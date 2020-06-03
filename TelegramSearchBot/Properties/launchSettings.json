@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "TelegramSearchBot": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "HTTP_PROXY": "http://127.0.0.1:7890"
+      }
+    }
+  }
+}

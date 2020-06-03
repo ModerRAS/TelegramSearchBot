@@ -1,0 +1,18 @@
+version: '3'
+services:
+  HHH:
+    image: moderras/hugehardhelper
+    env_file: .env
+    depends_on:
+      - redis
+      - pgsql
+    restart: always
+  redis:
+    image: redis
+    restart: always
+  pgsql:
+    image: postgres
+    env_file: .env
+    volumes:
+      - ./data:/var/lib/pgsql
+    restart: always
