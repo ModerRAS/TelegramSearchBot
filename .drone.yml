@@ -14,9 +14,9 @@ steps:
     PASSWORD:
       from_secret: docker_password
   commands:
-    - docker build --no-cache -t moderras/telegramsearchbot -f Dockerfile .
+    - docker build --no-cache -t moderras/telegramsearchbot:dev -f Dockerfile .
     - docker login -u $USERNAME -p $PASSWORD
-    - docker push moderras/telegramsearchbot
+    - docker push moderras/telegramsearchbot:dev
 
 - name: ssh_production
   image: appleboy/drone-ssh
@@ -35,7 +35,7 @@ steps:
     command_timeout: 120
     command_timeout: 2m
     script:
-      - docker pull moderras/telegramsearchbot
+      - docker pull moderras/telegramsearchbot:dev
       - cd /home/TelegramSearchBot
       - docker-compose up -d
 - name: send telegram notification
