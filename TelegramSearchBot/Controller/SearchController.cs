@@ -38,23 +38,37 @@ namespace TelegramSearchBot.Controller {
                     
                     var Begin = $"共找到 {length} 项结果：\n";
                     string Text = Begin;
+                    var keyboardList = new List<InlineKeyboardButton>();
                     InlineKeyboardMarkup reply = null;
                     if (length > 0) {
                         var list = Utils.ConvertToList(Finded, e.Message.Chat.Id);
                         Text = Begin + string.Join("\n", list) + "\n";
-                        if (length <= 20) {
-                            //reply = new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(""));
-                        } else {
-                            var uuid = Guid.NewGuid().ToString();
-                            await Cache.SetAsync(uuid, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new SearchOption { Search = queryString, Skip = 20, Take = 20, GroupId = ChatId, Count = length }, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) });
-                            reply = new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(
+                        var searchOption = new SearchOption { Search = queryString, Skip = 20, Take = 20, GroupId = ChatId, Count = length };
+                        if (length > 20) {
+                            var uuid_nxt = Guid.NewGuid().ToString();
+                            await Cache.SetAsync(uuid_nxt, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(searchOption, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) });
+                            keyboardList.Add(InlineKeyboardButton.WithCallbackData(
                                 "下一页",
-                                uuid
+                                uuid_nxt
                                 ));
-                            
                         }
+                        var uuid = Guid.NewGuid().ToString();
+                        searchOption.ToDeleteNow = true;
+                        await Cache.SetAsync(uuid, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(searchOption, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) });
+                        keyboardList.Add(InlineKeyboardButton.WithCallbackData(
+                                    "删除历史",
+                                    uuid
+                                    ));
                     } else {
                         Text = Begin;
+                        var searchOption = new SearchOption { Search = queryString, Skip = 20, Take = 20, GroupId = ChatId, Count = length };
+                        var uuid = Guid.NewGuid().ToString();
+                        searchOption.ToDeleteNow = true;
+                        await Cache.SetAsync(uuid, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(searchOption, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) });
+                        keyboardList.Add(InlineKeyboardButton.WithCallbackData(
+                                    "删除历史",
+                                    uuid
+                                    ));
                     }
                     await Send.AddTask(async () => {
                         await botClient.SendTextMessageAsync(
@@ -62,7 +76,7 @@ namespace TelegramSearchBot.Controller {
                     disableNotification: true,
                     parseMode: ParseMode.Markdown,
                     replyToMessageId: e.Message.MessageId,
-                    replyMarkup: reply,
+                    replyMarkup: new InlineKeyboardMarkup(keyboardList),
                     text: Text
                     );
                     }, IsGroup);
