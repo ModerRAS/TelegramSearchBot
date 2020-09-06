@@ -55,7 +55,7 @@ namespace TelegramSearchBot.Controller {
                 var model = JsonConvert.DeserializeObject<CommonModel.ImportModel>(await CrawlString(url, client));
                 //var keys = model.Messages.Keys.ToArray();
                 //var messages = context.Messages.ToList();
-                var missingRecords = model.Messages;//.Where(x => !messages.Any(z => z.MessageId == x.Key && z.GroupId == model.GroupId));
+                var missingRecords = model.Messages;//.Where(x => !messages.Any(z => z.MessageId == x.Key && z.ChatId == model.ChatId));
                 var ToAdd = new List<Message>();
                 foreach (var i in missingRecords) {
                     ToAdd.Add(new Message() {

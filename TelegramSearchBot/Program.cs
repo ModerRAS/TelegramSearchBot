@@ -12,6 +12,7 @@ using Telegram.Bot;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot {
     class Program {
@@ -26,6 +27,8 @@ namespace TelegramSearchBot {
                     //services.AddTransient<Hoursly>();
                     service.AddDbContext<SearchContext>(options => options.UseNpgsql(SearchContext.Configuring), ServiceLifetime.Transient);
                     service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy)));
+                    service.AddTransient<SearchService>();
+                    service.AddTransient<SendService>();
                     ControllerLoader.AddController(service);
                 });
         static void Main(string[] args) {

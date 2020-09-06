@@ -12,6 +12,7 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
     class SearchNextPageController : IOnCallbackQuery {
@@ -19,7 +20,19 @@ namespace TelegramSearchBot.Controller {
         private readonly SendMessage Send;
         private readonly IDistributedCache Cache;
         private readonly ILogger logger;
-        public SearchNextPageController(ITelegramBotClient botClient, SearchContext DbContext, SendMessage Send, IDistributedCache Cache, ILogger<SearchNextPageController> logger) : base(botClient) {
+        private readonly SearchService searchService;
+        private readonly SendService sendService;
+        public SearchNextPageController(
+            ITelegramBotClient botClient, 
+            SearchContext DbContext, 
+            SendMessage Send, 
+            IDistributedCache Cache, 
+            ILogger<SearchNextPageController> logger, 
+            SearchService searchService, 
+            SendService sendService
+            ) : base(botClient) {
+            this.sendService = sendService;
+            this.searchService = searchService;
             this.DbContext = DbContext;
             this.Send = Send;
             this.Cache = Cache;
@@ -36,10 +49,11 @@ namespace TelegramSearchBot.Controller {
             try {
                 var searchOption = JsonConvert.DeserializeObject<SearchOption>(Encoding.UTF8.GetString(await Cache.GetAsync(e.CallbackQuery.Data)));
                 await Cache.RemoveAsync(e.CallbackQuery.Data);
-                if (searchOption.ToDelete is null) {
-                    searchOption.ToDelete = new List<long>();
-                }
+
                 searchOption.ToDelete.Add(e.CallbackQuery.Message.MessageId);
+
+                searchOption.ReplyToMessageId = e.CallbackQuery.Message.MessageId;
+                searchOption.Chat = e.CallbackQuery.Message.Chat;
 
                 if (searchOption.ToDeleteNow) {
                     foreach (var i in searchOption.ToDelete) {
@@ -55,47 +69,10 @@ namespace TelegramSearchBot.Controller {
                     return;
                 }
 
-                var queryString = searchOption.Search;
-                var query = from s in DbContext.Messages
-                            where s.Content.Contains(queryString) && (IsGroup ? s.GroupId.Equals(ChatId) : (from u in DbContext.Users where u.UserId.Equals(ChatId) select u.GroupId).Contains(s.GroupId))
-                            orderby s.MessageId descending
-                            select s;
+                var (searchOptionNext, Finded) = searchService.Search(searchOption);
 
-                var Finded = query.Skip(searchOption.Skip).Take(searchOption.Take).ToList();
+                await sendService.ExecuteAsync(searchOption, Finded);
 
-                var list = Utils.ConvertToList(Finded, searchOption.GroupId);
-                var Text = string.Join("\n", list) + "\n";
-                var keyboardList = new List<InlineKeyboardButton>();
-
-                if (searchOption.Count > searchOption.Take + searchOption.Skip) {
-                    searchOption.Skip += searchOption.Take;
-                    var uuid_nxt = Guid.NewGuid().ToString();                    
-                    await Cache.SetAsync(uuid_nxt, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(searchOption, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) });
-                    keyboardList.Add(InlineKeyboardButton.WithCallbackData(
-                                "下一页",
-                                uuid_nxt
-                                ));
-                }
-
-                var uuid = Guid.NewGuid().ToString();
-                searchOption.ToDeleteNow = true;
-                await Cache.SetAsync(uuid, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(searchOption, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) });
-                keyboardList.Add(InlineKeyboardButton.WithCallbackData(
-                            "删除历史",
-                            uuid
-                            ));
-                var reply = new InlineKeyboardMarkup(keyboardList);
-                
-                await Send.AddTask(async () => {
-                    await botClient.SendTextMessageAsync(
-                        chatId: e.CallbackQuery.Message.Chat,
-                        disableNotification: true,
-                        parseMode: ParseMode.Markdown,
-                        replyToMessageId: e.CallbackQuery.Message.MessageId,
-                        replyMarkup: reply,
-                        text: Text
-                        );
-                }, IsGroup);
             } catch (KeyNotFoundException) {
 
             } catch (ArgumentException) {
