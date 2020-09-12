@@ -20,7 +20,7 @@ namespace TelegramSearchBot.Controller {
         private readonly SendMessage Send;
         private readonly IDistributedCache Cache;
         private readonly ILogger logger;
-        private readonly SearchService searchService;
+        private readonly ISearchService searchService;
         private readonly SendService sendService;
         public SearchNextPageController(
             ITelegramBotClient botClient, 
@@ -28,7 +28,7 @@ namespace TelegramSearchBot.Controller {
             SendMessage Send, 
             IDistributedCache Cache, 
             ILogger<SearchNextPageController> logger, 
-            SearchService searchService, 
+            ISearchService searchService, 
             SendService sendService
             ) : base(botClient) {
             this.sendService = sendService;
@@ -69,9 +69,9 @@ namespace TelegramSearchBot.Controller {
                     return;
                 }
 
-                var (searchOptionNext, Finded) = searchService.Search(searchOption);
+                var searchOptionNext = await searchService.Search(searchOption);
 
-                await sendService.ExecuteAsync(searchOption, Finded);
+                await sendService.ExecuteAsync(searchOption, searchOptionNext.Messages);
 
             } catch (KeyNotFoundException) {
 

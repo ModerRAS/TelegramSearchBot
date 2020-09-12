@@ -6,15 +6,17 @@ using Telegram.Bot;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Model;
 using System.Linq;
+using TelegramSearchBot.Intrerface;
+using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Service {
-    class SearchService {
+    class SearchService : ISearchService {
         private readonly SearchContext DbContext;
         public SearchService(SearchContext DbContext) {
             this.DbContext = DbContext;
         }
 
-        public (SearchOption, List<Message>) Search(SearchOption searchOption) {
+        public async override Task<SearchOption> Search(SearchOption searchOption) {
             var query = from s in DbContext.Messages
                         where s.Content.Contains(searchOption.Search) && (searchOption.IsGroup ? s.GroupId.Equals(searchOption.ChatId) : (from u in DbContext.Users where u.UserId.Equals(searchOption.ChatId) select u.GroupId).Contains(s.GroupId))
                         orderby s.MessageId descending
@@ -22,8 +24,8 @@ namespace TelegramSearchBot.Service {
             if (searchOption.Count < 0) {
                 searchOption.Count = query.Count();
             }
-            var Finded = query.Skip(searchOption.Skip).Take(searchOption.Take).ToList();
-            return (searchOption, Finded);
+            searchOption.Messages = query.Skip(searchOption.Skip).Take(searchOption.Take).ToList();
+            return searchOption;
         }
     }
 }

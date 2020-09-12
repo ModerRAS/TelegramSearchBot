@@ -14,11 +14,11 @@ using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
     class SearchController : IOnMessage {
-        private readonly SearchService searchService;
+        private readonly ISearchService searchService;
         private readonly SendService sendService;
         public SearchController(
             ITelegramBotClient botClient, 
-            SearchService searchService, 
+            ISearchService searchService, 
             SendService sendService
             ) : base(botClient) {
             this.searchService = searchService;
@@ -41,9 +41,9 @@ namespace TelegramSearchBot.Controller {
                         Chat = e.Message.Chat
                     };
 
-                    var (searchOption, Finded) = searchService.Search(firstSearch);
+                    var searchOption = await searchService.Search(firstSearch);
 
-                    await sendService.ExecuteAsync(searchOption, Finded);
+                    await sendService.ExecuteAsync(searchOption, searchOption.Messages);
                 }
             }
         }

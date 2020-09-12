@@ -13,12 +13,14 @@ namespace TelegramSearchBot {
             service.AddSingleton<SearchController>();
             service.AddSingleton<SendMessage>();
             service.AddSingleton<ImportController>();
+            service.AddSingleton<RefreshController>();
         }
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SearchNextPageController>();
             _ = service.GetRequiredService<MessageController>();
             _ = service.GetRequiredService<SearchController>();
             _ = service.GetRequiredService<ImportController>();
+            _ = service.GetRequiredService<RefreshController>();
             _ = service.GetRequiredService<SendMessage>().Run();
         }
     }
