@@ -35,18 +35,18 @@ namespace TelegramSearchBot.Service {
                     searchOption.Count = sonicQuery.Length + searchOption.Skip;
                 }
 
-                var MessagesIds = new Dictionary<long, long>();
+                var MessagesIds = new HashSet<(long, long)>();
 
                 foreach (var e in sonicQuery) {
                     var tmp = e.Split(":");
-                    if (tmp.Length == 2) MessagesIds.Add(long.Parse(tmp[0]), long.Parse(tmp[1]));
+                    if (tmp.Length == 2) MessagesIds.Add((long.Parse(tmp[0]), long.Parse(tmp[1])));
                 }
 
                 searchOption.Messages = new List<Message>();
 
                 foreach (var e in MessagesIds) {
                     var query = from s in DbContext.Messages
-                                where e.Key.Equals(s.GroupId) && e.Value.Equals(s.MessageId)
+                                where e.Item1.Equals(s.GroupId) && e.Item2.Equals(s.MessageId)
                                 select s;
                     searchOption.Messages.Add(query.FirstOrDefault());
                 }
