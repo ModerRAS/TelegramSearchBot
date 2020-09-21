@@ -58,6 +58,21 @@ namespace TelegramSearchBot.Controller {
                     Task.WaitAll(tasks: Tasks.ToArray());
                 }
             }
+            if (Command.Length == 4 && Command.Equals("刷新索引")) {
+                
+                var messages = from s in context.Messages
+                               select s;
+
+                var Tasks = new List<Task>();
+                foreach (var message in messages) {
+                    Tasks.Add(Cache.SetAsync(
+                        $"{message.GroupId}:{message.MessageId}", 
+                        Encoding.UTF8.GetBytes(message.Content), 
+                        new DistributedCacheEntryOptions { }));
+                }
+
+                Task.WaitAll(tasks: Tasks.ToArray());
+            }
         }
     }
 }

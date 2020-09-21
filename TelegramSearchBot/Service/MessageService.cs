@@ -6,12 +6,15 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using NSonic;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace TelegramSearchBot.Service {
     class MessageService : IMessageService {
         private readonly SearchContext context;
-        public MessageService(SearchContext context) {
+        private readonly IDistributedCache Cache;
+        public MessageService(SearchContext context, IDistributedCache Cache) {
             this.context = context;
+            this.Cache = Cache;
         }
         public override async Task ExecuteAsync(MessageOption messageOption) {
 
@@ -40,8 +43,13 @@ namespace TelegramSearchBot.Service {
 
 
                 foreach (var e in Users) {
-                    sonicIngestConnection.Push(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content.Replace("\n", " "));
+                    await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content.Replace("\n", " "));
                 }
+
+                await Cache.SetAsync(
+                    $"{messageOption.ChatId}:{messageOption.MessageId}", 
+                    Encoding.UTF8.GetBytes(messageOption.Content.Replace("\n", " ")), 
+                    new DistributedCacheEntryOptions { });
             }
             
 
