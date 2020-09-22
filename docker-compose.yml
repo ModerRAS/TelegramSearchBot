@@ -16,3 +16,8 @@ services:
     volumes:
       - ./data:/var/lib/pgsql
     restart: always
+  sonic:
+    image: valeriansaliou/sonic:v1.3.0
+    volumes:
+      - ./sonic:/var/lib/sonic/store/
+      - ./sonic.cfg:/etc/sonic.cfg
