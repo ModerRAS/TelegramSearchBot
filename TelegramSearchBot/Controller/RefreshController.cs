@@ -34,7 +34,7 @@ namespace TelegramSearchBot.Controller {
             } else if (!string.IsNullOrEmpty(e.Message.Caption)) {
                 Command = e.Message.Caption;
             } else return;
-            if (Command.Length == 4 && Command.Equals("刷新缓存")) {
+            if (Command.Length == 4 && Command.Equals("重建索引")) {
                 using (var sonicIngestConnection = NSonicFactory.Ingest(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)) {
                     await sonicIngestConnection.ConnectAsync();
 
@@ -58,7 +58,7 @@ namespace TelegramSearchBot.Controller {
                     Task.WaitAll(tasks: Tasks.ToArray());
                 }
             }
-            if (Command.Length == 4 && Command.Equals("刷新索引")) {
+            if (Command.Length == 4 && Command.Equals("刷新缓存")) {
                 
                 var messages = from s in context.Messages
                                select s;
