@@ -44,18 +44,15 @@ namespace TelegramSearchBot.Controller {
                     var users = (from s in context.Users
                                  select s).ToList();
 
-                    var Tasks = new List<Task>();
                     foreach (var message in messages) {
-                        Tasks.Add(sonicIngestConnection.PushAsync(Env.SonicCollection, message.GroupId.ToString(), $"{message.GroupId}:{message.MessageId}", message.Content));
+                        await sonicIngestConnection.PushAsync(Env.SonicCollection, message.GroupId.ToString(), $"{message.GroupId}:{message.MessageId}", message.Content);
 
                         foreach (var user in users) {
                             if (user.GroupId.Equals(message.GroupId)) {
-                                Tasks.Add(sonicIngestConnection.PushAsync(Env.SonicCollection, user.UserId.ToString(), $"{message.GroupId}:{message.MessageId}", message.Content));
+                                await sonicIngestConnection.PushAsync(Env.SonicCollection, user.UserId.ToString(), $"{message.GroupId}:{message.MessageId}", message.Content);
                             }
                         }
                     }
-
-                    Task.WaitAll(tasks: Tasks.ToArray());
                 }
             }
             if (Command.Length == 4 && Command.Equals("刷新缓存")) {
@@ -63,15 +60,12 @@ namespace TelegramSearchBot.Controller {
                 var messages = from s in context.Messages
                                select s;
 
-                var Tasks = new List<Task>();
                 foreach (var message in messages) {
-                    Tasks.Add(Cache.SetAsync(
-                        $"{message.GroupId}:{message.MessageId}", 
-                        Encoding.UTF8.GetBytes(message.Content), 
-                        new DistributedCacheEntryOptions { }));
+                    await Cache.SetAsync(
+                        $"{message.GroupId}:{message.MessageId}",
+                        Encoding.UTF8.GetBytes(message.Content),
+                        new DistributedCacheEntryOptions { });
                 }
-
-                Task.WaitAll(tasks: Tasks.ToArray());
             }
         }
     }
