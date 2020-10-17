@@ -10,6 +10,7 @@ namespace TelegramSearchBot {
         public static void AddController(IServiceCollection service) {
             service.AddSingleton<SearchNextPageController>();//这一段这两行更适合用反射来加载
             service.AddSingleton<MessageController>();
+            service.AddSingleton<MessageEditedController>();
             service.AddSingleton<SearchController>();
             service.AddSingleton<SendMessage>();
             service.AddSingleton<ImportController>();
@@ -18,6 +19,7 @@ namespace TelegramSearchBot {
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SearchNextPageController>();
             _ = service.GetRequiredService<MessageController>();
+            _ = service.GetRequiredService<MessageEditedController>();
             _ = service.GetRequiredService<SearchController>();
             _ = service.GetRequiredService<ImportController>();
             _ = service.GetRequiredService<RefreshController>();
