@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
+using NSonic;
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -27,8 +28,11 @@ namespace TelegramSearchBot {
                     //services.AddTransient<Hoursly>();
                     service.AddDbContext<SearchContext>(options => options.UseNpgsql(SearchContext.Configuring), ServiceLifetime.Transient);
                     service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy)));
-                    service.AddTransient<SearchService>();
+                    service.AddTransient<ISearchService, SonicSearchService>();
+                    service.AddTransient<IMessageService, MessageService>();
                     service.AddTransient<SendService>();
+                    //service.Add(item: new ServiceDescriptor(typeof(ISonicSearchConnection), NSonicFactory.Search(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)));
+                    //service.Add(item: new ServiceDescriptor(typeof(ISonicIngestConnection), NSonicFactory.Ingest(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)));
                     ControllerLoader.AddController(service);
                 });
         static void Main(string[] args) {

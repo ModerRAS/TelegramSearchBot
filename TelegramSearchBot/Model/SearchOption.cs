@@ -4,7 +4,7 @@ using System.Text;
 using Telegram.Bot.Types;
 
 namespace TelegramSearchBot.Model {
-    class SearchOption {
+    public class SearchOption {
         public string Search { get; set; }
         public long ChatId { get; set; }
         public bool IsGroup { get; set; }
@@ -21,5 +21,6 @@ namespace TelegramSearchBot.Model {
         public bool ToDeleteNow { get; set; }
         public int ReplyToMessageId { get; set; }
         public Chat Chat { get; set; }
+        public List<Message> Messages { get; set; }
     }
 }

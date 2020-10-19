@@ -55,7 +55,7 @@ namespace TelegramSearchBot.Service {
             var keyboardList = new List<InlineKeyboardButton>();
             searchOption.Skip += searchOption.Take;
             var tasks = new List<Task>();
-            if (searchOption.Count - searchOption.Skip > 0) {
+            if (searchOption.Messages.Count - searchOption.Take >= 0) {
                 var uuid_nxt = Guid.NewGuid().ToString();
                 tasks.Add(Cache.SetAsync(uuid_nxt, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(searchOption, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) }));
                 keyboardList.Add(InlineKeyboardButton.WithCallbackData(

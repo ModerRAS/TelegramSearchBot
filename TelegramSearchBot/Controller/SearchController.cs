@@ -14,11 +14,11 @@ using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
     class SearchController : IOnMessage {
-        private readonly SearchService searchService;
+        private readonly ISearchService searchService;
         private readonly SendService sendService;
         public SearchController(
             ITelegramBotClient botClient, 
-            SearchService searchService, 
+            ISearchService searchService, 
             SendService sendService
             ) : base(botClient) {
             this.searchService = searchService;
@@ -27,7 +27,7 @@ namespace TelegramSearchBot.Controller {
 
         protected override async void ExecuteAsync(object sender, MessageEventArgs e) {
             if (!string.IsNullOrEmpty(e.Message.Text)) {
-                if (e.Message.Text.Length > 4 && e.Message.Text.Substring(0, 3).Equals("搜索 ")) {
+                if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 ")) {
                     var firstSearch = new SearchOption() {
                         Search = e.Message.Text.Substring(3),
                         ChatId = e.Message.Chat.Id,
@@ -41,9 +41,9 @@ namespace TelegramSearchBot.Controller {
                         Chat = e.Message.Chat
                     };
 
-                    var (searchOption, Finded) = searchService.Search(firstSearch);
+                    var searchOption = await searchService.Search(firstSearch);
 
-                    await sendService.ExecuteAsync(searchOption, Finded);
+                    await sendService.ExecuteAsync(searchOption, searchOption.Messages);
                 }
             }
         }

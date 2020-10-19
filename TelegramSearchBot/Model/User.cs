@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Text;
 
 namespace TelegramSearchBot.Model {
-    class User {
+    public class User {
         [Key]
         public long Id { get; set; }
         public long GroupId { get; set; }

@@ -9,10 +9,10 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Controller {
-    class MessageController : IOnMessage {
+    class MessageEditedController : IOnMessageEdited {
         private readonly SearchContext context;
         private readonly IMessageService messageService;
-        public MessageController(ITelegramBotClient botClient, IMessageService messageService, SearchContext context) : base(botClient) {
+        public MessageEditedController(ITelegramBotClient botClient, IMessageService messageService, SearchContext context) : base(botClient) {
             this.context = context;
             this.messageService = messageService;
         }

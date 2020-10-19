@@ -12,5 +12,9 @@ namespace TelegramSearchBot {
         public static readonly string Password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD") ?? string.Empty;
         public static readonly string RedisConnString = Environment.GetEnvironmentVariable("RedisConnString") ?? string.Empty;
         public static readonly long AdminId = long.Parse(Environment.GetEnvironmentVariable("AdminId") ?? string.Empty);
+        public static readonly string SonicHostname = Environment.GetEnvironmentVariable("SonicHostname") ?? string.Empty;
+        public static readonly int SonicPort = int.Parse(Environment.GetEnvironmentVariable("SonicPort") ?? string.Empty);
+        public static readonly string SonicSecret = Environment.GetEnvironmentVariable("SonicSecret") ?? string.Empty;
+        public static readonly string SonicCollection = Environment.GetEnvironmentVariable("SonicCollection") ?? string.Empty;
     }
 }
