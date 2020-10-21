@@ -61,7 +61,7 @@ namespace TelegramSearchBot.Service {
                 foreach (var e in sonicQuery) {
                     var tmp = e.Split(":");
                     long groupid, messageid;
-                    if (long.TryParse(tmp[0], out groupid) && long.TryParse(tmp[0], out messageid)) {
+                    if (long.TryParse(tmp[0], out groupid) && long.TryParse(tmp[1], out messageid)) {
                         searchOption.Messages.Add(new Message() {
                             Id = 0,
                             GroupId = groupid,
