@@ -10,6 +10,7 @@ namespace TelegramSearchBot.Intrerface {
         protected IOnMessage(ITelegramBotClient botClient) {
             this.botClient = botClient;
             botClient.OnMessage += ExecuteAsync;
+            botClient.OnMessageEdited += ExecuteAsync;
 
         }
         protected abstract void ExecuteAsync(object sender, MessageEventArgs e);
