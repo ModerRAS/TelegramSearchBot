@@ -16,17 +16,6 @@ namespace TelegramSearchBot.Service {
             this.context = context;
             this.Cache = Cache;
         }
-        private List<string> SplitWords(string sentence) {
-            var ret = new List<string>();
-            ret.AddRange(
-                sentence.Replace("\n"," ")
-                        .Replace(","," ")
-                        .Replace(".", " ")
-                        .Replace("，", " ")
-                        .Replace("。", " ")
-                        .Split(" "));
-            return ret;
-        }
         public override async Task ExecuteAsync(MessageOption messageOption) {
 
             using (var sonicIngestConnection = NSonicFactory.Ingest(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)) {
@@ -54,10 +43,7 @@ namespace TelegramSearchBot.Service {
 
 
                 foreach (var e in Users) {
-                    foreach (var s in SplitWords(messageOption.Content)) {
-                        await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", s);
-                    }
-                    
+                    await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content.Replace("\n", " "));
                 }
 
                 await Cache.SetAsync(
