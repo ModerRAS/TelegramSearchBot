@@ -3,7 +3,7 @@ type: docker
 name: build
 steps:
 
-- name: build docker image
+- name: Build docker image
   image: docker:latest
   volumes:
     - name: docker_sock
@@ -16,11 +16,49 @@ steps:
   commands:
     - docker build -t moderras/telegramsearchbot:nightly-$(date +%F) -f ./Dockerfile .
     - docker build -t moderras/telegramsearchbot:latest -f ./Dockerfile .
+
+- name: Push docker image
+  image: docker:latest
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
     - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
     - docker push moderras/telegramsearchbot:nightly-$(date +%F)
     - docker push moderras/telegramsearchbot:latest
+
+- name: Delete local docker image
+  image: docker:latest
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
     - docker rmi moderras/telegramsearchbot:nightly-$(date +%F)
     - docker rmi moderras/telegramsearchbot:latest
+
+- name: Send Telegram notification
+  image: appleboy/drone-telegram
+  settings:
+    token: 
+      from_secret: bot_token
+    to: 
+      from_secret: userid
+    message: >
+      {{#success build.status}}
+         Telegram Search Bot build {{build.number}} succeeded. Good job.
+      {{else}}
+        build {{build.number}} failed. Fix me please.
+      {{/success}}
 
 trigger:
   branch:
