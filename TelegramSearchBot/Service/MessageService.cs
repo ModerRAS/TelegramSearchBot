@@ -21,10 +21,13 @@ namespace TelegramSearchBot.Service {
             ret.AddRange(
                 sentence.Replace("\n"," ")
                         .Replace(","," ")
+                        .Replace("\"", "\\\"")
+                        .Replace("\'", "\\\'")
                         .Replace(".", " ")
                         .Replace("，", " ")
                         .Replace("。", " ")
                         .Split(" "));
+            ret.Add(sentence.Replace("\"", "\\\""));
             return ret;
         }
         public override async Task ExecuteAsync(MessageOption messageOption) {
