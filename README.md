@@ -1,6 +1,8 @@
 # TelegramSearchBot
 自用群聊消息搜索机器人
 
+[![Build Status](https://ci.miaostay.com/api/badges/ModerRAS/TelegramSearchBot/status.svg)](https://ci.miaostay.com/ModerRAS/TelegramSearchBot)
+
 ## 食用方法
 
 ### 安装
