@@ -9,14 +9,14 @@ steps:
     - name: docker_sock
       path: /var/run/docker.sock
   environment:
-    USERNAME:
+    DOCKER_USERNAME:
       from_secret: docker_username
-    PASSWORD:
+    DOCKER_PASSWORD:
       from_secret: docker_password
   commands:
     - docker build -t moderras/telegramsearchbot:nightly-$(date +%F) -f ./Dockerfile .
     - docker build -t moderras/telegramsearchbot:latest -f ./Dockerfile .
-    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+    - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
     - docker push moderras/telegramsearchbot:nightly-$(date +%F)
     - docker push moderras/telegramsearchbot:latest
     - docker rmi moderras/telegramsearchbot:nightly-$(date +%F)
