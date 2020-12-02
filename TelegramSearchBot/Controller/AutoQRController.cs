@@ -31,20 +31,22 @@ namespace TelegramSearchBot.Controller {
                     var str = new StringBuilder();
                     var set = new HashSet<string>();
                     foreach (var s in links) {
-                        set.Add(s);
+                        if (!string.IsNullOrEmpty(s)) {
+                            set.Add(s);
+                        }
                     }
-                    foreach (var s in set) {
-                        str.Append($"{s}\n");
-                    }
-                    var tmp = str.ToString();
-                    if (!string.IsNullOrEmpty(tmp) && !string.IsNullOrWhiteSpace(tmp) && !string.IsNullOrEmpty(tmp.Replace("\n", ""))) {
+                    if (set.Count > 0) {
+                        foreach (var s in set) {
+                            str.Append($"{s}\n");
+                        }
                         await botClient.SendTextMessageAsync(
-                        chatId: e.Message.Chat,
-                        text: tmp,
-                        parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
-                        replyToMessageId: e.Message.MessageId
-                        );
+                            chatId: e.Message.Chat,
+                            text: str.ToString(),
+                            parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
+                            replyToMessageId: e.Message.MessageId
+                            );
                     }
+                    
                 }
             }
         }
