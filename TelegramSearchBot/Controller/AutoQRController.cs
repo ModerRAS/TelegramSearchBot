@@ -36,7 +36,7 @@ namespace TelegramSearchBot.Controller {
                         str.Append($"{s}\n");
                     }
                     var tmp = str.ToString();
-                    if (!string.IsNullOrEmpty(tmp)) {
+                    if (!string.IsNullOrEmpty(tmp) && !string.IsNullOrWhiteSpace(tmp) && !string.IsNullOrEmpty(tmp.Replace("\n", ""))) {
                         await botClient.SendTextMessageAsync(
                         chatId: e.Message.Chat,
                         text: tmp,
