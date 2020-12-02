@@ -28,15 +28,22 @@ namespace TelegramSearchBot.Controller {
                 }
                 if (links.Count > 0) {
                     var str = new StringBuilder();
+                    var set = new HashSet<string>();
                     foreach (var s in links) {
+                        set.Add(s);
+                    }
+                    foreach (var s in set) {
                         str.Append($"{s}\n");
                     }
-                    await botClient.SendTextMessageAsync(
+                    var tmp = str.ToString();
+                    if (!string.IsNullOrEmpty(tmp)) {
+                        await botClient.SendTextMessageAsync(
                         chatId: e.Message.Chat,
-                        text: str.ToString(),
+                        text: tmp,
                         parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
                         replyToMessageId: e.Message.MessageId
                         );
+                    }
                 }
             }
         }
