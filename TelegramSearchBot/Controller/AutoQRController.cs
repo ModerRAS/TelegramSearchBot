@@ -28,7 +28,6 @@ namespace TelegramSearchBot.Controller {
                     //File.Delete(file.FilePath);
                 }
                 if (links.Count > 0) {
-                    var str = new StringBuilder();
                     var set = new HashSet<string>();
                     foreach (var s in links) {
                         if (!string.IsNullOrEmpty(s)) {
@@ -36,9 +35,7 @@ namespace TelegramSearchBot.Controller {
                         }
                     }
                     if (set.Count > 0) {
-                        foreach (var s in set) {
-                            str.Append($"{s}\n");
-                        }
+                        var str = string.Join("\n", set);
                         await botClient.SendTextMessageAsync(
                             chatId: e.Message.Chat,
                             text: str.ToString(),
