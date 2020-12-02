@@ -36,7 +36,6 @@ namespace TelegramSearchBot.Controller {
                     }
                     if (set.Count > 0) {
                         var str = set.Count == 1 ? set.FirstOrDefault() :string.Join("\n", set);
-                        Console.WriteLine(str);
                         await botClient.SendTextMessageAsync(
                             chatId: e.Message.Chat,
                             text: str,
