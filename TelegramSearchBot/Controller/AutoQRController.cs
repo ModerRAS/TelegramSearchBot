@@ -11,9 +11,7 @@ using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
     class AutoQRController : IOnMessage {
-        private AutoQRService autoQRSevice;
-        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice) : base(botClient) {
-            this.autoQRSevice = autoQRSevice;
+        public AutoQRController(ITelegramBotClient botClient) : base(botClient) {
         }
         protected async override void ExecuteAsync(object sender, MessageEventArgs e) {
             if (e.Message.Photo is null || e.Message.Photo.Length <= 0) {
@@ -23,7 +21,7 @@ namespace TelegramSearchBot.Controller {
                     using (var stream = new MemoryStream()) {
                         var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
                         stream.Position = 0;
-                        links.Add(await autoQRSevice.ExecuteAsync(stream));
+                        links.Add(await new AutoQRService().ExecuteAsync(stream));
                     }
                     //File.Delete(file.FilePath);
                 }
