@@ -14,6 +14,7 @@ namespace TelegramSearchBot {
             service.AddSingleton<SendMessage>();
             service.AddSingleton<ImportController>();
             service.AddSingleton<RefreshController>();
+            service.AddSingleton<AutoQRController>();
         }
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SearchNextPageController>();
@@ -21,6 +22,7 @@ namespace TelegramSearchBot {
             _ = service.GetRequiredService<SearchController>();
             _ = service.GetRequiredService<ImportController>();
             _ = service.GetRequiredService<RefreshController>();
+            _ = service.GetRequiredService<AutoQRController>();
             _ = service.GetRequiredService<SendMessage>().Run();
         }
     }

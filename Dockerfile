@@ -7,6 +7,10 @@ RUN dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o ou
 
 
 FROM mcr.microsoft.com/dotnet/runtime:5.0
+
+RUN apt update -y && \
+    apt install -y fontconfig
+
 WORKDIR /app
 
 COPY --from=build-env /app/out /app

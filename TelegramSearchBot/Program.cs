@@ -30,6 +30,7 @@ namespace TelegramSearchBot {
                     service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy)));
                     service.AddTransient<ISearchService, SonicSearchService>();
                     service.AddTransient<IMessageService, MessageService>();
+                    service.AddTransient<AutoQRService>();
                     service.AddTransient<SendService>();
                     //service.Add(item: new ServiceDescriptor(typeof(ISonicSearchConnection), NSonicFactory.Search(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)));
                     //service.Add(item: new ServiceDescriptor(typeof(ISonicIngestConnection), NSonicFactory.Ingest(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)));
