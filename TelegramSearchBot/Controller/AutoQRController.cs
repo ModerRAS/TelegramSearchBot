@@ -20,10 +20,11 @@ namespace TelegramSearchBot.Controller {
             } else {
                 var links = new List<string>();
                 foreach (var f in e.Message.Photo) {
-                    var stream = new MemoryStream();
-                    var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
-                    stream.Position = 0;
-                    links.Add(await autoQRSevice.ExecuteAsync(stream));
+                    using (var stream = new MemoryStream()) {
+                        var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
+                        stream.Position = 0;
+                        links.Add(await autoQRSevice.ExecuteAsync(stream));
+                    }
                     //File.Delete(file.FilePath);
                 }
                 if (links.Count > 0) {
