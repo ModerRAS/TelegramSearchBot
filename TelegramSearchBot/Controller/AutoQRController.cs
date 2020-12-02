@@ -40,7 +40,7 @@ namespace TelegramSearchBot.Controller {
                         await botClient.SendTextMessageAsync(
                             chatId: e.Message.Chat,
                             text: str.ToString(),
-                            parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
+                            parseMode: Telegram.Bot.Types.Enums.ParseMode.Default,
                             replyToMessageId: e.Message.MessageId
                             );
                     }
