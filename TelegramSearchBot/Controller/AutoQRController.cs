@@ -12,8 +12,10 @@ using TelegramSearchBot.Service;
 namespace TelegramSearchBot.Controller {
     class AutoQRController : IOnMessage {
         private AutoQRService autoQRSevice;
-        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice) : base(botClient) {
+        private readonly SendMessage Send;
+        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send) : base(botClient) {
             this.autoQRSevice = autoQRSevice;
+            this.Send = Send;
         }
         protected async override void ExecuteAsync(object sender, MessageEventArgs e) {
             if (e.Message.Photo is null || e.Message.Photo.Length <= 0) {
@@ -36,12 +38,14 @@ namespace TelegramSearchBot.Controller {
                     }
                     if (set.Count > 0) {
                         var str = set.Count == 1 ? set.FirstOrDefault() :string.Join("\n", set);
-                        await botClient.SendTextMessageAsync(
+                        await Send.AddTask(async () => {
+                            await botClient.SendTextMessageAsync(
                             chatId: e.Message.Chat,
                             text: str,
                             parseMode: Telegram.Bot.Types.Enums.ParseMode.Default,
                             replyToMessageId: e.Message.MessageId
                             );
+                        }, e.Message.Chat.Id<0);
                     }
                     
                 }
