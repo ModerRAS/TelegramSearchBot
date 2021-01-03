@@ -11,10 +11,12 @@ using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
     class AutoQRController : IOnMessage {
-        private AutoQRService autoQRSevice;
+        private readonly AutoQRService autoQRSevice;
         private readonly SendMessage Send;
-        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send) : base(botClient) {
+        private readonly MessageService messageService;
+        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send, MessageService messageService) : base(botClient) {
             this.autoQRSevice = autoQRSevice;
+            this.messageService = messageService;
             this.Send = Send;
         }
         protected async override void ExecuteAsync(object sender, MessageEventArgs e) {
@@ -39,14 +41,22 @@ namespace TelegramSearchBot.Controller {
                     if (set.Count > 0) {
                         var str = set.Count == 1 ? set.FirstOrDefault() :string.Join("\n", set);
                         await Send.AddTask(async () => {
-                            await botClient.SendTextMessageAsync(
+                            var message = await botClient.SendTextMessageAsync(
                             chatId: e.Message.Chat,
                             text: str,
                             parseMode: Telegram.Bot.Types.Enums.ParseMode.Default,
                             replyToMessageId: e.Message.MessageId
                             );
+                            await messageService.ExecuteAsync(new Model.MessageOption() {
+                                ChatId = e.Message.Chat.Id,
+                                Content = str,
+                                MessageId = message.MessageId,
+                                UserId = botClient.BotId
+                            });
                         }, e.Message.Chat.Id<0);
+                        
                     }
+                    
                     
                 }
             }
