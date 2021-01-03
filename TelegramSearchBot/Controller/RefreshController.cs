@@ -98,13 +98,6 @@ namespace TelegramSearchBot.Controller {
                     }
                 }
             }
-
-            foreach (var message in messages) {
-                await Cache.SetAsync(
-                    $"{message.GroupId}:{message.MessageId}",
-                    Encoding.UTF8.GetBytes(message.Content),
-                    new DistributedCacheEntryOptions { });
-            }
         }
 
         protected override async void ExecuteAsync(object sender, MessageEventArgs e) {
