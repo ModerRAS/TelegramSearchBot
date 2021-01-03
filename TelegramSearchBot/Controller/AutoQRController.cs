@@ -13,8 +13,8 @@ namespace TelegramSearchBot.Controller {
     class AutoQRController : IOnMessage {
         private readonly AutoQRService autoQRSevice;
         private readonly SendMessage Send;
-        private readonly MessageService messageService;
-        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send, MessageService messageService) : base(botClient) {
+        private readonly IMessageService messageService;
+        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send, IMessageService messageService) : base(botClient) {
             this.autoQRSevice = autoQRSevice;
             this.messageService = messageService;
             this.Send = Send;
