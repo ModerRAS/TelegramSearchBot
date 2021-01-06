@@ -11,7 +11,7 @@ using TelegramSearchBot.Controller;
 
 namespace TelegramSearchBot.Service {
     class RefreshService : MessageService {
-        public RefreshService(SearchContext context, IDistributedCache Cache, SendMessage Send) : base(context, Cache) {
+        public RefreshService(SearchContext context, IDistributedCache Cache, SendMessage Send) : base(context, Cache, Send) {
         }
 
         public async Task ExecuteAsync(MessageOption messageOption) {
