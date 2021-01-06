@@ -34,7 +34,7 @@ namespace TelegramSearchBot.Service {
 
             using (var sonicIngestConnection = NSonicFactory.Ingest(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)) {
                 await sonicIngestConnection.ConnectAsync();
-                var tmp = context.Messages.AddAsync(new Message() { GroupId = messageOption.ChatId, MessageId = messageOption.MessageId, Content = messageOption.Content });
+                await context.Messages.AddAsync(new Message() { GroupId = messageOption.ChatId, MessageId = messageOption.MessageId, Content = messageOption.Content });
 
                 var UserIfExists = from s in context.Users
                                    where s.UserId.Equals(messageOption.UserId) && s.GroupId.Equals(messageOption.ChatId)
@@ -45,7 +45,6 @@ namespace TelegramSearchBot.Service {
                     await context.Users.AddAsync(new User() { GroupId = messageOption.ChatId, UserId = messageOption.UserId });
                 }
 
-                await tmp;
                 await context.SaveChangesAsync();
 
                 var UsersQuery = from s in context.Users
@@ -57,7 +56,12 @@ namespace TelegramSearchBot.Service {
 
 
                 foreach (var e in Users) {
-                    await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
+                    try {
+                        await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
+                    } catch (NSonic.AssertionException exception) {
+                        Console.Error.WriteLine(e);
+                        Console.Error.WriteLine(exception);
+                    }
                 }
 
                 await Cache.SetAsync(

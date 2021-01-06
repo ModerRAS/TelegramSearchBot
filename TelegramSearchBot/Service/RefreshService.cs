@@ -27,7 +27,12 @@ namespace TelegramSearchBot.Service {
 
 
                 foreach (var e in Users) {
-                    await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
+                    try {
+                        await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
+                    } catch (NSonic.AssertionException exception) {
+                        Console.Error.WriteLine(e);
+                        Console.Error.WriteLine(exception);
+                    }
                 }
 
                 await Cache.SetAsync(
