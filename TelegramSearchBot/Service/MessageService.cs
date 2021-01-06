@@ -10,13 +10,13 @@ using Microsoft.Extensions.Caching.Distributed;
 
 namespace TelegramSearchBot.Service {
     class MessageService : IMessageService {
-        private readonly SearchContext context;
-        private readonly IDistributedCache Cache;
+        protected readonly SearchContext context;
+        protected readonly IDistributedCache Cache;
         public MessageService(SearchContext context, IDistributedCache Cache) {
             this.context = context;
             this.Cache = Cache;
         }
-        private List<string> SplitWords(string sentence) {
+        protected List<string> SplitWords(string sentence) {
             var ret = new List<string>();
             ret.AddRange(
                 sentence.Replace("\n"," ")
@@ -30,7 +30,7 @@ namespace TelegramSearchBot.Service {
             ret.Add(sentence.Replace("\"", "\\\""));
             return ret;
         }
-        public override async Task ExecuteAsync(MessageOption messageOption) {
+        public async Task ExecuteAsync(MessageOption messageOption) {
 
             using (var sonicIngestConnection = NSonicFactory.Ingest(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)) {
                 await sonicIngestConnection.ConnectAsync();
