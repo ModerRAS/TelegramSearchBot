@@ -11,7 +11,9 @@ using TelegramSearchBot.Controller;
 
 namespace TelegramSearchBot.Service {
     class RefreshService : MessageService {
+        private Dictionary<long, List<long>> GroupUser { get; set; }
         public RefreshService(SearchContext context, IDistributedCache Cache, SendMessage Send) : base(context, Cache, Send) {
+            GroupUser = new Dictionary<long, List<long>>();
         }
 
         private async Task RebuildIndex() {
@@ -90,6 +92,14 @@ namespace TelegramSearchBot.Service {
         }
 
         public async Task ExecuteAsync(string Command) {
+            var AllGroups = (from s in context.Users
+                             select s.GroupId).ToHashSet();
+            foreach (var Group in AllGroups) {
+                var UsersQuery = (from s in context.Users
+                                 where s.GroupId.Equals(Group)
+                                 select s.UserId).ToList();
+                GroupUser.Add(Group, UsersQuery);
+            }
             if (Command.Length == 4 && Command.Equals("重建索引")) {
                 await RebuildIndex();
             }
@@ -102,37 +112,27 @@ namespace TelegramSearchBot.Service {
         }
 
         public async Task ExecuteAsync(MessageOption messageOption, ISonicIngestConnection sonicIngestConnection) {
-            var UsersQuery = from s in context.Users
-                             where s.GroupId.Equals(messageOption.ChatId)
-                             select s.UserId;
-
-            var Users = UsersQuery.ToList();
-            Users.Add(messageOption.ChatId);
-
-
-            try {
-                foreach (var e in Users) {
-                    foreach (var s in SplitWords(messageOption.Content)) {
-                        if (!string.IsNullOrEmpty(s)) {
-                            await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", s);
+            List<long> Users;
+            if (GroupUser.TryGetValue(messageOption.UserId, out Users)) {
+                try {
+                    foreach (var e in Users) {
+                        foreach (var s in SplitWords(messageOption.Content)) {
+                            if (!string.IsNullOrEmpty(s)) {
+                                await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", s);
+                            }
                         }
                     }
+                } catch (AssertionException exception) {
+                    await Send.Log($"{messageOption.ChatId}:{messageOption.MessageId}\n{messageOption.Content}");
+                    await Send.Log(exception.ToString());
+                    Console.Error.WriteLine(exception);
                 }
-            } catch (AssertionException exception) {
-                await Send.Log($"{messageOption.ChatId}:{messageOption.MessageId}\n{messageOption.Content}");
-                await Send.Log(exception.ToString());
-                Console.Error.WriteLine(exception);
+
+                await Cache.SetAsync(
+                    $"{messageOption.ChatId}:{messageOption.MessageId}",
+                    Encoding.UTF8.GetBytes(messageOption.Content.Replace("\n", " ")),
+                    new DistributedCacheEntryOptions { });
             }
-
-            await Cache.SetAsync(
-                $"{messageOption.ChatId}:{messageOption.MessageId}",
-                Encoding.UTF8.GetBytes(messageOption.Content.Replace("\n", " ")),
-                new DistributedCacheEntryOptions { });
-            
-            
-
-
-
         }
     }
 }

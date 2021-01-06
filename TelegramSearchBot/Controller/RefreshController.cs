@@ -18,11 +18,7 @@ using TelegramSearchBot.Service;
 namespace TelegramSearchBot.Controller {
     class RefreshController : IOnMessage {
         private readonly RefreshService refreshService;
-        public RefreshController(SearchContext context, 
-                                 IDistributedCache Cache,
-                                 RefreshService refreshService, 
-                                 SendMessage Send
-            ) {
+        public RefreshController(RefreshService refreshService) {
             this.refreshService = refreshService;
         }
 
