@@ -33,17 +33,6 @@ namespace TelegramSearchBot.Controller {
             this.Cache = Cache;
         }
 
-        private async void SendMessage(string Text) {
-            await Send.AddTask(async () => {
-                await botClient.SendTextMessageAsync(
-                    chatId: Env.AdminId,
-                    disableNotification: true,
-                    parseMode: ParseMode.Default,
-                    text: Text
-                    );
-            }, false);
-        }
-
         private async void RebuildIndex() {
             var messages = from s in context.Messages
                            select s;
@@ -70,7 +59,7 @@ namespace TelegramSearchBot.Controller {
                     }
                 }
             }
-            SendMessage("重建索引完成");
+            await Send.Log("重建索引完成");
         }
 
         private async void RefreshCache() {
@@ -83,7 +72,7 @@ namespace TelegramSearchBot.Controller {
                     Encoding.UTF8.GetBytes(message.Content),
                     new DistributedCacheEntryOptions { });
             }
-            SendMessage("刷新缓存完成");
+            await Send.Log("刷新缓存完成");
         }
 
         private async void RefreshAll() {
@@ -116,7 +105,7 @@ namespace TelegramSearchBot.Controller {
                     }
                 }
             }
-            SendMessage("全部刷新完成");
+            await Send.Log("全部刷新完成");
         }
 
         protected override async void ExecuteAsync(object sender, MessageEventArgs e) {

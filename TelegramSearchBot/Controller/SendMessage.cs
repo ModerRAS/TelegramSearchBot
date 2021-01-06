@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
+using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Controller {
@@ -14,12 +15,24 @@ namespace TelegramSearchBot.Controller {
         private ConcurrentQueue<Task> tasks;
         private readonly TimeLimiter GroupLimit;
         private readonly TimeLimiter GlobalLimit;
+        private readonly ITelegramBotClient botClient;
         //private List<Task> tasks;
         public SendMessage(ITelegramBotClient botClient) {
             //queue = new ConcurrentQueue<SendModel>();
             GroupLimit = TimeLimiter.GetFromMaxCountByInterval(20, TimeSpan.FromMinutes(1));
             GlobalLimit = TimeLimiter.GetFromMaxCountByInterval(30, TimeSpan.FromSeconds(1));
             tasks = new ConcurrentQueue<Task>();
+            this.botClient = botClient;
+        }
+        public async Task Log(string Text) {
+            await AddTask(async () => {
+                await botClient.SendTextMessageAsync(
+                    chatId: Env.AdminId,
+                    disableNotification: true,
+                    parseMode: ParseMode.Default,
+                    text: Text
+                    );
+            }, false);
         }
         public async Task AddTask(Func<Task> Action, bool IsGroup) {
             if (IsGroup) {
