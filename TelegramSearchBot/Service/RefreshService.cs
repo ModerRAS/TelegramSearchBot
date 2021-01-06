@@ -30,7 +30,7 @@ namespace TelegramSearchBot.Service {
                     try {
                         await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
                     } catch (NSonic.AssertionException exception) {
-                        Console.Error.WriteLine(e);
+                        Console.Error.WriteLine($"{e}\n{messageOption.ChatId}:{messageOption.MessageId}\n{messageOption.Content}");
                         Console.Error.WriteLine(exception);
                     }
                 }
