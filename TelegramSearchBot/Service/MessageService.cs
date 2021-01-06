@@ -57,12 +57,7 @@ namespace TelegramSearchBot.Service {
 
 
                 foreach (var e in Users) {
-                    foreach (var s in SplitWords(messageOption.Content)) {
-                        if (!string.IsNullOrEmpty(s)) {
-                            await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", s);
-                        }
-                    }
-                    
+                    await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
                 }
 
                 await Cache.SetAsync(
