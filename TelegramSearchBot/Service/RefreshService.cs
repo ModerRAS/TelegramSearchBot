@@ -7,10 +7,11 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using NSonic;
 using Microsoft.Extensions.Caching.Distributed;
+using TelegramSearchBot.Controller;
 
 namespace TelegramSearchBot.Service {
     class RefreshService : MessageService {
-        public RefreshService(SearchContext context, IDistributedCache Cache) : base(context, Cache) {
+        public RefreshService(SearchContext context, IDistributedCache Cache, SendMessage Send) : base(context, Cache) {
         }
 
         public async Task ExecuteAsync(MessageOption messageOption) {
@@ -30,6 +31,8 @@ namespace TelegramSearchBot.Service {
                     try {
                         await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
                     } catch (NSonic.AssertionException exception) {
+                        await Send.Log($"{e}\n{messageOption.ChatId}:{messageOption.MessageId}\n{messageOption.Content}");
+                        await Send.Log(exception.ToString());
                         Console.Error.WriteLine($"{e}\n{messageOption.ChatId}:{messageOption.MessageId}\n{messageOption.Content}");
                         Console.Error.WriteLine(exception);
                     }

@@ -7,14 +7,17 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using NSonic;
 using Microsoft.Extensions.Caching.Distributed;
+using TelegramSearchBot.Controller;
 
 namespace TelegramSearchBot.Service {
     class MessageService : IMessageService {
         protected readonly SearchContext context;
         protected readonly IDistributedCache Cache;
-        public MessageService(SearchContext context, IDistributedCache Cache) {
+        protected readonly SendMessage Send;
+        public MessageService(SearchContext context, IDistributedCache Cache, SendMessage Send) {
             this.context = context;
             this.Cache = Cache;
+            this.Send = Send;
         }
         protected List<string> SplitWords(string sentence) {
             var ret = new List<string>();
@@ -60,6 +63,8 @@ namespace TelegramSearchBot.Service {
                     try {
                         await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
                     } catch (NSonic.AssertionException exception) {
+                        await Send.Log($"{e}\n{messageOption.ChatId}:{messageOption.MessageId}\n{messageOption.Content}");
+                        await Send.Log(exception.ToString());
                         Console.Error.WriteLine(e);
                         Console.Error.WriteLine(exception);
                     }
