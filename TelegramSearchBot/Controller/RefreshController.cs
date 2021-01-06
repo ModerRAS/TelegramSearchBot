@@ -35,9 +35,6 @@ namespace TelegramSearchBot.Controller {
         private async void RebuildIndex() {
             var messages = from s in context.Messages
                            select s;
-
-            var users = (from s in context.Users
-                         select s).ToList();
             long count = messages.LongCount();
             await Send.Log($"共{count}条消息，现在开始重建索引");
             long i = 0;
@@ -51,17 +48,6 @@ namespace TelegramSearchBot.Controller {
                     UserId = message.GroupId,
                     Content = message.Content
                 });
-
-                foreach (var user in users) {
-                    if (user.GroupId.Equals(message.GroupId)) {
-                        await refreshService.ExecuteAsync(new MessageOption() {
-                            ChatId = message.GroupId,
-                            MessageId = message.MessageId,
-                            UserId = user.UserId,
-                            Content = message.Content
-                        });
-                    }
-                }
                 i++;
             }
             await Send.Log("重建索引完成");
@@ -89,9 +75,6 @@ namespace TelegramSearchBot.Controller {
         private async void RefreshAll() {
             var messages = from s in context.Messages
                            select s;
-
-            var users = (from s in context.Users
-                         select s).ToList();
             long count = messages.LongCount();
             await Send.Log($"共{count}条消息，现在开始全部刷新");
             long i = 0;
@@ -99,23 +82,16 @@ namespace TelegramSearchBot.Controller {
                 if (i % 10000 == 0) {
                     await Send.Log($"已完成{i * 100 / count}%");
                 }
-                var messageOption = new MessageOption() {
+                await refreshService.ExecuteAsync(new MessageOption() {
                     ChatId = message.GroupId,
                     MessageId = message.MessageId,
                     UserId = message.GroupId,
                     Content = message.Content
-                };
-                await refreshService.ExecuteAsync(messageOption);
+                });
                 await Cache.SetAsync(
                     $"{message.GroupId}:{message.MessageId}",
                     Encoding.UTF8.GetBytes(message.Content),
                     new DistributedCacheEntryOptions { });
-
-                foreach (var user in users) {
-                    if (user.GroupId.Equals(message.GroupId)) {
-                        await refreshService.ExecuteAsync(messageOption);
-                    }
-                }
                 i++;
             }
             await Send.Log("全部刷新完成");
