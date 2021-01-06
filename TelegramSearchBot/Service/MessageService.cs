@@ -20,22 +20,15 @@ namespace TelegramSearchBot.Service {
             this.Send = Send;
         }
         protected List<string> SplitWords(string sentence) {
-            var ret = new List<string>();
-            if (sentence.Length > 100) {
-                ret.AddRange(
-                sentence.Replace("\n", " ")
+            return sentence.Replace("\n", " ")
+                        .Replace("\r", "")
                         .Replace(",", " ")
                         .Replace("\"", "\\\"")
                         .Replace("\'", "\\\'")
                         .Replace(".", " ")
                         .Replace("，", " ")
                         .Replace("。", " ")
-                        .Split(" "));
-            } else {
-                ret.Add(sentence.Replace("\"", "\\\""));
-            }
-            
-            return ret;
+                        .Split(" ").ToList();
         }
         public async Task ExecuteAsync(MessageOption messageOption) {
 
