@@ -9,6 +9,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
@@ -18,14 +20,28 @@ namespace TelegramSearchBot.Controller {
         private readonly SearchContext context;
         private readonly RefreshService refreshService;
         private readonly IDistributedCache Cache;
+        private readonly SendMessage Send;
         public RefreshController(ITelegramBotClient botClient, 
                                  SearchContext context, 
                                  IDistributedCache Cache,
-                                 RefreshService refreshService
+                                 RefreshService refreshService, 
+                                 SendMessage Send
             ) : base(botClient) {
+            this.Send = Send;
             this.refreshService = refreshService;
             this.context = context;
             this.Cache = Cache;
+        }
+
+        private async void SendMessage(string Text) {
+            await Send.AddTask(async () => {
+                await botClient.SendTextMessageAsync(
+                    chatId: Env.AdminId,
+                    disableNotification: true,
+                    parseMode: ParseMode.Default,
+                    text: Text
+                    );
+            }, false);
         }
 
         private async void RebuildIndex() {
@@ -54,6 +70,7 @@ namespace TelegramSearchBot.Controller {
                     }
                 }
             }
+            SendMessage("重建索引完成");
         }
 
         private async void RefreshCache() {
@@ -66,6 +83,7 @@ namespace TelegramSearchBot.Controller {
                     Encoding.UTF8.GetBytes(message.Content),
                     new DistributedCacheEntryOptions { });
             }
+            SendMessage("刷新缓存完成");
         }
 
         private async void RefreshAll() {
@@ -98,6 +116,7 @@ namespace TelegramSearchBot.Controller {
                     }
                 }
             }
+            SendMessage("全部刷新完成");
         }
 
         protected override async void ExecuteAsync(object sender, MessageEventArgs e) {
