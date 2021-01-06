@@ -26,12 +26,12 @@ namespace TelegramSearchBot.Service {
         /// </summary>
         /// <param name="searchOption"></param>
         /// <returns></returns>
-        public override async Task<SearchOption> Search(SearchOption searchOption) {
+        public async Task<SearchOption> Search(SearchOption searchOption) {
 
             using (var sonicSearchConnection = NSonicFactory.Search(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)) {
                 await sonicSearchConnection.ConnectAsync();
 
-                var sonicQuery = await sonicSearchConnection.QueryAsync(Env.SonicCollection, searchOption.ChatId.ToString(), searchOption.Search, limit: searchOption.Take, offset: searchOption.Skip);
+                var sonicQuery = await sonicSearchConnection.QueryAsync(searchOption.ChatId.ToString(), Env.SonicCollection, searchOption.Search, limit: searchOption.Take, offset: searchOption.Skip);
 
                 if (sonicQuery.Length == searchOption.Take) {
                     var sonicQueryCount = await sonicSearchConnection.QueryAsync(Env.SonicCollection, searchOption.ChatId.ToString(), searchOption.Search, limit: searchOption.Take, offset: searchOption.Skip + searchOption.Take);
@@ -39,22 +39,6 @@ namespace TelegramSearchBot.Service {
                 } else {
                     searchOption.Count = sonicQuery.Length + searchOption.Skip;
                 }
-
-                //var MessagesIds = new HashSet<(long, long)>();
-
-                //foreach (var e in sonicQuery) {
-                //    var tmp = e.Split(":");
-                //    if (tmp.Length == 2) MessagesIds.Add((long.Parse(tmp[0]), long.Parse(tmp[1])));
-                //}
-
-                //searchOption.Messages = new List<Message>();
-
-                //foreach (var e in MessagesIds) {
-                //    var query = from s in DbContext.Messages
-                //                where e.Item1.Equals(s.GroupId) && e.Item2.Equals(s.MessageId)
-                //                select s;
-                //    searchOption.Messages.Add(query.FirstOrDefault());
-                //}
 
                 searchOption.Messages = new List<Message>();
 

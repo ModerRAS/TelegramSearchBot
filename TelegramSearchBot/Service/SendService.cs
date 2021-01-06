@@ -19,7 +19,6 @@ namespace TelegramSearchBot.Service {
         private readonly SendMessage Send;
         private readonly IDistributedCache Cache;
         public SendService(ITelegramBotClient botClient, SendMessage Send, IDistributedCache distributedCache) {
-            //this.DbContext = DbContext;
             this.Send = Send;
             this.Cache = distributedCache;
             this.botClient = botClient;

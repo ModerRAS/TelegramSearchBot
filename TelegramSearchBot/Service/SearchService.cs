@@ -16,7 +16,7 @@ namespace TelegramSearchBot.Service {
             this.DbContext = DbContext;
         }
 
-        public async override Task<SearchOption> Search(SearchOption searchOption) {
+        public async Task<SearchOption> Search(SearchOption searchOption) {
             var query = from s in DbContext.Messages
                         where s.Content.Contains(searchOption.Search) && (searchOption.IsGroup ? s.GroupId.Equals(searchOption.ChatId) : (from u in DbContext.Users where u.UserId.Equals(searchOption.ChatId) select u.GroupId).Contains(s.GroupId))
                         orderby s.MessageId descending
