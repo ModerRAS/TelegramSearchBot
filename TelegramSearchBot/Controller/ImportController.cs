@@ -15,9 +15,11 @@ namespace TelegramSearchBot.Controller {
     class ImportController : IOnMessage {
         private readonly SearchContext context;
         private readonly IDistributedCache Cache;
-        public ImportController(ITelegramBotClient botClient, SearchContext context, IDistributedCache Cache) : base(botClient) {
+        private readonly ITelegramBotClient botClient;
+        public ImportController(ITelegramBotClient botClient, SearchContext context, IDistributedCache Cache) {
             this.context = context;
             this.Cache = Cache;
+            this.botClient = botClient;
         }
 
         public static async Task<string> CrawlString(string url, HttpClient client) {
@@ -36,7 +38,7 @@ namespace TelegramSearchBot.Controller {
             throw new HttpRequestException();
         }
 
-        protected override async void ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
             if (e.Message.Chat.Id < 0) {
                 return;
             }

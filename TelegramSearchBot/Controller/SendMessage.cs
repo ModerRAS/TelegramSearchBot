@@ -59,22 +59,6 @@ namespace TelegramSearchBot.Controller {
                         }
                     }
                 }
-                //if (queue.IsEmpty) {
-                //var before = DateTime.Now;
-                //Task.WaitAll(tasks.ToArray());
-                //var after = DateTime.Now;
-                //if (after - before < TimeSpan.FromSeconds(1)) {
-                //    Thread.Sleep(1000);
-                //}
-                //} else {
-                //    SendModel ToSend;
-                //    queue.TryDequeue(out ToSend);
-                //    if (ToSend.IsGroup) {
-                //        tasks.Add(GroupLimit.Enqueue(async () => await GlobalLimit.Enqueue(ToSend.Action)));
-                //    } else {
-                //        tasks.Add(GlobalLimit.Enqueue(ToSend.Action));
-                //    }
-                //}
             }
         }
     }

@@ -14,12 +14,14 @@ namespace TelegramSearchBot.Controller {
         private readonly AutoQRService autoQRSevice;
         private readonly SendMessage Send;
         private readonly IMessageService messageService;
-        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send, IMessageService messageService) : base(botClient) {
+        private readonly ITelegramBotClient botClient;
+        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send, IMessageService messageService) {
             this.autoQRSevice = autoQRSevice;
             this.messageService = messageService;
             this.Send = Send;
+            this.botClient = botClient;
         }
-        protected async override void ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
             if (e.Message.Photo is null || e.Message.Photo.Length <= 0) {
             } else {
                 var links = new List<string>();

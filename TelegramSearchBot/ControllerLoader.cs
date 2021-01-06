@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Telegram.Bot.Args;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Intrerface;
 
@@ -24,6 +25,9 @@ namespace TelegramSearchBot {
             _ = service.GetRequiredService<RefreshController>();
             _ = service.GetRequiredService<AutoQRController>();
             _ = service.GetRequiredService<SendMessage>().Run();
+        }
+        public static void OnMessage(object sender, MessageEventArgs e) {
+            
         }
     }
 }

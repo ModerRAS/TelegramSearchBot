@@ -11,21 +11,21 @@ using Telegram.Bot.Types.ReplyMarkups;
 using Newtonsoft.Json;
 using Microsoft.Extensions.Caching.Distributed;
 using TelegramSearchBot.Service;
+using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Controller {
     class SearchController : IOnMessage {
         private readonly ISearchService searchService;
         private readonly SendService sendService;
         public SearchController(
-            ITelegramBotClient botClient, 
             ISearchService searchService, 
             SendService sendService
-            ) : base(botClient) {
+            ) {
             this.searchService = searchService;
             this.sendService = sendService;
         }
 
-        protected override async void ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
             if (!string.IsNullOrEmpty(e.Message.Text)) {
                 if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 ")) {
                     var firstSearch = new SearchOption() {

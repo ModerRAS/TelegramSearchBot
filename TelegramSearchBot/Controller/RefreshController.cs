@@ -21,12 +21,11 @@ namespace TelegramSearchBot.Controller {
         private readonly RefreshService refreshService;
         private readonly IDistributedCache Cache;
         private readonly SendMessage Send;
-        public RefreshController(ITelegramBotClient botClient, 
-                                 SearchContext context, 
+        public RefreshController(SearchContext context, 
                                  IDistributedCache Cache,
                                  RefreshService refreshService, 
                                  SendMessage Send
-            ) : base(botClient) {
+            ) {
             this.Send = Send;
             this.refreshService = refreshService;
             this.context = context;
@@ -108,7 +107,7 @@ namespace TelegramSearchBot.Controller {
             await Send.Log("全部刷新完成");
         }
 
-        protected override async void ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
             if (e.Message.Chat.Id < 0) {
                 return;
             }

@@ -7,16 +7,15 @@ using Telegram.Bot.Args;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
+using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Controller {
     class MessageController : IOnMessage {
-        private readonly SearchContext context;
         private readonly IMessageService messageService;
-        public MessageController(ITelegramBotClient botClient, IMessageService messageService, SearchContext context) : base(botClient) {
-            this.context = context;
+        public MessageController(IMessageService messageService) {
             this.messageService = messageService;
         }
-        protected override async void ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
             if (e.Message.Chat.Id > 0) {
                 return;
             }
