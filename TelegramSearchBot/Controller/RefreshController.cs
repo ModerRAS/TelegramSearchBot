@@ -38,11 +38,12 @@ namespace TelegramSearchBot.Controller {
 
             var users = (from s in context.Users
                          select s).ToList();
-            await Send.Log($"共{messages.LongCount()}条消息，现在开始重建索引");
+            long count = messages.LongCount();
+            await Send.Log($"共{count}条消息，现在开始重建索引");
             long i = 0;
             foreach (var message in messages) {
                 if (i % 10000 == 0) {
-                    await Send.Log($"已完成{i}条");
+                    await Send.Log($"已完成{i * 100 / count}%");
                 }
                 await refreshService.ExecuteAsync(new MessageOption() {
                     ChatId = message.GroupId,
@@ -69,11 +70,12 @@ namespace TelegramSearchBot.Controller {
         private async void RefreshCache() {
             var messages = from s in context.Messages
                            select s;
-            await Send.Log($"共{messages.LongCount()}条消息，现在开始刷新缓存");
+            long count = messages.LongCount();
+            await Send.Log($"共{count}条消息，现在开始刷新缓存");
             long i = 0;
             foreach (var message in messages) {
                 if (i % 10000 == 0) {
-                    await Send.Log($"已完成{i}条");
+                    await Send.Log($"已完成{i * 100 / count}%");
                 }
                 await Cache.SetAsync(
                     $"{message.GroupId}:{message.MessageId}",
@@ -90,11 +92,12 @@ namespace TelegramSearchBot.Controller {
 
             var users = (from s in context.Users
                          select s).ToList();
-            await Send.Log($"共{messages.LongCount()}条消息，现在开始全部刷新");
+            long count = messages.LongCount();
+            await Send.Log($"共{count}条消息，现在开始全部刷新");
             long i = 0;
             foreach (var message in messages) {
                 if (i % 10000 == 0) {
-                    await Send.Log($"已完成{i}条");
+                    await Send.Log($"已完成{i * 100 / count}%");
                 }
                 var messageOption = new MessageOption() {
                     ChatId = message.GroupId,
