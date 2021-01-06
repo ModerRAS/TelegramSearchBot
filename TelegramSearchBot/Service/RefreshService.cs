@@ -29,7 +29,11 @@ namespace TelegramSearchBot.Service {
 
                 try {
                     foreach (var e in Users) {
-                        await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
+                        foreach (var s in SplitWords(messageOption.Content)) {
+                            if (!string.IsNullOrEmpty(s)) {
+                                await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", s);
+                            }
+                        }
                     }
                 } catch (AssertionException exception) {
                     await Send.Log($"{messageOption.ChatId}:{messageOption.MessageId}\n{messageOption.Content}");

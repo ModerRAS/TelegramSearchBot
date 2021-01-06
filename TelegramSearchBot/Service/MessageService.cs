@@ -21,16 +21,20 @@ namespace TelegramSearchBot.Service {
         }
         protected List<string> SplitWords(string sentence) {
             var ret = new List<string>();
-            ret.AddRange(
-                sentence.Replace("\n"," ")
-                        .Replace(","," ")
+            if (sentence.Length > 100) {
+                ret.AddRange(
+                sentence.Replace("\n", " ")
+                        .Replace(",", " ")
                         .Replace("\"", "\\\"")
                         .Replace("\'", "\\\'")
                         .Replace(".", " ")
                         .Replace("，", " ")
                         .Replace("。", " ")
                         .Split(" "));
-            ret.Add(sentence.Replace("\"", "\\\""));
+            } else {
+                ret.Add(sentence.Replace("\"", "\\\""));
+            }
+            
             return ret;
         }
         public async Task ExecuteAsync(MessageOption messageOption) {
@@ -61,7 +65,11 @@ namespace TelegramSearchBot.Service {
 
                 try {
                     foreach (var e in Users) {
-                        await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", messageOption.Content);
+                        foreach (var s in SplitWords(messageOption.Content)) {
+                            if (!string.IsNullOrEmpty(s)) {
+                                await sonicIngestConnection.PushAsync(Env.SonicCollection, e.ToString(), $"{messageOption.ChatId}:{messageOption.MessageId}", s);
+                            }
+                        }
                     }
                 } catch (AssertionException exception) {
                     await Send.Log($"{messageOption.ChatId}:{messageOption.MessageId}\n{messageOption.Content}");
