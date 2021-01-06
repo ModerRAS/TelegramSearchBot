@@ -34,8 +34,7 @@ namespace TelegramSearchBot.Service {
 
             using (var sonicIngestConnection = NSonicFactory.Ingest(Env.SonicHostname, Env.SonicPort, Env.SonicSecret)) {
                 await sonicIngestConnection.ConnectAsync();
-                await context.Messages.AddAsync(new Message() { GroupId = messageOption.ChatId, MessageId = messageOption.MessageId, Content = messageOption.Content });
-
+                
                 var UserIfExists = from s in context.Users
                                    where s.UserId.Equals(messageOption.UserId) && s.GroupId.Equals(messageOption.ChatId)
                                    select s;
@@ -44,6 +43,8 @@ namespace TelegramSearchBot.Service {
                 } else {
                     await context.Users.AddAsync(new User() { GroupId = messageOption.ChatId, UserId = messageOption.UserId });
                 }
+
+                await context.Messages.AddAsync(new Message() { GroupId = messageOption.ChatId, MessageId = messageOption.MessageId, Content = messageOption.Content });
 
                 await context.SaveChangesAsync();
 
