@@ -43,7 +43,7 @@ namespace TelegramSearchBot {
             bot.OnMessageEdited += OnMessage;
             bot.OnCallbackQuery += OnCallbackQuery;
             service = host.Services;
-            ControllerLoader.InitController(host.Services);
+            InitController(host.Services);
             using (var serviceScope = host.Services.GetService<IServiceScopeFactory>().CreateScope()) {
                 var context = serviceScope.ServiceProvider.GetRequiredService<SearchContext>();
                 context.Database.Migrate();
