@@ -1,7 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Logging.Debug;
 using Newtonsoft.Json;
 using NSonic;
 using System;
@@ -36,7 +40,11 @@ namespace TelegramSearchBot {
                     AddController(service);
                 });
         static void Main(string[] args) {
-            IHost host = CreateHostBuilder(args).Build();
+            IHost host = CreateHostBuilder(args)
+                .ConfigureLogging(logging =>
+                logging.AddFilter("System", LogLevel.Warning)
+                  .AddFilter("Microsoft", LogLevel.Warning))
+                .Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             bot.StartReceiving();
             bot.OnMessage += OnMessage;
