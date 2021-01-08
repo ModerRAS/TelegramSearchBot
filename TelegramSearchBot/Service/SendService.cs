@@ -41,7 +41,7 @@ namespace TelegramSearchBot.Service {
         public string GenerateMessage(List<Message> Finded, SearchOption searchOption) {
             string Begin;
             if (searchOption.Count > 0) {
-                Begin = $"共找到 {searchOption.Count} 项结果, 当前为第{searchOption.Skip + 1}项到第{searchOption.Skip + searchOption.Take}项\n";
+                Begin = $"共找到 {searchOption.Count} 项结果, 当前为第{searchOption.Skip + 1}项到第{(searchOption.Skip + searchOption.Take < searchOption.Count ? searchOption.Skip + searchOption.Take : searchOption.Count)}项\n";
             } else {
                 Begin = $"未找到结果。\n";
             }
