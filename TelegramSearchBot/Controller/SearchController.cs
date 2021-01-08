@@ -15,13 +15,15 @@ using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Controller {
     class SearchController : IOnMessage {
-        private readonly ISearchService searchService;
+        private readonly ISearchService searchService,sonicSearchService;
         private readonly SendService sendService;
         public SearchController(
-            ISearchService searchService, 
+            SearchService searchService, 
+            SonicSearchService sonicSearchService,
             SendService sendService
             ) {
             this.searchService = searchService;
+            this.sonicSearchService = sonicSearchService;
             this.sendService = sendService;
         }
 
@@ -42,6 +44,10 @@ namespace TelegramSearchBot.Controller {
                     };
 
                     var searchOption = await searchService.Search(firstSearch);
+
+                    if (searchOption.Messages.Count == 0) {
+                        searchOption = await sonicSearchService.Search(firstSearch);
+                    }
 
                     await sendService.ExecuteAsync(searchOption, searchOption.Messages);
                 }

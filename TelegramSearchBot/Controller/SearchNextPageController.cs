@@ -20,7 +20,7 @@ namespace TelegramSearchBot.Controller {
         private readonly SendMessage Send;
         private readonly IDistributedCache Cache;
         private readonly ILogger logger;
-        private readonly ISearchService searchService;
+        private readonly ISearchService searchService, sonicSearchService;
         private readonly SendService sendService;
         private readonly ITelegramBotClient botClient;
         public SearchNextPageController(
@@ -28,7 +28,8 @@ namespace TelegramSearchBot.Controller {
             SendMessage Send, 
             IDistributedCache Cache, 
             ILogger<SearchNextPageController> logger, 
-            ISearchService searchService, 
+            SearchService searchService,
+            SonicSearchService sonicSearchService,
             SendService sendService
             ) {
             this.sendService = sendService;
@@ -37,6 +38,7 @@ namespace TelegramSearchBot.Controller {
             this.Cache = Cache;
             this.logger = logger;
             this.botClient = botClient;
+            this.sonicSearchService = sonicSearchService;
         }
 
         public async Task ExecuteAsync(object sender, CallbackQueryEventArgs e) {
@@ -70,6 +72,10 @@ namespace TelegramSearchBot.Controller {
                 }
 
                 var searchOptionNext = await searchService.Search(searchOption);
+
+                if (searchOptionNext.Messages.Count == 0) {
+                    searchOption = await sonicSearchService.Search(searchOption);
+                }
 
                 await sendService.ExecuteAsync(searchOption, searchOptionNext.Messages);
 

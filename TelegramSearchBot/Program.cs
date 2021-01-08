@@ -31,7 +31,8 @@ namespace TelegramSearchBot {
                     });
                     service.AddDbContext<SearchContext>(options => options.UseNpgsql(SearchContext.Configuring), ServiceLifetime.Transient);
                     service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy)));
-                    service.AddTransient<ISearchService, SonicSearchService>();
+                    service.AddTransient<SonicSearchService>();
+                    service.AddTransient<SearchService>();
                     service.AddTransient<IMessageService, MessageService>();
                     service.AddTransient<AutoQRService>();
                     service.AddTransient<RefreshService>();
