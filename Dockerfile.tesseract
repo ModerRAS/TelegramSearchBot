@@ -13,7 +13,7 @@ RUN export LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib && \
     ./configure && \
     make -j4 && \
     make install && \
-    cp /usr/local/lib/liblept.so.5.0.4 /app/out/x64/libleptonica-1.80.0.so
+    cp /usr/local/lib/liblept.so.5.0.4 /app/out/x64/libleptonica-1.80.0.so && \
     cd /app && \
     git clone https://github.com/tesseract-ocr/tesseract.git && \
     cd tesseract && \
