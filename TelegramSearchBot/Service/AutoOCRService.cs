@@ -15,7 +15,7 @@ namespace TelegramSearchBot.Service {
         /// <returns></returns>
         public async Task<string> ExecuteAsync(MemoryStream file) {
             var texts = new List<string>();
-            using (var engine = new TesseractEngine(@".\tessdata", "chi_sim", EngineMode.Default)) {
+            using (var engine = new TesseractEngine(@"/app/tessdata", "chi_sim", EngineMode.Default)) {
                 using (var img = Pix.LoadFromMemory(file.ToArray())) {
                     using (var page = engine.Process(img)) {
                         var text = page.GetText();
