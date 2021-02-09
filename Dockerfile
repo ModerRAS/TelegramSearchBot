@@ -8,7 +8,7 @@ RUN apt update -y && \
 
 WORKDIR /app
 
-COPY --from=build-env /app/out /app
 COPY --from=tessdata /app/out/tessdata /app/tessdata
+COPY --from=build-env /app/out /app
 
 ENTRYPOINT ["dotnet", "TelegramSearchBot.dll"]
