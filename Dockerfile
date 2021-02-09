@@ -5,7 +5,12 @@ FROM moderras/telegramsearchbot:tesseract-latest AS tesseract
 FROM mcr.microsoft.com/dotnet/runtime:5.0
 
 RUN apt update -y && \
-    apt install -y fontconfig
+    apt install -y fontconfig && \
+    apt-get install -y --allow-unauthenticated \
+        libc6-dev \
+        libgdiplus \
+        libx11-dev \
+     && rm -rf /var/lib/apt/lists/*
 
 
 WORKDIR /app
