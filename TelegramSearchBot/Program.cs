@@ -35,6 +35,7 @@ namespace TelegramSearchBot {
                     service.AddTransient<SearchService>();
                     service.AddTransient<IMessageService, MessageService>();
                     service.AddTransient<AutoQRService>();
+                    service.AddTransient<AutoOCRService>();
                     service.AddTransient<RefreshService>();
                     service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
@@ -53,7 +54,9 @@ namespace TelegramSearchBot {
             bot.OnCallbackQuery += OnCallbackQuery;
             service = host.Services;
             InitController(host.Services);
+#pragma warning disable CS8602 // 解引用可能出现空引用。
             using (var serviceScope = host.Services.GetService<IServiceScopeFactory>().CreateScope()) {
+#pragma warning restore CS8602 // 解引用可能出现空引用。
                 var context = serviceScope.ServiceProvider.GetRequiredService<SearchContext>();
                 context.Database.Migrate();
             }
@@ -76,6 +79,7 @@ namespace TelegramSearchBot {
             await service.GetRequiredService<ImportController>().ExecuteAsync(sender, e);
             await service.GetRequiredService<RefreshController>().ExecuteAsync(sender, e);
             await service.GetRequiredService<AutoQRController>().ExecuteAsync(sender, e);
+            await service.GetRequiredService<AutoOCRController>().ExecuteAsync(sender, e);
         }
         public static async void OnCallbackQuery(object sender, CallbackQueryEventArgs e) {
             await service.GetRequiredService<SearchNextPageController>().ExecuteAsync(sender, e);
