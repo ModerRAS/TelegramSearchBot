@@ -1,6 +1,6 @@
 FROM moderras/telegramsearchbot:build AS build-env
 FROM moderras/telegramsearchbot:tessdata-latest AS tessdata
-FROM moderras/telegramsearchbot:tessdata-latest AS tesseract
+FROM moderras/telegramsearchbot:tesseract-latest AS tesseract
 
 FROM mcr.microsoft.com/dotnet/runtime:5.0
 
