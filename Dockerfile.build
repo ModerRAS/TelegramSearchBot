@@ -3,10 +3,4 @@ WORKDIR /app
 
 # Copy everything else and build
 COPY . ./
-RUN dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /app/out -r linux-x64 --self-contained false && \
-    apt update -y && \
-    apt upgrade -y && \
-    apt install libleptonica-dev libtesseract-dev -y && \
-    cp /usr/lib/x86_64-linux-gnu/liblept.so.5 /app/out/x64/liblept.so.5 && \
-    cp /usr/lib/x86_64-linux-gnu/liblept.so.5 /app/out/x64/libleptonica-1.80.0.so && \
-    cp /usr/lib/x86_64-linux-gnu/libtesseract.so /app/out/x64/libtesseract41.so
+RUN dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /app/out -r linux-x64 --self-contained false

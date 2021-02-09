@@ -1,0 +1,26 @@
+FROM moderras/dotnetsdk:5.0 AS build-env
+WORKDIR /app
+
+RUN export LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib && \
+    apt update -y && \
+    apt upgrade -y && \
+    apt install automake ca-certificates g++ git libtool make pkg-config asciidoc docbook-xsl xsltproc libpango1.0-dev git cmake -y && \
+    mkdir -p /app/out/x64 && \
+    git clone https://github.com/DanBloomberg/leptonica && \
+    cd leptonica && \
+    git checkout 1ac72c93fef1a5eb76b76d6723d2aee843dd6e51 && \
+    ./autogen.sh && \
+    ./configure && \
+    make -j4 && \
+    make install && \
+    cp /usr/local/lib/liblept.so.5.0.4 /app/out/x64/libleptonica-1.80.0.so
+    cd /app && \
+    git clone https://github.com/tesseract-ocr/tesseract.git && \
+    cd tesseract && \
+    git checkout 75103040c94ffd7fe5e4e3dfce0a7e67a8420849 && \
+    ./autogen.sh && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j4 && \
+    cp libtesseract.so.4.1.1 /app/out/x64/tesseract41.so

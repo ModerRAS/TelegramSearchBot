@@ -32,9 +32,25 @@ steps:
   commands:
     - docker build -t moderras/telegramsearchbot:build -f ./Dockerfile.build .
 
+- name: Build Tesseract
+  image: docker:latest
+  depends_on: [ "clone" ]
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
+    - docker build -t moderras/telegramsearchbot:tesseract-nightly-$(date +%F) -f ./Dockerfile.tesseract .
+    - docker build -t moderras/telegramsearchbot:tesseract-latest -f ./Dockerfile.tesseract .
+
+
 - name: Build docker image
   image: docker:latest
-  depends_on: [ "Prepare Tessdata docker image", "Build Telegram Search Bot" ]
+  depends_on: [ "Prepare Tessdata docker image", "Build Telegram Search Bot", "Build Tesseract" ]
   volumes:
     - name: docker_sock
       path: /var/run/docker.sock
@@ -79,6 +95,22 @@ steps:
     - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
     - docker push moderras/telegramsearchbot:tessdata-nightly-$(date +%F)
     - docker push moderras/telegramsearchbot:tessdata-latest
+
+- name: Push Tesseract docker image
+  image: docker:latest
+  depends_on: [ "Build Tesseract" ]
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
+    - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
+    - docker push moderras/telegramsearchbot:tesseract-nightly-$(date +%F)
+    - docker push moderras/telegramsearchbot:tesseract-latest
 
 - name: Delete local docker image
   image: docker:latest
