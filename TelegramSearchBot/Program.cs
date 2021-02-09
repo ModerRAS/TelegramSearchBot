@@ -69,6 +69,7 @@ namespace TelegramSearchBot {
             service.AddTransient<ImportController>();
             service.AddTransient<RefreshController>();
             service.AddTransient<AutoQRController>();
+            service.AddTransient<AutoOCRController>();
         }
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SendMessage>().Run();
