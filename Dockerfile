@@ -17,6 +17,7 @@ WORKDIR /app
 
 COPY --from=tessdata /app/out/tessdata /app/tessdata
 COPY --from=tesseract /app/out/x64/tesseract41.so /app/x64/tesseract41.so
+RUN ln -s /app/x64/tesseract41.so /app/x64/libtesseract41.so
 COPY --from=tesseract /app/out/x64/libleptonica-1.80.0.so /app/x64/libleptonica-1.80.0.so
 COPY --from=build-env /app/out /app
 
