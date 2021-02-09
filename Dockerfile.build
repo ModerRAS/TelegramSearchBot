@@ -8,5 +8,5 @@ RUN dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /a
     apt upgrade -y && \
     apt install libleptonica-dev libtesseract-dev -y && \
     cp /usr/lib/x86_64-linux-gnu/liblept.so.5 /app/out/x64/liblept.so.5 && \
-    cp /usr/lib/x86_64-linux-gnu/liblept.so.5 /app/out/x64/libleptonica-1.78.0.so && \
-    cp /usr/lib/x86_64-linux-gnu/libtesseract.so.4.0.1 /app/out/x64/libtesseract41.so
+    cp /usr/lib/x86_64-linux-gnu/liblept.so.5 /app/out/x64/libleptonica-1.80.0.so && \
+    cp /usr/lib/x86_64-linux-gnu/libtesseract.so /app/out/x64/libtesseract41.so
