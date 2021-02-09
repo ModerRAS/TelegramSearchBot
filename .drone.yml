@@ -3,8 +3,38 @@ type: docker
 name: build
 steps:
 
+- name: Prepare Tessdata docker image
+  image: docker:latest
+  depends_on: [ "clone" ]
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
+    - docker build -t moderras/telegramsearchbot:tessdata-nightly-$(date +%F) -f ./Dockerfile.tessdata .
+    - docker build -t moderras/telegramsearchbot:tessdata-latest -f ./Dockerfile.tessdata .
+
+- name: Build Telegram Search Bot
+  image: docker:latest
+  depends_on: [ "clone" ]
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
+    - docker build -t moderras/telegramsearchbot:build -f ./Dockerfile.build .
+
 - name: Build docker image
   image: docker:latest
+  depends_on: [ "Prepare Tessdata docker image", "Build Telegram Search Bot" ]
   volumes:
     - name: docker_sock
       path: /var/run/docker.sock
@@ -17,8 +47,10 @@ steps:
     - docker build -t moderras/telegramsearchbot:nightly-$(date +%F) -f ./Dockerfile .
     - docker build -t moderras/telegramsearchbot:latest -f ./Dockerfile .
 
+
 - name: Push docker image
   image: docker:latest
+  depends_on: [ "Build docker image" ]
   volumes:
     - name: docker_sock
       path: /var/run/docker.sock
@@ -32,8 +64,25 @@ steps:
     - docker push moderras/telegramsearchbot:nightly-$(date +%F)
     - docker push moderras/telegramsearchbot:latest
 
+- name: Push Tessdata docker image
+  image: docker:latest
+  depends_on: [ "Prepare Tessdata docker image" ]
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
+    - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
+    - docker push moderras/telegramsearchbot:tessdata-nightly-$(date +%F)
+    - docker push moderras/telegramsearchbot:tessdata-latest
+
 - name: Delete local docker image
   image: docker:latest
+  depends_on: [ "Push docker image" ]
   volumes:
     - name: docker_sock
       path: /var/run/docker.sock
@@ -48,6 +97,7 @@ steps:
 
 - name: Send Telegram notification
   image: appleboy/drone-telegram
+  depends_on: [ "Delete local docker image" ]
   settings:
     token: 
       from_secret: bot_token

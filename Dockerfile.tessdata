@@ -1,0 +1,9 @@
+FROM moderras/dotnetsdk:5.0 AS build-env
+WORKDIR /app
+
+RUN apt update -y && \
+    apt install wget zip -y && \
+    wget https://github.com/tesseract-ocr/tessdata/archive/master.zip && \
+    unzip master.zip && \
+    mkdir -p /app/out/ && \
+    mv tessdata-master/ out/tessdata
