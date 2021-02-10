@@ -21,7 +21,7 @@ namespace TelegramSearchBot.Service {
             stream.Position = 0;
             var texts = new List<string>();
             using (var engine = new TesseractEngine(@"/app/tessdata", "chi_sim", EngineMode.Default)) {
-                using (var img = Pix.LoadFromMemory((stream.ToArray()))) {
+                using (var img = Pix.LoadTiffFromMemory(stream.ToArray())) {
                     using (var page = engine.Process(img)) {
                         var text = page.GetText();
                         //Console.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
