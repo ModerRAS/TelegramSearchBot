@@ -69,7 +69,10 @@ namespace TelegramSearchBot {
             service.AddTransient<ImportController>();
             service.AddTransient<RefreshController>();
             service.AddTransient<AutoQRController>();
-            service.AddTransient<AutoOCRController>();
+            if (Env.EnableAutoOCR) {
+                service.AddTransient<AutoOCRController>();
+            }
+            
         }
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SendMessage>().Run();
@@ -80,7 +83,9 @@ namespace TelegramSearchBot {
             await service.GetRequiredService<ImportController>().ExecuteAsync(sender, e);
             await service.GetRequiredService<RefreshController>().ExecuteAsync(sender, e);
             await service.GetRequiredService<AutoQRController>().ExecuteAsync(sender, e);
-            await service.GetRequiredService<AutoOCRController>().ExecuteAsync(sender, e);
+            if (Env.EnableAutoOCR) {
+                await service.GetRequiredService<AutoOCRController>().ExecuteAsync(sender, e);
+            }
         }
         public static async void OnCallbackQuery(object sender, CallbackQueryEventArgs e) {
             await service.GetRequiredService<SearchNextPageController>().ExecuteAsync(sender, e);
