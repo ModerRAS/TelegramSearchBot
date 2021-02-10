@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Drawing;
 using System.Threading.Tasks;
 using Tesseract;
 
@@ -14,9 +15,13 @@ namespace TelegramSearchBot.Service {
         /// <param name="messageOption"></param>
         /// <returns></returns>
         public async Task<string> ExecuteAsync(MemoryStream file) {
+            var stream = new MemoryStream();
+            var tg_img = Image.FromStream(file);
+            tg_img.Save(stream, System.Drawing.Imaging.ImageFormat.Tiff);
+            stream.Position = 0;
             var texts = new List<string>();
             using (var engine = new TesseractEngine(@"/app/tessdata", "chi_sim", EngineMode.Default)) {
-                using (var img = Pix.LoadFromMemory(file.ToArray())) {
+                using (var img = Pix.LoadFromMemory((stream.ToArray())) {
                     using (var page = engine.Process(img)) {
                         var text = page.GetText();
                         //Console.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
