@@ -31,9 +31,10 @@ namespace TelegramSearchBot.Controller {
                         stream.Position = 0;
                         var str = await autoOCRSevice.ExecuteAsync(stream);
                         await Send.AddTask(async () => {
-                            var message = await botClient.SendTextMessageAsync(
+                            var message = await botClient.SendPhotoAsync(
                             chatId: e.Message.Chat,
-                            text: str,
+                            photo: file.FileId,
+                            caption: str,
                             parseMode: Telegram.Bot.Types.Enums.ParseMode.Default,
                             replyToMessageId: e.Message.MessageId
                             );
