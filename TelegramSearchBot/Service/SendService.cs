@@ -14,7 +14,7 @@ using TelegramSearchBot.Model;
 using Message = TelegramSearchBot.Model.Message;
 
 namespace TelegramSearchBot.Service {
-    class SendService {
+    public class SendService {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
         private readonly IDistributedCache Cache;

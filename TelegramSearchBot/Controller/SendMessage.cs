@@ -11,7 +11,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Controller {
-    class SendMessage {
+    public class SendMessage {
         private ConcurrentQueue<Task> tasks;
         private readonly TimeLimiter GroupLimit;
         private readonly TimeLimiter GlobalLimit;

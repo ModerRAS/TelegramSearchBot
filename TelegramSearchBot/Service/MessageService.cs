@@ -10,7 +10,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using TelegramSearchBot.Controller;
 
 namespace TelegramSearchBot.Service {
-    class MessageService : IMessageService {
+    public class MessageService : IMessageService {
         protected readonly SearchContext context;
         protected readonly IDistributedCache Cache;
         protected readonly SendMessage Send;

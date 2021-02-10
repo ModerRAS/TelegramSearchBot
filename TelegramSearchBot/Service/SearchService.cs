@@ -10,7 +10,7 @@ using TelegramSearchBot.Intrerface;
 using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Service {
-    class SearchService : ISearchService {
+    public class SearchService : ISearchService {
         private readonly SearchContext DbContext;
         public SearchService(SearchContext DbContext) {
             this.DbContext = DbContext;

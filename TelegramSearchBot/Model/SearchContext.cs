@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace TelegramSearchBot.Model {
-    class SearchContext : DbContext {
+    public class SearchContext : DbContext {
         public SearchContext(DbContextOptions<SearchContext> options)
                 : base(options) {
             Database.EnsureCreated();

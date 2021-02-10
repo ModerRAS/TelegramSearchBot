@@ -10,7 +10,7 @@ using TelegramSearchBot.Model;
 using ZXing.SkiaSharp;
 
 namespace TelegramSearchBot.Service {
-    class AutoQRService {
+    public class AutoQRService {
         /// <summary>
         /// 按理说是进来文件出去字符的
         /// </summary>

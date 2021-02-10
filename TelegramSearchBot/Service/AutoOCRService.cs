@@ -9,7 +9,7 @@ using Tesseract;
 using System.Drawing.Imaging;
 
 namespace TelegramSearchBot.Service {
-    class AutoOCRService {
+    public class AutoOCRService {
         private async Task<Bitmap> ConvertToGray(Bitmap rgb_img) {
             Bitmap newBitmap = new Bitmap(rgb_img.Width, rgb_img.Height);
 
