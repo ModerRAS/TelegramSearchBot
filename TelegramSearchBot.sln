@@ -13,6 +13,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Dockerfile = Dockerfile
 		Dockerfile.build = Dockerfile.build
 		Dockerfile.tessdata = Dockerfile.tessdata
+		Dockerfile.tesseract = Dockerfile.tesseract
 		README.md = README.md
 		sonic.cfg = sonic.cfg
 	EndProjectSection
