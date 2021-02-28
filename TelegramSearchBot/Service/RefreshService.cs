@@ -116,9 +116,10 @@ namespace TelegramSearchBot.Service {
             if (GroupUser.TryGetValue(messageOption.UserId, out Users)) {
                 try {
                     foreach (var e in Users) {
+                        var i = 0;
                         foreach (var s in SplitWords(messageOption.Content)) {
                             if (!string.IsNullOrEmpty(s)) {
-                                await sonicIngestConnection.PushAsync(e.ToString(), Env.SonicCollection, $"{messageOption.ChatId}:{messageOption.MessageId}", s);
+                                await sonicIngestConnection.PushAsync(e.ToString(), Env.SonicCollection, $"{messageOption.ChatId}:{messageOption.MessageId}:{i++}", s);
                             }
                         }
                     }

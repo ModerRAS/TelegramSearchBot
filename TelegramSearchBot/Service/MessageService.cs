@@ -20,18 +20,18 @@ namespace TelegramSearchBot.Service {
             this.Send = Send;
         }
         protected List<string> SplitWords(string sentence) {
-            //return sentence.Replace("\n", " ")
-            //            .Replace("\r", "")
-            //            .Replace(",", " ")
-            //            .Replace("\"", "\\\"")
-            //            .Replace("\'", "\\\'")
-            //            .Replace(".", " ")
-            //            .Replace("，", " ")
-            //            .Replace("。", " ")
-            //            .Split(" ").ToList();
-            var tmp = new List<string>();
-            tmp.Add(sentence.Replace("\n", " ").Replace("\r", "").Replace("\"", "\\\""));
-            return tmp;
+            return sentence.Replace("\n", " ")
+                        .Replace("\r", "")
+                        .Replace(",", " ")
+                        .Replace("\"", "\\\"")
+                        .Replace("\'", "\\\'")
+                        //.Replace(".", " ")
+                        .Replace("，", " ")
+                        .Replace("。", " ")
+                        .Split(" ").ToList();
+            //var tmp = new List<string>();
+            //tmp.Add(sentence.Replace("\n", " ").Replace("\r", "").Replace("\"", "\\\""));
+            //return tmp;
         }
         public async Task ExecuteAsync(MessageOption messageOption) {
 
@@ -61,9 +61,10 @@ namespace TelegramSearchBot.Service {
 
                 try {
                     foreach (var e in Users) {
+                        var i = 0;
                         foreach (var s in SplitWords(messageOption.Content)) {
                             if (!string.IsNullOrEmpty(s)) {
-                                await sonicIngestConnection.PushAsync(e.ToString(), Env.SonicCollection, $"{messageOption.ChatId}:{messageOption.MessageId}", s);
+                                await sonicIngestConnection.PushAsync(e.ToString(), Env.SonicCollection, $"{messageOption.ChatId}:{messageOption.MessageId}:{i++}", s);
                             }
                         }
                     }
