@@ -71,10 +71,10 @@ namespace TelegramSearchBot.Controller {
                     return;
                 }
 
-                var searchOptionNext = await searchService.Search(searchOption);
+                var searchOptionNext = await sonicSearchService.Search(searchOption);
 
                 if (searchOptionNext.Messages.Count == 0) {
-                    searchOption = await sonicSearchService.Search(searchOption);
+                    searchOption = await searchService.Search(searchOption);
                 }
 
                 await sendService.ExecuteAsync(searchOption, searchOptionNext.Messages);

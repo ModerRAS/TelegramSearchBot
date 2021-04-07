@@ -43,10 +43,10 @@ namespace TelegramSearchBot.Controller {
                         Chat = e.Message.Chat
                     };
 
-                    var searchOption = await searchService.Search(firstSearch);
+                    var searchOption = await sonicSearchService.Search(firstSearch);
 
                     if (searchOption.Messages.Count == 0) {
-                        searchOption = await sonicSearchService.Search(firstSearch);
+                        searchOption = await searchService.Search(firstSearch);
                     }
 
                     await sendService.ExecuteAsync(searchOption, searchOption.Messages);
