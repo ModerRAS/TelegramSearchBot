@@ -20,7 +20,7 @@ namespace TelegramSearchBot.Service {
             this.Send = Send;
         }
         protected List<string> SplitWords(string sentence) {
-            return sentence.Replace("\n", " ")
+            var tmp = sentence.Replace("\n", " ")
                         .Replace("\r", "")
                         .Replace(",", " ")
                         .Replace("\"", "\\\"")
@@ -29,6 +29,15 @@ namespace TelegramSearchBot.Service {
                         .Replace("，", " ")
                         .Replace("。", " ")
                         .Split(" ").ToList();
+            var ret = new List<string>();
+            foreach(var e in tmp) {
+                if (string.IsNullOrEmpty(e) | string.IsNullOrWhiteSpace(e)) {
+
+                } else {
+                    ret.Add(e);
+                }
+            }
+            return ret;
             //var tmp = new List<string>();
             //tmp.Add(sentence.Replace("\n", " ").Replace("\r", "").Replace("\"", "\\\""));
             //return tmp;
