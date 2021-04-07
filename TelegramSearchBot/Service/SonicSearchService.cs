@@ -50,7 +50,7 @@ namespace TelegramSearchBot.Service {
                             Id = 0,
                             GroupId = groupid,
                             MessageId = messageid,
-                            Content = Encoding.UTF8.GetString(await Cache.GetAsync(e))
+                            Content = Encoding.UTF8.GetString(await Cache.GetAsync($"{groupid}:{messageid}"))
                         });
                     }
                     
