@@ -31,7 +31,7 @@ namespace TelegramSearchBot.Service {
                         .Split(" ").ToList();
             var ret = new List<string>();
             foreach(var e in tmp) {
-                if (string.IsNullOrEmpty(e) | string.IsNullOrWhiteSpace(e)) {
+                if (string.IsNullOrEmpty(e) || string.IsNullOrWhiteSpace(e)) {
 
                 } else {
                     ret.Add(e);

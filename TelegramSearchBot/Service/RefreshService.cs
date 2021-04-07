@@ -130,10 +130,10 @@ namespace TelegramSearchBot.Service {
                     Console.Error.WriteLine(exception);
                 }
 
-                await Cache.SetAsync(
-                    $"{messageOption.ChatId}:{messageOption.MessageId}",
-                    Encoding.UTF8.GetBytes(messageOption.Content.Replace("\n", " ")),
-                    new DistributedCacheEntryOptions { });
+                //await Cache.SetAsync(
+                //    $"{messageOption.ChatId}:{messageOption.MessageId}",
+                //    Encoding.UTF8.GetBytes(messageOption.Content.Replace("\n", " ")),
+                //    new DistributedCacheEntryOptions { });
             }
         }
     }
