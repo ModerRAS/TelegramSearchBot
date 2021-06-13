@@ -22,6 +22,9 @@ namespace TelegramSearchBot.Controller {
             this.botClient = botClient;
         }
         public async Task ExecuteAsync(object sender, MessageEventArgs e) {
+            if (!Env.EnableAutoOCR) {
+                return;
+            }
             if (e.Message.Photo is null || e.Message.Photo.Length <= 0) {
             } else {
                 var links = new List<string>();

@@ -63,32 +63,41 @@ namespace TelegramSearchBot {
             host.Run();
         }
         public static void AddController(IServiceCollection service) {
-            service.AddTransient<SearchNextPageController>();//这一段这两行更适合用反射来加载
-            service.AddTransient<MessageController>();
-            service.AddTransient<SearchController>();
-            service.AddTransient<ImportController>();
-            service.AddTransient<RefreshController>();
-            service.AddTransient<AutoQRController>();
-            if (Env.EnableAutoOCR) {
-                service.AddTransient<AutoOCRController>();
-            }
+            service.Scan(scan => scan
+            .FromAssemblyOf<IOnMessage>()
+            .AddClasses(classes => classes.AssignableTo<IOnMessage>())
+            .AsImplementedInterfaces()
+            .WithTransientLifetime()
+
+            .FromAssemblyOf<IOnCallbackQuery>()
+            .AddClasses(classes => classes.AssignableTo<IOnCallbackQuery>())
+            .AsImplementedInterfaces()
+            .WithTransientLifetime()
+
+            .FromAssemblyOf<IMessageService>()
+            .AddClasses(classes => classes.AssignableTo<IMessageService>())
+            .AsImplementedInterfaces()
+            .WithTransientLifetime()
+
+            .FromAssemblyOf<ISearchService>()
+            .AddClasses(classes => classes.AssignableTo<ISearchService>())
+            .AsImplementedInterfaces()
+            .WithTransientLifetime()
+            );
             
         }
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SendMessage>().Run();
         }
         public static async void OnMessage(object sender, MessageEventArgs e) {
-            await service.GetRequiredService<MessageController>().ExecuteAsync(sender, e);
-            await service.GetRequiredService<SearchController>().ExecuteAsync(sender, e);
-            await service.GetRequiredService<ImportController>().ExecuteAsync(sender, e);
-            await service.GetRequiredService<RefreshController>().ExecuteAsync(sender, e);
-            await service.GetRequiredService<AutoQRController>().ExecuteAsync(sender, e);
-            if (Env.EnableAutoOCR) {
-                await service.GetRequiredService<AutoOCRController>().ExecuteAsync(sender, e);
+            foreach (var per in service.GetServices<IOnMessage>()) {
+                await per.ExecuteAsync(sender, e);
             }
         }
         public static async void OnCallbackQuery(object sender, CallbackQueryEventArgs e) {
-            await service.GetRequiredService<SearchNextPageController>().ExecuteAsync(sender, e);
+            foreach (var per in service.GetServices<IOnCallbackQuery>()) {
+                await per.ExecuteAsync(sender, e);
+            }
         }
     }
 }
