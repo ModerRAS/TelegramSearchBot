@@ -7,9 +7,10 @@ using System.Drawing;
 using System.Threading.Tasks;
 using Tesseract;
 using System.Drawing.Imaging;
+using TelegramSearchBot.Intrerface;
 
 namespace TelegramSearchBot.Service {
-    public class AutoOCRService {
+    public class AutoOCRService : IStreamService {
         private async Task<Bitmap> ConvertToGray(Bitmap rgb_img) {
             Bitmap newBitmap = new Bitmap(rgb_img.Width, rgb_img.Height);
 
@@ -46,7 +47,7 @@ namespace TelegramSearchBot.Service {
         /// </summary>
         /// <param name="messageOption"></param>
         /// <returns></returns>
-        public async Task<string> ExecuteAsync(MemoryStream file) {
+        public async Task<string> ExecuteAsync(Stream file) {
             var stream = new MemoryStream();
             var tg_img = Image.FromStream(file);
             var bitmap = await ConvertToGray(new Bitmap(tg_img));

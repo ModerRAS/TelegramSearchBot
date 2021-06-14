@@ -8,11 +8,12 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using System.Threading.Tasks;
+using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
     class MessageController : IOnMessage {
-        private readonly IMessageService messageService;
-        public MessageController(IMessageService messageService) {
+        private readonly MessageService messageService;
+        public MessageController(MessageService messageService) {
             this.messageService = messageService;
         }
         public async Task ExecuteAsync(object sender, MessageEventArgs e) {

@@ -13,9 +13,9 @@ namespace TelegramSearchBot.Controller {
     class AutoOCRController : IOnMessage {
         private readonly AutoOCRService autoOCRSevice;
         private readonly SendMessage Send;
-        private readonly IMessageService messageService;
+        private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
-        public AutoOCRController(ITelegramBotClient botClient, AutoOCRService autoOCRSevice, SendMessage Send, IMessageService messageService) {
+        public AutoOCRController(ITelegramBotClient botClient, AutoOCRService autoOCRSevice, SendMessage Send, MessageService messageService) {
             this.autoOCRSevice = autoOCRSevice;
             this.messageService = messageService;
             this.Send = Send;

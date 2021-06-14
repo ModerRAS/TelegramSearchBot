@@ -10,13 +10,13 @@ using TelegramSearchBot.Model;
 using ZXing.SkiaSharp;
 
 namespace TelegramSearchBot.Service {
-    public class AutoQRService {
+    public class AutoQRService : IStreamService {
         /// <summary>
         /// 按理说是进来文件出去字符的
         /// </summary>
         /// <param name="messageOption"></param>
         /// <returns></returns>
-        public async Task<string> ExecuteAsync(MemoryStream file) {
+        public async Task<string> ExecuteAsync(Stream file) {
 
             using (var inputStream = new SKManagedStream(file))
             using (var original = SKBitmap.Decode(inputStream)) {
