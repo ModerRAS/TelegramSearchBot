@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Intrerface {
-    public interface IStreamService : IService {
+    public interface IStreamService {
         public abstract Task<string> ExecuteAsync(Stream file);
     }
 }

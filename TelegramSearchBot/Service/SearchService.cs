@@ -10,11 +10,13 @@ using TelegramSearchBot.Intrerface;
 using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Service {
-    public class SearchService : ISearchService {
+    public class SearchService : ISearchService, IService {
         private readonly SearchContext DbContext;
         public SearchService(SearchContext DbContext) {
             this.DbContext = DbContext;
         }
+
+        public string ServiceName => "SearchService";
 
         public async Task<SearchOption> Search(SearchOption searchOption) {
             var query = from s in DbContext.Messages

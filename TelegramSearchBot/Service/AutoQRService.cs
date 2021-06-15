@@ -10,7 +10,9 @@ using TelegramSearchBot.Model;
 using ZXing.SkiaSharp;
 
 namespace TelegramSearchBot.Service {
-    public class AutoQRService : IStreamService {
+    public class AutoQRService : IStreamService, IService {
+        public string ServiceName => "AutoQRService";
+
         /// <summary>
         /// 按理说是进来文件出去字符的
         /// </summary>

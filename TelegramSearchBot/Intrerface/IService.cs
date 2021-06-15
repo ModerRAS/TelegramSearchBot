@@ -6,5 +6,6 @@ using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Intrerface {
     public interface IService {
+        public string ServiceName { get; }
     }
 }

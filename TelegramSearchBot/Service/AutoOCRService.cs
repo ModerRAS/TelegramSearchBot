@@ -10,7 +10,9 @@ using System.Drawing.Imaging;
 using TelegramSearchBot.Intrerface;
 
 namespace TelegramSearchBot.Service {
-    public class AutoOCRService : IStreamService {
+    public class AutoOCRService : IStreamService, IService {
+        public string ServiceName => "AutoOCRService";
+
         private async Task<Bitmap> ConvertToGray(Bitmap rgb_img) {
             Bitmap newBitmap = new Bitmap(rgb_img.Width, rgb_img.Height);
 

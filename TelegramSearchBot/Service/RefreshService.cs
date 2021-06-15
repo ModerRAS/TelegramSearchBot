@@ -10,7 +10,8 @@ using Microsoft.Extensions.Caching.Distributed;
 using TelegramSearchBot.Controller;
 
 namespace TelegramSearchBot.Service {
-    public class RefreshService : MessageService {
+    public class RefreshService : MessageService, IService {
+        public new string ServiceName => "RefreshService";
         private Dictionary<long, List<long>> GroupUser { get; set; }
         public RefreshService(SearchContext context, IDistributedCache Cache, SendMessage Send) : base(context, Cache, Send) {
             GroupUser = new Dictionary<long, List<long>>();

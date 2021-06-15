@@ -10,7 +10,7 @@ using Telegram.Bot.Exceptions;
 using Microsoft.Extensions.Caching.Distributed;
 
 namespace TelegramSearchBot.Service {
-    public class SonicSearchService : ISearchService {
+    public class SonicSearchService : ISearchService, IService {
         //private readonly SearchContext DbContext;
         private readonly IDistributedCache Cache;
         public SonicSearchService(
@@ -19,6 +19,8 @@ namespace TelegramSearchBot.Service {
             //this.DbContext = DbContext;
             this.Cache = Cache;
         }
+
+        public string ServiceName => "SonicSearchService";
 
         /// <summary>
         /// 私聊搜索返回值： 群组Id:消息Id
