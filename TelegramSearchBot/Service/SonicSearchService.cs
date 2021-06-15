@@ -8,6 +8,7 @@ using NSonic;
 using System.Threading.Tasks;
 using Telegram.Bot.Exceptions;
 using Microsoft.Extensions.Caching.Distributed;
+using TelegramSearchBot.Comparer;
 
 namespace TelegramSearchBot.Service {
     public class SonicSearchService : ISearchService, IService {
@@ -42,7 +43,7 @@ namespace TelegramSearchBot.Service {
                     searchOption.Count = sonicQuery.Length + searchOption.Skip;
                 }
 
-                var Messages = new HashSet<Message>();
+                var Messages = new HashSet<Message>(new MessageComparer());
 
                 foreach (var e in sonicQuery) {
                     var tmp = e.Split(":");
