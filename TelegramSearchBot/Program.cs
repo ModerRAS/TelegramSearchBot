@@ -33,6 +33,13 @@ namespace TelegramSearchBot {
                     service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy)));
                     service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
+
+                    service.AddTransient<SonicSearchService>();
+                    service.AddTransient<SearchService>();
+                    service.AddTransient<MessageService>();
+                    service.AddTransient<AutoQRService>();
+                    service.AddTransient<AutoOCRService>();
+                    service.AddTransient<RefreshService>();
                     AddController(service);
                 });
         static void Main(string[] args) {
@@ -73,20 +80,20 @@ namespace TelegramSearchBot {
             //.AsImplementedInterfaces()
             //.WithTransientLifetime()
 
-            .FromAssemblyOf<IMessageService>()
-            .AddClasses(classes => classes.AssignableTo<IMessageService>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
+            //.FromAssemblyOf<IMessageService>()
+            //.AddClasses(classes => classes.AssignableTo<IMessageService>())
+            //.AsImplementedInterfaces()
+            //.WithTransientLifetime()
 
-            .FromAssemblyOf<ISearchService>()
-            .AddClasses(classes => classes.AssignableTo<ISearchService>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
+            //.FromAssemblyOf<ISearchService>()
+            //.AddClasses(classes => classes.AssignableTo<ISearchService>())
+            //.AsImplementedInterfaces()
+            //.WithTransientLifetime()
 
-            .FromAssemblyOf<IStreamService>()
-            .AddClasses(classes => classes.AssignableTo<IStreamService>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
+            //.FromAssemblyOf<IStreamService>()
+            //.AddClasses(classes => classes.AssignableTo<IStreamService>())
+            //.AsImplementedInterfaces()
+            //.WithTransientLifetime()
             );
             
         }
