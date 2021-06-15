@@ -68,20 +68,25 @@ namespace TelegramSearchBot {
             .AsImplementedInterfaces()
             .WithTransientLifetime()
 
-            .FromAssemblyOf<IMessageService>()
-            .AddClasses(classes => classes.AssignableTo<IMessageService>())
+            .FromAssemblyOf<IService>()
+            .AddClasses(classes => classes.AssignableTo<IService>())
             .AsImplementedInterfaces()
             .WithTransientLifetime()
 
-            .FromAssemblyOf<ISearchService>()
-            .AddClasses(classes => classes.AssignableTo<ISearchService>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
+            //.FromAssemblyOf<IMessageService>()
+            //.AddClasses(classes => classes.AssignableTo<IMessageService>())
+            //.AsImplementedInterfaces()
+            //.WithTransientLifetime()
 
-            .FromAssemblyOf<IStreamService>()
-            .AddClasses(classes => classes.AssignableTo<IStreamService>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
+            //.FromAssemblyOf<ISearchService>()
+            //.AddClasses(classes => classes.AssignableTo<ISearchService>())
+            //.AsImplementedInterfaces()
+            //.WithTransientLifetime()
+
+            //.FromAssemblyOf<IStreamService>()
+            //.AddClasses(classes => classes.AssignableTo<IStreamService>())
+            //.AsImplementedInterfaces()
+            //.WithTransientLifetime()
             );
             
         }
