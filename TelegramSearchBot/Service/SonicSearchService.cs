@@ -40,13 +40,13 @@ namespace TelegramSearchBot.Service {
                     searchOption.Count = sonicQuery.Length + searchOption.Skip;
                 }
 
-                searchOption.Messages = new List<Message>();
+                var Messages = new HashSet<Message>();
 
                 foreach (var e in sonicQuery) {
                     var tmp = e.Split(":");
                     long groupid, messageid;
                     if (long.TryParse(tmp[0], out groupid) && long.TryParse(tmp[1], out messageid)) {
-                        searchOption.Messages.Add(new Message() {
+                        Messages.Add(new Message() {
                             Id = 0,
                             GroupId = groupid,
                             MessageId = messageid,
@@ -55,6 +55,7 @@ namespace TelegramSearchBot.Service {
                     }
                     
                 }
+                searchOption.Messages = new List<Message>(Messages);
                 return searchOption;
             }
         }
