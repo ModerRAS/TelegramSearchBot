@@ -30,7 +30,7 @@ namespace TelegramSearchBot {
                         options.Configuration = Env.RedisConnString;
                     });
                     service.AddDbContext<SearchContext>(options => options.UseNpgsql(SearchContext.Configuring), ServiceLifetime.Transient);
-                    service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy)));
+                    service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken, baseUrl: Env.BaseUrl) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy), baseUrl: Env.BaseUrl));
                     service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
 
