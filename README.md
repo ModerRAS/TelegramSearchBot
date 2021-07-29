@@ -45,5 +45,8 @@ tips2: 因为现在的奇怪设计， 所以如果redis重启了， 那么需要
 
 换成了使用基于sonic的倒排索引搜索， 然后将消息记录塞入redis以便加速搜索， 但是数据库中依然有一份历史记录备份。
 
+
+## 额外功能
+可以使用私有搭建的`Telegram Bot API`配合使用，只需要参考`docker-compose.yml`和`.env.example`配置好所需要的参数即可
 ## License
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FModerRAS%2FTelegramSearchBot.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FModerRAS%2FTelegramSearchBot?ref=badge_large)
