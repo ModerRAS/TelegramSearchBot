@@ -26,11 +26,19 @@ namespace TelegramSearchBot.Controller {
             } else {
                 var links = new List<string>();
                 foreach (var f in e.Message.Photo) {
-                    using (var stream = new MemoryStream()) {
-                        var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
-                        stream.Position = 0;
-                        links.Add(await autoQRSevice.ExecuteAsync(stream));
+                    if (Env.IsLocalAPI) {
+                        var fileInfo = await botClient.GetFileAsync(f.FileId);
+                        using(var stream = new FileStream(fileInfo.FilePath, FileMode.Open, FileAccess.Read)) {
+                            links.Add(await autoQRSevice.ExecuteAsync(stream));
+                        }
+                    } else {
+                        using (var stream = new MemoryStream()) {
+                            var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
+                            stream.Position = 0;
+                            links.Add(await autoQRSevice.ExecuteAsync(stream));
+                        }
                     }
+                    
                     //File.Delete(file.FilePath);
                 }
                 if (links.Count > 0) {

@@ -5,6 +5,7 @@ using System.Text;
 namespace TelegramSearchBot {
     class Env {
         public static readonly string BaseUrl = Environment.GetEnvironmentVariable("BaseUrl") ?? "https://api.telegram.org";
+        public static readonly bool IsLocalAPI = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("IsLocalAPI")) && bool.Parse(Environment.GetEnvironmentVariable("IsLocal"));
         public static readonly string HttpProxy = Environment.GetEnvironmentVariable("HTTP_PROXY") ?? Environment.GetEnvironmentVariable("HTTPS_PROXY") ?? Environment.GetEnvironmentVariable("http_proxy") ?? Environment.GetEnvironmentVariable("https_proxy") ?? string.Empty;
         public static readonly string BotToken = Environment.GetEnvironmentVariable("BotToken") ?? string.Empty;
         public static readonly string DatabaseHost = Environment.GetEnvironmentVariable("Host") ?? string.Empty;
