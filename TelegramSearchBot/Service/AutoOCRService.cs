@@ -14,13 +14,13 @@ namespace TelegramSearchBot.Service {
         public string ServiceName => "AutoOCRService";
 
         private async Task<Bitmap> ConvertToGray(Bitmap rgb_img) {
-            Bitmap newBitmap = new Bitmap(rgb_img.Width, rgb_img.Height);
+            Bitmap newBitmap = new(rgb_img.Width, rgb_img.Height);
 
             //get a graphics object from the new image
             using (Graphics g = Graphics.FromImage(newBitmap)) {
 
                 //create the grayscale ColorMatrix
-                ColorMatrix colorMatrix = new ColorMatrix(
+                ColorMatrix colorMatrix = new(
                    new float[][]
                    {
              new float[] {.3f, .3f, .3f, 0, 0},
@@ -31,16 +31,14 @@ namespace TelegramSearchBot.Service {
                    });
 
                 //create some image attributes
-                using (ImageAttributes attributes = new ImageAttributes()) {
+                using ImageAttributes attributes = new();
+                //set the color matrix attribute
+                attributes.SetColorMatrix(colorMatrix);
 
-                    //set the color matrix attribute
-                    attributes.SetColorMatrix(colorMatrix);
-
-                    //draw the original image on the new image
-                    //using the grayscale color matrix
-                    g.DrawImage(rgb_img, new Rectangle(0, 0, rgb_img.Width, rgb_img.Height),
-                                0, 0, rgb_img.Width, rgb_img.Height, GraphicsUnit.Pixel, attributes);
-                }
+                //draw the original image on the new image
+                //using the grayscale color matrix
+                g.DrawImage(rgb_img, new Rectangle(0, 0, rgb_img.Width, rgb_img.Height),
+                            0, 0, rgb_img.Width, rgb_img.Height, GraphicsUnit.Pixel, attributes);
             }
             return newBitmap;
         }
@@ -57,45 +55,38 @@ namespace TelegramSearchBot.Service {
             stream.Position = 0;
             var texts = new List<string>();
             using (var engine = new TesseractEngine(@"/app/tessdata", "chi_sim", EngineMode.Default)) {
-                using (var img = Pix.LoadFromMemory(stream.ToArray())) {
-                    using (var page = engine.Process(img)) {
-                        var text = page.GetText();
-                        //Console.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
+                using var img = Pix.LoadFromMemory(stream.ToArray()); using var page = engine.Process(img); var text = page.GetText();
+                //Console.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
 
-                        //Console.WriteLine("Text (GetText): \r\n{0}", text);
-                        //Console.WriteLine("Text (iterator):");
-                        using (var iter = page.GetIterator()) {
-                            iter.Begin();
+                //Console.WriteLine("Text (GetText): \r\n{0}", text);
+                //Console.WriteLine("Text (iterator):");
+                using var iter = page.GetIterator(); iter.Begin();
 
+                do {
+                    do {
+                        do {
                             do {
-                                do {
-                                    do {
-                                        do {
-                                            //if (iter.IsAtBeginningOf(PageIteratorLevel.Block)) {
-                                            //    Console.WriteLine("<BLOCK>");
-                                            //}
-                                            var inner_text = iter.GetText(PageIteratorLevel.Word);
+                                //if (iter.IsAtBeginningOf(PageIteratorLevel.Block)) {
+                                //    Console.WriteLine("<BLOCK>");
+                                //}
+                                var inner_text = iter.GetText(PageIteratorLevel.Word);
 
-                                            texts.Add(inner_text);
+                                texts.Add(inner_text);
 
-                                            //Console.Write(inner_text);
-                                            //Console.Write(" ");
+                                //Console.Write(inner_text);
+                                //Console.Write(" ");
 
-                                            //if (iter.IsAtFinalOf(PageIteratorLevel.TextLine, PageIteratorLevel.Word)) {
-                                            //    Console.WriteLine();
-                                            //}
-                                        } while (iter.Next(PageIteratorLevel.TextLine, PageIteratorLevel.Word));
+                                //if (iter.IsAtFinalOf(PageIteratorLevel.TextLine, PageIteratorLevel.Word)) {
+                                //    Console.WriteLine();
+                                //}
+                            } while (iter.Next(PageIteratorLevel.TextLine, PageIteratorLevel.Word));
 
-                                        //if (iter.IsAtFinalOf(PageIteratorLevel.Para, PageIteratorLevel.TextLine)) {
-                                        //    Console.WriteLine();
-                                        //}
-                                    } while (iter.Next(PageIteratorLevel.Para, PageIteratorLevel.TextLine));
-                                } while (iter.Next(PageIteratorLevel.Block, PageIteratorLevel.Para));
-                            } while (iter.Next(PageIteratorLevel.Block));
-
-                        }
-                    }
-                }
+                            //if (iter.IsAtFinalOf(PageIteratorLevel.Para, PageIteratorLevel.TextLine)) {
+                            //    Console.WriteLine();
+                            //}
+                        } while (iter.Next(PageIteratorLevel.Para, PageIteratorLevel.TextLine));
+                    } while (iter.Next(PageIteratorLevel.Block, PageIteratorLevel.Para));
+                } while (iter.Next(PageIteratorLevel.Block));
             }
             return string.Join("", texts);
         }
