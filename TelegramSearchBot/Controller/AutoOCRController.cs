@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
 using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
@@ -33,21 +34,13 @@ namespace TelegramSearchBot.Controller {
                         var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
                         stream.Position = 0;
                         var str = await autoOCRSevice.ExecuteAsync(stream);
-                        await Send.AddTask(async () => {
-                            var message = await botClient.SendPhotoAsync(
-                            chatId: e.Message.Chat,
-                            photo: file.FileId,
-                            caption: str,
-                            parseMode: Telegram.Bot.Types.Enums.ParseMode.Default,
-                            replyToMessageId: e.Message.MessageId
-                            );
-                            await messageService.ExecuteAsync(new Model.MessageOption() {
-                                ChatId = e.Message.Chat.Id,
-                                Content = str,
-                                MessageId = message.MessageId,
-                                UserId = (long)botClient.BotId
-                            });
-                        }, e.Message.Chat.Id < 0);
+
+                        await messageService.ExecuteAsync(new MessageOption {
+                            ChatId = e.Message.Chat.Id,
+                            MessageId = e.Message.MessageId,
+                            UserId = e.Message.From.Id,
+                            Content = str
+                        });
                     }
                     //File.Delete(file.FilePath);
                 }
