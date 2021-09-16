@@ -35,15 +35,16 @@ namespace TelegramSearchBot.Controller {
                         stream.Position = 0;
                         var str = await autoOCRSevice.ExecuteAsync(stream);
 
-                        await messageService.ExecuteAsync(new MessageOption {
-                            ChatId = e.Message.Chat.Id,
-                            MessageId = e.Message.MessageId,
-                            UserId = e.Message.From.Id,
-                            Content = str
-                        });
+                        links.Add(str);   
                     }
                     //File.Delete(file.FilePath);
                 }
+                await messageService.ExecuteAsync(new MessageOption {
+                    ChatId = e.Message.Chat.Id,
+                    MessageId = e.Message.MessageId,
+                    UserId = e.Message.From.Id,
+                    Content = string.Join(" ", links)
+                });
             }
         }
     }
