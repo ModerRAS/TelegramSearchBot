@@ -12,12 +12,12 @@ using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
     class AutoOCRController : IOnMessage {
-        private readonly AutoOCRService autoOCRSevice;
+        private readonly PaddleOCRService paddleOCRService;
         private readonly SendMessage Send;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
-        public AutoOCRController(ITelegramBotClient botClient, AutoOCRService autoOCRSevice, SendMessage Send, MessageService messageService) {
-            this.autoOCRSevice = autoOCRSevice;
+        public AutoOCRController(ITelegramBotClient botClient, PaddleOCRService paddleOCRService, SendMessage Send, MessageService messageService) {
+            this.paddleOCRService = paddleOCRService;
             this.messageService = messageService;
             this.Send = Send;
             this.botClient = botClient;
@@ -33,7 +33,7 @@ namespace TelegramSearchBot.Controller {
                     using (var stream = new MemoryStream()) {
                         var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
                         stream.Position = 0;
-                        var str = await autoOCRSevice.ExecuteAsync(stream);
+                        var str = await paddleOCRService.ExecuteAsync(stream);
 
                         links.Add(str);   
                     }

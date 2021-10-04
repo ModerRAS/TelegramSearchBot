@@ -19,5 +19,6 @@ namespace TelegramSearchBot {
         public static readonly string SonicSecret = Environment.GetEnvironmentVariable("SonicSecret") ?? string.Empty;
         public static readonly string SonicCollection = Environment.GetEnvironmentVariable("SonicCollection") ?? string.Empty;
         public static readonly bool EnableAutoOCR = (Environment.GetEnvironmentVariable("EnableAutoOCR") ?? string.Empty).Equals("true");
+        public static readonly string PaddleOCRAPI = Environment.GetEnvironmentVariable("PaddleOCRAPI") ?? string.Empty;
     }
 }
