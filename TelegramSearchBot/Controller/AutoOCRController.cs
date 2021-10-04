@@ -28,15 +28,23 @@ namespace TelegramSearchBot.Controller {
             }
             if (e.Message.Photo is null || e.Message.Photo.Length <= 0) {
             } else {
-                var links = new List<string>();
+                var links = new HashSet<string>();
                 foreach (var f in e.Message.Photo) {
-                    using (var stream = new MemoryStream()) {
-                        var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
-                        stream.Position = 0;
-                        var str = await paddleOCRService.ExecuteAsync(stream);
-
-                        links.Add(str);   
+                    if (Env.IsLocalAPI) {
+                        var fileInfo = await botClient.GetFileAsync(f.FileId);
+                        using (var stream = new FileStream(fileInfo.FilePath, FileMode.Open, FileAccess.Read)) {
+                            links.Add(await paddleOCRService.ExecuteAsync(stream));
+                        }
+                    } else {
+                        using (var stream = new MemoryStream()) {
+                            var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
+                            stream.Position = 0;
+                            var str = await paddleOCRService.ExecuteAsync(stream);
+                            links.Add(str);
+                        }
                     }
+
+                    
                     //File.Delete(file.FilePath);
                 }
                 await messageService.ExecuteAsync(new MessageOption {
