@@ -11,7 +11,7 @@ RUN export LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib && \
     git checkout 1ac72c93fef1a5eb76b76d6723d2aee843dd6e51 && \
     ./autogen.sh && \
     ./configure && \
-    make -j4 && \
+    make -j && \
     make install && \
     cp /usr/local/lib/liblept.so.5.0.4 /app/out/x64/libleptonica-1.80.0.so && \
     cd /app && \
