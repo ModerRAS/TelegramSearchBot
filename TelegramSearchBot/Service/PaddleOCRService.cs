@@ -11,18 +11,21 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using System.Net.Http;
 using Newtonsoft.Json;
+using System.Threading;
 
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
         public string ServiceName => "PaddleOCRService";
+        private static SemaphoreSlim semaphore = new SemaphoreSlim(Env.PaddleOCRAPIParallel);
 
-        
+
         /// <summary>
         /// 按理说是进来文件出去字符的
         /// </summary>
         /// <param name="messageOption"></param>
         /// <returns></returns>
         public async Task<string> ExecuteAsync(Stream file) {
+            await semaphore.WaitAsync().ConfigureAwait(false);
             if (Env.PaddleOCRAPI.Equals(string.Empty)) {
                 return "";
             }
@@ -35,6 +38,7 @@ namespace TelegramSearchBot.Service {
             var client = new HttpClient();
             var response = await client.PostAsync(Env.PaddleOCRAPI, new StringContent(JsonConvert.SerializeObject(postJson), Encoding.UTF8, "application/json"));
             var responseText = await response.Content.ReadAsStringAsync();
+            semaphore.Release();
             var responseJson = JsonConvert.DeserializeObject<PaddleOCRResult>(responseText);
             int status;
             if (int.TryParse(responseJson.Status, out status) && status == 0) {
