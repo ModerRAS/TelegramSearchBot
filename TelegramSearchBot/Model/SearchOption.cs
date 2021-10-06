@@ -6,6 +6,7 @@ using Telegram.Bot.Types;
 namespace TelegramSearchBot.Model {
     public class SearchOption {
         public string Search { get; set; }
+        public int MessageId { get; set; }
         public long ChatId { get; set; }
         public bool IsGroup { get; set; }
         /// <summary>
