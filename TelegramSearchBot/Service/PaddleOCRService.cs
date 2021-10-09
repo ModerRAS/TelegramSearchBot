@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text;
 using System.Drawing;
 using System.Threading.Tasks;
-using Tesseract;
 using System.Drawing.Imaging;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
@@ -31,7 +30,7 @@ namespace TelegramSearchBot.Service {
             }
             var stream = new MemoryStream();
             var tg_img = Image.FromStream(file);
-            tg_img.Save(stream, System.Drawing.Imaging.ImageFormat.Jpeg);
+            tg_img.Save(stream, ImageFormat.Jpeg);
             var tg_img_arr = stream.ToArray();
             var tg_img_base64 = Convert.ToBase64String(tg_img_arr);
             var postJson = new PaddleOCRPost() { Images = new List<string>() { tg_img_base64 } };

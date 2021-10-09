@@ -38,7 +38,6 @@ namespace TelegramSearchBot {
                     service.AddTransient<SearchService>();
                     service.AddTransient<MessageService>();
                     service.AddTransient<AutoQRService>();
-                    service.AddTransient<AutoOCRService>();
                     service.AddTransient<RefreshService>();
                     service.AddTransient<PaddleOCRService>();
                     AddController(service);
