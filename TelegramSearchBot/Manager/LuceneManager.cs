@@ -65,16 +65,22 @@ namespace TelegramSearchBot.Manager {
             }
             Parallel.ForEach(dict.Keys.ToList(), e => {
                 using (var writer = GetIndexWriter(e)) {
-                    foreach (var (message, doc) in from message in dict.GetValueOrDefault(e)
+                    foreach ((Message message, Document doc) in from message in dict.GetValueOrDefault(e)
                                                    let doc = new Document()
                                                    select (message, doc)) {
-                        doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
-                        Int64Field MessageIdField = new Int64Field("MessageId", message.MessageId, Field.Store.YES);
-                        TextField ContentField = new TextField("Content", message.Content, Field.Store.YES);
-                        ContentField.Boost = 1F;
-                        doc.Add(MessageIdField);
-                        doc.Add(ContentField);
-                        writer.AddDocument(doc);
+                        try {
+                            doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
+                            Int64Field MessageIdField = new Int64Field("MessageId", message.MessageId, Field.Store.YES);
+                            TextField ContentField = new TextField("Content", message.Content, Field.Store.YES);
+                            ContentField.Boost = 1F;
+                            doc.Add(MessageIdField);
+                            doc.Add(ContentField);
+                            writer.AddDocument(doc);
+                        } catch (ArgumentNullException ex) {
+                            Console.WriteLine(ex);
+                            Console.WriteLine(message);
+                            Console.WriteLine($"{message.GroupId},{message.MessageId},{message.Content}");
+                        }
                         
                     }
                     writer.Flush(triggerMerge: true, applyAllDeletes: true);
