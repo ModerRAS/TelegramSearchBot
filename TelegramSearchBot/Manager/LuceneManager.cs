@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Manager {
@@ -62,7 +63,7 @@ namespace TelegramSearchBot.Manager {
                     dict.Add(e.GroupId, list);
                 }
             }
-            foreach (var e in dict.Keys.ToList()) {
+            Parallel.ForEach(dict.Keys.ToList(), e => {
                 using (var writer = GetIndexWriter(e)) {
                     foreach (var (message, doc) in from message in dict.GetValueOrDefault(e)
                                                    let doc = new Document()
@@ -78,7 +79,7 @@ namespace TelegramSearchBot.Manager {
                         writer.Commit();
                     }
                 }
-            }
+            });
             
         }
         private IndexWriter GetIndexWriter(long GroupId) {
