@@ -110,7 +110,7 @@ namespace TelegramSearchBot.Manager {
             }
             return keyworkds;
         }
-        public List<Message> Search(string q, long GroupId, int Skip, int Take) {
+        public (int, List<Message>) Search(string q, long GroupId, int Skip, int Take) {
             IndexReader reader = DirectoryReader.Open(FSDirectory.Open($"{Env.WorkDir}/Index_Data_{GroupId}"));
 
             var searcher = new IndexSearcher(reader);
@@ -120,7 +120,9 @@ namespace TelegramSearchBot.Manager {
                 keyWordQuery.Add(new FuzzyQuery(new Term("Content", item)), Occur.SHOULD);
                 keyWordQuery.Add(new TermQuery(new Term("Content", item)), Occur.SHOULD);
             }
-            var hits = searcher.Search(keyWordQuery, Skip+Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true))).ScoreDocs;
+            var top = searcher.Search(keyWordQuery, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
+            var total = top.TotalHits;
+            var hits = top.ScoreDocs;
 
             var messages = new List<Message>();
             var id = 0;
@@ -134,7 +136,7 @@ namespace TelegramSearchBot.Manager {
                     Content = document.Get("Content")
                 });
             }
-            return messages;
+            return (total, messages);
         }
     }
 }

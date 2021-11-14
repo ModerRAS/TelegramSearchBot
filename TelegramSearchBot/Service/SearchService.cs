@@ -17,14 +17,16 @@ namespace TelegramSearchBot.Service {
 
         public async Task<SearchOption> Search(SearchOption searchOption) {
             if (searchOption.IsGroup) {
-                searchOption.Messages = lucene.Search(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                (searchOption.Count, searchOption.Messages) = lucene.Search(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
             } else {
                 var Users = Env.Database.GetCollection<User>("Users");
                 var UserInGroups =  Users.Find(user => searchOption.ChatId.Equals(user.UserId)).ToList();
                 var GroupsLength = UserInGroups.Count;
                 searchOption.Messages = new List<Message>();
                 foreach (var Group in UserInGroups) {
-                    searchOption.Messages.AddRange(lucene.Search(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength));
+                    var (count, messages) = lucene.Search(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
+                    searchOption.Messages.AddRange(messages);
+                    searchOption.Count += count;
                 }
             }
             return searchOption;
