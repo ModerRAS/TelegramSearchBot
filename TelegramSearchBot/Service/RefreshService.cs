@@ -8,6 +8,9 @@ using TelegramSearchBot.Model;
 using NSonic;
 using Microsoft.Extensions.Caching.Distributed;
 using TelegramSearchBot.Controller;
+using TelegramSearchBot.Comparer;
+using Newtonsoft.Json;
+using System.IO;
 
 namespace TelegramSearchBot.Service {
     public class RefreshService : MessageService, IService {
@@ -92,6 +95,23 @@ namespace TelegramSearchBot.Service {
             await Send.Log("全部刷新完成");
         }
 
+        private async Task ExportAll() {
+            await Send.Log("开始拉取数据库内容");
+            var messages = from s in context.Messages
+                           select s;
+            var users = from s in context.Users
+                           select s;
+            await Send.Log("开始去重");
+            var messageList = messages.ToList().Distinct(new MessageComparer()).ToList();
+            var usersList = users.ToList();
+            await Send.Log("开始序列化");
+            var jsonStr = JsonConvert.SerializeObject(new ExportModel() { Messages = messageList, Users = usersList });
+            await Send.Log("开始导出到文件");
+            await File.WriteAllTextAsync("/tmp/export.json", jsonStr);
+
+            await Send.Log("全部导出完成");
+        }
+
         public async Task ExecuteAsync(string Command) {
             var AllGroups = (from s in context.Users
                              select s.GroupId).ToHashSet();
@@ -109,6 +129,9 @@ namespace TelegramSearchBot.Service {
             }
             if (Command.Length == 4 && Command.Equals("全部刷新")) {
                 await RefreshAll();
+            }
+            if (Command.Length == 4 && Command.Equals("导出数据")) {
+                await ExportAll();
             }
         }
 
