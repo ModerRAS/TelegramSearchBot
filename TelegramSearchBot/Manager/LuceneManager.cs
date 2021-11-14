@@ -75,9 +75,10 @@ namespace TelegramSearchBot.Manager {
                         doc.Add(MessageIdField);
                         doc.Add(ContentField);
                         writer.AddDocument(doc);
-                        writer.Flush(triggerMerge: true, applyAllDeletes: true);
-                        writer.Commit();
+                        
                     }
+                    writer.Flush(triggerMerge: true, applyAllDeletes: true);
+                    writer.Commit();
                 }
             });
             
