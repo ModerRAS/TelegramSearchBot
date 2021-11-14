@@ -29,14 +29,8 @@ namespace TelegramSearchBot.Service {
             var Messages = Env.Database.GetCollection<Message>("Messages").FindAll();
             long count = Messages.LongCount();
             await Send.Log($"共{count}条消息，现在开始重建索引");
-            long i = 0;
-            foreach (var message in Messages) {
-                if (i % 10000 == 0) {
-                    await Send.Log($"已完成{i * 100 / count}%");
-                }
-                lucene.WriteDocument(message.GroupId, message.MessageId, message.Content);
-                i++;
-            }
+            lucene.WriteDocuments(Messages.ToList());
+            await Send.Log($"重建完成");
         }
 
         private async Task ImportAll() {
