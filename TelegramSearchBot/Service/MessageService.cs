@@ -29,9 +29,10 @@ namespace TelegramSearchBot.Service {
             if (!UserIfExists.Any()) {
                 Users.Insert(new User() { GroupId = messageOption.ChatId, UserId = messageOption.UserId });
             }
-            Messages.Insert(new Message() { GroupId = messageOption.ChatId, MessageId = messageOption.MessageId, Content = messageOption.Content });
+            var message = new Message() { GroupId = messageOption.ChatId, MessageId = messageOption.MessageId, Content = messageOption.Content };
+            Messages.Insert(message);
 
-            lucene.WriteDocument(messageOption.ChatId, messageOption.MessageId, messageOption.Content);
+            await lucene.WriteDocumentAsync(message);
 
         }
     }

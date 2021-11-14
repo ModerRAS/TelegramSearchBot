@@ -10,44 +10,36 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TelegramSearchBot.Controller;
 using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Manager {
     public class LuceneManager {
-        public void WriteDocument(long GroupId, long MessageId, string Content) {
-            using (var writer = GetIndexWriter(GroupId)) {
-
-                Document doc = new Document();
-                doc.Add(new Int64Field("GroupId", GroupId, Field.Store.YES));
-
-                Int64Field MessageIdField = new Int64Field("MessageId", MessageId, Field.Store.YES);
-
-                TextField ContentField = new TextField("Content", Content, Field.Store.YES);
-                ContentField.Boost = 1F;
-
-                doc.Add(MessageIdField);
-                doc.Add(ContentField);
-                writer.AddDocument(doc);
-                writer.Flush(triggerMerge: true, applyAllDeletes: true);
-                writer.Commit();
-            }
+        private SendMessage Send;
+        public LuceneManager(SendMessage Send) {
+            this.Send = Send;
         }
-        public void WriteDocument(Message message) {
+        public async Task WriteDocumentAsync(Message message) {
             using (var writer = GetIndexWriter(message.GroupId)) {
 
-                Document doc = new Document();
-                doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
+                try {
+                    Document doc = new Document();
+                    doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
 
-                Int64Field MessageIdField = new Int64Field("MessageId", message.MessageId, Field.Store.YES);
+                    Int64Field MessageIdField = new Int64Field("MessageId", message.MessageId, Field.Store.YES);
 
-                TextField ContentField = new TextField("Content", message.Content, Field.Store.YES);
-                ContentField.Boost = 1F;
+                    TextField ContentField = new TextField("Content", message.Content, Field.Store.YES);
+                    ContentField.Boost = 1F;
 
-                doc.Add(MessageIdField);
-                doc.Add(ContentField);
-                writer.AddDocument(doc);
-                writer.Flush(triggerMerge: true, applyAllDeletes: true);
-                writer.Commit();
+                    doc.Add(MessageIdField);
+                    doc.Add(ContentField);
+                    writer.AddDocument(doc);
+                    writer.Flush(triggerMerge: true, applyAllDeletes: true);
+                    writer.Commit();
+                } catch (ArgumentNullException ex) {
+                    await Send.Log(ex.Message);
+                    await Send.Log($"{message.GroupId},{message.MessageId},{message.Content}");
+                }
             }
         }
         public void WriteDocuments(IEnumerable<Message> messages) {
@@ -63,7 +55,7 @@ namespace TelegramSearchBot.Manager {
                     dict.Add(e.GroupId, list);
                 }
             }
-            Parallel.ForEach(dict.Keys.ToList(), e => {
+            Parallel.ForEach(dict.Keys.ToList(), async e => {
                 using (var writer = GetIndexWriter(e)) {
                     foreach ((Message message, Document doc) in from message in dict.GetValueOrDefault(e)
                                                    let doc = new Document()
@@ -77,9 +69,8 @@ namespace TelegramSearchBot.Manager {
                             doc.Add(ContentField);
                             writer.AddDocument(doc);
                         } catch (ArgumentNullException ex) {
-                            Console.WriteLine(ex);
-                            Console.WriteLine(message);
-                            Console.WriteLine($"{message.GroupId},{message.MessageId},{message.Content}");
+                            await Send.Log(ex.Message);
+                            await Send.Log($"{message.GroupId},{message.MessageId},{message.Content}");
                         }
                         
                     }
