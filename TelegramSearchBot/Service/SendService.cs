@@ -28,8 +28,8 @@ namespace TelegramSearchBot.Service {
             var list = new List<string>();
             foreach (var kv in messages) {
                 string text;
-                if (kv.Content.Length > 15) {
-                    text = kv.Content.Substring(0, 15);
+                if (kv.Content.Length > 30) {
+                    text = kv.Content.Substring(0, 30);
                 } else {
                     text = kv.Content;
                 }
