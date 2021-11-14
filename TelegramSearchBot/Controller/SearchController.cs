@@ -1,15 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Linq;
-using Telegram.Bot;
+﻿using System.Collections.Generic;
 using Telegram.Bot.Args;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
-using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
-using Newtonsoft.Json;
-using Microsoft.Extensions.Caching.Distributed;
 using TelegramSearchBot.Service;
 using System.Threading.Tasks;
 
@@ -19,11 +11,9 @@ namespace TelegramSearchBot.Controller {
         private readonly SendService sendService;
         public SearchController(
             SearchService searchService, 
-            SonicSearchService sonicSearchService,
             SendService sendService
             ) {
             this.searchService = searchService;
-            this.sonicSearchService = sonicSearchService;
             this.sendService = sendService;
         }
 
@@ -43,11 +33,7 @@ namespace TelegramSearchBot.Controller {
                         Chat = e.Message.Chat
                     };
 
-                    var searchOption = await sonicSearchService.Search(firstSearch);
-
-                    if (searchOption.Messages.Count == 0) {
-                        searchOption = await searchService.Search(firstSearch);
-                    }
+                    var searchOption = await searchService.Search(firstSearch);
 
                     await sendService.ExecuteAsync(searchOption, searchOption.Messages);
                 }

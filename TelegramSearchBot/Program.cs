@@ -1,5 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
+﻿using LiteDB;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -7,9 +6,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Logging.Debug;
 using Newtonsoft.Json;
-using NSonic;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
@@ -17,6 +16,7 @@ using Telegram.Bot;
 using Telegram.Bot.Args;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 
@@ -26,15 +26,10 @@ namespace TelegramSearchBot {
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .ConfigureServices(service => {
-                    service.AddDistributedRedisCache(options => {
-                        options.Configuration = Env.RedisConnString;
-                    });
-                    service.AddDbContext<SearchContext>(options => options.UseNpgsql(SearchContext.Configuring), ServiceLifetime.Transient);
                     service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken, baseUrl: Env.BaseUrl) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy), baseUrl: Env.BaseUrl));
                     service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
-
-                    service.AddTransient<SonicSearchService>();
+                    service.AddSingleton<LuceneManager>();
                     service.AddTransient<SearchService>();
                     service.AddTransient<MessageService>();
                     service.AddTransient<AutoQRService>();
@@ -43,6 +38,12 @@ namespace TelegramSearchBot {
                     AddController(service);
                 });
         static void Main(string[] args) {
+            if (!Directory.Exists(Env.WorkDir)) {
+                Utils.CreateDirectorys(Env.WorkDir);
+            }
+            Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
+            Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
+            Directory.SetCurrentDirectory(Env.WorkDir);
             IHost host = CreateHostBuilder(args)
                 .ConfigureLogging(logging =>
                 logging.AddFilter("System", LogLevel.Warning)
@@ -55,12 +56,6 @@ namespace TelegramSearchBot {
             bot.OnCallbackQuery += OnCallbackQuery;
             service = host.Services;
             InitController(host.Services);
-#pragma warning disable CS8602 // 解引用可能出现空引用。
-            using (var serviceScope = host.Services.GetService<IServiceScopeFactory>().CreateScope()) {
-#pragma warning restore CS8602 // 解引用可能出现空引用。
-                var context = serviceScope.ServiceProvider.GetRequiredService<SearchContext>();
-                context.Database.Migrate();
-            }
             host.Run();
         }
         public static void AddController(IServiceCollection service) {
@@ -74,28 +69,8 @@ namespace TelegramSearchBot {
             .AddClasses(classes => classes.AssignableTo<IOnCallbackQuery>())
             .AsImplementedInterfaces()
             .WithTransientLifetime()
-
-            //.FromAssemblyOf<IService>()
-            //.AddClasses(classes => classes.AssignableTo<IService>())
-            //.AsImplementedInterfaces()
-            //.WithTransientLifetime()
-
-            //.FromAssemblyOf<IMessageService>()
-            //.AddClasses(classes => classes.AssignableTo<IMessageService>())
-            //.AsImplementedInterfaces()
-            //.WithTransientLifetime()
-
-            //.FromAssemblyOf<ISearchService>()
-            //.AddClasses(classes => classes.AssignableTo<ISearchService>())
-            //.AsImplementedInterfaces()
-            //.WithTransientLifetime()
-
-            //.FromAssemblyOf<IStreamService>()
-            //.AddClasses(classes => classes.AssignableTo<IStreamService>())
-            //.AsImplementedInterfaces()
-            //.WithTransientLifetime()
             );
-            
+
         }
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SendMessage>().Run();

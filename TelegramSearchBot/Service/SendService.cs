@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Distributed;
+﻿using LiteDB;
 using Newtonsoft.Json;
 using RateLimiter;
 using System;
@@ -14,13 +14,14 @@ using TelegramSearchBot.Model;
 using Message = TelegramSearchBot.Model.Message;
 
 namespace TelegramSearchBot.Service {
+    
     public class SendService {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
-        private readonly IDistributedCache Cache;
-        public SendService(ITelegramBotClient botClient, SendMessage Send, IDistributedCache distributedCache) {
+        private readonly ILiteCollection<CacheData> Cache;
+        public SendService(ITelegramBotClient botClient, SendMessage Send) {
+            this.Cache = Env.Cache.GetCollection<CacheData>("CacheData");
             this.Send = Send;
-            this.Cache = distributedCache;
             this.botClient = botClient;
         }
         public static List<string> ConvertToList(IEnumerable<Message> messages) {
@@ -53,10 +54,12 @@ namespace TelegramSearchBot.Service {
             //此处会生成键盘并将searchOption中的Skip向后推移
             var keyboardList = new List<InlineKeyboardButton>();
             searchOption.Skip += searchOption.Take;
-            var tasks = new List<Task>();
             if (searchOption.Messages.Count - searchOption.Take >= 0) {
                 var uuid_nxt = Guid.NewGuid().ToString();
-                tasks.Add(Cache.SetAsync(uuid_nxt, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(searchOption, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) }));
+                Cache.Insert(new CacheData() {
+                    UUID = uuid_nxt,
+                    searchOption = searchOption
+                });
                 keyboardList.Add(InlineKeyboardButton.WithCallbackData(
                     "下一页",
                     uuid_nxt
@@ -64,16 +67,17 @@ namespace TelegramSearchBot.Service {
             }
             var uuid = Guid.NewGuid().ToString();
             searchOption.ToDeleteNow = true;
-            tasks.Add(Cache.SetAsync(uuid, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(searchOption, Formatting.Indented)), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(3) }));
+            Cache.Insert(new CacheData() {
+                UUID = uuid,
+                searchOption = searchOption
+            });
+            
             searchOption.ToDeleteNow = false; //按理说不需要的
             keyboardList.Add(InlineKeyboardButton.WithCallbackData(
                         "删除历史",
                         uuid
                         ));
 
-            foreach (var t in tasks) {
-                await t;
-            }
 
             return (keyboardList, searchOption);
         }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using TelegramSearchBot.Model;
 
@@ -18,6 +19,23 @@ namespace TelegramSearchBot {
             }
             return list;
 
+        }
+        public static bool CreateDirectorys(string FolderPath) {
+            try {
+                var FolderPaths = FolderPath.Split('/');
+                var tmp = new StringBuilder();
+                foreach (var i in FolderPaths) {
+                    tmp.Append(i);
+                    tmp.Append("/");
+                    if (!Directory.Exists(tmp.ToString())) {
+                        Directory.CreateDirectory(tmp.ToString());
+                    }
+                }
+                return true;
+            } catch (Exception e) {
+                Console.WriteLine(e);
+                return false;
+            }
         }
     }
 }
