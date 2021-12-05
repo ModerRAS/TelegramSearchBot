@@ -115,7 +115,7 @@ namespace TelegramSearchBot.Manager {
 
             var keyWordQuery = new BooleanQuery();
             foreach (var item in GetKeyWords(q)) {
-                keyWordQuery.Add(new TermQuery(new Term("Content", item)), Occur.SHOULD);
+                keyWordQuery.Add(new TermQuery(new Term("Content", item)), Occur.MUST);
             }
             var top = searcher.Search(keyWordQuery, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
             var total = top.TotalHits;
