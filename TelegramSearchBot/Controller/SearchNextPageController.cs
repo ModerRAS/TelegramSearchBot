@@ -9,9 +9,10 @@ using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Service;
 using System.Threading.Tasks;
 using LiteDB;
+using Telegram.Bot.Types;
 
 namespace TelegramSearchBot.Controller {
-    class SearchNextPageController : IOnCallbackQuery {
+    class SearchNextPageController : IOnUpdate {
         private readonly SendMessage Send;
         private readonly ILiteCollection<CacheData> Cache;
         private readonly ILogger logger;
@@ -33,10 +34,13 @@ namespace TelegramSearchBot.Controller {
             this.botClient = botClient;
         }
 
-        public async Task ExecuteAsync(object sender, CallbackQueryEventArgs e) {
+        public async Task ExecuteAsync(Update e) {
             //Console.WriteLine(e.CallbackQuery.Message.Text);
             //Console.WriteLine(e.CallbackQuery.Id);
             //Console.WriteLine(e.CallbackQuery.Data);//这才是关键的东西，就是上面在按钮上写的那个sendmessage
+            if (e.CallbackQuery is null) {
+                return;
+            }
             var ChatId = e.CallbackQuery.Message.Chat.Id;
             var IsGroup = e.CallbackQuery.Message.Chat.Id < 0;
             await botClient.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "搜索中。。。");

@@ -6,12 +6,13 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
+using Telegram.Bot.Types;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
-    class AutoOCRController : IOnMessage {
+    class AutoOCRController : IOnUpdate {
         private readonly PaddleOCRService paddleOCRService;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
@@ -20,7 +21,7 @@ namespace TelegramSearchBot.Controller {
             this.messageService = messageService;
             this.botClient = botClient;
         }
-        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(Update e) {
             if (!Env.EnableAutoOCR) {
                 return;
             }
