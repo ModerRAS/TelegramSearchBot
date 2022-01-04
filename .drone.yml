@@ -3,18 +3,17 @@ type: docker
 name: Release
 steps:
 - name: Build Telegram Search Bot
-  image: docker:latest
-  depends_on: [ "clone" ]
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  pull: if-not-exists
   volumes:
-    - name: docker_sock
-      path: /var/run/docker.sock
-  environment:
-    DOCKER_USERNAME:
-      from_secret: docker_username
-    DOCKER_PASSWORD:
-      from_secret: docker_password
+  - name: cache
+    path: /cache
+  - name: nuget_cache
+    path: /root/.nuget/packages
   commands:
-    - docker build -t moderras/telegramsearchbot:build -f ./Dockerfile.build .
+    - dotnet restore
+    - dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /cache/out -r linux-x64 --self-contained false
+    - cp -a Dockerfile /cache
 
 - name: Build docker image
   image: docker:latest
@@ -22,14 +21,16 @@ steps:
   volumes:
     - name: docker_sock
       path: /var/run/docker.sock
+    - name: cache
+      path: /cache
   environment:
     DOCKER_USERNAME:
       from_secret: docker_username
     DOCKER_PASSWORD:
       from_secret: docker_password
   commands:
-    - docker build -t moderras/telegramsearchbot:nightly-$(date +%F) -f ./Dockerfile .
-    - docker build -t moderras/telegramsearchbot:latest -f ./Dockerfile .
+    - docker build -t moderras/telegramsearchbot:nightly-$(date +%F) -f ./Dockerfile /cache
+    - docker build -t moderras/telegramsearchbot:latest -f ./Dockerfile /cache
 
 
 - name: Push docker image
@@ -140,6 +141,8 @@ steps:
   volumes:
   - name: cache
     path: /cache
+  - name: nuget_cache
+    path: /root/.nuget/packages
   commands:
     - dotnet restore
     - dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /cache/out -r linux-x64 --self-contained false
@@ -150,3 +153,6 @@ trigger:
 volumes:
 - name: cache
   temp: {}
+- name: nuget_cache
+  host:
+    path: /home/cache/nuget_cache
