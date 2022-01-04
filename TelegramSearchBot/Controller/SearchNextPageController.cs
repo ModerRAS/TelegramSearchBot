@@ -38,7 +38,7 @@ namespace TelegramSearchBot.Controller {
             //Console.WriteLine(e.CallbackQuery.Message.Text);
             //Console.WriteLine(e.CallbackQuery.Id);
             //Console.WriteLine(e.CallbackQuery.Data);//这才是关键的东西，就是上面在按钮上写的那个sendmessage
-            if (e.CallbackQuery is null) {
+            if (e.CallbackQuery == null) {
                 return;
             }
             var ChatId = e.CallbackQuery.Message.Chat.Id;
