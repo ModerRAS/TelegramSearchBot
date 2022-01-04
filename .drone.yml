@@ -92,17 +92,18 @@ type: docker
 name: Build
 steps:
 - name: Build Telegram Search Bot
-  image: docker:latest
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  pull: if-not-exists
   volumes:
-    - name: docker_sock
-      path: /var/run/docker.sock
+  - name: cache
+    path: /cache
   commands:
-    - docker build -t moderras/telegramsearchbot:build -f ./Dockerfile.build .
+    - dotnet restore
+    - dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /cache/out -r linux-x64 --self-contained false
 
 trigger:
   branch:
   - master
 volumes:
-- name: docker_sock
-  host:
-    path: /var/run/docker.sock
+- name: cache
+  temp: {}
