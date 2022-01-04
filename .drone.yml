@@ -63,6 +63,48 @@ steps:
     - docker rmi moderras/telegramsearchbot:nightly-$(date +%F)
     - docker rmi moderras/telegramsearchbot:latest
 
+- name: Deploy Dev Telegram Search Bot
+  image: appleboy/drone-ssh
+  depends_on: [ "Delete local docker image" ]
+  settings:
+    host:
+      from_secret: dev_ssh_ip
+    username: 
+      from_secret: dev_ssh_username
+    password:
+      from_secret: dev_ssh_password
+    port:
+      from_secret: dev_ssh_port
+    command_timeout: 2m
+    script:
+      - docker pull moderras/telegramsearchbot:latest
+      - cd /home/TelegramSearchBot
+      - docker-compose up -d
+    when:
+      branch:
+        - dev
+
+- name: Deploy Production Telegram Search Bot
+  image: appleboy/drone-ssh
+  depends_on: [ "Delete local docker image" ]
+  settings:
+    host:
+      from_secret: production_ssh_ip
+    username: 
+      from_secret: production_ssh_username
+    password:
+      from_secret: production_ssh_password
+    port:
+      from_secret: production_ssh_port
+    command_timeout: 2m
+    script:
+      - docker pull moderras/telegramsearchbot:latest
+      - cd /home/TelegramSearchBot
+      - docker-compose up -d
+    when:
+      branch:
+        - release
+
 - name: Send Telegram notification
   image: appleboy/drone-telegram
   depends_on: [ "Delete local docker image" ]
@@ -81,6 +123,7 @@ steps:
 trigger:
   branch:
   - release
+  - dev
 volumes:
 - name: docker_sock
   host:
