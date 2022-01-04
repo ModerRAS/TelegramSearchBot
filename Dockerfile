@@ -11,6 +11,6 @@ RUN apt update -y && \
 
 WORKDIR /app
 
-COPY /cache/out /app
+COPY ./out /app
 
 ENTRYPOINT ["dotnet", "TelegramSearchBot.dll"]
