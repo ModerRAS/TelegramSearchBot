@@ -1,8 +1,7 @@
 kind: pipeline
 type: docker
-name: build
+name: Release
 steps:
-
 - name: Build Telegram Search Bot
   image: docker:latest
   depends_on: [ "clone" ]
@@ -78,6 +77,27 @@ steps:
       {{else}}
         build {{build.number}} failed. Fix me please.
       {{/success}}
+
+trigger:
+  branch:
+  - release
+volumes:
+- name: docker_sock
+  host:
+    path: /var/run/docker.sock
+
+---
+kind: pipeline
+type: docker
+name: Build
+steps:
+- name: Build Telegram Search Bot
+  image: docker:latest
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  commands:
+    - docker build -t moderras/telegramsearchbot:build -f ./Dockerfile.build .
 
 trigger:
   branch:
