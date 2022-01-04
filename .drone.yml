@@ -13,7 +13,6 @@ steps:
   - name: v3-cache
     path: /root/.local/share/NuGet/v3-cache
   commands:
-    - dotnet restore
     - dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /cache/out -r linux-x64 --self-contained false
     - cp -a Dockerfile /cache
 
@@ -131,7 +130,14 @@ volumes:
 - name: docker_sock
   host:
     path: /var/run/docker.sock
-
+- name: cache
+  temp: {}
+- name: global-packages
+  host:
+    path: /home/cache/Nuget/global-packages
+- name: v3-cache
+  host:
+    path: /home/cache/Nuget/v3-cache
 ---
 kind: pipeline
 type: docker
