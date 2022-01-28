@@ -1,0 +1,24 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "SearchServer";
+
+package Messager;
+
+// The greeting service definition.
+service Messager {
+  // Sends a greeting
+  rpc AddMessage (MessageOption) returns (Reply);
+}
+
+// The request message containing the user's name.
+message MessageOption {
+  int64 UserId = 1;
+  int64 GroupId = 2;
+  int64 MessageId = 3;
+  string Content = 4;
+}
+
+// The response message containing the greetings.
+message Reply {
+  string message = 1;
+}
