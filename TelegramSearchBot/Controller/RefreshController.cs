@@ -1,11 +1,10 @@
 ﻿using System.Threading.Tasks;
 using Telegram.Bot.Args;
-using Telegram.Bot.Types;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
-    class RefreshController : IOnUpdate {
+    class RefreshController : IOnMessage {
         private readonly RefreshService refreshService;
         public RefreshController(RefreshService refreshService) {
             this.refreshService = refreshService;
@@ -13,7 +12,7 @@ namespace TelegramSearchBot.Controller {
 
         
 
-        public async Task ExecuteAsync(Update e) {
+        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
             if (e.Message.Chat.Id < 0) {
                 return;
             }

@@ -29,7 +29,7 @@ namespace TelegramSearchBot.Controller {
                 await botClient.SendTextMessageAsync(
                     chatId: Env.AdminId,
                     disableNotification: true,
-                    parseMode: ParseMode.MarkdownV2,
+                    parseMode: ParseMode.Default,
                     text: Text
                     );
             }, false);

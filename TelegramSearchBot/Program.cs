@@ -12,18 +12,13 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
-using Telegram.Bot.Types;
-using Telegram.Bot.Extensions.Polling;
-using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
-using Telegram.Bot.Exceptions;
 
 namespace TelegramSearchBot {
     class Program {
@@ -31,7 +26,7 @@ namespace TelegramSearchBot {
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .ConfigureServices(service => {
-                    service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(Env.BotToken, baseUrl: Env.BaseUrl));
+                    service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken, baseUrl: Env.BaseUrl) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy), baseUrl: Env.BaseUrl));
                     service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
                     service.AddSingleton<LuceneManager>();
@@ -55,28 +50,18 @@ namespace TelegramSearchBot {
                   .AddFilter("Microsoft", LogLevel.Warning))
                 .Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
-            var receiverOptions = new ReceiverOptions {
-                AllowedUpdates = { } // receive all update types
-            };
-            var cts = new CancellationTokenSource();
-            var cancellationToken = cts.Token;
-            bot.StartReceiving(
-                HandleUpdateAsync,
-                HandleErrorAsync,
-                receiverOptions,
-                cancellationToken
-                );
-            //bot.OnMessage += OnMessage;
-            //bot.OnMessageEdited += OnMessage;
-            //bot.OnCallbackQuery += OnCallbackQuery;
+            bot.StartReceiving();
+            bot.OnMessage += OnMessage;
+            bot.OnMessageEdited += OnMessage;
+            bot.OnCallbackQuery += OnCallbackQuery;
             service = host.Services;
             InitController(host.Services);
             host.Run();
         }
         public static void AddController(IServiceCollection service) {
             service.Scan(scan => scan
-            .FromAssemblyOf<IOnUpdate>()
-            .AddClasses(classes => classes.AssignableTo<IOnUpdate>())
+            .FromAssemblyOf<IOnMessage>()
+            .AddClasses(classes => classes.AssignableTo<IOnMessage>())
             .AsImplementedInterfaces()
             .WithTransientLifetime()
 
@@ -90,21 +75,8 @@ namespace TelegramSearchBot {
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SendMessage>().Run();
         }
-
-        public static async Task HandleUpdateAsync (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) {
-            foreach (var per in service.GetServices<IOnUpdate>()) {
-                await per.ExecuteAsync(update);
-            }
-        }
-        public static async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
-            if (exception is ApiRequestException apiRequestException) {
-                //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
-                Console.WriteLine(apiRequestException.ToString());
-            }
-        }
-        /*
         public static async void OnMessage(object sender, MessageEventArgs e) {
-            foreach (var per in service.GetServices<IOnUpdate>()) {
+            foreach (var per in service.GetServices<IOnMessage>()) {
                 await per.ExecuteAsync(sender, e);
             }
         }
@@ -113,6 +85,5 @@ namespace TelegramSearchBot {
                 await per.ExecuteAsync(sender, e);
             }
         }
-        */
     }
 }
