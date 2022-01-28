@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+option csharp_namespace = "SearchServer";
+
+package search;
+
+// The greeting service definition.
+service Searcher {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply);
+}
+
+// The request message containing the user's name.
+message HelloRequest {
+  string name = 1;
+}
+
+// The response message containing the greetings.
+message HelloReply {
+  string message = 1;
+}
+
+message Message {
+  int64 Id = 1;
+  int64 GroupId = 2;
+  int64 MessageId = 3;
+  string Content = 4;
+}
+
+message SearchOption {
+  string Search = 1;
+  int32 MessageId = 2;
+  int64 ChatId = 3;
+  bool IsGroup = 4;
+  int32 Skip = 5;
+  int32 Take = 6;
+  int32 Count = 7;
+  repeated int64 ToDelete = 8; 
+  bool ToDeleteNow = 9;
+  int32 ReplyToMessageId = 10;
+  int64 Chat = 11;
+  repeated Message Messages = 12;
+}

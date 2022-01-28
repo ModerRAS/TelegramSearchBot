@@ -8,12 +8,13 @@ package Messager;
 service Messager {
   // Sends a greeting
   rpc AddMessage (MessageOption) returns (Reply);
+  rpc ExecuteAsync(Command) returns (Reply);
 }
 
 // The request message containing the user's name.
 message MessageOption {
-  int64 UserId = 1;
-  int64 GroupId = 2;
+  int64 ChatId = 1;
+  int64 UserId = 2;
   int64 MessageId = 3;
   string Content = 4;
 }
@@ -21,4 +22,8 @@ message MessageOption {
 // The response message containing the greetings.
 message Reply {
   string message = 1;
+}
+
+message Command {
+	string message = 1;
 }
