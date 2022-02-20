@@ -4,27 +4,13 @@ services:
     image: moderras/telegramsearchbot
     env_file: .env
     volumes:
+      - ./tmp:/tmp
+      - ./db:/data/TelegramSearchBot
       - ./telegram-bot-api-data:/var/lib/telegram-bot-api
     depends_on:
-      - redis
-      - pgsql
-      - sonic
       - telegram-bot-api
     restart: always
-  redis:
-    image: redis
-    restart: always
-  pgsql:
-    image: postgres
-    env_file: .env
-    volumes:
-      - ./data:/var/lib/pgsql
-    restart: always
-  sonic:
-    image: valeriansaliou/sonic:v1.3.0
-    volumes:
-      - ./sonic:/var/lib/sonic/store/
-      - ./sonic.cfg:/etc/sonic.cfg
+
   telegram-bot-api:
     image: aiogram/telegram-bot-api:latest
     environment:
