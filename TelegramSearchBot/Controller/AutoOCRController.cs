@@ -47,17 +47,20 @@ namespace TelegramSearchBot.Controller {
                     
                     //File.Delete(file.FilePath);
                 }
+                var Text = string.Join(" ", links).Trim();
+                Console.WriteLine(Text);
                 await messageService.ExecuteAsync(new MessageOption {
                     ChatId = e.Message.Chat.Id,
                     MessageId = e.Message.MessageId,
                     UserId = e.Message.From.Id,
-                    Content = string.Join(" ", links).Trim()
+                    Content = Text
                 });
+                
                 if (e.Message.Text.Equals("打印")) {
                     await Send.AddTask(async () => {
                         var message = await botClient.SendTextMessageAsync(
                         chatId: e.Message.Chat,
-                        text: string.Join(" ", links).Trim(),
+                        text: Text,
                         parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
                         replyToMessageId: e.Message.MessageId
                         );
