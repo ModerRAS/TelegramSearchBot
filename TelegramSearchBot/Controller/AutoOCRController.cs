@@ -57,7 +57,7 @@ namespace TelegramSearchBot.Controller {
                     Content = Text
                 });
                 
-                if (e.Message.Text.Equals("打印")) {
+                if (e.Message.Caption.Length == 2 && e.Message.Caption.Equals("打印")) {
                     await Send.AddTask(async () => {
                         var message = await botClient.SendTextMessageAsync(
                         chatId: e.Message.Chat,
