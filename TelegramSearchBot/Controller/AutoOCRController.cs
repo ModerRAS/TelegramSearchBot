@@ -16,10 +16,12 @@ namespace TelegramSearchBot.Controller {
         private readonly PaddleOCRService paddleOCRService;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
+        private readonly SendMessage Send;
         public AutoOCRController(ITelegramBotClient botClient, PaddleOCRService paddleOCRService, SendMessage Send, MessageService messageService) {
             this.paddleOCRService = paddleOCRService;
             this.messageService = messageService;
             this.botClient = botClient;
+            this.Send = Send;
         }
         public async Task ExecuteAsync(Update e) {
             if (!Env.EnableAutoOCR) {
@@ -52,6 +54,16 @@ namespace TelegramSearchBot.Controller {
                     UserId = e.Message.From.Id,
                     Content = string.Join(" ", links).Trim()
                 });
+                if (e.Message.Text.Equals("打印")) {
+                    await Send.AddTask(async () => {
+                        var message = await botClient.SendTextMessageAsync(
+                        chatId: e.Message.Chat,
+                        text: string.Join(" ", links).Trim(),
+                        parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        replyToMessageId: e.Message.MessageId
+                        );
+                    }, e.Message.Chat.Id < 0);
+                }
             }
         }
     }
