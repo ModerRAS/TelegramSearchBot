@@ -77,12 +77,21 @@ namespace TelegramSearchBot {
         }
         public static async void OnMessage(object sender, MessageEventArgs e) {
             foreach (var per in service.GetServices<IOnMessage>()) {
-                await per.ExecuteAsync(sender, e);
+                try {
+                    await per.ExecuteAsync(sender, e);
+                } catch (Exception ex) { 
+                    Console.WriteLine(ex.ToString());
+                }
             }
         }
         public static async void OnCallbackQuery(object sender, CallbackQueryEventArgs e) {
             foreach (var per in service.GetServices<IOnCallbackQuery>()) {
-                await per.ExecuteAsync(sender, e);
+                try {
+                    await per.ExecuteAsync(sender, e);
+                } catch (Exception ex) {
+                    Console.WriteLine(ex.ToString());
+                }
+                
             }
         }
     }
