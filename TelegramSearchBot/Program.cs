@@ -93,7 +93,12 @@ namespace TelegramSearchBot {
 
         public static async Task HandleUpdateAsync (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) {
             foreach (var per in service.GetServices<IOnUpdate>()) {
-                await per.ExecuteAsync(update);
+                try {
+                    await per.ExecuteAsync(update);
+                } catch (Exception ex) {
+                    Console.WriteLine(ex);
+                }
+                
             }
         }
         public static async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
