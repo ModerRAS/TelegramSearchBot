@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -29,7 +30,8 @@ namespace TelegramSearchBot.Controller {
                 foreach (var f in e.Message.Photo) {
                     if (Env.IsLocalAPI) {
                         var fileInfo = await botClient.GetFileAsync(f.FileId);
-                        using(var stream = new FileStream(fileInfo.FilePath, FileMode.Open, FileAccess.Read)) {
+                        var client = new HttpClient();
+                        using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
                             links.Add(await autoQRSevice.ExecuteAsync(stream));
                         }
                     } else {

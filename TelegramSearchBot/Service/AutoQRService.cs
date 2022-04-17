@@ -19,9 +19,7 @@ namespace TelegramSearchBot.Service {
         /// <param name="messageOption"></param>
         /// <returns></returns>
         public async Task<string> ExecuteAsync(Stream file) {
-
-            using (var inputStream = new SKManagedStream(file))
-            using (var original = SKBitmap.Decode(inputStream)) {
+            using (var original = SKBitmap.Decode(file)) {
 
                 // create a barcode reader instance
                 var reader = new BarcodeReader();
