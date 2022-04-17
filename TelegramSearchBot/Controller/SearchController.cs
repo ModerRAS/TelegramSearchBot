@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Controller {
     class SearchController : IOnMessage {
-        private readonly ISearchService searchService,sonicSearchService;
+        private readonly ISearchService searchService;
         private readonly SendService sendService;
         public SearchController(
             SearchService searchService, 

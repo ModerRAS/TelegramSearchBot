@@ -11,6 +11,7 @@ using TelegramSearchBot.Model;
 using System.Net.Http;
 using Newtonsoft.Json;
 using System.Threading;
+using SkiaSharp;
 
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
@@ -29,9 +30,11 @@ namespace TelegramSearchBot.Service {
                 return "";
             }
             var stream = new MemoryStream();
-            var tg_img = Image.FromStream(file);
-            tg_img.Save(stream, ImageFormat.Jpeg);
-            var tg_img_arr = stream.ToArray();
+            
+            var tg_img = SKBitmap.Decode(file);
+            var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Jpeg, 99);
+            //tg_img.Save(stream, ImageFormat.Jpeg);
+            var tg_img_arr = tg_img_data.ToArray();
             var tg_img_base64 = Convert.ToBase64String(tg_img_arr);
             var postJson = new PaddleOCRPost() { Images = new List<string>() { tg_img_base64 } };
             var client = new HttpClient();
