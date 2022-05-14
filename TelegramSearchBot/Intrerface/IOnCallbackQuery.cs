@@ -4,10 +4,9 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
-using Telegram.Bot.Types;
 
 namespace TelegramSearchBot.Intrerface {
     public interface IOnCallbackQuery {
-        public Task ExecuteAsync(Update e);
+        public Task ExecuteAsync(object sender, CallbackQueryEventArgs e);
     }
 }

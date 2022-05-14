@@ -4,7 +4,6 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 using System.Threading.Tasks;
-using Telegram.Bot.Types;
 
 namespace TelegramSearchBot.Controller {
     class SearchController : IOnMessage {
@@ -18,7 +17,7 @@ namespace TelegramSearchBot.Controller {
             this.sendService = sendService;
         }
 
-        public async Task ExecuteAsync(Update e) {
+        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
             if (!string.IsNullOrEmpty(e.Message.Text)) {
                 if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 ")) {
                     var firstSearch = new SearchOption() {
