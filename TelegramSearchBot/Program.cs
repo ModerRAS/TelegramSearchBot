@@ -12,8 +12,12 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
+using Telegram.Bot.Exceptions;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
@@ -26,7 +30,7 @@ namespace TelegramSearchBot {
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .ConfigureServices(service => {
-                    service.AddSingleton<ITelegramBotClient>(sp => string.IsNullOrEmpty(Env.HttpProxy) ? new TelegramBotClient(Env.BotToken, baseUrl: Env.BaseUrl) : new TelegramBotClient(Env.BotToken, new WebProxy(Env.HttpProxy), baseUrl: Env.BaseUrl));
+                    service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(Env.BotToken, baseUrl: Env.BaseUrl));
                     service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
                     service.AddSingleton<LuceneManager>();
@@ -50,18 +54,18 @@ namespace TelegramSearchBot {
                   .AddFilter("Microsoft", LogLevel.Warning))
                 .Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
-            bot.StartReceiving();
-            bot.OnMessage += OnMessage;
-            bot.OnMessageEdited += OnMessage;
-            bot.OnCallbackQuery += OnCallbackQuery;
+            using CancellationTokenSource cts = new();
+            bot.StartReceiving(HandleUpdateAsync, HandleErrorAsync, new() {
+                AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
+            }, cts.Token);
             service = host.Services;
             InitController(host.Services);
             host.Run();
         }
         public static void AddController(IServiceCollection service) {
             service.Scan(scan => scan
-            .FromAssemblyOf<IOnMessage>()
-            .AddClasses(classes => classes.AssignableTo<IOnMessage>())
+            .FromAssemblyOf<IOnUpdate>()
+            .AddClasses(classes => classes.AssignableTo<IOnUpdate>())
             .AsImplementedInterfaces()
             .WithTransientLifetime()
 
@@ -90,26 +94,6 @@ namespace TelegramSearchBot {
             if (exception is ApiRequestException apiRequestException) {
                 //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
                 Console.WriteLine(apiRequestException.ToString());
-            }
-        }
-        /*
-        public static async void OnMessage(object sender, MessageEventArgs e) {
-            foreach (var per in service.GetServices<IOnMessage>()) {
-                try {
-                    await per.ExecuteAsync(sender, e);
-                } catch (Exception ex) { 
-                    Console.WriteLine(ex.ToString());
-                }
-            }
-        }
-        public static async void OnCallbackQuery(object sender, CallbackQueryEventArgs e) {
-            foreach (var per in service.GetServices<IOnCallbackQuery>()) {
-                try {
-                    await per.ExecuteAsync(sender, e);
-                } catch (Exception ex) {
-                    Console.WriteLine(ex.ToString());
-                }
-                
             }
         }
     }

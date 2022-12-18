@@ -9,14 +9,15 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using System.Threading.Tasks;
 using TelegramSearchBot.Service;
+using Telegram.Bot.Types;
 
 namespace TelegramSearchBot.Controller {
-    class MessageController : IOnMessage {
+    class MessageController : IOnUpdate {
         private readonly MessageService messageService;
         public MessageController(MessageService messageService) {
             this.messageService = messageService;
         }
-        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(Update e) {
             if (e.Message.Chat.Id > 0) {
                 return;
             }

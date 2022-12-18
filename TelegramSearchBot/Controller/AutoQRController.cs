@@ -7,11 +7,12 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
+using Telegram.Bot.Types;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
-    class AutoQRController : IOnMessage {
+    class AutoQRController : IOnUpdate {
         private readonly AutoQRService autoQRSevice;
         private readonly SendMessage Send;
         private readonly MessageService messageService;
@@ -22,8 +23,8 @@ namespace TelegramSearchBot.Controller {
             this.Send = Send;
             this.botClient = botClient;
         }
-        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
-            if (e.Message.Photo is null || e.Message.Photo.Length <= 0) {
+        public async Task ExecuteAsync(Update e) {
+            if (e.Message is not null && (e.Message.Photo is null || e.Message.Photo.Length <= 0)) {
             } else {
                 var links = new List<string>();
                 foreach (var f in e.Message.Photo) {
@@ -56,6 +57,7 @@ namespace TelegramSearchBot.Controller {
                             var message = await botClient.SendTextMessageAsync(
                             chatId: e.Message.Chat,
                             text: str,
+                            parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
                             replyToMessageId: e.Message.MessageId
                             );
                             await messageService.ExecuteAsync(new Model.MessageOption() {
