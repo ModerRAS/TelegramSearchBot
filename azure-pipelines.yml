@@ -9,7 +9,7 @@ resources:
 - repo: self
 
 variables:
-  tag: '$(Build.BuildId)'
+  tag: '1.0.$(Build.BuildId)'
 
 stages:
 - stage: BuildAndPush
@@ -28,6 +28,7 @@ stages:
       displayName: Build an image
       inputs:
         containerRegistry: 'DockerHub'
+        repository: 'moderras/telegramsearchbot'
         command: 'buildAndPush'
         Dockerfile: '**/Dockerfile'
         tags: '$(tag),latest'
