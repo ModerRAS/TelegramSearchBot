@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
 using Telegram.Bot.Types;
+using TelegramSearchBot.CommonModel;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Service;
 
@@ -60,7 +61,7 @@ namespace TelegramSearchBot.Controller {
                             parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
                             replyToMessageId: e.Message.MessageId
                             );
-                            await messageService.ExecuteAsync(new Model.MessageOption() {
+                            await messageService.ExecuteAsync(new MessageOption() {
                                 ChatId = e.Message.Chat.Id,
                                 Content = str,
                                 MessageId = message.MessageId,

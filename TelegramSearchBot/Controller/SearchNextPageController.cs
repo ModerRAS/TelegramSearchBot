@@ -4,12 +4,12 @@ using System.Linq;
 using Telegram.Bot;
 using Telegram.Bot.Args;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Service;
 using System.Threading.Tasks;
 using LiteDB;
 using Telegram.Bot.Types;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot.Controller {
     class SearchNextPageController : IOnUpdate {
@@ -41,8 +41,8 @@ namespace TelegramSearchBot.Controller {
             if (e.CallbackQuery == null) {
                 return;
             }
-            var ChatId = e.CallbackQuery.Message.Chat.Id;
-            var IsGroup = e.CallbackQuery.Message.Chat.Id < 0;
+            var ChatId = e?.CallbackQuery?.Message?.Chat.Id;
+            var IsGroup = e?.CallbackQuery?.Message?.Chat.Id < 0;
             await botClient.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "搜索中。。。");
             try {
                 var cacheData = Cache.Find(c => c.UUID.Equals(e.CallbackQuery.Data)).First();

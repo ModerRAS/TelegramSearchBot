@@ -6,10 +6,10 @@ using Telegram.Bot;
 using Telegram.Bot.Args;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 using System.Threading.Tasks;
 using TelegramSearchBot.Service;
 using Telegram.Bot.Types;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot.Controller {
     class MessageController : IOnUpdate {
@@ -18,13 +18,13 @@ namespace TelegramSearchBot.Controller {
             this.messageService = messageService;
         }
         public async Task ExecuteAsync(Update e) {
-            if (e.Message.Chat.Id > 0) {
+            if (e?.Message?.Chat.Id > 0) {
                 return;
             }
             string ToAdd;
-            if (!string.IsNullOrEmpty(e.Message.Text)) {
+            if (!string.IsNullOrEmpty(e?.Message?.Text)) {
                 ToAdd = e.Message.Text;
-            } else if (!string.IsNullOrEmpty(e.Message.Caption)) {
+            } else if (!string.IsNullOrEmpty(e?.Message?.Caption)) {
                 ToAdd = e.Message.Caption;
             } else return;
             if (ToAdd.Length > 3 && ToAdd.Substring(0, 3).Equals("搜索 ")) {

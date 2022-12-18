@@ -21,7 +21,6 @@ using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot {

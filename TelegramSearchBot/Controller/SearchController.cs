@@ -1,10 +1,10 @@
 ﻿using System.Collections.Generic;
 using Telegram.Bot.Args;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot.Controller {
     class SearchController : IOnUpdate {
@@ -19,7 +19,7 @@ namespace TelegramSearchBot.Controller {
         }
 
         public async Task ExecuteAsync(Update e) {
-            if (!string.IsNullOrEmpty(e.Message.Text)) {
+            if (!string.IsNullOrEmpty(e?.Message?.Text)) {
                 if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 ")) {
                     var firstSearch = new SearchOption() {
                         Search = e.Message.Text.Substring(3),

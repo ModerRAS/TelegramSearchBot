@@ -1,15 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Manager;
 using System.IO;
-using TelegramSearchBot.Comparer;
 using Newtonsoft.Json;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot.Service {
     public class RefreshService : MessageService, IService {

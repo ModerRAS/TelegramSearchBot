@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.CommonModel {
     /// <summary>
     /// ChatId, UserId, MessageId, Content
     /// </summary>

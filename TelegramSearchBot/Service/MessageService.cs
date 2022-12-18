@@ -4,9 +4,9 @@ using System.Text;
 using System.Linq;
 using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot.Service {
     public class MessageService : IMessageService, IService {

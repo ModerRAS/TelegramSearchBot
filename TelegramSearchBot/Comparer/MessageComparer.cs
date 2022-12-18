@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot.Comparer {
     class MessageComparer : IEqualityComparer<Message> {

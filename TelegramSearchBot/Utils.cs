@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot {
     class Utils {

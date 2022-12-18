@@ -10,8 +10,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TelegramSearchBot.CommonModel;
 using TelegramSearchBot.Controller;
-using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Manager {
     public class LuceneManager {

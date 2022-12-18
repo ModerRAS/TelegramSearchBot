@@ -7,11 +7,11 @@ using System.Drawing;
 using System.Threading.Tasks;
 using System.Drawing.Imaging;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 using System.Net.Http;
 using Newtonsoft.Json;
 using System.Threading;
 using SkiaSharp;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
