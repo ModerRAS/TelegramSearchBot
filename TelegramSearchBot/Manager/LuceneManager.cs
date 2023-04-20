@@ -60,6 +60,9 @@ namespace TelegramSearchBot.Manager {
                     foreach ((Message message, Document doc) in from message in dict.GetValueOrDefault(e)
                                                    let doc = new Document()
                                                    select (message, doc)) {
+                        if (string.IsNullOrEmpty(message.Content)) {
+                            continue;
+                        }
                         try {
                             doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
                             Int64Field MessageIdField = new Int64Field("MessageId", message.MessageId, Field.Store.YES);
