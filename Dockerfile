@@ -3,7 +3,7 @@ WORKDIR /app
 
 # Copy everything else and build
 COPY . ./
-RUN dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /app/out -r linux-x64 --self-contained false
+RUN dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /app/out --self-contained false
 
 
 FROM mcr.microsoft.com/dotnet/runtime:7.0
