@@ -26,6 +26,7 @@ using TelegramSearchBot.Service;
 namespace TelegramSearchBot {
     class Program {
         private static IServiceProvider service;
+        private static ILogger<Program> logger;
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .ConfigureServices(service => {
@@ -66,6 +67,7 @@ namespace TelegramSearchBot {
             }, cts.Token);
             service = host.Services;
             InitController(host.Services);
+            logger = service.GetService<ILogger<Program>>();
             host.Run();
         }
         public static void AddController(IServiceCollection service) {
@@ -91,7 +93,7 @@ namespace TelegramSearchBot {
                 try {
                     await per.ExecuteAsync(update);
                 } catch (Exception ex) {
-                    Console.WriteLine(ex);
+                    logger.LogError(ex.Message, ex);
                 }
                 
             }
@@ -100,7 +102,8 @@ namespace TelegramSearchBot {
         public static async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
             if (exception is ApiRequestException apiRequestException) {
                 //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
-                Console.WriteLine(apiRequestException.ToString());
+                logger.LogError($"ApiRequestException: {apiRequestException.Message}");
+                //Console.WriteLine(apiRequestException.ToString());
             }
         }
 #pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
