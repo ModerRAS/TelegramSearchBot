@@ -55,7 +55,7 @@ namespace TelegramSearchBot {
                     {
                         options.IncludeScopes = true;
                         options.SingleLine = true;
-                        options.TimestampFormat = "[yyyy/MM/dd HH:mm:ss]";
+                        options.TimestampFormat = "[yyyy/MM/dd HH:mm:ss] ";
                     });
                 }).Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
