@@ -2,54 +2,71 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
+using Telegram.Bot.Types;
+using TelegramSearchBot.CommonModel;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
-    class AutoOCRController : IOnMessage {
-        private readonly AutoOCRService autoOCRSevice;
-        private readonly SendMessage Send;
+    class AutoOCRController : IOnUpdate {
+        private readonly PaddleOCRService paddleOCRService;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
-        public AutoOCRController(ITelegramBotClient botClient, AutoOCRService autoOCRSevice, SendMessage Send, MessageService messageService) {
-            this.autoOCRSevice = autoOCRSevice;
+        private readonly SendMessage Send;
+        public AutoOCRController(ITelegramBotClient botClient, PaddleOCRService paddleOCRService, SendMessage Send, MessageService messageService) {
+            this.paddleOCRService = paddleOCRService;
             this.messageService = messageService;
-            this.Send = Send;
             this.botClient = botClient;
+            this.Send = Send;
         }
-        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(Update e) {
             if (!Env.EnableAutoOCR) {
                 return;
             }
-            if (e.Message.Photo is null || e.Message.Photo.Length <= 0) {
+            if (e?.Message?.Photo?.Length <= 0) {
             } else {
-                var links = new List<string>();
-                foreach (var f in e.Message.Photo) {
-                    using (var stream = new MemoryStream()) {
-                        var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
-                        stream.Position = 0;
-                        var str = await autoOCRSevice.ExecuteAsync(stream);
-                        await Send.AddTask(async () => {
-                            var message = await botClient.SendPhotoAsync(
-                            chatId: e.Message.Chat,
-                            photo: file.FileId,
-                            caption: str,
-                            parseMode: Telegram.Bot.Types.Enums.ParseMode.Default,
-                            replyToMessageId: e.Message.MessageId
-                            );
-                            await messageService.ExecuteAsync(new Model.MessageOption() {
-                                ChatId = e.Message.Chat.Id,
-                                Content = str,
-                                MessageId = message.MessageId,
-                                UserId = botClient.BotId
-                            });
-                        }, e.Message.Chat.Id < 0);
+                var links = new HashSet<string>();
+                foreach (var f in e?.Message?.Photo) {
+                    if (Env.IsLocalAPI) {
+                        var fileInfo = await botClient.GetFileAsync(f.FileId);
+                        var client = new HttpClient();
+                        using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
+                            links.Add(await paddleOCRService.ExecuteAsync(stream));
+                        }
+                    } else {
+                        using (var stream = new MemoryStream()) {
+                            var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
+                            stream.Position = 0;
+                            var str = await paddleOCRService.ExecuteAsync(stream);
+                            links.Add(str);
+                        }
                     }
+
+                    
                     //File.Delete(file.FilePath);
+                }
+                var Text = string.Join(" ", links).Trim();
+                Console.WriteLine(Text);
+                await messageService.ExecuteAsync(new MessageOption {
+                    ChatId = e.Message.Chat.Id,
+                    MessageId = e.Message.MessageId,
+                    UserId = e.Message.From.Id,
+                    Content = Text
+                });
+                
+                if (!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Length == 2 && e.Message.Caption.Equals("打印")) {
+                    await Send.AddTask(async () => {
+                        var message = await botClient.SendTextMessageAsync(
+                        chatId: e.Message.Chat,
+                        text: Text,
+                        replyToMessageId: e.Message.MessageId
+                        );
+                    }, e.Message.Chat.Id < 0);
                 }
             }
         }

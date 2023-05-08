@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using System.Text;
 using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.CommonModel {
     public class SearchOption {
         public string Search { get; set; }
+        public int MessageId { get; set; }
         public long ChatId { get; set; }
         public bool IsGroup { get; set; }
         /// <summary>
