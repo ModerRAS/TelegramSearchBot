@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -15,16 +16,19 @@ namespace TelegramSearchBot.Controller {
         private readonly SendMessage Send;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
-        public AutoQRController(ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send, MessageService messageService) {
+        private readonly ILogger<AutoQRController> logger;
+        public AutoQRController(ILogger<AutoQRController> logger, ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send, MessageService messageService) {
             this.autoQRSevice = autoQRSevice;
             this.messageService = messageService;
             this.Send = Send;
             this.botClient = botClient;
+            this.logger = logger;
         }
         public async Task ExecuteAsync(Update e) {
             if (e?.Message?.Photo?.Length <= 0) {
                 return;
             }
+            logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}");
             var links = new List<string>();
             foreach (var f in e.Message.Photo) {
                 if (Env.IsLocalAPI) {
