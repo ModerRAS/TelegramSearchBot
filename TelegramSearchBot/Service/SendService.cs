@@ -45,6 +45,7 @@ namespace TelegramSearchBot.Service {
             return Begin + string.Join("\n", list) + "\n";
         }
 
+#pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
         public async Task<(List<InlineKeyboardButton>, SearchOption)> GenerateKeyboard(SearchOption searchOption) {
             //此处会生成键盘并将searchOption中的Skip向后推移
             var keyboardList = new List<InlineKeyboardButton>();
@@ -76,6 +77,7 @@ namespace TelegramSearchBot.Service {
 
             return (keyboardList, searchOption);
         }
+#pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
 
         public async Task SendMessage(string Text, SearchOption searchOption, List<InlineKeyboardButton> keyboardList) {
             await Send.AddTask(async () => {

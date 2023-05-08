@@ -56,7 +56,6 @@ namespace TelegramSearchBot.Controller {
                                 result.Wait();
                             }
                         } catch (Exception) {
-                            
                         }
                     }
                 }

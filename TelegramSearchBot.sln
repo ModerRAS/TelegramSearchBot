@@ -5,18 +5,14 @@ VisualStudioVersion = 17.4.33122.133
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A0009D1B-3EB9-402E-BD09-31CB10F582A0}"
 	ProjectSection(SolutionItems) = preProject
-		.drone.yml = .drone.yml
 		.env.example = .env.example
 		.gitignore = .gitignore
-		.travis.yml = .travis.yml
 		docker-compose.yml = docker-compose.yml
 		Dockerfile = Dockerfile
-		Dockerfile.build = Dockerfile.build
-		Dockerfile.tessdata = Dockerfile.tessdata
-		Dockerfile.tesseract = Dockerfile.tesseract
 		Jenkinsfile = Jenkinsfile
+		.github\workflows\pr.yml = .github\workflows\pr.yml
+		.github\workflows\push.yml = .github\workflows\push.yml
 		README.md = README.md
-		sonic.cfg = sonic.cfg
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TelegramSearchBot", "TelegramSearchBot\TelegramSearchBot.csproj", "{85931FBE-F0AF-4EC9-B67F-B5D2E409421A}"

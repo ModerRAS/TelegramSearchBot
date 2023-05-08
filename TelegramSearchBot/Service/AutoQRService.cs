@@ -17,6 +17,7 @@ namespace TelegramSearchBot.Service {
         /// </summary>
         /// <param name="messageOption"></param>
         /// <returns></returns>
+#pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
         public async Task<string> ExecuteAsync(Stream file) {
             using (var original = SKBitmap.Decode(file)) {
 
@@ -36,5 +37,6 @@ namespace TelegramSearchBot.Service {
 
             
         }
+#pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
     }
 }
