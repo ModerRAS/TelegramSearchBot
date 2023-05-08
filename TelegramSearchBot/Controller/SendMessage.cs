@@ -33,6 +33,7 @@ namespace TelegramSearchBot.Controller {
                     );
             }, false);
         }
+#pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
         public async Task AddTask(Func<Task> Action, bool IsGroup) {
             if (IsGroup) {
                 tasks.Enqueue(GroupLimit.Enqueue(async () => await GlobalLimit.Enqueue(Action)));
@@ -42,6 +43,7 @@ namespace TelegramSearchBot.Controller {
             //queue.Append(new SendModel() { Action = func, IsGroup = IsGroup });
             //Console.WriteLine(queue.Count());
         }
+#pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
         public Task Run() {
             
             while (true) {
@@ -50,9 +52,9 @@ namespace TelegramSearchBot.Controller {
                 } else {
                     while (!tasks.IsEmpty) {
                         try {
-                            Task result;
-                            tasks.TryDequeue(out result);
-                            result.Wait();
+                            if (tasks.TryDequeue(out var result)) {
+                                result.Wait();
+                            }
                         } catch (Exception) {
                             
                         }

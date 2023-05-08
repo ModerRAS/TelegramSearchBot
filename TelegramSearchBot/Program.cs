@@ -48,10 +48,10 @@ namespace TelegramSearchBot {
             Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
             Directory.SetCurrentDirectory(Env.WorkDir);
             IHost host = CreateHostBuilder(args)
-                .ConfigureLogging(logging =>
-                logging.AddFilter("System", LogLevel.Warning)
-                  .AddFilter("Microsoft", LogLevel.Warning))
-                .Build();
+                .ConfigureLogging(logging => {
+                    logging.ClearProviders();
+                    logging.AddConsole();
+                }).Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             bot.StartReceiving(
@@ -91,11 +91,13 @@ namespace TelegramSearchBot {
                 
             }
         }
+#pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
         public static async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
             if (exception is ApiRequestException apiRequestException) {
                 //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
                 Console.WriteLine(apiRequestException.ToString());
             }
         }
+#pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
     }
 }

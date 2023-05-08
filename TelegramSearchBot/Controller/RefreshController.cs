@@ -14,10 +14,10 @@ namespace TelegramSearchBot.Controller {
         
 
         public async Task ExecuteAsync(Update e) {
-            if (e.Message.Chat.Id < 0) {
+            if (e?.Message?.Chat?.Id < 0) {
                 return;
             }
-            if (e.Message.Chat.Id != Env.AdminId) {
+            if (e?.Message?.Chat?.Id != Env.AdminId) {
                 return;
             }
             string Command;
