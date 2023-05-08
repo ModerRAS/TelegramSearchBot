@@ -8,7 +8,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
-using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Controller {
     public class SendMessage {
@@ -29,7 +28,7 @@ namespace TelegramSearchBot.Controller {
                 await botClient.SendTextMessageAsync(
                     chatId: Env.AdminId,
                     disableNotification: true,
-                    parseMode: ParseMode.Default,
+                    parseMode: ParseMode.MarkdownV2,
                     text: Text
                     );
             }, false);

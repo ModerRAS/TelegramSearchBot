@@ -1,56 +1,53 @@
-﻿using Microsoft.Extensions.Options;
-using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Linq;
 using Telegram.Bot;
 using Telegram.Bot.Args;
-using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Service;
 using System.Threading.Tasks;
+using LiteDB;
+using Telegram.Bot.Types;
+using TelegramSearchBot.CommonModel;
 
 namespace TelegramSearchBot.Controller {
-    class SearchNextPageController : IOnCallbackQuery {
+    class SearchNextPageController : IOnUpdate {
         private readonly SendMessage Send;
-        private readonly IDistributedCache Cache;
+        private readonly ILiteCollection<CacheData> Cache;
         private readonly ILogger logger;
-        private readonly ISearchService searchService, sonicSearchService;
+        private readonly ISearchService searchService;
         private readonly SendService sendService;
         private readonly ITelegramBotClient botClient;
         public SearchNextPageController(
             ITelegramBotClient botClient, 
             SendMessage Send, 
-            IDistributedCache Cache, 
             ILogger<SearchNextPageController> logger, 
             SearchService searchService,
-            SonicSearchService sonicSearchService,
             SendService sendService
             ) {
             this.sendService = sendService;
             this.searchService = searchService;
             this.Send = Send;
-            this.Cache = Cache;
+            this.Cache = Env.Cache.GetCollection<CacheData>("CacheData");
             this.logger = logger;
             this.botClient = botClient;
-            this.sonicSearchService = sonicSearchService;
         }
 
-        public async Task ExecuteAsync(object sender, CallbackQueryEventArgs e) {
+        public async Task ExecuteAsync(Update e) {
             //Console.WriteLine(e.CallbackQuery.Message.Text);
             //Console.WriteLine(e.CallbackQuery.Id);
             //Console.WriteLine(e.CallbackQuery.Data);//这才是关键的东西，就是上面在按钮上写的那个sendmessage
-            var ChatId = e.CallbackQuery.Message.Chat.Id;
-            var IsGroup = e.CallbackQuery.Message.Chat.Id < 0;
+            if (e.CallbackQuery == null) {
+                return;
+            }
+            var ChatId = e?.CallbackQuery?.Message?.Chat.Id;
+            var IsGroup = e?.CallbackQuery?.Message?.Chat.Id < 0;
             await botClient.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "搜索中。。。");
             try {
-                var searchOption = JsonConvert.DeserializeObject<SearchOption>(Encoding.UTF8.GetString(await Cache.GetAsync(e.CallbackQuery.Data)));
-                await Cache.RemoveAsync(e.CallbackQuery.Data);
+                var cacheData = Cache.Find(c => c.UUID.Equals(e.CallbackQuery.Data)).First();
+                var searchOption = cacheData.searchOption;
+                Cache.Delete(cacheData.Id);
 
                 searchOption.ToDelete.Add(e.CallbackQuery.Message.MessageId);
 
@@ -71,11 +68,7 @@ namespace TelegramSearchBot.Controller {
                     return;
                 }
 
-                var searchOptionNext = await sonicSearchService.Search(searchOption);
-
-                if (searchOptionNext.Messages.Count == 0) {
-                    searchOption = await searchService.Search(searchOption);
-                }
+                var searchOptionNext = await searchService.Search(searchOption);
 
                 await sendService.ExecuteAsync(searchOption, searchOptionNext.Messages);
 

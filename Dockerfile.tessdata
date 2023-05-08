@@ -5,4 +5,4 @@ RUN apt update -y && \
     apt install wget zip -y && \
     mkdir -p /app/out/tessdata && \
     cd /app/out/tessdata && \
-    wget https://github.com/tesseract-ocr/tessdata/raw/master/chi_sim.traineddata
+    wget https://github.com/tesseract-ocr/tessdata/raw/main/chi_sim.traineddata

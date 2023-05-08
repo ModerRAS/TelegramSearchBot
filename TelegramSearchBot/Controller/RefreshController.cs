@@ -1,22 +1,11 @@
-﻿using Microsoft.Extensions.Caching.Distributed;
-using Newtonsoft.Json;
-using NSonic;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
-using Telegram.Bot;
+﻿using System.Threading.Tasks;
 using Telegram.Bot.Args;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
-    class RefreshController : IOnMessage {
+    class RefreshController : IOnUpdate {
         private readonly RefreshService refreshService;
         public RefreshController(RefreshService refreshService) {
             this.refreshService = refreshService;
@@ -24,7 +13,7 @@ namespace TelegramSearchBot.Controller {
 
         
 
-        public async Task ExecuteAsync(object sender, MessageEventArgs e) {
+        public async Task ExecuteAsync(Update e) {
             if (e.Message.Chat.Id < 0) {
                 return;
             }

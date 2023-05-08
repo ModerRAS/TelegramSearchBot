@@ -6,20 +6,19 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 using ZXing.SkiaSharp;
 
 namespace TelegramSearchBot.Service {
-    public class AutoQRService : IStreamService {
+    public class AutoQRService : IStreamService, IService {
+        public string ServiceName => "AutoQRService";
+
         /// <summary>
         /// 按理说是进来文件出去字符的
         /// </summary>
         /// <param name="messageOption"></param>
         /// <returns></returns>
         public async Task<string> ExecuteAsync(Stream file) {
-
-            using (var inputStream = new SKManagedStream(file))
-            using (var original = SKBitmap.Decode(inputStream)) {
+            using (var original = SKBitmap.Decode(file)) {
 
                 // create a barcode reader instance
                 var reader = new BarcodeReader();

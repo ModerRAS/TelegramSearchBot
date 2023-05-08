@@ -1,67 +1,37 @@
 kind: pipeline
 type: docker
-name: build
+name: Dev
 steps:
-
-- name: Prepare Tessdata docker image
-  image: docker:latest
-  depends_on: [ "clone" ]
-  volumes:
-    - name: docker_sock
-      path: /var/run/docker.sock
-  environment:
-    DOCKER_USERNAME:
-      from_secret: docker_username
-    DOCKER_PASSWORD:
-      from_secret: docker_password
-  commands:
-    - docker build -t moderras/telegramsearchbot:tessdata-nightly-$(date +%F) -f ./Dockerfile.tessdata .
-    - docker build -t moderras/telegramsearchbot:tessdata-latest -f ./Dockerfile.tessdata .
-
 - name: Build Telegram Search Bot
-  image: docker:latest
-  depends_on: [ "clone" ]
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  pull: if-not-exists
   volumes:
-    - name: docker_sock
-      path: /var/run/docker.sock
-  environment:
-    DOCKER_USERNAME:
-      from_secret: docker_username
-    DOCKER_PASSWORD:
-      from_secret: docker_password
+  - name: cache
+    path: /cache
+  - name: global-packages
+    path: /root/.nuget/packages
+  - name: v3-cache
+    path: /root/.local/share/NuGet/v3-cache
   commands:
-    - docker build -t moderras/telegramsearchbot:build -f ./Dockerfile.build .
-
-- name: Build Tesseract
-  image: docker:latest
-  depends_on: [ "clone" ]
-  volumes:
-    - name: docker_sock
-      path: /var/run/docker.sock
-  environment:
-    DOCKER_USERNAME:
-      from_secret: docker_username
-    DOCKER_PASSWORD:
-      from_secret: docker_password
-  commands:
-    - docker build -t moderras/telegramsearchbot:tesseract-nightly-$(date +%F) -f ./Dockerfile.tesseract .
-    - docker build -t moderras/telegramsearchbot:tesseract-latest -f ./Dockerfile.tesseract .
-
+    - dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /cache/out -r linux-x64 --self-contained false
+    - cp -a Dockerfile /cache
 
 - name: Build docker image
   image: docker:latest
-  depends_on: [ "Prepare Tessdata docker image", "Build Telegram Search Bot", "Build Tesseract" ]
+  depends_on: ["Build Telegram Search Bot"]
   volumes:
     - name: docker_sock
       path: /var/run/docker.sock
+    - name: cache
+      path: /cache
   environment:
     DOCKER_USERNAME:
       from_secret: docker_username
     DOCKER_PASSWORD:
       from_secret: docker_password
   commands:
-    - docker build -t moderras/telegramsearchbot:nightly-$(date +%F) -f ./Dockerfile .
-    - docker build -t moderras/telegramsearchbot:latest -f ./Dockerfile .
+    - docker build -t moderras/telegramsearchbot:nightly-$(date +%F) -f ./Dockerfile /cache
+    - docker build -t moderras/telegramsearchbot:latest -f ./Dockerfile /cache
 
 
 - name: Push docker image
@@ -80,38 +50,6 @@ steps:
     - docker push moderras/telegramsearchbot:nightly-$(date +%F)
     - docker push moderras/telegramsearchbot:latest
 
-- name: Push Tessdata docker image
-  image: docker:latest
-  depends_on: [ "Prepare Tessdata docker image" ]
-  volumes:
-    - name: docker_sock
-      path: /var/run/docker.sock
-  environment:
-    DOCKER_USERNAME:
-      from_secret: docker_username
-    DOCKER_PASSWORD:
-      from_secret: docker_password
-  commands:
-    - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
-    - docker push moderras/telegramsearchbot:tessdata-nightly-$(date +%F)
-    - docker push moderras/telegramsearchbot:tessdata-latest
-
-- name: Push Tesseract docker image
-  image: docker:latest
-  depends_on: [ "Build Tesseract" ]
-  volumes:
-    - name: docker_sock
-      path: /var/run/docker.sock
-  environment:
-    DOCKER_USERNAME:
-      from_secret: docker_username
-    DOCKER_PASSWORD:
-      from_secret: docker_password
-  commands:
-    - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
-    - docker push moderras/telegramsearchbot:tesseract-nightly-$(date +%F)
-    - docker push moderras/telegramsearchbot:tesseract-latest
-
 - name: Delete local docker image
   image: docker:latest
   depends_on: [ "Push docker image" ]
@@ -126,6 +64,24 @@ steps:
   commands:
     - docker rmi moderras/telegramsearchbot:nightly-$(date +%F)
     - docker rmi moderras/telegramsearchbot:latest
+
+- name: Deploy Dev Telegram Search Bot
+  image: appleboy/drone-ssh
+  depends_on: [ "Delete local docker image" ]
+  settings:
+    host:
+      from_secret: dev_ssh_ip
+    username: 
+      from_secret: dev_ssh_username
+    password:
+      from_secret: dev_ssh_password
+    port:
+      from_secret: dev_ssh_port
+    command_timeout: 2m
+    script:
+      - docker pull moderras/telegramsearchbot:latest
+      - cd /home/TelegramSearchBot
+      - docker-compose up -d
 
 - name: Send Telegram notification
   image: appleboy/drone-telegram
@@ -144,8 +100,163 @@ steps:
 
 trigger:
   branch:
-  - master
+  - dev
 volumes:
 - name: docker_sock
   host:
     path: /var/run/docker.sock
+- name: cache
+  temp: {}
+- name: global-packages
+  host:
+    path: /home/cache/Nuget/global-packages
+- name: v3-cache
+  host:
+    path: /home/cache/Nuget/v3-cache
+---
+kind: pipeline
+type: docker
+name: Release
+steps:
+- name: Build Telegram Search Bot
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  pull: if-not-exists
+  volumes:
+  - name: cache
+    path: /cache
+  - name: global-packages
+    path: /root/.nuget/packages
+  - name: v3-cache
+    path: /root/.local/share/NuGet/v3-cache
+  commands:
+    - dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /cache/out -r linux-x64 --self-contained false
+    - cp -a Dockerfile /cache
+
+- name: Build docker image
+  image: docker:latest
+  depends_on: ["Build Telegram Search Bot"]
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+    - name: cache
+      path: /cache
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
+    - docker build -t moderras/telegramsearchbot:nightly-$(date +%F) -f ./Dockerfile /cache
+    - docker build -t moderras/telegramsearchbot:latest -f ./Dockerfile /cache
+
+
+- name: Push docker image
+  image: docker:latest
+  depends_on: [ "Build docker image" ]
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
+    - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
+    - docker push moderras/telegramsearchbot:nightly-$(date +%F)
+    - docker push moderras/telegramsearchbot:latest
+
+- name: Delete local docker image
+  image: docker:latest
+  depends_on: [ "Push docker image" ]
+  volumes:
+    - name: docker_sock
+      path: /var/run/docker.sock
+  environment:
+    DOCKER_USERNAME:
+      from_secret: docker_username
+    DOCKER_PASSWORD:
+      from_secret: docker_password
+  commands:
+    - docker rmi moderras/telegramsearchbot:nightly-$(date +%F)
+    - docker rmi moderras/telegramsearchbot:latest
+
+- name: Deploy Production Telegram Search Bot
+  image: appleboy/drone-ssh
+  depends_on: [ "Delete local docker image" ]
+  settings:
+    host:
+      from_secret: production_ssh_ip
+    username: 
+      from_secret: production_ssh_username
+    password:
+      from_secret: production_ssh_password
+    port:
+      from_secret: production_ssh_port
+    command_timeout: 2m
+    script:
+      - docker pull moderras/telegramsearchbot:latest
+      - cd /home/TelegramSearchBot
+      - docker-compose up -d
+
+- name: Send Telegram notification
+  image: appleboy/drone-telegram
+  depends_on: [ "Delete local docker image" ]
+  settings:
+    token: 
+      from_secret: bot_token
+    to: 
+      from_secret: userid
+    message: >
+      {{#success build.status}}
+         Telegram Search Bot build {{build.number}} succeeded. Good job.
+      {{else}}
+        build {{build.number}} failed. Fix me please.
+      {{/success}}
+
+trigger:
+  branch:
+  - release
+volumes:
+- name: docker_sock
+  host:
+    path: /var/run/docker.sock
+- name: cache
+  temp: {}
+- name: global-packages
+  host:
+    path: /home/cache/Nuget/global-packages
+- name: v3-cache
+  host:
+    path: /home/cache/Nuget/v3-cache
+---
+kind: pipeline
+type: docker
+name: Master
+steps:
+- name: Build Telegram Search Bot
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  pull: if-not-exists
+  volumes:
+  - name: cache
+    path: /cache
+  - name: global-packages
+    path: /root/.nuget/packages
+  - name: v3-cache
+    path: /root/.local/share/NuGet/v3-cache
+  commands:
+    - dotnet restore
+    - dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /cache/out -r linux-x64 --self-contained false
+
+trigger:
+  branch:
+  - master
+volumes:
+- name: cache
+  temp: {}
+- name: global-packages
+  host:
+    path: /home/cache/Nuget/global-packages
+- name: v3-cache
+  host:
+    path: /home/cache/Nuget/v3-cache
