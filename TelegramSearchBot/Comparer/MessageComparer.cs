@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using TelegramSearchBot.CommonModel;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Comparer {
     class MessageComparer : IEqualityComparer<Message> {

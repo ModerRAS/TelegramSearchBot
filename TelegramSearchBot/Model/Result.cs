@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace TelegramSearchBot.CommonModel {
+namespace TelegramSearchBot.Model {
     public class Result {
         [JsonProperty("confidence")]
         public double Confidence { get; set; }

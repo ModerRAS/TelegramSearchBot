@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.CommonModel {
+namespace TelegramSearchBot.Model {
     public class SearchOption {
         public string Search { get; set; }
         public int MessageId { get; set; }

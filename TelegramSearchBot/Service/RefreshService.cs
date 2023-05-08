@@ -6,6 +6,7 @@ using TelegramSearchBot.Manager;
 using System.IO;
 using Newtonsoft.Json;
 using TelegramSearchBot.CommonModel;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Service {
     public class RefreshService : MessageService, IService {

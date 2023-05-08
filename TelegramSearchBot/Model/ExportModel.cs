@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.CommonModel {
+namespace TelegramSearchBot.Model {
     public class ExportModel {
         public List<Message> Messages { get; set; }
         public List<User> Users { get; set; }

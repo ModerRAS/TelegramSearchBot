@@ -29,7 +29,7 @@ namespace TelegramSearchBot {
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .ConfigureServices(service => {
-                    service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(Env.BotToken, baseUrl: Env.BaseUrl));
+                    service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl)));
                     service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
                     service.AddSingleton<LuceneManager>();
@@ -54,8 +54,10 @@ namespace TelegramSearchBot {
                 .Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
-            bot.StartReceiving(HandleUpdateAsync, HandleErrorAsync, new() {
-                AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
+            bot.StartReceiving(
+                HandleUpdateAsync, 
+                HandleErrorAsync, new() {
+                    AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
             }, cts.Token);
             service = host.Services;
             InitController(host.Services);

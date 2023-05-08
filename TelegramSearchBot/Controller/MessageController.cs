@@ -1,15 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Linq;
-using Telegram.Bot;
-using Telegram.Bot.Args;
-using Telegram.Bot.Types.ReplyMarkups;
-using TelegramSearchBot.Intrerface;
+﻿using TelegramSearchBot.Intrerface;
 using System.Threading.Tasks;
 using TelegramSearchBot.Service;
 using Telegram.Bot.Types;
-using TelegramSearchBot.CommonModel;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Controller {
     class MessageController : IOnUpdate {

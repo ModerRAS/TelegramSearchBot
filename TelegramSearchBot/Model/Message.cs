@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
 
-namespace TelegramSearchBot.CommonModel {
+namespace TelegramSearchBot.Model {
     public class Message {
         [Key]
         public long Id { get; set; }

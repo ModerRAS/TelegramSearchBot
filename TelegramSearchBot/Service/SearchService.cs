@@ -1,10 +1,9 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using TelegramSearchBot.Intrerface;
 using System.Threading.Tasks;
 using TelegramSearchBot.Manager;
 using System.Collections.Generic;
-using TelegramSearchBot.CommonModel;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Service {
     public class SearchService : ISearchService, IService {
