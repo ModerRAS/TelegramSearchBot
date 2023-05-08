@@ -3,8 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace TelegramSearchBot.CommonModel {
-    public class Result {
+namespace TelegramSearchBot.Common.DTO.PaddleOCR
+{
+    public class Result
+    {
         [JsonProperty("confidence")]
         public double Confidence { get; set; }
         [JsonProperty("text")]

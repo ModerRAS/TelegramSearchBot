@@ -2,14 +2,13 @@
 using System.Collections.Generic;
 using System.Linq;
 using Telegram.Bot;
-using Telegram.Bot.Args;
-using TelegramSearchBot.Intrerface;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Service;
 using System.Threading.Tasks;
 using LiteDB;
 using Telegram.Bot.Types;
-using TelegramSearchBot.CommonModel;
+using TelegramSearchBot.Common.Intrerface;
+using TelegramSearchBot.Common.DTO;
 
 namespace TelegramSearchBot.Controller {
     class SearchNextPageController : IOnUpdate {

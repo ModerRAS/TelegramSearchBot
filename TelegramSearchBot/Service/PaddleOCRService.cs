@@ -1,17 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
-using System.Drawing;
 using System.Threading.Tasks;
-using System.Drawing.Imaging;
-using TelegramSearchBot.Intrerface;
 using System.Net.Http;
 using Newtonsoft.Json;
 using System.Threading;
 using SkiaSharp;
-using TelegramSearchBot.CommonModel;
+using TelegramSearchBot.Common.DTO.PaddleOCR;
+using TelegramSearchBot.Common.Intrerface;
 
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {

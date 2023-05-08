@@ -9,7 +9,8 @@ using TelegramSearchBot.Intrerface;
 using System.Threading.Tasks;
 using TelegramSearchBot.Service;
 using Telegram.Bot.Types;
-using TelegramSearchBot.CommonModel;
+using TelegramSearchBot.Common.Intrerface;
+using TelegramSearchBot.Common.DTO;
 
 namespace TelegramSearchBot.Controller {
     class MessageController : IOnUpdate {

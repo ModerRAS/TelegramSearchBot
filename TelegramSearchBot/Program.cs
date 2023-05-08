@@ -1,46 +1,75 @@
-﻿using LiteDB;
+﻿using AgileConfig.Client;
+using LiteDB;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Console;
-using Microsoft.Extensions.Logging.Debug;
-using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Net;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
-using Telegram.Bot.Args;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Common.Intrerface;
 using TelegramSearchBot.Controller;
-using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot {
+#pragma warning disable CA1050 // Declare types in namespaces
+#pragma warning disable RCS1110 // Declare type inside namespace.
+    public class BotConfiguration
+#pragma warning restore RCS1110 // Declare type inside namespace.
+#pragma warning restore CA1050 // Declare types in namespaces
+    {
+        public static readonly string Configuration = "BotConfiguration";
+
+        public string BotToken { get; set; } = "";
+    }
     class Program {
         private static IServiceProvider service;
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
-                .ConfigureServices(service => {
-                    service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(Env.BotToken, baseUrl: Env.BaseUrl));
+                .ConfigureHostConfiguration(config => {
+                    config.AddEnvironmentVariables();
+                })
+                .ConfigureAppConfiguration((context, config) => {
+                    try {
+
+                        var configClient = new ConfigClient(Env.AgileConfigAppId, Env.AgileConfigSecret, Env.AgileConfigServerNodes, Env.AgileConfigEnv);
+
+                        //注册配置项修改事件
+                        configClient.ConfigChanged += (arg) =>
+                        {
+                            Console.WriteLine($"action:{arg.Action} key:{arg.Key}");
+                        };
+                        config.AddAgileConfig(configClient);
+                    } catch (ArgumentNullException ex) {
+                        Console.WriteLine("Could not load Agile Config");
+                    }
+                    
+
+                    //使用AddAgileConfig配置一个新的IConfigurationSource
+                    
+                })
+                .ConfigureServices((context, service) => {
+                    service.AddHttpClient("telegram_bot_client").AddTypedClient<ITelegramBotClient>((httpClient, sp) => {
+                        var options = new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl);
+                        return new TelegramBotClient(options, httpClient);
+                    });
+                    service.AddAgileConfig();
                     service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
                     service.AddSingleton<LuceneManager>();
                     service.AddTransient<SearchService>();
                     service.AddTransient<MessageService>();
                     service.AddTransient<AutoQRService>();
-                    service.AddTransient<RefreshService>();
                     service.AddTransient<PaddleOCRService>();
                     AddController(service);
                 });
-        static void Main(string[] args) {
+        static async Task Main(string[] args) {
             if (!Directory.Exists(Env.WorkDir)) {
                 Utils.CreateDirectorys(Env.WorkDir);
             }
@@ -52,14 +81,8 @@ namespace TelegramSearchBot {
                 logging.AddFilter("System", LogLevel.Warning)
                   .AddFilter("Microsoft", LogLevel.Warning))
                 .Build();
-            var bot = host.Services.GetRequiredService<ITelegramBotClient>();
-            using CancellationTokenSource cts = new();
-            bot.StartReceiving(HandleUpdateAsync, HandleErrorAsync, new() {
-                AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
-            }, cts.Token);
-            service = host.Services;
             InitController(host.Services);
-            host.Run();
+            await host.RunAsync();
         }
         public static void AddController(IServiceCollection service) {
             service.Scan(scan => scan

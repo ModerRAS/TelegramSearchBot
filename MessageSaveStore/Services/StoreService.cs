@@ -1,23 +1,14 @@
-﻿using System.Linq;
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
-using TelegramSearchBot.Controller;
-using TelegramSearchBot.Manager;
-using TelegramSearchBot.Common.Intrerface;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Common.DTO;
-using TelegramSearchBot.Common.DO;
 
-namespace TelegramSearchBot.Service {
-    public class MessageService : IMessageService, IService {
-        protected readonly LuceneManager lucene;
-        protected readonly SendMessage Send;
-
-        public string ServiceName => "MessageService";
-
-        public MessageService(LuceneManager lucene, SendMessage Send) {
-            this.lucene = lucene;
-            this.Send = Send;
-        }
-
+namespace MessageSaveStore.Services {
+    public class StoreService {
         public async Task ExecuteAsync(MessageOption messageOption) {
             var Users = Env.Database.GetCollection<User>("Users");
             var Messages = Env.Database.GetCollection<Message>("Messages");

@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using Telegram.Bot.Types;
+using Chat = Telegram.Bot.Types.Chat;
+using TelegramSearchBot.Common.DO;
 
-namespace TelegramSearchBot.CommonModel {
-    public class SearchOption {
+namespace TelegramSearchBot.Common.DTO
+{
+    public class SearchOption
+    {
         public string Search { get; set; }
         public int MessageId { get; set; }
         public long ChatId { get; set; }

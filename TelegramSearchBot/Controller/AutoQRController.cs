@@ -1,15 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
-using Telegram.Bot.Args;
 using Telegram.Bot.Types;
-using TelegramSearchBot.CommonModel;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Common.DTO;
+using TelegramSearchBot.Common.Intrerface;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {

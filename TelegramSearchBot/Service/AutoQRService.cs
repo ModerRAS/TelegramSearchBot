@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Common.Intrerface;
 using ZXing.SkiaSharp;
 
 namespace TelegramSearchBot.Service {
