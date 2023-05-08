@@ -50,7 +50,12 @@ namespace TelegramSearchBot {
             IHost host = CreateHostBuilder(args)
                 .ConfigureLogging(logging => {
                     logging.ClearProviders();
-                    logging.AddConsole();
+                    logging.AddSimpleConsole(options =>
+                    {
+                        options.IncludeScopes = true;
+                        options.SingleLine = true;
+                        options.TimestampFormat = "[yyyy/MM/dd HH:mm:ss]";
+                    });
                 }).Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
