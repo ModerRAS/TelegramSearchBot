@@ -41,7 +41,7 @@
     <PackageReference Include="Telegram.Bot" Version="17.0.0" />
     <PackageReference Include="Telegram.Bot.Extensions.Polling" Version="1.0.1" />
     <PackageReference Include="ZXing.Net" Version="0.16.6" />
-    <PackageReference Include="ZXing.Net.Bindings.SkiaSharp" Version="0.16.10" />
+    <PackageReference Include="ZXing.Net.Bindings.SkiaSharp" Version="0.16.13" />
   </ItemGroup>
 
   <ItemGroup>
