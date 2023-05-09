@@ -26,7 +26,6 @@ using TelegramSearchBot.Service;
 namespace TelegramSearchBot {
     class Program {
         private static IServiceProvider service;
-        private static ILogger<Program> logger;
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .ConfigureServices(service => {
@@ -67,7 +66,6 @@ namespace TelegramSearchBot {
             }, cts.Token);
             service = host.Services;
             InitController(host.Services);
-            logger = service.GetService<ILogger<Program>>();
             host.Run();
         }
         public static void AddController(IServiceCollection service) {
@@ -93,7 +91,7 @@ namespace TelegramSearchBot {
                 try {
                     await per.ExecuteAsync(update);
                 } catch (Exception ex) {
-                    logger.LogInformation(ex.Message, ex);
+                    Console.WriteLine(ex.ToString());
                 }
                 
             }
@@ -102,7 +100,7 @@ namespace TelegramSearchBot {
         public static async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
             if (exception is ApiRequestException apiRequestException) {
                 //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
-                logger.LogInformation($"ApiRequestException: {apiRequestException.Message}");
+                Console.WriteLine($"ApiRequestException: {apiRequestException.Message}");
                 //Console.WriteLine(apiRequestException.ToString());
             }
         }
