@@ -93,7 +93,7 @@ namespace TelegramSearchBot {
                 try {
                     await per.ExecuteAsync(update);
                 } catch (Exception ex) {
-                    logger.LogError(ex.Message, ex);
+                    logger.LogInformation(ex.Message, ex);
                 }
                 
             }
@@ -102,7 +102,7 @@ namespace TelegramSearchBot {
         public static async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
             if (exception is ApiRequestException apiRequestException) {
                 //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
-                logger.LogError($"ApiRequestException: {apiRequestException.Message}");
+                logger.LogInformation($"ApiRequestException: {apiRequestException.Message}");
                 //Console.WriteLine(apiRequestException.ToString());
             }
         }
