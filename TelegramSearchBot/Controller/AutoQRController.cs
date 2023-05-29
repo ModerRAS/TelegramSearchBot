@@ -57,6 +57,7 @@ namespace TelegramSearchBot.Controller {
                 }
                 if (set.Count > 0) {
                     var str = set.Count == 1 ? set.FirstOrDefault() : string.Join("\n", set);
+                    logger.LogInformation(str);
                     await Send.AddTask(async () => {
                         var message = await botClient.SendTextMessageAsync(
                         chatId: e.Message.Chat,
