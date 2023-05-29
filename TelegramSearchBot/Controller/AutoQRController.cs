@@ -47,7 +47,7 @@ namespace TelegramSearchBot.Controller {
 
                 //File.Delete(file.FilePath);
             }
-            links.ForEach(logger.LogInformation);
+            logger.LogInformation(string.Join(", ", links));
             if (links.Count > 0) {
                 var set = new HashSet<string>();
                 foreach (var s in links) {
