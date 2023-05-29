@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -62,10 +62,9 @@ namespace TelegramSearchBot.Controller {
                         var message = await botClient.SendTextMessageAsync(
                         chatId: e.Message.Chat,
                         text: str,
-                        parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        parseMode: Telegram.Bot.Types.Enums.ParseMode.Default,
                         replyToMessageId: e.Message.MessageId
                         );
-                        logger.LogInformation(message);
                         await messageService.ExecuteAsync(new MessageOption() {
                             ChatId = e.Message.Chat.Id,
                             Content = str,
