@@ -63,7 +63,6 @@ namespace TelegramSearchBot.Controller {
                         var message = await botClient.SendTextMessageAsync(
                         chatId: e.Message.Chat,
                         text: str,
-                        parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
                         replyToMessageId: e.Message.MessageId
                         );
                         logger.LogInformation($"Send success {message.MessageId}");
