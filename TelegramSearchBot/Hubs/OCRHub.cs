@@ -2,13 +2,14 @@
 using System;
 using System.Threading.Tasks;
 using TelegramSearchBot.Common.Model.DTO;
+using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 
 namespace TelegramSearchBot.Hubs {
     public class OCRHub : Hub {
         private JobManager<OCRTaskPost, OCRTaskResult> manager { get; init; }
-        private TokenManager tokenManager { get; init; }
-        public OCRHub(JobManager<OCRTaskPost, OCRTaskResult> manager, TokenManager tokenManager) {
+        private ITokenManager tokenManager { get; init; }
+        public OCRHub(JobManager<OCRTaskPost, OCRTaskResult> manager, ITokenManager tokenManager) {
             this.manager = manager;
             this.tokenManager = tokenManager;
         }
