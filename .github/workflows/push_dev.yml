@@ -34,4 +34,5 @@ jobs:
         IsLocalAPI: false
         BotToken: ${{ secrets.BOTTOKEN }}
         AdminId: ${{ secrets.ADMINID }}
+        WorkDir: ./app/
       run: dotnet ./app/TelegramSearchBot.dll & sleep 1800; kill $!;
