@@ -27,6 +27,8 @@ namespace TelegramSearchBot {
             var builder = WebApplication.CreateBuilder(args);
             builder.Services.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl)));
             builder.Services.AddSingleton<LuceneManager>();
+            builder.Services.AddSingleton<JobManager<OCRTaskPost, OCRTaskResult>>();
+            builder.Services.AddSingleton<ITokenManager, TokenManager>();
             builder.Services.AddSignalR().AddMessagePackProtocol(options => {
                 options.SerializerOptions = MessagePackSerializerOptions.Standard
                 .WithSecurity(MessagePackSecurity.UntrustedData);
