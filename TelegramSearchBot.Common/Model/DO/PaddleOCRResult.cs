@@ -3,10 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace TelegramSearchBot.Model {
-    public class PaddleOCRResult {
+namespace TelegramSearchBot.Common.Model.DO
+{
+    public class PaddleOCRResult
+    {
         [JsonProperty("msg")]
-        public string Massage { get; set; }
+        public string Message { get; set; }
         [JsonProperty("results")]
         public List<List<Result>> Results { get; set; }
         [JsonProperty("status")]

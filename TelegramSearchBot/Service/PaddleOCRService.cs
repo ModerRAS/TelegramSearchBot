@@ -9,6 +9,8 @@ using Newtonsoft.Json;
 using System.Threading;
 using SkiaSharp;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Common.Model.DO;
+using TelegramSearchBot.Common.Model.DTO;
 
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
