@@ -41,7 +41,7 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
                     TextRegion = region.Rect.Points().Select(point => {
                         return new List<int>() { (int)point.X, (int)point.Y };
                     }).ToList(),
-                    Confidence = region.Score
+                    Confidence = float.IsNaN(region.Score) ? 0 : region.Score,
                 });
             }
             return results;

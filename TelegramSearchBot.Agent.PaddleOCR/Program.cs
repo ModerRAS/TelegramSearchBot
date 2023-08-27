@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using System.Text;
 using System.Threading;
@@ -16,6 +17,7 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
             var token = args[1];
             var connection = new HubConnectionBuilder()
                 .WithUrl(url)
+                //.AddMessagePackProtocol()
                 //.WithAutomaticReconnect()
                 .Build();
             var client = new HttpClient();
@@ -23,7 +25,10 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
             var paddleOcr = new PaddleOCR();
             connection.On<OCRTaskPost>("paddleocr", async (post) => {
                 try {
-                    Console.WriteLine($"{post.Id}");
+                    Console.WriteLine($"{post.Id} {post.IsVaild}");
+                    if (!post.IsVaild) {
+                        await connection.StopAsync();
+                    }
                     var response = paddleOcr.Execute(post.PaddleOCRPost.Images);
                     await connection.SendAsync("PostResult", token, new OCRTaskResult() { Id = post.Id, PaddleOCRResult = response });
                 } catch (Exception ex) {
