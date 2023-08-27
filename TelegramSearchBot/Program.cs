@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Builder;
 using TelegramSearchBot.Hubs;
 using TelegramSearchBot.Common.Model.DTO;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace TelegramSearchBot {
     class Program {
@@ -31,6 +32,8 @@ namespace TelegramSearchBot {
             builder.Services.AddSingleton<JobManager<OCRTaskPost, OCRTaskResult>>();
             builder.Services.AddSingleton<ITokenManager, TokenManager>();
             builder.Services.AddSingleton<SendMessage>();
+            builder.Services.AddSingleton<LiteDbManager>();
+            builder.Services.AddSingleton<OCRHub>();
             builder.Services.AddSignalR().AddMessagePackProtocol(options => {
                 options.SerializerOptions = MessagePackSerializerOptions.Standard
                 .WithSecurity(MessagePackSecurity.UntrustedData);
@@ -71,14 +74,15 @@ namespace TelegramSearchBot {
             var bot = service.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             bot.StartReceiving(
-                HandleUpdateAsync, 
-                HandleErrorAsync, new() {
+                HandleUpdateAsync(service), 
+                HandleErrorAsync(service), new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
             }, cts.Token);
             var wait = app.RunAsync();
+            
             var tasks = InitController(service);
-            tasks.Add(wait);
-            foreach(var task in tasks) {
+            await wait;
+            foreach (var task in tasks) {
                 await task;
             }
         }
@@ -109,23 +113,29 @@ namespace TelegramSearchBot {
             return new List<Task>() { service.GetRequiredService<SendMessage>().Run() };
         }
 
-        public static async Task HandleUpdateAsync (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) {
-            foreach (var per in service.GetServices<IOnUpdate>()) {
-                try {
-                    await per.ExecuteAsync(update);
-                } catch (Exception ex) {
-                    Console.WriteLine(ex.ToString());
-                }
-                
-            }
+        public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
+            var all = service.GetServices<IOnUpdate>();
+
+            return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
+                all.Select(per => per.ExecuteAsync(update))
+                   .Select(async per => {
+                       try {
+                           await per;
+                       } catch (Exception ex) {
+                           Console.WriteLine(ex.ToString());
+                       }
+                   }).ToList();
+            };
         }
 #pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
-        public static async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
-            if (exception is ApiRequestException apiRequestException) {
-                //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
-                Console.WriteLine($"ApiRequestException: {apiRequestException.Message}");
-                //Console.WriteLine(apiRequestException.ToString());
-            }
+        public static Func<ITelegramBotClient, Exception, CancellationToken, Task> HandleErrorAsync(IServiceProvider service) {
+            return async (ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) => {
+                if (exception is ApiRequestException apiRequestException) {
+                    //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
+                    Console.WriteLine($"ApiRequestException: {apiRequestException.Message}");
+                    //Console.WriteLine(apiRequestException.ToString());
+                }
+            };
         }
 #pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
     }
