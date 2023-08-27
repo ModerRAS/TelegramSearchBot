@@ -18,7 +18,7 @@ namespace TelegramSearchBot.Service {
                 tokenManager.AddToken(TokenType, Token);
                 return Token;
             }
-            if (Command.Length > 8 && Command.Equals("查看Token ")) {
+            if (Command.Length > 8 && Command.StartsWith("查看Token ")) {
                 var TokenType = Command.Substring(8);
                 var tokens = tokenManager.ListToken(TokenType);
                 return string.Join("\n", tokens);
