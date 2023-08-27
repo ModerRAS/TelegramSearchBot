@@ -9,9 +9,9 @@ namespace TelegramSearchBot.Manager {
     public class TokenManager : ITokenManager {
         private ILiteCollection<TokenModel> liteCollection { get; set; }
         private ConcurrentDictionary<string, HashSet<string>> Tokens {  get; set; }
-        public TokenManager(LiteDatabase liteDatabase) {
+        public TokenManager(LiteDbManager liteDbManager) {
             Tokens = new ConcurrentDictionary<string, HashSet<string>>();
-            liteCollection = liteDatabase.GetCollection<TokenModel>("Token");
+            liteCollection = liteDbManager.Cache.GetCollection<TokenModel>("Token");
             var AllToken = liteCollection.FindAll();
             foreach (var token in AllToken) {
                 if (Tokens.Keys.Contains(token.Type)) {
