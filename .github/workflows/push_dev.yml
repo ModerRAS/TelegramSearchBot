@@ -1,7 +1,7 @@
 # This workflow will build a .NET project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
 
-name: Push To Docker 
+name: Dev Test
 
 on:
   push:
@@ -27,11 +27,11 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal
     - name: publish
-      run: dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /app/ --self-contained false
+      run: dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o ./app/ --self-contained false
     - name: Online Test
       env:
         EnableAutoOCR: true
         IsLocalAPI: false
         BotToken: ${{ secrets.BOTTOKEN }}
         AdminId: ${{ secrets.ADMINID }}
-      run: dotnet /app/TelegramSearchBot.dll & sleep 1800; kill $!;
+      run: dotnet ./app/TelegramSearchBot.dll & sleep 1800; kill $!;
