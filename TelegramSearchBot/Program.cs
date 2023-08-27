@@ -19,6 +19,7 @@ using MessagePack;
 using Microsoft.AspNetCore.Builder;
 using TelegramSearchBot.Hubs;
 using TelegramSearchBot.Common.Model.DTO;
+using System.Collections.Generic;
 
 namespace TelegramSearchBot {
     class Program {
@@ -29,10 +30,12 @@ namespace TelegramSearchBot {
             builder.Services.AddSingleton<LuceneManager>();
             builder.Services.AddSingleton<JobManager<OCRTaskPost, OCRTaskResult>>();
             builder.Services.AddSingleton<ITokenManager, TokenManager>();
+            builder.Services.AddSingleton<SendMessage>();
             builder.Services.AddSignalR().AddMessagePackProtocol(options => {
                 options.SerializerOptions = MessagePackSerializerOptions.Standard
                 .WithSecurity(MessagePackSecurity.UntrustedData);
             });
+            //builder.Services.AddRazorPages();
             AddController(builder.Services);
             AddService(builder.Services);
             builder.Logging.ClearProviders();
@@ -45,7 +48,7 @@ namespace TelegramSearchBot {
             return builder;
         }
             
-        static void Main(string[] args) {
+        static async Task Main(string[] args) {
             if (!Directory.Exists(Env.WorkDir)) {
                 Utils.CreateDirectorys(Env.WorkDir);
             }
@@ -53,27 +56,31 @@ namespace TelegramSearchBot {
             Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
             Directory.SetCurrentDirectory(Env.WorkDir);
             var app = CreateHostBuilder(args).Build();
-            app.UseHttpsRedirection();
+            //app.UseHttpsRedirection();
             app.UseStaticFiles();
 
             app.UseRouting();
 
             app.UseAuthorization();
 
-            app.MapRazorPages();
+            //app.MapRazorPages();
             app.UseEndpoints(endpoints => {
                 endpoints.MapHub<OCRHub>("/OCRHub");
             });
-            var bot = app.Services.GetRequiredService<ITelegramBotClient>();
+            service = app.Services;
+            var bot = service.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             bot.StartReceiving(
                 HandleUpdateAsync, 
                 HandleErrorAsync, new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
             }, cts.Token);
-            service = app.Services;
-            InitController(app.Services);
-            app.Run();
+            var wait = app.RunAsync();
+            var tasks = InitController(service);
+            tasks.Add(wait);
+            foreach(var task in tasks) {
+                await task;
+            }
         }
         public static void AddController(IServiceCollection service) {
             service.Scan(scan => scan
@@ -98,8 +105,8 @@ namespace TelegramSearchBot {
             );
 
         }
-        public static void InitController(IServiceProvider service) {
-            _ = service.GetRequiredService<SendMessage>().Run();
+        public static List<Task> InitController(IServiceProvider service) {
+            return new List<Task>() { service.GetRequiredService<SendMessage>().Run() };
         }
 
         public static async Task HandleUpdateAsync (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) {
