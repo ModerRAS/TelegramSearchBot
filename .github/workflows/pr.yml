@@ -7,6 +7,8 @@ name: Pull requests Check
 on:
   pull_request:
     branches: [ "master" ]
+  push:
+    branches: [ "dev" ]
 
 jobs:
   build:
