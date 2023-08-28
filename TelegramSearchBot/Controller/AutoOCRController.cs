@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
@@ -15,11 +16,13 @@ namespace TelegramSearchBot.Controller {
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
-        public AutoOCRController(ITelegramBotClient botClient, PaddleOCRService paddleOCRService, SendMessage Send, MessageService messageService) {
+        private readonly ILogger<AutoOCRController> logger;
+        public AutoOCRController(ITelegramBotClient botClient, PaddleOCRService paddleOCRService, SendMessage Send, MessageService messageService, ILogger<AutoOCRController> logger) {
             this.paddleOCRService = paddleOCRService;
             this.messageService = messageService;
             this.botClient = botClient;
             this.Send = Send;
+            this.logger = logger;
         }
         public async Task ExecuteAsync(Update e) {
             if (!Env.EnableAutoOCR) {
@@ -27,6 +30,7 @@ namespace TelegramSearchBot.Controller {
             }
             if (e?.Message?.Photo?.Length <= 0) {
             } else {
+                logger.LogInformation($"Get {e?.Message?.Photo?.Length} Photos in {e?.Message?.Chat.Id}");
                 var links = new HashSet<string>();
                 foreach (var f in e?.Message?.Photo) {
                     if (Env.IsLocalAPI) {
@@ -48,7 +52,7 @@ namespace TelegramSearchBot.Controller {
                     //File.Delete(file.FilePath);
                 }
                 var Text = string.Join(" ", links).Trim();
-                Console.WriteLine(Text);
+                logger.LogInformation(Text);
                 await messageService.ExecuteAsync(new MessageOption {
                     ChatId = e.Message.Chat.Id,
                     MessageId = e.Message.MessageId,
