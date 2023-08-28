@@ -82,5 +82,5 @@ jobs:
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v2
       with:
-        name: SelectAndSearch_${{ matrix.configuration }}
+        name: TelegramSearchBot.Agent.PaddleOCR
         path: TelegramSearchBot.Agent.PaddleOCR\bin\Release\net7.0\win-x64\publish
