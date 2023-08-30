@@ -1,12 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build-env
-WORKDIR /app
-
-# Copy everything else and build
-COPY . ./
-RUN dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o /app/out --self-contained false
-
-
-FROM mcr.microsoft.com/dotnet/runtime:7.0
+FROM mcr.microsoft.com/dotnet/aspnet:7.0
 
 RUN apt update -y && \
     apt install -y fontconfig && \
@@ -19,6 +11,6 @@ RUN apt update -y && \
 
 WORKDIR /app
 
-COPY --from=build-env /app/out /app
+COPY ./out /app
 
 ENTRYPOINT ["dotnet", "TelegramSearchBot.dll"]

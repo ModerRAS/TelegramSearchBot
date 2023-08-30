@@ -9,11 +9,18 @@ using Newtonsoft.Json;
 using System.Threading;
 using SkiaSharp;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Common.Model.DO;
+using TelegramSearchBot.Common.Model.DTO;
+using TelegramSearchBot.Manager;
 
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
         public string ServiceName => "PaddleOCRService";
-        private static SemaphoreSlim semaphore = new SemaphoreSlim(Env.PaddleOCRAPIParallel);
+        public JobManager<OCRTaskPost, OCRTaskResult> JobManager { get; set; }
+
+        public PaddleOCRService(JobManager<OCRTaskPost, OCRTaskResult> jobManager) {
+            JobManager = jobManager;
+        }
 
 
         /// <summary>
@@ -22,8 +29,7 @@ namespace TelegramSearchBot.Service {
         /// <param name="messageOption"></param>
         /// <returns></returns>
         public async Task<string> ExecuteAsync(Stream file) {
-            await semaphore.WaitAsync().ConfigureAwait(false);
-            if (Env.PaddleOCRAPI.Equals(string.Empty)) {
+            if (!Env.EnableAutoOCR) {
                 return "";
             }
             var stream = new MemoryStream();
@@ -34,11 +40,8 @@ namespace TelegramSearchBot.Service {
             var tg_img_arr = tg_img_data.ToArray();
             var tg_img_base64 = Convert.ToBase64String(tg_img_arr);
             var postJson = new PaddleOCRPost() { Images = new List<string>() { tg_img_base64 } };
-            var client = new HttpClient();
-            var response = await client.PostAsync(Env.PaddleOCRAPI, new StringContent(JsonConvert.SerializeObject(postJson), Encoding.UTF8, "application/json"));
-            var responseText = await response.Content.ReadAsStringAsync();
-            semaphore.Release();
-            var responseJson = JsonConvert.DeserializeObject<PaddleOCRResult>(responseText);
+            var response = await JobManager.Execute(new OCRTaskPost() { Id = Guid.NewGuid(), IsVaild = true, PaddleOCRPost = postJson });
+            var responseJson = response.PaddleOCRResult;
             int status;
             if (int.TryParse(responseJson.Status, out status) && status == 0) {
                 var StringList = new List<string>();

@@ -43,12 +43,11 @@ namespace TelegramSearchBot.Controller {
             //queue.Append(new SendModel() { Action = func, IsGroup = IsGroup });
             //Console.WriteLine(queue.Count());
         }
-#pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
-        public Task Run() {
+        public async Task Run() {
             
             while (true) {
                 if (tasks.IsEmpty) {
-                    Thread.Sleep(1000);
+                    await Task.Delay(1000);
                 } else {
                     while (!tasks.IsEmpty) {
                         try {

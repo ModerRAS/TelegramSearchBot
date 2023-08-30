@@ -8,8 +8,7 @@ on:
     branches: [ "master" ]
 
 jobs:
-  build:
-
+  BuildServer:
     runs-on: ubuntu-latest
 
     steps:
@@ -39,6 +38,8 @@ jobs:
       run: dotnet build --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
+    - name: Publish
+      run: dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o ./out --self-contained false
     - name: Build and push Docker image nightly
       uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
       with:
@@ -66,3 +67,22 @@ jobs:
         pass: ${{ secrets.SERVER_PASSWORD }}
         # execute pre-commands before scp
         first_ssh: kubectl delete pods tgsb && kubectl apply -f /data/TelegramSearchBot/deploy.yaml
+  
+  BuildPaddleOCRAgent:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 7.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Publish
+      run: dotnet publish ./TelegramSearchBot.Agent.PaddleOCR/TelegramSearchBot.Agent.PaddleOCR.csproj -c Release -o TelegramSearchBot.Agent.PaddleOCR\bin\Release\net7.0\win-x64\publish --self-contained true
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: TelegramSearchBot.Agent.PaddleOCR
+        path: TelegramSearchBot.Agent.PaddleOCR\bin\Release\net7.0\win-x64\publish

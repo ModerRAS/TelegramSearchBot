@@ -3,8 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace TelegramSearchBot.Model {
-    public class PaddleOCRPost {
+namespace TelegramSearchBot.Common.Model.DO
+{
+    public class PaddleOCRPost
+    {
         [JsonProperty("images")]
         public List<string> Images { get; set; }
     }
