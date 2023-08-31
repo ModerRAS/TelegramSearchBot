@@ -77,6 +77,8 @@ jobs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: 7.0.x
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1.1
     - name: Restore dependencies
       run: dotnet restore
     - name: Publish
@@ -85,4 +87,13 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: TelegramSearchBot.Agent.PaddleOCR
-        path: TelegramSearchBot.Agent.PaddleOCR\bin\Release\net7.0\win-x64\publish
+        path: TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/publish
+    - name: Publish ClickOnce
+      run: msbuild TelegramSearchBot.Agent.PaddleOCR /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
+    - name: Upload to ClickOnce Server
+      uses: jakejarvis/backblaze-b2-action@master
+      env:
+        SOURCE_DIR: 'TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/app.publish'
+        B2_BUCKET: ${{ secrets.B2_BUCKET }}
+        B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
+        B2_APPKEY: ${{ secrets.B2_APPKEY }}
