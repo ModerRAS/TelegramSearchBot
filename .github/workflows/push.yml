@@ -68,7 +68,26 @@ jobs:
         # execute pre-commands before scp
         first_ssh: kubectl delete pods tgsb && kubectl apply -f /data/TelegramSearchBot/deploy.yaml
   
-  BuildPaddleOCRAgent:
+  BuildPaddleOCRAgentArtifact:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 7.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Publish
+      run: dotnet publish ./TelegramSearchBot.Agent.PaddleOCR/TelegramSearchBot.Agent.PaddleOCR.csproj -c Release -o TelegramSearchBot.Agent.PaddleOCR\bin\Release\net7.0\win-x64\publish --self-contained true
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: TelegramSearchBot.Agent.PaddleOCR
+        path: TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/publish
+
+  BuildPaddleOCRAgentClickOnce:
     runs-on: windows-latest
 
     steps:
@@ -84,13 +103,6 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
     - name: Restore dependencies
       run: dotnet restore
-    - name: Publish
-      run: dotnet publish ./TelegramSearchBot.Agent.PaddleOCR/TelegramSearchBot.Agent.PaddleOCR.csproj -c Release -o TelegramSearchBot.Agent.PaddleOCR\bin\Release\net7.0\win-x64\publish --self-contained true
-    - name: Upload Build Artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: TelegramSearchBot.Agent.PaddleOCR
-        path: TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/publish
     - name: Publish ClickOnce
       shell: pwsh
       run: |
@@ -108,7 +120,7 @@ jobs:
       run: |
         pip install --quiet --no-cache-dir b2
         b2 authorize-account $env:B2_APPKEY_ID $env:B2_APPKEY
-        b2 sync --delete --replaceNewer $env:SOURCE_DIR $env:B2_BUCKET
+        b2 sync --delete --replaceNewer $env:SOURCE_DIR $env:B2_BUCKET/TelegramSearchBot.Agent.PaddleOCR
 
         # TO-DO: Delete old versions of updated files because that's what
         # we're already using GitHub for... but B2 doesn't make this easy:
