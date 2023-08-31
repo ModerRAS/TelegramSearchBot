@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Text;
 using System.Threading;
+using System.Timers;
 using TelegramSearchBot.Common.Model.DO;
 using TelegramSearchBot.Common.Model.DTO;
 
@@ -19,12 +20,12 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
                 }));
 
             ILogger<Program> logger = loggerFactory.CreateLogger<Program>();
-            if (args.Length != 2) {
-                logger.LogError("TelegramSearchBot.Agent.PaddleOCR.exe <url> <token>");
+            var url = Environment.GetEnvironmentVariable("TelegramSearchBot.Agent.PaddleOCR.URL");
+            var token = Environment.GetEnvironmentVariable("TelegramSearchBot.Agent.PaddleOCR.Token");
+            if (url is null || token is null) {
+                logger.LogError("Please Add Environment Variables `TelegramSearchBot.Agent.PaddleOCR.URL` for url and `TelegramSearchBot.Agent.PaddleOCR.Token` for token!");
                 return 1;
             }
-            var url = args[0];
-            var token = args[1];
             var connection = new HubConnectionBuilder()
                 .WithUrl(url)
                 //.AddMessagePackProtocol()
@@ -33,13 +34,27 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
             var client = new HttpClient();
             var rnd = new Random();
             var paddleOcr = new PaddleOCR();
+            var IsBusy = false;
+            var timer = new System.Timers.Timer(300_000);
+            timer.AutoReset = true;
+            timer.Enabled = true;
+            timer.Elapsed += async (object? sender, ElapsedEventArgs e) => {
+                if (!IsBusy) {
+                    await connection.StopAsync();
+                    await connection.StartAsync();
+                    await connection.SendAsync("GetJob", token);
+                }
+            };
+            connection.KeepAliveInterval = TimeSpan.FromSeconds(1);
             connection.On<OCRTaskPost>("paddleocr", async (post) => {
                 try {
                     logger.LogInformation($"{post.Id} {post.IsVaild}");
                     if (!post.IsVaild) {
                         await connection.StopAsync();
                     }
+                    IsBusy = true;
                     var response = paddleOcr.Execute(post.PaddleOCRPost.Images);
+                    IsBusy = false;
                     await connection.SendAsync("PostResult", token, new OCRTaskResult() { Id = post.Id, PaddleOCRResult = response });
                 } catch (Exception ex) {
                     logger.LogError(ex.ToString());
