@@ -73,6 +73,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip' # caching pip dependencies
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
@@ -96,9 +100,19 @@ jobs:
           echo $env:BUILD_VERSION
           msbuild TelegramSearchBot.Agent.PaddleOCR /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
     - name: Upload to ClickOnce Server
-      uses: jakejarvis/backblaze-b2-action@master
+      shell: pwsh
       env:
         SOURCE_DIR: 'TelegramSearchBot.Agent.PaddleOCR/bin/TelegramSearchBot.Agent.PaddleOCR'
         B2_BUCKET: ${{ secrets.B2_BUCKET }}
         B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
         B2_APPKEY: ${{ secrets.B2_APPKEY }}
+      run: |
+        pip install --quiet --no-cache-dir b2
+        b2 authorize-account ${B2_APPKEY_ID} ${B2_APPKEY}
+        b2 sync --delete --replaceNewer ${SOURCE_DIR} ${B2_BUCKET}
+
+        # TO-DO: Delete old versions of updated files because that's what
+        # we're already using GitHub for... but B2 doesn't make this easy:
+        # https://github.com/Backblaze/B2_Command_Line_Tool/issues/324
+
+        b2 clear-account
