@@ -102,10 +102,12 @@ jobs:
         path: TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/publish
     - name: Publish ClickOnce
       shell: pwsh
+      env:
+        ApplicationVersion: ${{ steps.ApplicationVersion.outputs.info }}
+        ApplicationRevision: ${{ steps.ApplicationRevision.outputs.info }}
       run: |
-          $ApplicationVersion = ${{ steps.ApplicationVersion.outputs.info }}
-          $ApplicationRevision = ${{ steps.ApplicationRevision.outputs.info }}
-          $env:BUILD_VERSION = $ApplicationVersion.replace('*', $ApplicationRevision)
+          $env:BUILD_VERSION = $env:ApplicationVersion.replace('*', $env:ApplicationRevision)
+          echo $env:BUILD_VERSION
           msbuild TelegramSearchBot.Agent.PaddleOCR /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
     - name: Upload to ClickOnce Server
       uses: jakejarvis/backblaze-b2-action@master
