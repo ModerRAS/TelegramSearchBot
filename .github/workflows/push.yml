@@ -79,18 +79,6 @@ jobs:
         dotnet-version: 7.0.x
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v1.1
-    - name: Get XML ApplicationVersion
-      id: GetApplicationVersion
-      uses: mavrosxristoforos/get-xml-info@1.0
-      with:
-        xml-file: 'TelegramSearchBot.Agent.PaddleOCR/Properties/PublishProfiles/ClickOnceProfile.pubxml'
-        xpath: '/Project/PropertyGroup/ApplicationVersion'
-    - name: Get XML ApplicationRevision
-      id: GetApplicationRevision
-      uses: mavrosxristoforos/get-xml-info@1.0
-      with:
-        xml-file: 'TelegramSearchBot.Agent.PaddleOCR/Properties/PublishProfiles/ClickOnceProfile.pubxml'
-        xpath: '/Project/PropertyGroup/ApplicationRevision'
     - name: Restore dependencies
       run: dotnet restore
     - name: Publish
@@ -102,11 +90,9 @@ jobs:
         path: TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/publish
     - name: Publish ClickOnce
       shell: pwsh
-      env:
-        ApplicationVersion: ${{ steps.ApplicationVersion.outputs.info }}
-        ApplicationRevision: ${{ steps.ApplicationRevision.outputs.info }}
       run: |
-          $env:BUILD_VERSION = $env:ApplicationVersion.replace('*', $env:ApplicationRevision)
+          $xmldata = [xml](Get-Content TelegramSearchBot.Agent.PaddleOCR/Properties/PublishProfiles/ClickOnceProfile.pubxml)
+          $env:BUILD_VERSION = $xmldata.Project.PropertyGroup.ApplicationVersion.replace('*', $xmldata.Project.PropertyGroup.ApplicationRevision)
           echo $env:BUILD_VERSION
           msbuild TelegramSearchBot.Agent.PaddleOCR /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
     - name: Upload to ClickOnce Server
