@@ -39,7 +39,9 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
             timer.AutoReset = true;
             timer.Enabled = true;
             timer.Elapsed += async (object? sender, ElapsedEventArgs e) => {
+                logger.LogInformation("定时器触发了");
                 if (!IsBusy) {
+                    logger.LogInformation("自动断开连接重连中。。。。。");
                     await connection.StopAsync();
                     await connection.StartAsync();
                     await connection.SendAsync("GetJob", token);
@@ -63,6 +65,7 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
             }); 
             connection.Closed += async (error) =>
             {
+                logger.LogWarning("断线了");
                 await Task.Delay(rnd.Next(0, 5) * 1000);
                 await connection.StartAsync();
                 await connection.SendAsync("GetJob", token);
@@ -70,6 +73,7 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
 
             await connection.StartAsync();
             await connection.SendAsync("GetJob", token);
+            logger.LogInformation("启动完毕");
             while (true) {
                 await Task.Delay(int.MaxValue);
             }
