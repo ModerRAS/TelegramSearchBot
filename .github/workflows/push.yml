@@ -79,6 +79,18 @@ jobs:
         dotnet-version: 7.0.x
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v1.1
+    - name: Get XML ApplicationVersion
+      id: GetApplicationVersion
+      uses: mavrosxristoforos/get-xml-info@1.0
+      with:
+        xml-file: 'TelegramSearchBot.Agent.PaddleOCR/Properties/PublishProfiles/ClickOnceProfile.pubxml'
+        xpath: '/Project/PropertyGroup/ApplicationVersion'
+    - name: Get XML ApplicationRevision
+      id: GetApplicationRevision
+      uses: mavrosxristoforos/get-xml-info@1.0
+      with:
+        xml-file: 'TelegramSearchBot.Agent.PaddleOCR/Properties/PublishProfiles/ClickOnceProfile.pubxml'
+        xpath: '/Project/PropertyGroup/ApplicationRevision'
     - name: Restore dependencies
       run: dotnet restore
     - name: Publish
@@ -89,11 +101,16 @@ jobs:
         name: TelegramSearchBot.Agent.PaddleOCR
         path: TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/publish
     - name: Publish ClickOnce
-      run: msbuild TelegramSearchBot.Agent.PaddleOCR /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
+      shell: pwsh
+      run: |
+          $ApplicationVersion = ${{ steps.ApplicationVersion.outputs.info }}
+          $ApplicationRevision = ${{ steps.ApplicationRevision.outputs.info }}
+          $env:BUILD_VERSION = $ApplicationVersion.replace('*', $ApplicationRevision)
+          msbuild TelegramSearchBot.Agent.PaddleOCR /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
     - name: Upload to ClickOnce Server
       uses: jakejarvis/backblaze-b2-action@master
       env:
-        SOURCE_DIR: 'TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/app.publish'
+        SOURCE_DIR: 'TelegramSearchBot.Agent.PaddleOCR/bin/TelegramSearchBot.Agent.PaddleOCR'
         B2_BUCKET: ${{ secrets.B2_BUCKET }}
         B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
         B2_APPKEY: ${{ secrets.B2_APPKEY }}
