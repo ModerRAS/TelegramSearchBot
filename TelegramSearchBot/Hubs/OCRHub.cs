@@ -16,6 +16,13 @@ namespace TelegramSearchBot.Hubs {
             this.tokenManager = tokenManager;
             this.logger = logger;
         }
+        public override Task OnDisconnectedAsync(Exception e) {
+            if (e is not null) {
+                logger.LogError($"Client {Context.ConnectionId} explicitly closed the connection. Exception {e}");
+            }
+
+            return base.OnDisconnectedAsync(e);
+        }
         public async Task PostResult(string token, OCRTaskResult result) {
             if (await CheckToken(token)) {
                 manager.Add(result);
