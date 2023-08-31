@@ -24,6 +24,7 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
             var token = Environment.GetEnvironmentVariable("TelegramSearchBot.Agent.PaddleOCR.Token");
             if (url is null || token is null) {
                 logger.LogError("Please Add Environment Variables `TelegramSearchBot.Agent.PaddleOCR.URL` for url and `TelegramSearchBot.Agent.PaddleOCR.Token` for token!");
+                await Task.Delay(10_000);
                 return 1;
             }
             var connection = new HubConnectionBuilder()
