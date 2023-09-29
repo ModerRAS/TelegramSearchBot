@@ -25,6 +25,7 @@ namespace TelegramSearchBot.Hubs {
         }
         public async Task PostResult(string token, OCRTaskResult result) {
             if (await CheckToken(token)) {
+                logger.LogInformation($"Get a Result {result.Id}");
                 manager.Add(result);
             }
         }
