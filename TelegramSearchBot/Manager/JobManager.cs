@@ -9,11 +9,11 @@ using TelegramSearchBot.Common.Interface;
 namespace TelegramSearchBot.Manager {
     public class JobManager<S, R> where S:ICompareRPC where R:ICompareRPC {
         private ConcurrentQueue<S> SQueue { get; init; }
-        private ConcurrentQueue<R> RQueue { get; init; }
+        private ConcurrentDictionary<string, R> RDictionary { get; init; }
         private ILogger<JobManager<S,R>> logger { get; set; }
         public JobManager(ILogger<JobManager<S, R>> logger) {
             SQueue = new ConcurrentQueue<S>();
-            RQueue = new ConcurrentQueue<R>();
+            RDictionary = new ConcurrentDictionary<string, R>();
             this.logger = logger;
         }
         public async Task WaitAndSave() {
@@ -23,17 +23,18 @@ namespace TelegramSearchBot.Manager {
             logger.LogInformation($"Execute {item.GetUniqueId()}");
             SQueue.Enqueue(item);
             while (true) {
-                if (RQueue.TryPeek(out var r)) {
-                    if (r.GetUniqueId().Equals(item.GetUniqueId())) {
-                        RQueue.TryDequeue(out var result);
-                        return result;
-                    }
+                if (RDictionary.TryRemove(item.GetUniqueId(), out var result)) {
+                    return result;
                 }
                 await WaitAndSave();
             }
         }
         public void Add(R item) {
-            RQueue.Enqueue(item);
+            if (RDictionary.TryAdd(item.GetUniqueId(), item)) {
+                logger.LogInformation($"Add Success {item.GetUniqueId()}");
+            } else {
+                logger.LogInformation($"Add Failed {item.GetUniqueId()}");
+            }
         }
         public async Task<S> GetAsync() {
             while (true) {
