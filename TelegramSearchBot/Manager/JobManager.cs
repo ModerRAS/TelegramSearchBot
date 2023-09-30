@@ -11,12 +11,17 @@ namespace TelegramSearchBot.Manager {
         private ConcurrentQueue<S> SQueue { get; init; }
         private ConcurrentDictionary<string, R> RDictionary { get; init; }
         private ILogger<JobManager<S,R>> logger { get; set; }
+        private int Count = 0;
         public JobManager(ILogger<JobManager<S, R>> logger) {
             SQueue = new ConcurrentQueue<S>();
             RDictionary = new ConcurrentDictionary<string, R>();
             this.logger = logger;
         }
         public async Task WaitAndSave() {
+            if (Count++ % 100 == 0) {
+                logger.LogInformation($"Still in Result:{RDictionary.Count}");
+                Count = 0;
+            }
             await Task.Delay(Env.TaskDelayTimeout);
         }
         public async Task<R> Execute(S item) {
