@@ -70,6 +70,7 @@ namespace TelegramSearchBot.Agent.PaddleOCR {
                 await Task.Delay(rnd.Next(0, 5) * 1000);
                 await connection.StartAsync();
                 await connection.SendAsync("GetJob", token);
+                logger.LogInformation("连接成功");
             };
 
             await connection.StartAsync();
