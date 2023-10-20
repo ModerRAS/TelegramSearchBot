@@ -36,6 +36,6 @@ jobs:
         AdminId: ${{ secrets.ADMINID }}
         WorkDir: ./app/
       run: |
-        dotnet ./app/TelegramSearchBot.exe 
+        start ./app/TelegramSearchBot.exe 
         timeout /t 1800
         taskkill /f /im TelegramSearchBot.exe
