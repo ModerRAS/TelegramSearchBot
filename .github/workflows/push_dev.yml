@@ -36,6 +36,6 @@ jobs:
         AdminId: ${{ secrets.ADMINID }}
         WorkDir: ./app/
       run: |
-        start ./app/TelegramSearchBot.exe 
-        timeout /t 1800
+        start ./app/TelegramSearchBot.exe
+        ping -n 1800 127.0.0.1
         taskkill /f /im TelegramSearchBot.exe
