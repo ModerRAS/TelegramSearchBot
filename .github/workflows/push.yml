@@ -8,86 +8,8 @@ on:
     branches: [ "master" ]
 
 jobs:
-  BuildServer:
-    runs-on: ubuntu-latest
 
-    steps:
-    - name: Get current date
-      id: date
-      run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
-    - name: Log in to Docker Hub
-      uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-    - uses: actions/checkout@v3
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v1
-    - name: Set up Docker Buildx
-      id: buildx
-      uses: docker/setup-buildx-action@v1
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: |
-          6.0.x
-          7.0.x
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
-    - name: Publish
-      run: dotnet publish ./TelegramSearchBot/TelegramSearchBot.csproj -c Release -o ./out --self-contained false
-    - name: Build and push Docker image nightly
-      uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
-      with:
-        context: .
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: moderras/telegramsearchbot:nightly-${{ steps.date.outputs.date }}
-    - name: Build and push Docker image latest
-      uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
-      with:
-        context: .
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: moderras/telegramsearchbot:latest
-    - name: Deploy to Server
-      uses: cross-the-world/ssh-scp-ssh-pipelines@v1.1.4
-      with:
-        # ssh remote host
-        host: ${{ secrets.SERVER_IP }}
-        # ssh remote port
-        port: ${{ secrets.SERVER_PORT }}
-        # ssh remote user
-        user: ${{ secrets.SERVER_USER }}
-        # ssh remote password
-        pass: ${{ secrets.SERVER_PASSWORD }}
-        # execute pre-commands before scp
-        first_ssh: kubectl delete pods tgsb && kubectl apply -f /data/TelegramSearchBot/deploy.yaml
-  
-  BuildPaddleOCRAgentArtifact:
-    runs-on: windows-latest
-
-    steps:
-    - uses: actions/checkout@v3
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: 7.0.x
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Publish
-      run: dotnet publish ./TelegramSearchBot.Agent.PaddleOCR/TelegramSearchBot.Agent.PaddleOCR.csproj -c Release -o TelegramSearchBot.Agent.PaddleOCR\bin\Release\net7.0\win-x64\publish --self-contained true
-    - name: Upload Build Artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: TelegramSearchBot.Agent.PaddleOCR
-        path: TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/publish
-
-  BuildPaddleOCRAgentClickOnce:
+  BuildClickOnce:
     runs-on: windows-latest
 
     steps:
@@ -103,12 +25,16 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
     - name: Restore dependencies
       run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
     - name: Publish ClickOnce
       shell: pwsh
       env:
         BUILD_NUMBER: ${{github.run_number}}
       run: |
-          $content = 'TelegramSearchBot.Agent.PaddleOCR/Properties/PublishProfiles/ClickOnceProfile.pubxml'
+          $content = 'TelegramSearchBot/Properties/PublishProfiles/ClickOnceProfile.pubxml'
           $xmldata = [xml](Get-Content $content)
           $Version = Get-Date -Format "yyyy.MM.dd.*"
           $env:BUILD_VERSION = Get-Date -Format "yyyy.MM.dd.$env:BUILD_NUMBER"
@@ -117,19 +43,19 @@ jobs:
           $node.ApplicationRevision = $env:BuildNumber
           $xmldata.Save($content)
           echo $env:BUILD_VERSION
-          msbuild TelegramSearchBot.Agent.PaddleOCR /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
-          Copy-Item "TelegramSearchBot.Agent.PaddleOCR/bin/Release/net7.0/win-x64/app.publish/Publish.html" "TelegramSearchBot.Agent.PaddleOCR/bin/TelegramSearchBot.Agent.PaddleOCR/"
+          msbuild TelegramSearchBot /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
+          Copy-Item "TelegramSearchBot/bin/Release/net7.0/win-x64/app.publish/Publish.html" "TelegramSearchBot/bin/TelegramSearchBot/"
     - name: Upload to ClickOnce Server
       shell: pwsh
       env:
-        SOURCE_DIR: 'TelegramSearchBot.Agent.PaddleOCR/bin/TelegramSearchBot.Agent.PaddleOCR'
+        SOURCE_DIR: 'TelegramSearchBot/bin/TelegramSearchBot'
         B2_BUCKET: ${{ secrets.B2_BUCKET }}
         B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
         B2_APPKEY: ${{ secrets.B2_APPKEY }}
       run: |
         pip install --quiet --no-cache-dir b2
         b2 authorize-account $env:B2_APPKEY_ID $env:B2_APPKEY
-        b2 sync --delete --replaceNewer $env:SOURCE_DIR $env:B2_BUCKET/TelegramSearchBot.Agent.PaddleOCR
+        b2 sync --delete --replaceNewer $env:SOURCE_DIR $env:B2_BUCKET/TelegramSearchBot
 
         # TO-DO: Delete old versions of updated files because that's what
         # we're already using GitHub for... but B2 doesn't make this easy:
