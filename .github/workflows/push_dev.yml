@@ -34,6 +34,6 @@ jobs:
         IsLocalAPI: false
         BotToken: ${{ secrets.BOTTOKEN }}
         AdminId: ${{ secrets.ADMINID }}
-        WorkDir: ./app/
+        WorkDir: .
       run: |
         ./app/TelegramSearchBot.exe
