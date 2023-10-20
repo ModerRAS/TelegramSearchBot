@@ -56,12 +56,12 @@ namespace TelegramSearchBot {
                 }).Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
+            service = host.Services;
             bot.StartReceiving(
                 HandleUpdateAsync(service), 
                 HandleErrorAsync(service), new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
             }, cts.Token);
-            service = host.Services;
             InitController(host.Services);
             host.Run();
         }
