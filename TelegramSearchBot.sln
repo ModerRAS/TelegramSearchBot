@@ -18,8 +18,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TelegramSearchBot", "Telegr
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TelegramSearchBot.Common", "TelegramSearchBot.Common\TelegramSearchBot.Common.csproj", "{902F87DC-F692-4A49-8F18-DF42A1FB351D}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TelegramSearchBot.Agent.PaddleOCR", "TelegramSearchBot.Agent.PaddleOCR\TelegramSearchBot.Agent.PaddleOCR.csproj", "{70D23749-1338-4EFA-83C9-F7CAA2AAAC5F}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TelegramSearchBot.Test", "TelegramSearchBot.Test\TelegramSearchBot.Test.csproj", "{B0569DC1-B927-41C8-B888-05513A97EE81}"
 EndProject
 Global
@@ -36,10 +34,6 @@ Global
 		{902F87DC-F692-4A49-8F18-DF42A1FB351D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{902F87DC-F692-4A49-8F18-DF42A1FB351D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{902F87DC-F692-4A49-8F18-DF42A1FB351D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{70D23749-1338-4EFA-83C9-F7CAA2AAAC5F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{70D23749-1338-4EFA-83C9-F7CAA2AAAC5F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{70D23749-1338-4EFA-83C9-F7CAA2AAAC5F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{70D23749-1338-4EFA-83C9-F7CAA2AAAC5F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B0569DC1-B927-41C8-B888-05513A97EE81}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B0569DC1-B927-41C8-B888-05513A97EE81}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B0569DC1-B927-41C8-B888-05513A97EE81}.Release|Any CPU.ActiveCfg = Release|Any CPU
