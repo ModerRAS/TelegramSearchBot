@@ -10,7 +10,7 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v3
@@ -35,4 +35,7 @@ jobs:
         BotToken: ${{ secrets.BOTTOKEN }}
         AdminId: ${{ secrets.ADMINID }}
         WorkDir: ./app/
-      run: dotnet ./app/TelegramSearchBot.dll & sleep 1800; kill $!;
+      run: |
+        dotnet ./app/TelegramSearchBot.exe 
+        timeout /t 1800
+        taskkill /f /im TelegramSearchBot.exe
