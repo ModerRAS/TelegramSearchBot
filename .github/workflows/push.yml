@@ -36,11 +36,11 @@ jobs:
       run: |
           $content = 'TelegramSearchBot/Properties/PublishProfiles/ClickOnceProfile.pubxml'
           $xmldata = [xml](Get-Content $content)
-          $Version = Get-Date -Format "yyyy.MM.dd.*"
+          $Version = Get-Date -Format "yyyy.MM.dd.$env:BUILD_NUMBER"
           $env:BUILD_VERSION = Get-Date -Format "yyyy.MM.dd.$env:BUILD_NUMBER"
           $node = $xmldata.Project.PropertyGroup
           $node.ApplicationVersion = $Version
-          $node.ApplicationRevision = $env:BuildNumber
+          $node.MinimumRequiredVersion = $Version
           $xmldata.Save($content)
           echo $env:BUILD_VERSION
           msbuild TelegramSearchBot /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
