@@ -16,11 +16,9 @@ using TelegramSearchBot.Manager;
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
         public string ServiceName => "PaddleOCRService";
-        public JobManager<OCRTaskPost, OCRTaskResult> JobManager { get; set; }
         public PaddleOCR PaddleOCR { get; set; }
 
-        public PaddleOCRService(JobManager<OCRTaskPost, OCRTaskResult> jobManager, PaddleOCR paddleOCR) {
-            JobManager = jobManager;
+        public PaddleOCRService(PaddleOCR paddleOCR) {
             PaddleOCR = paddleOCR;
         }
 
