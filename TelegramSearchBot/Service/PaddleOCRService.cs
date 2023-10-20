@@ -17,9 +17,11 @@ namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
         public string ServiceName => "PaddleOCRService";
         public JobManager<OCRTaskPost, OCRTaskResult> JobManager { get; set; }
+        public PaddleOCR PaddleOCR { get; set; }
 
-        public PaddleOCRService(JobManager<OCRTaskPost, OCRTaskResult> jobManager) {
+        public PaddleOCRService(JobManager<OCRTaskPost, OCRTaskResult> jobManager, PaddleOCR paddleOCR) {
             JobManager = jobManager;
+            PaddleOCR = paddleOCR;
         }
 
 
@@ -32,20 +34,18 @@ namespace TelegramSearchBot.Service {
             if (!Env.EnableAutoOCR) {
                 return "";
             }
-            var stream = new MemoryStream();
+            //var stream = new MemoryStream();
             
             var tg_img = SKBitmap.Decode(file);
             var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Jpeg, 99);
             //tg_img.Save(stream, ImageFormat.Jpeg);
             var tg_img_arr = tg_img_data.ToArray();
             var tg_img_base64 = Convert.ToBase64String(tg_img_arr);
-            var postJson = new PaddleOCRPost() { Images = new List<string>() { tg_img_base64 } };
-            var response = await JobManager.Execute(new OCRTaskPost() { Id = Guid.NewGuid(), IsVaild = true, PaddleOCRPost = postJson });
-            var responseJson = response.PaddleOCRResult;
+            var response = await PaddleOCR.ExecuteAsync(new List<string>() { tg_img_base64 });
             int status;
-            if (int.TryParse(responseJson.Status, out status) && status == 0) {
+            if (int.TryParse(response.Status, out status) && status == 0) {
                 var StringList = new List<string>();
-                foreach (var e in responseJson.Results) {
+                foreach (var e in response.Results) {
                     foreach (var f in e) {
                         StringList.Add(f.Text);
                     }

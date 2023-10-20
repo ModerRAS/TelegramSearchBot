@@ -9,6 +9,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
@@ -30,15 +31,11 @@ namespace TelegramSearchBot {
             Host.CreateDefaultBuilder(args)
                 .ConfigureServices(service => {
                     service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl)));
-                    service.AddTransient<SendService>();
                     service.AddSingleton<SendMessage>();
                     service.AddSingleton<LuceneManager>();
-                    service.AddTransient<SearchService>();
-                    service.AddTransient<MessageService>();
-                    service.AddTransient<AutoQRService>();
-                    service.AddTransient<RefreshService>();
-                    service.AddTransient<PaddleOCRService>();
+                    service.AddSingleton<PaddleOCR>();
                     AddController(service);
+                    AddService(service);
                 });
         static void Main(string[] args) {
             if (!Directory.Exists(Env.WorkDir)) {
