@@ -5,12 +5,24 @@
 ## 食用方法
 
 ### 安装
-
-1. 下载本仓库中的`docker-compose.yml`、 `.env.example`~~和`sonic.cfg`~~
+#### Windows版使用
+1. 安装[软件本体](https://clickonce.miaostay.com/TelegramSearchBot/Publish.html)
+2. 配置环境变量
+|变量名|变量值|
+|--|--|
+|WorkDir|路径，填数据库存储目录|
+|EnableAutoOCR|`true`或者`false`，是否启动OCR|
+|AdminId|管理员的用户ID|
+|BotToken|Bot的Token|
+3. 启动软件本体
+#### Linux版使用
+待补全
+~~
+1. 下载本仓库中的`docker-compose.yml`、 `.env.example`和`sonic.cfg`
 2. 重命名`.env.example`为`.env`
 3. 修改`.env`中的BotToken以及其他选项
 4. 输入`docker-compose up -d`来启动
-
+~~
 ### 搜索
 
 1. 去找BotFather创建一个Bot
