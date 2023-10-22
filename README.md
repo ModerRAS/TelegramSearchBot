@@ -8,12 +8,14 @@
 #### Windows版使用
 1. 安装[软件本体](https://clickonce.miaostay.com/TelegramSearchBot/Publish.html)
 2. 配置环境变量
+
 |变量名|变量值|
 |--|--|
 |WorkDir|路径，填数据库存储目录|
 |EnableAutoOCR|`true`或者`false`，是否启动OCR|
 |AdminId|管理员的用户ID|
 |BotToken|Bot的Token|
+
 3. 启动软件本体
 #### Linux版使用
 待补全
