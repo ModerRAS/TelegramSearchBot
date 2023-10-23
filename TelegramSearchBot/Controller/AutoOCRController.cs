@@ -28,7 +28,7 @@ namespace TelegramSearchBot.Controller {
             if (!Env.EnableAutoOCR) {
                 return;
             }
-            if (e?.Message?.Photo?.Length <= 0) {
+            if (e?.Message?.Photo?.Length is null || e?.Message?.Photo?.Length <= 0) {
             } else {
                 logger.LogInformation($"Get {e?.Message?.Photo?.Length} Photos in {e?.Message?.Chat.Id}");
                 var links = new HashSet<string>();

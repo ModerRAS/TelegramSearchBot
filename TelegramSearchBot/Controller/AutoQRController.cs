@@ -25,7 +25,7 @@ namespace TelegramSearchBot.Controller {
             this.logger = logger;
         }
         public async Task ExecuteAsync(Update e) {
-            if (e?.Message?.Photo?.Length <= 0) {
+            if (e?.Message?.Photo?.Length is null || e?.Message?.Photo?.Length <= 0) {
                 return;
             }
             logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}");

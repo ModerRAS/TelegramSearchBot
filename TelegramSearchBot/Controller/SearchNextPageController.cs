@@ -38,14 +38,13 @@ namespace TelegramSearchBot.Controller {
             //Console.WriteLine(e.CallbackQuery.Id);
             //Console.WriteLine(e.CallbackQuery.Data);//这才是关键的东西，就是上面在按钮上写的那个sendmessage
             if (e.CallbackQuery == null) {
-                logger.LogInformation("CallbackQuery is null");
                 return;
             }
             var ChatId = e?.CallbackQuery?.Message?.Chat.Id;
             if (ChatId == null) {
-                logger.LogInformation("ChatId is null");
                 return;
             }
+            logger.LogInformation($"CallbackQuery is: {e.CallbackQuery}, ChatId is: {ChatId}");
             var IsGroup = e?.CallbackQuery?.Message?.Chat.Id < 0;
 #pragma warning disable CS8602 // 解引用可能出现空引用。
             await botClient.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "搜索中。。。");
