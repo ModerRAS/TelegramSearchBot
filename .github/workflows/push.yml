@@ -46,7 +46,7 @@ jobs:
           $xmldata.Save($content)
           echo $env:BUILD_VERSION
           msbuild TelegramSearchBot /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
-          Copy-Item "TelegramSearchBot/bin/Release/net7.0/win-x64/app.publish/Publish.html" "TelegramSearchBot/bin/TelegramSearchBot/"
+          Copy-Item "TelegramSearchBot/bin/Release/net8.0/win-x64/app.publish/Publish.html" "TelegramSearchBot/bin/TelegramSearchBot/"
     - name: Upload to ClickOnce Server
       shell: pwsh
       env:
