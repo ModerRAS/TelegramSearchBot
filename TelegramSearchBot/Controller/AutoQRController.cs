@@ -30,23 +30,23 @@ namespace TelegramSearchBot.Controller {
             }
             logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}");
             var links = new List<string>();
-            foreach (var f in e.Message.Photo) {
-                if (Env.IsLocalAPI) {
-                    var fileInfo = await botClient.GetFileAsync(f.FileId);
-                    var client = new HttpClient();
-                    using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
-                        links.Add(await autoQRSevice.ExecuteAsync(stream));
-                    }
-                } else {
-                    using (var stream = new MemoryStream()) {
-                        var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
-                        stream.Position = 0;
-                        links.Add(await autoQRSevice.ExecuteAsync(stream));
-                    }
+            var f = e.Message.Photo.Last();
+            if (Env.IsLocalAPI) {
+                var fileInfo = await botClient.GetFileAsync(f.FileId);
+                var client = new HttpClient();
+                using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
+                    links.Add(await autoQRSevice.ExecuteAsync(stream));
                 }
+            } else {
+                using (var stream = new MemoryStream()) {
+                    var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
+                    stream.Position = 0;
+                    links.Add(await autoQRSevice.ExecuteAsync(stream));
+                }
+            }
 
                 //File.Delete(file.FilePath);
-            }
+            
             logger.LogInformation(string.Join(", ", links));
             if (links.Count > 0) {
                 var set = new HashSet<string>();

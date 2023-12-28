@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -32,24 +33,20 @@ namespace TelegramSearchBot.Controller {
             } else {
                 logger.LogInformation($"Get {e?.Message?.Photo?.Length} Photos in {e?.Message?.Chat.Id}");
                 var links = new HashSet<string>();
-                foreach (var f in e?.Message?.Photo) {
-                    if (Env.IsLocalAPI) {
-                        var fileInfo = await botClient.GetFileAsync(f.FileId);
-                        var client = new HttpClient();
-                        using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
-                            links.Add(await paddleOCRService.ExecuteAsync(stream));
-                        }
-                    } else {
-                        using (var stream = new MemoryStream()) {
-                            var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
-                            stream.Position = 0;
-                            var str = await paddleOCRService.ExecuteAsync(stream);
-                            links.Add(str);
-                        }
+                var f = e?.Message?.Photo.Last();
+                if (Env.IsLocalAPI) {
+                    var fileInfo = await botClient.GetFileAsync(f.FileId);
+                    var client = new HttpClient();
+                    using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
+                        links.Add(await paddleOCRService.ExecuteAsync(stream));
                     }
-
-                    
-                    //File.Delete(file.FilePath);
+                } else {
+                    using (var stream = new MemoryStream()) {
+                        var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
+                        stream.Position = 0;
+                        var str = await paddleOCRService.ExecuteAsync(stream);
+                        links.Add(str);
+                    }
                 }
                 var Text = string.Join(" ", links).Trim();
                 logger.LogInformation(Text);
