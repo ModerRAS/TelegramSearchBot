@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.IO;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -30,7 +31,7 @@ namespace TelegramSearchBot.Controller {
             //File.Delete(file.FilePath);
             try {
                 var PhotoStream = await IProcessPhoto.GetPhoto(botClient, e);
-                var OcrStr = await paddleOCRService.ExecuteAsync(PhotoStream);
+                var OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
                 logger.LogInformation(OcrStr);
                 await messageService.ExecuteAsync(new MessageOption {
                     ChatId = e.Message.Chat.Id,

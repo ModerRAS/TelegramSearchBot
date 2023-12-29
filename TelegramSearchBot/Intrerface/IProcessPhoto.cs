@@ -22,7 +22,7 @@ namespace TelegramSearchBot.Intrerface {
                 return false;
             }
         }
-        public static async Task<Stream> GetPhoto(ITelegramBotClient botClient, Update e) {
+        public static async Task<byte[]> GetPhoto(ITelegramBotClient botClient, Update e) {
             string FileId = string.Empty;
             if (e?.Message?.Photo?.Length is not null && e?.Message?.Photo?.Length > 0) {
                 FileId = e.Message.Photo.Last().FileId;
@@ -36,13 +36,15 @@ namespace TelegramSearchBot.Intrerface {
                 var fileInfo = await botClient.GetFileAsync(FileId);
                 var client = new HttpClient();
                 using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
-                    return stream;
+                    var memstream = new MemoryStream();
+                    await stream.CopyToAsync(memstream);
+                    return memstream.ToArray();
                 }
             } else {
                 using (var stream = new MemoryStream()) {
                     var file = await botClient.GetInfoAndDownloadFileAsync(FileId, stream);
                     stream.Position = 0;
-                    return stream;
+                    return stream.ToArray();
                 }
             }
         }

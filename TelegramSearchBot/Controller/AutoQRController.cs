@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System.IO;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -27,7 +28,7 @@ namespace TelegramSearchBot.Controller {
             //File.Delete(file.FilePath);
             try {
                 var PhotoStream = await IProcessPhoto.GetPhoto(botClient, e);
-                var QrStr = await autoQRSevice.ExecuteAsync(PhotoStream);
+                var QrStr = await autoQRSevice.ExecuteAsync(new MemoryStream(PhotoStream));
                 logger.LogInformation(QrStr);
                 logger.LogInformation(QrStr);
                 await Send.AddTask(async () => {
