@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using ImageMagick;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -22,6 +23,18 @@ namespace TelegramSearchBot.Intrerface {
                 return false;
             }
         }
+        public static byte[] ConvertToJpeg(byte[] source) {
+            // Read first frame of gif image
+            using var image = new MagickImage(source);
+
+            using var memStream = new MemoryStream();
+
+            // Sets the output format to png
+            image.Format = MagickFormat.Jpeg;
+
+            // Write the image to the memorystream
+            return image.ToByteArray();
+        }
         public static async Task<byte[]> GetPhoto(ITelegramBotClient botClient, Update e) {
             string FileId = string.Empty;
             if (e?.Message?.Photo?.Length is not null && e?.Message?.Photo?.Length > 0) {
@@ -31,22 +44,21 @@ namespace TelegramSearchBot.Intrerface {
             } else {
                 throw new CannotGetPhotoException();
             }
-
-            if (Env.IsLocalAPI) {
-                var fileInfo = await botClient.GetFileAsync(FileId);
-                var client = new HttpClient();
-                using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
-                    var memstream = new MemoryStream();
-                    await stream.CopyToAsync(memstream);
-                    return memstream.ToArray();
-                }
-            } else {
-                using (var stream = new MemoryStream()) {
+            using (var stream = new MemoryStream()) {
+                if (Env.IsLocalAPI) {
+                    var fileInfo = await botClient.GetFileAsync(FileId);
+                    var client = new HttpClient();
+                    using (var clistream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
+                        await clistream.CopyToAsync(stream);
+                    }
+                } else {
                     var file = await botClient.GetInfoAndDownloadFileAsync(FileId, stream);
                     stream.Position = 0;
-                    return stream.ToArray();
                 }
+
+                return ConvertToJpeg(stream.ToArray());
             }
+            
         }
     }
 }
