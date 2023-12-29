@@ -27,10 +27,10 @@ namespace TelegramSearchBot.Controller {
                 return;
             }
 
-            logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}, e?.Message?.Document: {e?.Message?.Document}");
-            //File.Delete(file.FilePath);
             try {
                 var PhotoStream = await IProcessPhoto.GetPhoto(botClient, e);
+                logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}, e?.Message?.Document: {e?.Message?.Document}");
+                //File.Delete(file.FilePath);
                 var OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
                 logger.LogInformation(OcrStr);
                 await messageService.ExecuteAsync(new MessageOption {
