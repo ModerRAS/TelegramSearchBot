@@ -1,12 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
@@ -29,43 +25,31 @@ namespace TelegramSearchBot.Controller {
             if (!Env.EnableAutoOCR) {
                 return;
             }
-            if (e?.Message?.Photo?.Length is null || e?.Message?.Photo?.Length <= 0) {
-            } else {
-                logger.LogInformation($"Get {e?.Message?.Photo?.Length} Photos in {e?.Message?.Chat.Id}");
-                var links = new HashSet<string>();
-                var f = e?.Message?.Photo.Last();
-                if (Env.IsLocalAPI) {
-                    var fileInfo = await botClient.GetFileAsync(f.FileId);
-                    var client = new HttpClient();
-                    using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
-                        links.Add(await paddleOCRService.ExecuteAsync(stream));
-                    }
-                } else {
-                    using (var stream = new MemoryStream()) {
-                        var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
-                        stream.Position = 0;
-                        var str = await paddleOCRService.ExecuteAsync(stream);
-                        links.Add(str);
-                    }
-                }
-                var Text = string.Join(" ", links).Trim();
-                logger.LogInformation(Text);
+
+            logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}, e?.Message?.Document: {e?.Message?.Document}");
+            //File.Delete(file.FilePath);
+            try {
+                var PhotoStream = await IProcessPhoto.GetPhoto(botClient, e);
+                var OcrStr = await paddleOCRService.ExecuteAsync(PhotoStream);
+                logger.LogInformation(OcrStr);
                 await messageService.ExecuteAsync(new MessageOption {
                     ChatId = e.Message.Chat.Id,
                     MessageId = e.Message.MessageId,
                     UserId = e.Message.From.Id,
-                    Content = Text
+                    Content = $"{e.Message?.Caption}\n{OcrStr}"
                 });
-                
+
                 if (!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Length == 2 && e.Message.Caption.Equals("打印")) {
                     await Send.AddTask(async () => {
                         var message = await botClient.SendTextMessageAsync(
                         chatId: e.Message.Chat,
-                        text: Text,
+                        text: OcrStr,
                         replyToMessageId: e.Message.MessageId
                         );
                     }, e.Message.Chat.Id < 0);
                 }
+            } catch (CannotGetPhotoException) {
+
             }
         }
     }

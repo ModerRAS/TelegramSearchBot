@@ -1,17 +1,14 @@
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
-    class AutoQRController : IOnUpdate {
+    class AutoQRController : IOnUpdate, IProcessPhoto {
         private readonly AutoQRService autoQRSevice;
         private readonly SendMessage Send;
         private readonly MessageService messageService;
@@ -25,59 +22,33 @@ namespace TelegramSearchBot.Controller {
             this.logger = logger;
         }
         public async Task ExecuteAsync(Update e) {
-            if (e?.Message?.Photo?.Length is null || e?.Message?.Photo?.Length <= 0) {
-                return;
-            }
-            logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}");
-            var links = new List<string>();
-            var f = e.Message.Photo.Last();
-            if (Env.IsLocalAPI) {
-                var fileInfo = await botClient.GetFileAsync(f.FileId);
-                var client = new HttpClient();
-                using (var stream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
-                    links.Add(await autoQRSevice.ExecuteAsync(stream));
-                }
-            } else {
-                using (var stream = new MemoryStream()) {
-                    var file = await botClient.GetInfoAndDownloadFileAsync(f.FileId, stream);
-                    stream.Position = 0;
-                    links.Add(await autoQRSevice.ExecuteAsync(stream));
-                }
-            }
 
-                //File.Delete(file.FilePath);
+            logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}, e?.Message?.Document: {e?.Message?.Document}");
+            //File.Delete(file.FilePath);
+            try {
+                var PhotoStream = await IProcessPhoto.GetPhoto(botClient, e);
+                var QrStr = await autoQRSevice.ExecuteAsync(PhotoStream);
+                logger.LogInformation(QrStr);
+                logger.LogInformation(QrStr);
+                await Send.AddTask(async () => {
+                    logger.LogInformation($" Start send {QrStr}");
+                    var message = await botClient.SendTextMessageAsync(
+                    chatId: e.Message.Chat,
+                    text: QrStr,
+                    replyToMessageId: e.Message.MessageId
+                    );
+                    logger.LogInformation($"Send success {message.MessageId}");
+                    await messageService.ExecuteAsync(new MessageOption() {
+                        ChatId = e.Message.Chat.Id,
+                        Content = QrStr,
+                        MessageId = message.MessageId,
+                        UserId = (long)botClient.BotId
+                    });
+                }, e.Message.Chat.Id < 0);
+            } catch (CannotGetPhotoException) {
+
+            }
             
-            logger.LogInformation(string.Join(", ", links));
-            if (links.Count > 0) {
-                var set = new HashSet<string>();
-                foreach (var s in links) {
-                    if (!string.IsNullOrEmpty(s)) {
-                        set.Add(s);
-                    }
-                }
-                if (set.Count > 0) {
-                    var str = set.Count == 1 ? set.FirstOrDefault() : string.Join("\n", set);
-                    logger.LogInformation(str);
-                    await Send.AddTask(async () => {
-                        logger.LogInformation($" Start send {str}");
-                        var message = await botClient.SendTextMessageAsync(
-                        chatId: e.Message.Chat,
-                        text: str,
-                        replyToMessageId: e.Message.MessageId
-                        );
-                        logger.LogInformation($"Send success {message.MessageId}");
-                        await messageService.ExecuteAsync(new MessageOption() {
-                            ChatId = e.Message.Chat.Id,
-                            Content = str,
-                            MessageId = message.MessageId,
-                            UserId = (long)botClient.BotId
-                        });
-                    }, e.Message.Chat.Id < 0);
-
-                }
-
-
-            }
         }
     }
 }
