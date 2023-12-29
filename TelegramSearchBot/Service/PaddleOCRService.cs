@@ -34,10 +34,12 @@ namespace TelegramSearchBot.Service {
             }
             //var stream = new MemoryStream();
             
-            var tg_img = SKBitmap.Decode(file);
-            var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Jpeg, 99);
+            //var tg_img = SKBitmap.Decode(file);
+            //var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Jpeg, 99);
             //tg_img.Save(stream, ImageFormat.Jpeg);
-            var tg_img_arr = tg_img_data.ToArray();
+            var memstream = new MemoryStream();
+            await file.CopyToAsync(memstream);
+            var tg_img_arr = memstream.ToArray();
             var tg_img_base64 = Convert.ToBase64String(tg_img_arr);
             var response = await PaddleOCR.ExecuteAsync(new List<string>() { tg_img_base64 });
             int status;
