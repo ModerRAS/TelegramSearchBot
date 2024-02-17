@@ -16,14 +16,32 @@ namespace TelegramSearchBot.Controller {
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
         private readonly ILogger<AutoQRController> logger;
-        public AutoQRController(ILogger<AutoQRController> logger, ITelegramBotClient botClient, AutoQRService autoQRSevice, SendMessage Send, MessageService messageService) {
+        private readonly WeChatQRService weChatQRService;
+        public AutoQRController(
+            ILogger<AutoQRController> logger, 
+            ITelegramBotClient botClient, 
+            AutoQRService autoQRSevice, 
+            SendMessage Send, 
+            MessageService messageService,
+            WeChatQRService weChatQRService
+            ) {
             this.autoQRSevice = autoQRSevice;
             this.messageService = messageService;
             this.Send = Send;
             this.botClient = botClient;
             this.logger = logger;
+            this.weChatQRService = weChatQRService;
         }
         public async Task ExecuteAsync(Update e) {
+            try {
+                var filePath = IProcessPhoto.GetPhotoPath(e);
+                if (filePath == null) {
+                    return;
+                }
+                logger.LogInformation(await weChatQRService.ExecuteAsync(filePath));
+            } catch (Exception ex) {
+                logger.LogWarning(ex.Message);
+            }
 
             
             try {

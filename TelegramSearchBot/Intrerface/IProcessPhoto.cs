@@ -36,13 +36,17 @@ namespace TelegramSearchBot.Intrerface {
             // Write the image to the memorystream
             return image.ToByteArray();
         }
-        public static async Task<byte[]> GetPhoto(Update e) {
+        public static string GetPhotoPath(Update e) {
             var DirPath = Path.Combine(Env.WorkDir, "Photos", $"{e.Message.Chat.Id}");
             var files = Directory.GetFiles(DirPath, $"{e.Message.MessageId}.*");
             if (files.Length == 0) {
                 throw new CannotGetPhotoException();
             }
-            var FilePath = files[0];
+            return files[0];
+
+        }
+        public static async Task<byte[]> GetPhoto(Update e) {
+            var FilePath = GetPhotoPath(e);
             var file = await File.ReadAllBytesAsync(FilePath);
             return ConvertToJpeg(file);
 

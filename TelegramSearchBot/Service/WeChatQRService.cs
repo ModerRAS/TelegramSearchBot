@@ -13,7 +13,7 @@ using TelegramSearchBot.Intrerface;
 using ZXing.SkiaSharp;
 
 namespace TelegramSearchBot.Service {
-    public class WeChatQRService : IStreamService, IService {
+    public class WeChatQRService : IService {
         public string ServiceName => "WeChatQRService";
         private readonly ILogger<WeChatQRService> logger;
         public WeChatQRCode opencvDecoder { get; set; }
@@ -31,7 +31,8 @@ namespace TelegramSearchBot.Service {
                 );
             this.logger = logger;
         }
-        public string DecodeByOpenCV(Bitmap img) {
+        public string DecodeByOpenCV(Mat img) {
+
             if (img == null) {
                 return string.Empty;
             }
@@ -39,9 +40,8 @@ namespace TelegramSearchBot.Service {
             Mat[] rects;
             string[] texts;
             try {
-                Mat mat = OpenCvSharp.Extensions.BitmapConverter.ToMat(img);
-                opencvDecoder.DetectAndDecode(mat, out rects, out texts);
-                mat.Dispose();
+                opencvDecoder.DetectAndDecode(img, out rects, out texts);
+                img.Dispose();
             } catch (ZXing.ReaderException ex) {
                 logger.LogWarning(ex, "OpenCV decode failed");
                 return string.Empty;
@@ -59,12 +59,13 @@ namespace TelegramSearchBot.Service {
         /// <param name="messageOption"></param>
         /// <returns></returns>
 #pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
-        public async Task<string> ExecuteAsync(Stream file) {
-            // 先把文件转成bitmap
-            Bitmap bitmap = new Bitmap(file);
-            // 然后用opencv来解析
-            string result = DecodeByOpenCV(bitmap);
-            return result;
+        public async Task<string> ExecuteAsync(string filePath) {
+            using (var src = Cv2.ImRead(filePath, ImreadModes.Unchanged)) {
+                // 然后用opencv来解析
+                string result = DecodeByOpenCV(src);
+                return result;
+            }
+
         }
 #pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
     }
