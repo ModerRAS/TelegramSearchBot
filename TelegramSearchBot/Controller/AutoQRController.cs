@@ -60,7 +60,7 @@ namespace TelegramSearchBot.Controller {
                   ex is CannotGetPhotoException ||
                   ex is DirectoryNotFoundException
                   ) {
-                logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
+                //logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
             }
 
         }
