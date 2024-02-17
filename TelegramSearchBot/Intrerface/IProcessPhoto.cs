@@ -37,7 +37,7 @@ namespace TelegramSearchBot.Intrerface {
             return image.ToByteArray();
         }
         public static async Task<byte[]> GetPhoto(Update e) {
-            var DirPath = Path.Combine(Env.WorkDir, "Photo", $"{e.Message.Chat.Id}");
+            var DirPath = Path.Combine(Env.WorkDir, "Photos", $"{e.Message.Chat.Id}");
             var files = Directory.GetFiles(DirPath, $"{e.Message.MessageId}.*");
             if (files.Length == 0) {
                 throw new CannotGetPhotoException();
