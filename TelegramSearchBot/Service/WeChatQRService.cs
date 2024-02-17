@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Controller;
@@ -17,13 +19,35 @@ namespace TelegramSearchBot.Service {
         public string ServiceName => "WeChatQRService";
         private readonly ILogger<WeChatQRService> logger;
         public WeChatQRCode opencvDecoder { get; set; }
-        const string _wechat_QCODE_detector_prototxt_path = "Resources/wechat_qrcode/detect.prototxt";
-        const string _wechat_QCODE_detector_caffe_model_path = "Resources/wechat_qrcode/detect.caffemodel";
-        const string _wechat_QCODE_super_resolution_prototxt_path = "Resources/wechat_qrcode/sr.prototxt";
-        const string _wechat_QCODE_super_resolution_caffe_model_path = "Resources/wechat_qrcode/sr.caffemodel";
+        public string _wechat_QCODE_detector_prototxt_path = $"{Env.WorkDir}/wechat_qrcode/detect.prototxt";
+        public string _wechat_QCODE_detector_caffe_model_path = $"{Env.WorkDir}/wechat_qrcode/detect.caffemodel";
+        public string _wechat_QCODE_super_resolution_prototxt_path = $"{Env.WorkDir}/wechat_qrcode/sr.prototxt";
+        public string _wechat_QCODE_super_resolution_caffe_model_path = $"{Env.WorkDir}/wechat_qrcode/sr.caffemodel";
+
+        public string detect_caffe_model_url = "https://github.com/WeChatCV/opencv_3rdparty/raw/wechat_qrcode/detect.caffemodel";
+        public string detect_prototxt_url = "https://github.com/WeChatCV/opencv_3rdparty/raw/wechat_qrcode/detect.prototxt";
+        public string sr_caffe_model_url = "https://github.com/WeChatCV/opencv_3rdparty/raw/wechat_qrcode/sr.caffemodel";
+        public string sr_prototxt_url = "https://github.com/WeChatCV/opencv_3rdparty/raw/wechat_qrcode/sr.prototxt";
 
         public WeChatQRService(ILogger<WeChatQRService> logger) {
-            opencvDecoder = WeChatQRCode.Create(
+            if (!Directory.Exists(Path.Combine(Env.WorkDir, "wechat_qrcode"))) {
+                Directory.CreateDirectory(Path.Combine(Env.WorkDir, "wechat_qrcode"));
+            }
+            var client = new WebClient();
+            if (!File.Exists(_wechat_QCODE_detector_prototxt_path)) {
+                client.DownloadFile(detect_prototxt_url, _wechat_QCODE_detector_prototxt_path);
+            }
+            if (!File.Exists(_wechat_QCODE_detector_caffe_model_path)) {
+                client.DownloadFile(detect_caffe_model_url, _wechat_QCODE_detector_caffe_model_path);
+            }
+            if (!File.Exists(_wechat_QCODE_super_resolution_prototxt_path)) {
+                client.DownloadFile(sr_prototxt_url, _wechat_QCODE_super_resolution_prototxt_path);
+            }
+            if (!File.Exists(_wechat_QCODE_super_resolution_caffe_model_path)) {
+                client.DownloadFile(sr_caffe_model_url, _wechat_QCODE_super_resolution_caffe_model_path);
+            }
+
+                opencvDecoder = WeChatQRCode.Create(
                 _wechat_QCODE_detector_prototxt_path,
                 _wechat_QCODE_detector_caffe_model_path, 
                 _wechat_QCODE_super_resolution_prototxt_path, 
