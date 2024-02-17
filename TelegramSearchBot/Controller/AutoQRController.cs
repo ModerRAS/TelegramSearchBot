@@ -48,6 +48,8 @@ namespace TelegramSearchBot.Controller {
                 }, e.Message.Chat.Id < 0);
             } catch (CannotGetPhotoException) {
 
+            } catch (DirectoryNotFoundException) {
+
             }
             
         }

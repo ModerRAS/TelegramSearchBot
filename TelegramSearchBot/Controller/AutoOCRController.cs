@@ -51,6 +51,8 @@ namespace TelegramSearchBot.Controller {
                 }
             } catch (CannotGetPhotoException) {
 
+            } catch (DirectoryNotFoundException) {
+
             }
         }
     }

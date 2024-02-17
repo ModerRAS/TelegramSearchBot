@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Intrerface;
 using File = System.IO.File;
 
@@ -32,13 +33,18 @@ namespace TelegramSearchBot.Controller {
         }
 
         public async Task ExecuteAsync(Update e) {
-            var (PhotoName, PhotoByte) = await IProcessPhoto.DownloadPhoto(botClient, e);
-            var chatid = e.Message.Chat.Id;
-            var FilePath = Path.Combine(PhotoDirectory, $"{chatid}");
-            if (!Directory.Exists(FilePath)) {
-                CreateDirectoryRecursively(FilePath);
+            try {
+                var (PhotoName, PhotoByte) = await IProcessPhoto.DownloadPhoto(botClient, e);
+                var chatid = e.Message.Chat.Id;
+                var FilePath = Path.Combine(PhotoDirectory, $"{chatid}");
+                if (!Directory.Exists(FilePath)) {
+                    CreateDirectoryRecursively(FilePath);
+                }
+                await File.WriteAllBytesAsync(Path.Combine(FilePath, PhotoName), PhotoByte);
+            } catch(CannotGetPhotoException) {
+
             }
-            await File.WriteAllBytesAsync(Path.Combine(FilePath, PhotoName), PhotoByte);
+            
         }
     }
 }
