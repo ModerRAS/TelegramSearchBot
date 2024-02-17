@@ -72,6 +72,11 @@ namespace TelegramSearchBot {
             .AsImplementedInterfaces()
             .WithTransientLifetime()
 
+            .FromAssemblyOf<IPreUpdate>()
+            .AddClasses(classes => classes.AssignableTo<IPreUpdate>())
+            .AsImplementedInterfaces()
+            .WithTransientLifetime()
+
             .FromAssemblyOf<IOnCallbackQuery>()
             .AddClasses(classes => classes.AssignableTo<IOnCallbackQuery>())
             .AsImplementedInterfaces()
@@ -93,9 +98,20 @@ namespace TelegramSearchBot {
         }
 
         public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
+            var pre = service.GetServices<IPreUpdate>();
             var all = service.GetServices<IOnUpdate>();
+            
+
 
             return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
+                pre.Select(per => per.ExecuteAsync(update))
+                   .Select(async per => {
+                       try {
+                           await per;
+                       } catch (Exception ex) {
+                           Console.WriteLine(ex.ToString());
+                       }
+                   }).ToList();
                 all.Select(per => per.ExecuteAsync(update))
                    .Select(async per => {
                        try {
@@ -104,6 +120,7 @@ namespace TelegramSearchBot {
                            Console.WriteLine(ex.ToString());
                        }
                    }).ToList();
+
             };
         }
 #pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行

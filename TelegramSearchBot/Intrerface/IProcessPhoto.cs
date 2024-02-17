@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Exceptions;
+using File = System.IO.File;
 
 namespace TelegramSearchBot.Intrerface {
     public interface IProcessPhoto {
@@ -35,12 +36,27 @@ namespace TelegramSearchBot.Intrerface {
             // Write the image to the memorystream
             return image.ToByteArray();
         }
-        public static async Task<byte[]> GetPhoto(ITelegramBotClient botClient, Update e) {
+        public static async Task<byte[]> GetPhoto(Update e) {
+            var DirPath = Path.Combine(Env.WorkDir, "Photo", $"{e.Message.Chat.Id}");
+            var files = Directory.GetFiles(DirPath, $"{e.Message.MessageId}.*");
+            if (files.Length == 0) {
+                throw new CannotGetPhotoException();
+            }
+            var FilePath = files[0];
+            var file = await File.ReadAllBytesAsync(FilePath);
+            return ConvertToJpeg(file);
+
+        }
+        public static async Task<(string, byte[])> DownloadPhoto(ITelegramBotClient botClient, Update e) {
             string FileId = string.Empty;
+            string FileName = string.Empty;
             if (e?.Message?.Photo?.Length is not null && e?.Message?.Photo?.Length > 0) {
                 FileId = e.Message.Photo.Last().FileId;
+                FileName = $"{e.Message.MessageId}.jpg";
             } else if (e?.Message?.Document is not null && IsPhoto(e?.Message?.Document.FileName)) {
                 FileId = e?.Message?.Document.FileId;
+                
+                FileName = $"{e.Message.MessageId}{Path.GetExtension(e?.Message?.Document.FileName)}";
             } else {
                 throw new CannotGetPhotoException();
             }
@@ -56,9 +72,9 @@ namespace TelegramSearchBot.Intrerface {
                     stream.Position = 0;
                 }
 
-                return ConvertToJpeg(stream.ToArray());
+                return (FileName, stream.ToArray());
             }
-            
+
         }
     }
 }

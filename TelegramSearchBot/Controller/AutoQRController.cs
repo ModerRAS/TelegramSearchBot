@@ -26,7 +26,7 @@ namespace TelegramSearchBot.Controller {
 
             
             try {
-                var PhotoStream = await IProcessPhoto.GetPhoto(botClient, e);
+                var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}, e?.Message?.Document: {e?.Message?.Document}");
                 //File.Delete(file.FilePath);
                 var QrStr = await autoQRSevice.ExecuteAsync(new MemoryStream(PhotoStream));
