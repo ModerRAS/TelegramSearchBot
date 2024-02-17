@@ -15,8 +15,19 @@ namespace TelegramSearchBot.Controller {
         public string PhotoDirectory { get; private set; } = Path.Combine(Env.WorkDir, "Photos");
         public DownloadPhotoController(ITelegramBotClient botClient) { 
             this.botClient = botClient;
-            if (!Directory.Exists(PhotoDirectory)) {
-                Directory.CreateDirectory(PhotoDirectory);
+        }
+        static void CreateDirectoryRecursively(string path) {
+            if (!Directory.Exists(path)) {
+                Directory.CreateDirectory(path);
+                Console.WriteLine($"已创建文件夹：{path}");
+            }
+
+            // 获取父文件夹路径
+            string parentDirectory = Directory.GetParent(path)?.FullName;
+
+            // 递归调用直到创建完所有文件夹
+            if (!string.IsNullOrEmpty(parentDirectory)) {
+                CreateDirectoryRecursively(parentDirectory);
             }
         }
 
@@ -25,7 +36,7 @@ namespace TelegramSearchBot.Controller {
             var chatid = e.Message.Chat.Id;
             var FilePath = Path.Combine(PhotoDirectory, $"{chatid}");
             if (!Directory.Exists(FilePath)) {
-                Directory.CreateDirectory(FilePath);
+                CreateDirectoryRecursively(FilePath);
             }
             await File.WriteAllBytesAsync(Path.Combine(FilePath, PhotoName), PhotoByte);
         }
