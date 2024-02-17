@@ -32,22 +32,14 @@ namespace TelegramSearchBot.Controller {
             this.logger = logger;
             this.weChatQRService = weChatQRService;
         }
-        public async Task ExecuteAsync(Update e) {
+        public async Task ExecuteAsync(Update e) {            
             try {
                 var filePath = IProcessPhoto.GetPhotoPath(e);
                 if (filePath == null) {
-                    return;
+                    throw new CannotGetPhotoException();
                 }
-                logger.LogInformation(await weChatQRService.ExecuteAsync(filePath));
-            } catch (Exception ex) {
-                logger.LogWarning(ex.Message);
-            }
-
-            
-            try {
-                var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"Get File: {e.Message.Chat.Id}/{e.Message.MessageId}");
-                var QrStr = await autoQRSevice.ExecuteAsync(new MemoryStream(PhotoStream));
+                var QrStr = await weChatQRService.ExecuteAsync(filePath);
                 logger.LogInformation(QrStr);
                 await Send.AddTask(async () => {
                     logger.LogInformation($" Start send {QrStr}");
