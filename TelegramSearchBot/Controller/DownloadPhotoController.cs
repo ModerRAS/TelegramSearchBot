@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -14,8 +15,11 @@ namespace TelegramSearchBot.Controller {
     public class DownloadPhotoController : IPreUpdate {
         public ITelegramBotClient botClient { get; private set; }
         public string PhotoDirectory { get; private set; } = Path.Combine(Env.WorkDir, "Photos");
-        public DownloadPhotoController(ITelegramBotClient botClient) { 
+
+        private readonly ILogger<DownloadPhotoController> logger;
+        public DownloadPhotoController(ITelegramBotClient botClient, ILogger<DownloadPhotoController> logger) { 
             this.botClient = botClient;
+            this.logger = logger;
         }
         static void CreateDirectoryRecursively(string path) {
             if (!Directory.Exists(path)) {
@@ -41,6 +45,7 @@ namespace TelegramSearchBot.Controller {
                     CreateDirectoryRecursively(FilePath);
                 }
                 await File.WriteAllBytesAsync(Path.Combine(FilePath, PhotoName), PhotoByte);
+                logger.LogInformation($"已保存图片：{chatid}\t{PhotoName}");
             } catch(CannotGetPhotoException) {
 
             }

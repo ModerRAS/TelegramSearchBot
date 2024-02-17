@@ -28,6 +28,7 @@ namespace TelegramSearchBot.Controller {
             }
 
             try {
+                logger.LogInformation($"Get File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}, e?.Message?.Document: {e?.Message?.Document}");
                 //File.Delete(file.FilePath);
