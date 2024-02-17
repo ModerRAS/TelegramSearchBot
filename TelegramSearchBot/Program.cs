@@ -104,22 +104,20 @@ namespace TelegramSearchBot {
 
 
             return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
-                pre.Select(per => per.ExecuteAsync(update))
-                   .Select(async per => {
-                       try {
-                           await per;
-                       } catch (Exception ex) {
-                           Console.WriteLine(ex.ToString());
-                       }
-                   }).ToList();
-                all.Select(per => per.ExecuteAsync(update))
-                   .Select(async per => {
-                       try {
-                           await per;
-                       } catch (Exception ex) {
-                           Console.WriteLine(ex.ToString());
-                       }
-                   }).ToList();
+                foreach(var per in pre) {
+                    try {
+                        await per.ExecuteAsync(update);
+                    } catch (Exception ex) {
+                        Console.WriteLine(ex.ToString());
+                    }
+                }
+                foreach (var per in all) {
+                    try {
+                        await per.ExecuteAsync(update);
+                    } catch (Exception ex) {
+                        Console.WriteLine(ex.ToString());
+                    }
+                }
 
             };
         }
