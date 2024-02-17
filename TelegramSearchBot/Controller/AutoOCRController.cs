@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -28,10 +29,8 @@ namespace TelegramSearchBot.Controller {
             }
 
             try {
-                logger.LogInformation($"Get File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
-                logger.LogInformation($"ChatId: {e.Message.Chat.Id}, MessageId: {e.Message.MessageId}, e?.Message?.Photo?.Length: {e?.Message?.Photo?.Length}, e?.Message?.Document: {e?.Message?.Document}");
-                //File.Delete(file.FilePath);
+                logger.LogInformation($"Get File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
                 logger.LogInformation(OcrStr);
                 await messageService.ExecuteAsync(new MessageOption {
@@ -50,11 +49,12 @@ namespace TelegramSearchBot.Controller {
                         );
                     }, e.Message.Chat.Id < 0);
                 }
-            } catch (CannotGetPhotoException) {
-
-            } catch (DirectoryNotFoundException) {
-
-            }
+            } catch (Exception ex) when (
+                  ex is CannotGetPhotoException ||
+                  ex is DirectoryNotFoundException
+                  ) {
+                logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
+            } 
         }
     }
 }

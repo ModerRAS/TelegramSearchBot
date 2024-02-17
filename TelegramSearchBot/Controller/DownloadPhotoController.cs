@@ -45,11 +45,14 @@ namespace TelegramSearchBot.Controller {
                     CreateDirectoryRecursively(FilePath);
                 }
                 await File.WriteAllBytesAsync(Path.Combine(FilePath, PhotoName), PhotoByte);
-                logger.LogInformation($"已保存图片：{chatid}\t{PhotoName}");
-            } catch(CannotGetPhotoException) {
-
+                logger.LogInformation($"Already Save Photo：{chatid}\t{PhotoName}");
+            } catch (Exception ex) when (
+                  ex is CannotGetPhotoException ||
+                  ex is DirectoryNotFoundException
+                  ) {
+                logger.LogInformation($"Cannot Save Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
             }
-            
+
         }
     }
 }
