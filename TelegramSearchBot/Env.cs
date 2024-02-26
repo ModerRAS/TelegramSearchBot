@@ -20,6 +20,8 @@ namespace TelegramSearchBot {
             EnableAutoOCR = config.EnableAutoOCR;
             //WorkDir = config.WorkDir;
             TaskDelayTimeout = config.TaskDelayTimeout;
+            LocalApiFilePath = config.LocalApiFilePath;
+            SameServer = config.SameServer;
         }
         public static readonly string BaseUrl;
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
@@ -30,6 +32,8 @@ namespace TelegramSearchBot {
         public static readonly bool EnableAutoOCR;
         public static readonly string WorkDir;
         public static readonly int TaskDelayTimeout;
+        public static readonly string LocalApiFilePath;
+        public static readonly bool SameServer;
         public static LiteDatabase Database { get; set; }
         public static LiteDatabase Cache { get; set; }
     }
@@ -40,6 +44,8 @@ namespace TelegramSearchBot {
         public bool EnableAutoOCR { get; set; } = false;
         //public string WorkDir { get; set; } = "/data/TelegramSearchBot";
         public bool IsLocalAPI { get; set; } = false;
+        public bool SameServer { get; set; } = false;
         public int TaskDelayTimeout { get; set; } = 1000;
+        public string LocalApiFilePath { get; set; } = string.Empty;
     }
 }

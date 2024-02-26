@@ -68,8 +68,14 @@ namespace TelegramSearchBot.Intrerface {
                 if (Env.IsLocalAPI) {
                     var fileInfo = await botClient.GetFileAsync(FileId);
                     var client = new HttpClient();
-                    using (var clistream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
-                        await clistream.CopyToAsync(stream);
+                    if (Env.SameServer) {
+                        using (var filestream = new FileStream(fileInfo.FilePath, FileMode.Open, FileAccess.Read)) {
+                            await filestream.CopyToAsync(stream);
+                        }
+                    } else {
+                        using (var clistream = await client.GetStreamAsync($"{Env.BaseUrl}{fileInfo.FilePath}")) {
+                            await clistream.CopyToAsync(stream);
+                        }
                     }
                 } else {
                     var file = await botClient.GetInfoAndDownloadFileAsync(FileId, stream);
