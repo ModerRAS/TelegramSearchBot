@@ -1,4 +1,5 @@
 ﻿using ImageMagick;
+using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -37,13 +38,17 @@ namespace TelegramSearchBot.Intrerface {
             return image.ToByteArray();
         }
         public static string GetPhotoPath(Update e) {
-            var DirPath = Path.Combine(Env.WorkDir, "Photos", $"{e.Message.Chat.Id}");
-            var files = Directory.GetFiles(DirPath, $"{e.Message.MessageId}.*");
-            if (files.Length == 0) {
+            try {
+                var DirPath = Path.Combine(Env.WorkDir, "Photos", $"{e.Message.Chat.Id}");
+                var files = Directory.GetFiles(DirPath, $"{e.Message.MessageId}.*");
+                if (files.Length == 0) {
+                    throw new CannotGetPhotoException();
+                }
+                return files.FirstOrDefault();
+            } catch(NullReferenceException) {
+                //Console.WriteLine(err.Message);
                 throw new CannotGetPhotoException();
             }
-            return files[0];
-
         }
         public static async Task<byte[]> GetPhoto(Update e) {
             var FilePath = GetPhotoPath(e);
