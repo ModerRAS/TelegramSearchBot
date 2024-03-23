@@ -7,6 +7,7 @@ using Lucene.Net.Store;
 using Lucene.Net.Util;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -83,8 +84,11 @@ namespace TelegramSearchBot.Manager {
             });
             
         }
+        private FSDirectory GetFSDirectory(long GroupId) {
+            return FSDirectory.Open(Path.Combine(Env.WorkDir, "Index_Data", $"{GroupId}"));
+        }
         private IndexWriter GetIndexWriter(long GroupId) {
-            var dir = FSDirectory.Open($"{Env.WorkDir}/Index_Data_{GroupId}");
+            var dir = GetFSDirectory(GroupId);
             Analyzer analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
             var indexConfig = new IndexWriterConfig(LuceneVersion.LUCENE_48, analyzer);
             IndexWriter writer = new IndexWriter(dir, indexConfig);
@@ -112,7 +116,7 @@ namespace TelegramSearchBot.Manager {
             return keyworkds;
         }
         public (int, List<Message>) Search(string q, long GroupId, int Skip, int Take) {
-            IndexReader reader = DirectoryReader.Open(FSDirectory.Open($"{Env.WorkDir}/Index_Data_{GroupId}"));
+            IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
 
             var searcher = new IndexSearcher(reader);
 

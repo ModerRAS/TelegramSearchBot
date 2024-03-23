@@ -6,6 +6,7 @@ using TelegramSearchBot.Manager;
 using System.IO;
 using Newtonsoft.Json;
 using TelegramSearchBot.Model;
+using System.Collections.Generic;
 
 namespace TelegramSearchBot.Service {
     public class RefreshService : MessageService, IService {
@@ -15,8 +16,10 @@ namespace TelegramSearchBot.Service {
         }
 
         private async Task RebuildIndex() {
-            var dirs = Directory.GetDirectories(Env.WorkDir, "Index_Data_*");
-            await Send.Log($"找到{dirs.Length}个索引目录，现在开始清空目录");
+            var dirs = new List<string>();
+            dirs.AddRange(Directory.GetDirectories(Env.WorkDir, "Index_Data_*"));
+            dirs.AddRange(Directory.GetDirectories(Env.WorkDir, "Index_Data"));
+            await Send.Log($"找到{dirs.Count}个索引目录，现在开始清空目录");
             foreach (var dir in dirs) {
                 Directory.Delete(dir, true);
                 await Send.Log($"删除了{dir}");
