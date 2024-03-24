@@ -44,7 +44,7 @@ namespace TelegramSearchBot.Intrerface {
                     .DisableChannel(FFMpegCore.Enums.Channel.Video)
                     .WithAudioCodec("pcm_s16le")
                     .WithAudioSamplingRate(16000)
-                    .WithCustomArgument("-ac 2")
+                    .WithCustomArgument("-ac 2 -f wav")
                     .WithFastStart())
                 .ProcessAsynchronously();
 
