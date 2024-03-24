@@ -38,7 +38,7 @@ namespace TelegramSearchBot.Controller {
                 if (filePath == null) {
                     throw new CannotGetPhotoException();
                 }
-                logger.LogInformation($"Get File: {e.Message.Chat.Id}/{e.Message.MessageId}");
+                logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var QrStr = await weChatQRService.ExecuteAsync(filePath);
                 logger.LogInformation(QrStr);
                 await Send.AddTask(async () => {

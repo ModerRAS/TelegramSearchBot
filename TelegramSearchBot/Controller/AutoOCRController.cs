@@ -30,7 +30,7 @@ namespace TelegramSearchBot.Controller {
 
             try {
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
-                logger.LogInformation($"Get File: {e.Message.Chat.Id}/{e.Message.MessageId}");
+                logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
                 logger.LogInformation(OcrStr);
                 await messageService.ExecuteAsync(new MessageOption {
