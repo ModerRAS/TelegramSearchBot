@@ -18,6 +18,7 @@ namespace TelegramSearchBot {
             BotToken = config.BotToken;
             AdminId = config.AdminId;
             EnableAutoOCR = config.EnableAutoOCR;
+            EnableAutoASR = config.EnableAutoASR;
             //WorkDir = config.WorkDir;
             TaskDelayTimeout = config.TaskDelayTimeout;
             LocalApiFilePath = config.LocalApiFilePath;
@@ -30,6 +31,7 @@ namespace TelegramSearchBot {
         public static readonly string BotToken;
         public static readonly long AdminId;
         public static readonly bool EnableAutoOCR;
+        public static readonly bool EnableAutoASR;
         public static readonly string WorkDir;
         public static readonly int TaskDelayTimeout;
         public static readonly string LocalApiFilePath;
@@ -42,6 +44,7 @@ namespace TelegramSearchBot {
         public string BotToken { get; set; }
         public long AdminId { get; set; }
         public bool EnableAutoOCR { get; set; } = false;
+        public bool EnableAutoASR { get; set; } = false;
         //public string WorkDir { get; set; } = "/data/TelegramSearchBot";
         public bool IsLocalAPI { get; set; } = false;
         public bool SameServer { get; set; } = false;
