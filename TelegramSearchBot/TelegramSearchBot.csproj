@@ -27,7 +27,7 @@
     <PackageReference Include="Telegram.Bot" Version="19.0.0" />
     <PackageReference Include="Teru.Code.WechatQrcode.Lite" Version="1.0.0.20230813" />
     <PackageReference Include="Whisper.net" Version="1.5.0" />
-    <PackageReference Include="Whisper.net.Runtime" Version="1.5.0" />
+    <PackageReference Include="Whisper.net.Runtime.Clblast" Version="1.5.0" />
     <PackageReference Include="ZXing.Net" Version="0.16.9" />
     <PackageReference Include="ZXing.Net.Bindings.SkiaSharp" Version="0.16.14" />
     <PackageReference Include="MSBuildTasks" Version="1.5.0.235">
