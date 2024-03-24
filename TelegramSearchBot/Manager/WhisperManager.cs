@@ -24,6 +24,9 @@ namespace TelegramSearchBot.Manager {
         }
         
         async Task DownloadModelAsync(GgmlType modelType, string modelFileName, string targetModelsDir) {
+            if (!Directory.Exists(targetModelsDir)) {
+                Directory.CreateDirectory(targetModelsDir);
+            }
             Console.WriteLine($"Model {modelName} not found. Downloading...");
             await using var modelStream = await WhisperGgmlDownloader.GetGgmlModelAsync(modelType);
             await using var fileWriter = File.OpenWrite(Path.Combine(targetModelsDir, modelName));
