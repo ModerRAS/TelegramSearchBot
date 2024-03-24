@@ -34,6 +34,7 @@ namespace TelegramSearchBot {
                     service.AddSingleton<SendMessage>();
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
+                    service.AddSingleton<WhisperManager>();
                     AddController(service);
                     AddService(service);
                 });
