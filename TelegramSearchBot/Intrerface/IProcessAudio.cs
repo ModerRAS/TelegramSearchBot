@@ -77,7 +77,7 @@ namespace TelegramSearchBot.Intrerface {
             string FileName = string.Empty;
             if (e?.Message?.Audio is not null) {
                 FileId = e.Message.Audio.FileId;
-                FileName = $"{e.Message.MessageId}.{Path.GetExtension(e.Message.Audio.FileName)}";
+                FileName = $"{e.Message.MessageId}{Path.GetExtension(e.Message.Audio.FileName)}";
             } else if (e?.Message?.Voice is not null) {
                 FileId = e.Message.Voice.FileId;
                 FileName = $"{e.Message.MessageId}.ogg";
