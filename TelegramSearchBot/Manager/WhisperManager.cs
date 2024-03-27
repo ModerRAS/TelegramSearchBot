@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Whisper.net;
 using Whisper.net.Ggml;
@@ -12,17 +13,19 @@ namespace TelegramSearchBot.Manager {
 
 
         const string modelName = "ggml-medium.bin";
-        public string modelsDir { get; set; } 
-        public string modelPath { get; set; } 
+        public string modelsDir { get; set; }
+        public string modelPath { get; set; }
 
         const GgmlType ggmlType = GgmlType.Medium;
         private ILogger<WhisperManager> logger { get; set; }
+
+        private static SemaphoreSlim semaphore = new SemaphoreSlim(1);
         public WhisperManager(ILogger<WhisperManager> logger) {
             this.logger = logger;
             modelsDir = Path.Combine(Env.WorkDir, "Models");
             modelPath = Path.Combine(modelsDir, modelName);
         }
-        
+
         async Task DownloadModelAsync(GgmlType modelType, string modelFileName, string targetModelsDir) {
             if (!Directory.Exists(targetModelsDir)) {
                 Directory.CreateDirectory(targetModelsDir);
@@ -34,7 +37,8 @@ namespace TelegramSearchBot.Manager {
             Console.WriteLine($"Model {modelName} downloaded to {targetModelsDir}");
         }
 
-        public async Task<string> ExecuteAsync(Stream wavStream) {
+        public async Task<string> DetectAsync(Stream wavStream) {
+            
             TimeSpan timeTaken;
             var startTime = DateTime.UtcNow;
             if (!File.Exists(modelPath)) {
@@ -74,7 +78,19 @@ namespace TelegramSearchBot.Manager {
             }
 
             logger.LogInformation("⟫ Completed Whisper processing...");
+            
             return string.Join("\n", ToReturn);
+        }
+        public async Task<string> ExecuteAsync(Stream wavStream) {
+            string ret = string.Empty;
+            await semaphore.WaitAsync().ConfigureAwait(false);
+            try {
+                ret = await DetectAsync(wavStream);
+            } catch (Exception ex) {
+                logger.LogError(ex.ToString());
+            }
+            semaphore.Release();
+            return ret;
         }
     }
 }

@@ -17,7 +17,7 @@ using TelegramSearchBot.Common.Model.DO;
 namespace TelegramSearchBot.Manager {
     public class PaddleOCR {
         public PaddleOcrAll all { get; set; }
-        private SemaphoreSlim semaphore = new SemaphoreSlim(1);
+        private static SemaphoreSlim semaphore = new SemaphoreSlim(1);
         public PaddleOCR() {
             FullOcrModel model = LocalFullModels.ChineseV3;
 
