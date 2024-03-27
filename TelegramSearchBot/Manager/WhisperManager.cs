@@ -47,7 +47,8 @@ namespace TelegramSearchBot.Manager {
             // This section creates the processor object which is used to process the audio file, it uses language `auto` to detect the language of the audio file.
             await using var processor = whisperFactory.CreateBuilder()
                                                       .WithThreads(16)
-                                                      .WithLanguage("zh")
+                                                      //.WithLanguage("zh")
+                                                      .WithLanguageDetection()
                                                       //.WithPrompt(prompt)
                                                       .Build();
 
