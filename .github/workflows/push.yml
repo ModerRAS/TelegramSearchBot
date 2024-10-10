@@ -57,7 +57,7 @@ jobs:
       run: |
         pip install --quiet --no-cache-dir b2
         b2 authorize-account $env:B2_APPKEY_ID $env:B2_APPKEY
-        b2 sync --delete --replaceNewer $env:SOURCE_DIR b2://$env:B2_BUCKET/TelegramSearchBot
+        b2 sync --delete --replace-Newer $env:SOURCE_DIR b2://$env:B2_BUCKET/TelegramSearchBot
 
         # TO-DO: Delete old versions of updated files because that's what
         # we're already using GitHub for... but B2 doesn't make this easy:
