@@ -20,7 +20,14 @@ namespace TelegramSearchBot.Service {
         public async Task ExecuteAsync(MessageOption messageOption) {
             var Users = Env.Database.GetCollection<User>("Users");
             var Messages = Env.Database.GetCollection<Message>("Messages");
-
+            var UserData = Env.Database.GetCollection<Telegram.Bot.Types.User>("UserData");
+            var GroupData = Env.Database.GetCollection<Telegram.Bot.Types.Chat>("GroupData");
+            if (!UserData.Find(user => user.Id.Equals(messageOption.UserId)).Any()) {
+                UserData.Insert(messageOption.User);
+            }
+            if (!GroupData.Find(group => group.Id.Equals(messageOption.Chat.Id)).Any()) {
+                GroupData.Insert(messageOption.Chat);
+            }
             var UserIfExists = Users.Find(user => user.UserId.Equals(messageOption.UserId) && user.GroupId.Equals(messageOption.ChatId));
 
             if (!UserIfExists.Any()) {

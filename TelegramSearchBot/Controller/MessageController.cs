@@ -29,6 +29,8 @@ namespace TelegramSearchBot.Controller {
                 UserId = e.Message.From.Id,
                 Content = ToAdd,
                 DateTime = e.Message.Date,
+                User = e.Message.From,
+                Chat = e.Message.Chat,
             });
         }
     }
