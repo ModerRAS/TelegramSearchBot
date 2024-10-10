@@ -24,9 +24,17 @@ namespace TelegramSearchBot.Service {
             var UserIfExists = Users.Find(user => user.UserId.Equals(messageOption.UserId) && user.GroupId.Equals(messageOption.ChatId));
 
             if (!UserIfExists.Any()) {
-                Users.Insert(new User() { GroupId = messageOption.ChatId, UserId = messageOption.UserId });
+                Users.Insert(new User() { 
+                    GroupId = messageOption.ChatId, 
+                    UserId = messageOption.UserId 
+                });
             }
-            var message = new Message() { GroupId = messageOption.ChatId, MessageId = messageOption.MessageId, Content = messageOption.Content };
+            var message = new Message() { 
+                GroupId = messageOption.ChatId, 
+                MessageId = messageOption.MessageId, 
+                Content = messageOption.Content,
+                DateTime = messageOption.DateTime,
+            };
             Messages.Insert(message);
 
             await lucene.WriteDocumentAsync(message);

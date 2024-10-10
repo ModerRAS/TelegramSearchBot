@@ -23,12 +23,12 @@ namespace TelegramSearchBot.Controller {
             if (ToAdd.Length > 3 && ToAdd.Substring(0, 3).Equals("搜索 ")) {
                 return;
             }
-
             await messageService.ExecuteAsync(new MessageOption {
                 ChatId = e.Message.Chat.Id,
                 MessageId = e.Message.MessageId,
                 UserId = e.Message.From.Id,
-                Content = ToAdd
+                Content = ToAdd,
+                DateTime = e.Message.Date,
             });
         }
     }
