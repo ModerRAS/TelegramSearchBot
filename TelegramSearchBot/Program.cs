@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Logging.Debug;
 using Newtonsoft.Json;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -29,6 +30,7 @@ namespace TelegramSearchBot {
         private static IServiceProvider service;
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
+                .UseSerilog()
                 .ConfigureServices(service => {
                     service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl)));
                     service.AddSingleton<SendMessage>();
@@ -45,16 +47,30 @@ namespace TelegramSearchBot {
             Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
             Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
             Directory.SetCurrentDirectory(Env.WorkDir);
+
+            if (!Directory.Exists($"{Env.WorkDir}/logs")) {
+                Utils.CreateDirectorys($"{Env.WorkDir}/logs");
+            }
+            Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug() // 设置最低日志级别
+            .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
+              rollingInterval: RollingInterval.Day,
+              outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+
             IHost host = CreateHostBuilder(args)
-                .ConfigureLogging(logging => {
-                    logging.ClearProviders();
-                    logging.AddSimpleConsole(options =>
-                    {
-                        options.IncludeScopes = true;
-                        options.SingleLine = true;
-                        options.TimestampFormat = "[yyyy/MM/dd HH:mm:ss] ";
-                    });
-                }).Build();
+                //.ConfigureLogging(logging => {
+                //    logging.ClearProviders();
+                    
+                //    logging.AddSimpleConsole(options =>
+                //    {
+                //        options.IncludeScopes = true;
+                //        options.SingleLine = true;
+                //        options.TimestampFormat = "[yyyy/MM/dd HH:mm:ss] ";
+                //    });
+                //})
+                .Build();
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             service = host.Services;
@@ -110,16 +126,17 @@ namespace TelegramSearchBot {
                         try {
                             await per.ExecuteAsync(update);
                         } catch (Exception ex) {
-                            Console.WriteLine(ex.ToString());
+                            Log.Error(ex, "Message Pre Process Error");
                         }
                     }
                     foreach (var per in all) {
                         try {
                             await per.ExecuteAsync(update);
                         } catch (Exception ex) {
-                            Console.WriteLine(ex.ToString());
+                            Log.Error(ex, "Message Process Error");
                         }
                     }
+                    await Log.CloseAndFlushAsync();
                 });
 
             };
@@ -129,7 +146,8 @@ namespace TelegramSearchBot {
             return async (ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) => {
                 if (exception is ApiRequestException apiRequestException) {
                     //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
-                    Console.WriteLine($"ApiRequestException: {apiRequestException.Message}");
+                    Log.Error(apiRequestException, "ApiRequestException");
+                    //Console.WriteLine($"ApiRequestException: {apiRequestException.Message}");
                     //Console.WriteLine(apiRequestException.ToString());
                 }
             };
