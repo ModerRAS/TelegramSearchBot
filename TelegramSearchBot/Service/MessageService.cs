@@ -17,7 +17,7 @@ namespace TelegramSearchBot.Service {
             this.Send = Send;
         }
 
-        public async Task ExecuteAsync(MessageOption messageOption) {
+        public async Task AddToLiteDB(MessageOption messageOption) {
             var Users = Env.Database.GetCollection<User>("Users");
             var Messages = Env.Database.GetCollection<Message>("Messages");
             var UserData = Env.Database.GetCollection<Telegram.Bot.Types.User>("UserData");
@@ -31,21 +31,34 @@ namespace TelegramSearchBot.Service {
             var UserIfExists = Users.Find(user => user.UserId.Equals(messageOption.UserId) && user.GroupId.Equals(messageOption.ChatId));
 
             if (!UserIfExists.Any()) {
-                Users.Insert(new User() { 
-                    GroupId = messageOption.ChatId, 
-                    UserId = messageOption.UserId 
+                Users.Insert(new User() {
+                    GroupId = messageOption.ChatId,
+                    UserId = messageOption.UserId
                 });
             }
-            var message = new Message() { 
-                GroupId = messageOption.ChatId, 
-                MessageId = messageOption.MessageId, 
+            var message = new Message() {
+                GroupId = messageOption.ChatId,
+                MessageId = messageOption.MessageId,
                 Content = messageOption.Content,
                 DateTime = messageOption.DateTime,
             };
+
             Messages.Insert(message);
+        }
+        public async Task AddToLucene(MessageOption messageOption) {
+            var message = new Message() {
+                GroupId = messageOption.ChatId,
+                MessageId = messageOption.MessageId,
+                Content = messageOption.Content,
+                DateTime = messageOption.DateTime,
+            };
 
             await lucene.WriteDocumentAsync(message);
+        }
 
+        public async Task ExecuteAsync(MessageOption messageOption) {
+            await AddToLiteDB(messageOption);
+            await AddToLucene(messageOption);
         }
     }
 }
