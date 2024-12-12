@@ -85,7 +85,7 @@ namespace TelegramSearchBot.Service {
             chatId: searchOption.Chat,
             disableNotification: true,
             parseMode: ParseMode.Markdown,
-            replyToMessageId: searchOption.ReplyToMessageId,
+            replyParameters: new Telegram.Bot.Types.ReplyParameters() { MessageId = searchOption.ReplyToMessageId },
             replyMarkup: new InlineKeyboardMarkup(keyboardList),
             text: Text
             );

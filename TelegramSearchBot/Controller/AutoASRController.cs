@@ -44,7 +44,7 @@ namespace TelegramSearchBot.Controller {
                     var message = await botClient.SendTextMessageAsync(
                     chatId: e.Message.Chat,
                     text: AsrStr,
-                    replyToMessageId: e.Message.MessageId
+                    replyParameters:  new ReplyParameters() { MessageId = e.Message.MessageId }
                     );
                 }, e.Message.Chat.Id < 0);
             } catch (Exception ex) when (

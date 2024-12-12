@@ -46,7 +46,7 @@ namespace TelegramSearchBot.Controller {
                     var message = await botClient.SendTextMessageAsync(
                     chatId: e.Message.Chat,
                     text: QrStr,
-                    replyToMessageId: e.Message.MessageId
+                    replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
                     );
                     logger.LogInformation($"Send success {message.MessageId}");
                     await messageService.ExecuteAsync(new MessageOption() {

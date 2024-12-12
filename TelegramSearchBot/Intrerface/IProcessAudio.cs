@@ -102,7 +102,9 @@ namespace TelegramSearchBot.Intrerface {
                         }
                     }
                 } else {
-                    var file = await botClient.GetInfoAndDownloadFileAsync(FileId, stream);
+                    var fileInfo = await botClient.GetFile(FileId);
+                    var filePath = fileInfo.FilePath;
+                    await botClient.DownloadFile(filePath, stream);
                     stream.Position = 0;
                 }
 
