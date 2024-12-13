@@ -1,4 +1,5 @@
 ﻿using LiteDB;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -23,6 +24,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot {
@@ -37,20 +39,16 @@ namespace TelegramSearchBot {
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
+                    service.AddDbContext<DataDbContext>();
                     AddController(service);
                     AddService(service);
                 });
         static void Main(string[] args) {
-            if (!Directory.Exists(Env.WorkDir)) {
-                Utils.CreateDirectorys(Env.WorkDir);
-            }
+            Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
+
             Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
             Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
             Directory.SetCurrentDirectory(Env.WorkDir);
-
-            if (!Directory.Exists($"{Env.WorkDir}/logs")) {
-                Utils.CreateDirectorys($"{Env.WorkDir}/logs");
-            }
             Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug() // 设置最低日志级别
             .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
@@ -80,6 +78,11 @@ namespace TelegramSearchBot {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
             }, cts.Token);
             InitController(host.Services);
+            using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
+                var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
+                //context.Database.EnsureCreated();
+                context.Database.Migrate();
+            }
             host.Run();
         }
         public static void AddController(IServiceCollection service) {

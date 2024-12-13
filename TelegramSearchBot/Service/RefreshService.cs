@@ -12,7 +12,7 @@ namespace TelegramSearchBot.Service {
     public class RefreshService : MessageService, IService {
         public new string ServiceName => "RefreshService";
 
-        public RefreshService(LuceneManager lucene, SendMessage Send) : base(lucene, Send) {
+        public RefreshService(LuceneManager lucene, SendMessage Send, DataDbContext context) : base(lucene, Send, context) {
         }
 
         private async Task RebuildIndex() {
@@ -35,7 +35,7 @@ namespace TelegramSearchBot.Service {
         private async Task ImportAll() {
             await Send.Log("开始导入数据库内容");
             var importModel = JsonConvert.DeserializeObject<ExportModel>(await File.ReadAllTextAsync("/tmp/export.json"));
-            var users = Env.Database.GetCollection<User>("Users");
+            var users = Env.Database.GetCollection<UserWithGroup>("Users");
             users.InsertBulk(importModel.Users);
             var messages = Env.Database.GetCollection<Message>("Messages");
             messages.InsertBulk(importModel.Messages);

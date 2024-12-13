@@ -35,6 +35,7 @@ namespace TelegramSearchBot.Controller {
                 logger.LogInformation(OcrStr);
                 await messageService.ExecuteAsync(new MessageOption {
                     ChatId = e.Message.Chat.Id,
+                    Chat = e.Message.Chat,
                     MessageId = e.Message.MessageId,
                     UserId = e.Message.From.Id,
                     Content = $"{e.Message?.Caption}\n{OcrStr}"

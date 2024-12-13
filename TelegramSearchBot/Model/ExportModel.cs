@@ -7,6 +7,6 @@ using System.Threading.Tasks;
 namespace TelegramSearchBot.Model {
     public class ExportModel {
         public List<Message> Messages { get; set; }
-        public List<User> Users { get; set; }
+        public List<UserWithGroup> Users { get; set; }
     }
 }

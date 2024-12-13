@@ -19,7 +19,7 @@ namespace TelegramSearchBot.Service {
             if (searchOption.IsGroup) {
                 (searchOption.Count, searchOption.Messages) = lucene.Search(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
             } else {
-                var Users = Env.Database.GetCollection<User>("Users");
+                var Users = Env.Database.GetCollection<UserWithGroup>("Users");
                 var UserInGroups =  Users.Find(user => searchOption.ChatId.Equals(user.UserId)).ToList();
                 var GroupsLength = UserInGroups.Count;
                 searchOption.Messages = new List<Message>();

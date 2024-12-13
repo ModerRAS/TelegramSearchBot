@@ -37,5 +37,10 @@ namespace TelegramSearchBot {
                 return false;
             }
         }
+        public static void CheckExistsAndCreateDirectorys(string FolderPath) {
+            if (!Directory.Exists(FolderPath)) {
+                CreateDirectorys(FolderPath);
+            }
+        }
     }
 }
