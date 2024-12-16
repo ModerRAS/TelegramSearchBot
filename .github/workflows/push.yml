@@ -27,11 +27,13 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
     - name: Restore dependencies
       run: dotnet restore
+    - name: Migrations
+      run: |
+          dotnet tool install --global dotnet-ef
+          dotnet ef migrations add "UpdateDatabase$(Get-Date -Format 'yyyyMMddHHmmss')"  --project TelegramSearchBot --startup-project TelegramSearchBot
     - name: Build
       run: |
           dotnet build --no-restore
-          dotnet tool install --global dotnet-ef
-          dotnet ef migrations add "UpdateDatabase$(Get-Date -Format 'yyyyMMddHHmmss')"
     - name: Test
       run: dotnet test --no-build --verbosity normal
     - name: Publish ClickOnce
