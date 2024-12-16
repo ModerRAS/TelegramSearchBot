@@ -39,7 +39,7 @@ namespace TelegramSearchBot {
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
-                    service.AddDbContext<DataDbContext>();
+                    service.AddDbContext<DataDbContext>(ServiceLifetime.Transient);
                     AddController(service);
                     AddService(service);
                 });
