@@ -38,6 +38,8 @@ namespace TelegramSearchBot.Controller {
                     Chat = e.Message.Chat,
                     MessageId = e.Message.MessageId,
                     UserId = e.Message.From.Id,
+                    DateTime = e.Message.Date,
+                    User = e.Message.From,
                     Content = $"{e.Message?.Caption}\n{OcrStr}"
                 });
 

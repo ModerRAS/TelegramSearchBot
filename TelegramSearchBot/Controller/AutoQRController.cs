@@ -52,6 +52,8 @@ namespace TelegramSearchBot.Controller {
                     await messageService.ExecuteAsync(new MessageOption() {
                         ChatId = e.Message.Chat.Id,
                         Chat = e.Message.Chat,
+                        DateTime = e.Message.Date,
+                        User = e.Message.From,
                         Content = QrStr,
                         MessageId = message.MessageId,
                         UserId = (long)botClient.BotId
