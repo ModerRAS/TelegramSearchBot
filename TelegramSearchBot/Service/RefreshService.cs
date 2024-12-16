@@ -51,6 +51,7 @@ namespace TelegramSearchBot.Service {
                 number++;
                 if (number % 10000 == 0) {
                     await Send.Log($"已迁移{number}条数据");
+                    await DataContext.SaveChangesAsync();
                 }
                 var sqliteMessage = from sq in DataContext.Messages
                                     where sq.MessageId == e.MessageId &&
@@ -61,7 +62,12 @@ namespace TelegramSearchBot.Service {
                     continue;
                 }
 
-                await DataContext.Messages.AddAsync(e);
+                await DataContext.Messages.AddAsync(new Message() {
+                    DateTime = e.DateTime,
+                    Content = e.Content,
+                    GroupId = e.GroupId,
+                    MessageId = e.MessageId,
+                });
             }
             await DataContext.SaveChangesAsync();
         }

@@ -28,7 +28,9 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --no-restore
+      run: |
+          dotnet build --no-restore
+          dotnet ef migrations add "UpdateDatabase$(Get-Date -Format 'yyyyMMddHHmmss')"
     - name: Test
       run: dotnet test --no-build --verbosity normal
     - name: Publish ClickOnce
