@@ -42,12 +42,40 @@ namespace TelegramSearchBot.Service {
             await Send.Log("导入完成");
         }
 
+        private async Task CopyLiteDbToSqlite() {
+            var Messages = Env.Database.GetCollection<Message>("Messages").FindAll();
+            long count = Messages.LongCount();
+            await Send.Log($"共{count}条消息，现在开始迁移数据至Sqlite");
+            var number = 0;
+            foreach (var e in Messages) { 
+                number++;
+                if (number % 10000 == 0) {
+                    await Send.Log($"已迁移{number}条数据");
+                }
+                var sqliteMessage = from sq in DataContext.Messages
+                                    where sq.MessageId == e.MessageId &&
+                                          sq.GroupId == e.GroupId &&
+                                          sq.Content.Equals(e.Content)
+                                    select sq;
+                if (sqliteMessage.FirstOrDefault() != null) {
+                    continue;
+                }
+
+                await DataContext.Messages.AddAsync(e);
+            }
+            await DataContext.SaveChangesAsync();
+        }
+
         public async Task ExecuteAsync(string Command) {
             if (Command.Length == 4 && Command.Equals("重建索引")) {
                 await RebuildIndex();
             }
             if (Command.Length == 4 && Command.Equals("导入数据")) {
                 await ImportAll();
+            }
+
+            if (Command.Length == 4 && Command.Equals("迁移数据")) {
+                await CopyLiteDbToSqlite();
             }
         }
     }
