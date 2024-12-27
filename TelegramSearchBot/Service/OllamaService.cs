@@ -14,7 +14,7 @@ namespace TelegramSearchBot.Service {
         private readonly ILogger _logger;
         public OllamaApiClient ollama { get; set; }
         public string BotName { get; set; }
-        public Dictionary<long, Chat> ChatWithId { get; set; }
+        public Dictionary<long, Chat> ChatWithId { get; set; } = new Dictionary<long, Chat>();
 
         public OllamaService(ILogger<OllamaService> logger) {
             _logger = logger;

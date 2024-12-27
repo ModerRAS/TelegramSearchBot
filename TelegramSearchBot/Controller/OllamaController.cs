@@ -29,6 +29,9 @@ namespace TelegramSearchBot.Controller {
                 service.BotName = BotName;
             } 
             var Message = string.IsNullOrEmpty(e.Message.Text) ? e.Message.Caption : e.Message.Text;
+            if (string.IsNullOrEmpty(Message)) {
+                return;
+            }
             if (Message.Contains(BotName)) {
                 // 初始化一条消息，准备编辑
                 var sentMessage = await botClient.SendTextMessageAsync(
