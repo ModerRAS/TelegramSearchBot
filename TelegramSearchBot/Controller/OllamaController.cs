@@ -30,7 +30,8 @@ namespace TelegramSearchBot.Controller {
                 // 初始化一条消息，准备编辑
                 var sentMessage = await botClient.SendTextMessageAsync(
                     chatId: e.Message.Chat.Id,
-                    text: "Initializing..."
+                    text: "Initializing...",
+                    replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
                 );
                 StringBuilder builder = new StringBuilder();
                 var num = 0;
