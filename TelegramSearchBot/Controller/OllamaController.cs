@@ -25,6 +25,9 @@ namespace TelegramSearchBot.Controller {
         }
         public async Task ExecuteAsync(Update e) {
             var BotName = (await botClient.GetMeAsync()).Username;
+            if (string.IsNullOrEmpty(service.BotName)) {
+                service.BotName = BotName;
+            } 
             var Message = string.IsNullOrEmpty(e.Message.Text) ? e.Message.Caption : e.Message.Text;
             if (Message.Contains(BotName)) {
                 // 初始化一条消息，准备编辑
@@ -35,7 +38,7 @@ namespace TelegramSearchBot.Controller {
                 );
                 StringBuilder builder = new StringBuilder();
                 var num = 0;
-                await foreach(var PerMessage in service.ExecAsync(Message)) {
+                await foreach(var PerMessage in service.ExecAsync(Message, e.Message.Chat.Id)) {
                     builder.Append(PerMessage);
                     num++;
                     if (num % 10 == 0) {

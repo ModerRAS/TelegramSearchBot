@@ -13,6 +13,8 @@ namespace TelegramSearchBot.Service {
 
         private readonly ILogger _logger;
         public OllamaApiClient ollama { get; set; }
+        public string BotName { get; set; }
+        public Dictionary<long, Chat> ChatWithId { get; set; }
 
         public OllamaService(ILogger<OllamaService> logger) {
             _logger = logger;
@@ -33,15 +35,19 @@ namespace TelegramSearchBot.Service {
             }
             return false;
         }
+        
 
-        public async IAsyncEnumerable<string> ExecAsync(string InputToken) {
+        public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId) {
             var models = await ollama.ListLocalModelsAsync();
             if (!CheckIfExists(models)) {
                 await foreach (var status in ollama.PullModelAsync(Env.OllamaModelName))
                     _logger.LogInformation($"{status.Percent}% {status.Status}");
             }
-            var chat = new Chat(ollama);
-            await foreach (var answerToken in chat.SendAsync(InputToken)) {
+            if (!ChatWithId.ContainsKey(ChatId)) {
+                ChatWithId.Add(ChatId, new Chat(ollama, $"忘记你原有的名字，记住，你的名字叫：${BotName}，是一个问答机器人"));
+            }
+            
+            await foreach (var answerToken in ChatWithId[ChatId].SendAsync(InputToken)) {
                 yield return answerToken;
             }
 
