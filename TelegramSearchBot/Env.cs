@@ -23,6 +23,8 @@ namespace TelegramSearchBot {
             TaskDelayTimeout = config.TaskDelayTimeout;
             LocalApiFilePath = config.LocalApiFilePath;
             SameServer = config.SameServer;
+            OllamaHost = config.OllamaHost;
+            OllamaModelName = config.OllamaModelName;
         }
         public static readonly string BaseUrl;
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
@@ -38,6 +40,8 @@ namespace TelegramSearchBot {
         public static readonly bool SameServer;
         public static LiteDatabase Database { get; set; }
         public static LiteDatabase Cache { get; set; }
+        public static string OllamaHost { get; set; }
+        public static string OllamaModelName { get; set; }
     }
     public class Config {
         public string BaseUrl { get; set; } = "https://api.telegram.org";
@@ -50,5 +54,7 @@ namespace TelegramSearchBot {
         public bool SameServer { get; set; } = false;
         public int TaskDelayTimeout { get; set; } = 1000;
         public string LocalApiFilePath { get; set; } = string.Empty;
+        public string OllamaHost { get; set; } = "http://localhost:11434";
+        public string OllamaModelName { get; set; } = "qwen2.5:72b-instruct-q2_K";
     }
 }

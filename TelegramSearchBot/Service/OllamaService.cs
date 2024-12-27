@@ -11,38 +11,40 @@ namespace TelegramSearchBot.Service {
     public class OllamaService : IService {
         public string ServiceName => "OllamaService";
 
-        private readonly string ModelName = "qwen2.5:72b-instruct-q2_K";
-        private readonly string Host = "http://localhost:11434";
         private readonly ILogger _logger;
         public OllamaApiClient ollama { get; set; }
 
         public OllamaService(ILogger<OllamaService> logger) {
             _logger = logger;
             // set up the client
-            var uri = new Uri(Host);
+            var uri = new Uri(Env.OllamaHost);
             ollama = new OllamaApiClient(uri);
 
             // select a model which should be used for further operations
-            ollama.SelectedModel = ModelName;
+            ollama.SelectedModel = Env.OllamaModelName;
 
         }
 
         public bool CheckIfExists(IEnumerable<OllamaSharp.Models.Model> models) {
             foreach (var model in models) {
-                if (model.Name.Equals(ModelName)) {
+                if (model.Name.Equals(Env.OllamaModelName)) {
                     return true;
                 }
             }
             return false;
         }
 
-        public async Task ExecAsync(string InputToken) {
+        public async IAsyncEnumerable<string> ExecAsync(string InputToken) {
             var models = await ollama.ListLocalModelsAsync();
             if (!CheckIfExists(models)) {
-                await foreach (var status in ollama.PullModelAsync(ModelName))
+                await foreach (var status in ollama.PullModelAsync(Env.OllamaModelName))
                     _logger.LogInformation($"{status.Percent}% {status.Status}");
             }
-            
+            var chat = new Chat(ollama);
+            await foreach (var answerToken in chat.SendAsync(InputToken)) {
+                yield return answerToken;
+            }
+
         }
     }
 }
