@@ -37,6 +37,7 @@ namespace TelegramSearchBot.Controller {
                 var sentMessage = await botClient.SendTextMessageAsync(
                     chatId: e.Message.Chat.Id,
                     text: "Initializing...",
+                    parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
                     replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
                 );
                 StringBuilder builder = new StringBuilder();
@@ -49,6 +50,7 @@ namespace TelegramSearchBot.Controller {
                             await botClient.EditMessageTextAsync(
                                 chatId: sentMessage.Chat.Id,
                                 messageId: sentMessage.MessageId,
+                                parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
                                 text: builder.ToString()
                                 );
                         }, e.Message.Chat.Id < 0);
@@ -58,6 +60,7 @@ namespace TelegramSearchBot.Controller {
                     await botClient.EditMessageTextAsync(
                         chatId: sentMessage.Chat.Id,
                         messageId: sentMessage.MessageId,
+                        parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
                         text: builder.ToString()
                         );
                 }, e.Message.Chat.Id < 0);
