@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using OllamaSharp;
 using System;
 using System.Collections.Generic;
@@ -6,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Service {
     public class OllamaService : IService {
@@ -14,10 +17,11 @@ namespace TelegramSearchBot.Service {
         private readonly ILogger _logger;
         public OllamaApiClient ollama { get; set; }
         public string BotName { get; set; }
-        public Dictionary<long, Chat> ChatWithId { get; set; } = new Dictionary<long, Chat>();
+        private DataDbContext _dbContext;
 
-        public OllamaService(ILogger<OllamaService> logger) {
+        public OllamaService(DataDbContext context, ILogger<OllamaService> logger) {
             _logger = logger;
+            _dbContext = context;
             // set up the client
             var uri = new Uri(Env.OllamaHost);
             ollama = new OllamaApiClient(uri);
@@ -43,11 +47,15 @@ namespace TelegramSearchBot.Service {
                 await foreach (var status in ollama.PullModelAsync(Env.OllamaModelName))
                     _logger.LogInformation($"{status.Percent}% {status.Status}");
             }
-            if (!ChatWithId.ContainsKey(ChatId)) {
-                ChatWithId.Add(ChatId, new Chat(ollama, $"忘记你原有的名字，记住，你的名字叫：${BotName}，是一个问答机器人"));
-            }
-            
-            await foreach (var answerToken in ChatWithId[ChatId].SendAsync(InputToken)) {
+            var Messages = (from s in _dbContext.Messages
+                           where s.GroupId == ChatId && s.DateTime > DateTime.Now.AddHours(-1)
+                           select s).ToList();
+            var MessagesJson = JsonConvert.SerializeObject(Messages, Formatting.Indented);
+            var prompt = $"忘记你原有的名字，记住，你的名字叫：${BotName}，是一个问答机器人，在向你提问之前，我将给你提供以下聊天记录，以供参考,格式为Json格式的列表，其中每一条的聊天记录在Content字段内\n${MessagesJson}";
+            var chat = new Chat(ollama, prompt);
+
+
+            await foreach (var answerToken in chat.SendAsync(InputToken)) {
                 yield return answerToken;
             }
 

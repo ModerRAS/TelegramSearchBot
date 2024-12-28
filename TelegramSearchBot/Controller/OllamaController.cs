@@ -34,10 +34,10 @@ namespace TelegramSearchBot.Controller {
             }
             if (Message.Contains(BotName)) {
                 // 初始化一条消息，准备编辑
-                var sentMessage = await botClient.SendTextMessageAsync(
+                var sentMessage = await botClient.SendMessage(
                     chatId: e.Message.Chat.Id,
                     text: "Initializing...",
-                    parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                    parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
                     replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
                 );
                 StringBuilder builder = new StringBuilder();
@@ -50,7 +50,7 @@ namespace TelegramSearchBot.Controller {
                             await botClient.EditMessageTextAsync(
                                 chatId: sentMessage.Chat.Id,
                                 messageId: sentMessage.MessageId,
-                                parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
                                 text: builder.ToString()
                                 );
                         }, e.Message.Chat.Id < 0);
@@ -60,7 +60,7 @@ namespace TelegramSearchBot.Controller {
                     await botClient.EditMessageTextAsync(
                         chatId: sentMessage.Chat.Id,
                         messageId: sentMessage.MessageId,
-                        parseMode: Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
                         text: builder.ToString()
                         );
                 }, e.Message.Chat.Id < 0);
