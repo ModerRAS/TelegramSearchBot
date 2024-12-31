@@ -38,7 +38,7 @@ namespace TelegramSearchBot.Controller {
 
         public async Task ExecuteAsync(Update e) {
             try {
-                var (VideoName, VideoByte) = await IProcessAudio.DownloadAudio(botClient, e);
+                var (VideoName, VideoByte) = await IProcessVideo.DownloadVideo(botClient, e);
                 var chatid = e.Message.Chat.Id;
                 var FilePath = Path.Combine(VideoDirectory, $"{chatid}");
                 if (!Directory.Exists(FilePath)) {
