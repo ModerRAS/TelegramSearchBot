@@ -24,13 +24,24 @@ namespace TelegramSearchBot.Controller {
             this.Send = Send;
             this.logger = logger;
         }
+        public async Task<byte[]> GetFileAsync(Update e) {
+            if (e?.Message?.Audio is not null ||
+                (string.IsNullOrEmpty(e?.Message?.Document?.FileName) && IProcessAudio.IsAudio(e?.Message?.Document?.FileName))) {
+                return await IProcessAudio.GetAudio(e);
+            } else if (e?.Message?.Video is not null ||
+                (string.IsNullOrEmpty(e?.Message?.Document?.FileName) && IProcessVideo.IsVideo(e?.Message?.Document?.FileName))) { 
+                return await IProcessVideo.GetVideo(e);
+            } else {
+                throw new FileNotFoundException();
+            }
+        }
         public async Task ExecuteAsync(Update e) {
             if (!Env.EnableAutoASR) {
                 return;
             }
 
             try {
-                var AudioStream = await IProcessAudio.GetAudio(e);
+                var AudioStream = await IProcessAudio.ConvertToWav(await GetFileAsync(e));
                 logger.LogInformation($"Get Audio File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var AsrStr = await autoASRService.ExecuteAsync(new MemoryStream(AudioStream));
                 logger.LogInformation(AsrStr);
@@ -64,6 +75,8 @@ namespace TelegramSearchBot.Controller {
                 
             } catch (Exception ex) when (
                   ex is CannotGetAudioException ||
+                  ex is CannotGetVideoException ||
+                  ex is FileNotFoundException ||
                   ex is DirectoryNotFoundException
                   ) {
                 //logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");

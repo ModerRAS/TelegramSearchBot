@@ -68,8 +68,7 @@ namespace TelegramSearchBot.Intrerface {
         }
         public static async Task<byte[]> GetAudio(Update e) {
             var FilePath = GetAudioPath(e);
-            var file = await File.ReadAllBytesAsync(FilePath);
-            return await ConvertToWav(file);
+            return await File.ReadAllBytesAsync(FilePath);
 
         }
         public static async Task<(string, byte[])> DownloadAudio(ITelegramBotClient botClient, Update e) {
