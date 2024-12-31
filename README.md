@@ -2,29 +2,36 @@
 自用群聊消息搜索机器人
 
 ![Build Status](https://github.com/ModerRAS/TelegramSearchBot/actions/workflows/push.yml/badge.svg)
+## 功能列表
+1. 群聊消息存储并支持中文分词搜索
+1. 群聊消息中图片自动下载并OCR后存储
+1. 发送图片附带Caption内容为`打印`时自动OCR文本并回复
+1. 群聊中的语音及音频文件及视频及视频文件自动语音识别并回复（短文本回复消息，长文本回复文件）
+1. 支持使用Ollama将大语言模型接入，at此bot即可获得回复
+
 ## 食用方法
 
 ### 安装
 #### Windows版使用
 1. 安装[软件本体](https://clickonce.miaostay.com/TelegramSearchBot/Publish.html)
-2. 配置环境变量
+2. 运行一次让其自动崩溃，然后打开`AppData/Local/TelegramSearchBot`目录放入`Config.json`配置文件，格式如下，其他功能开关参考`Env.cs`
 
-|变量名|变量值|
-|--|--|
-|WorkDir|路径，填数据库存储目录|
-|EnableAutoOCR|`true`或者`false`，是否启动OCR|
-|AdminId|管理员的用户ID|
-|BotToken|Bot的Token|
+```
+{
+"BaseUrl": "http://127.0.0.1:8081",
+"BotToken": "your-bot-token",
+"AdminId": your-user-id-pure-number,
+"EnableAutoOCR": true,
+"EnableAutoASR": true,
+"IsLocalAPI": true,
+"SameServer": true,
+"TaskDelayTimeout": 1000,
+"OllamaHost": "http://127.0.0.1:11434"
+}
+```
 
 3. 启动软件本体
-#### Linux版使用
-待补全
-~~
-1. 下载本仓库中的`docker-compose.yml`、 `.env.example`和`sonic.cfg`
-2. 重命名`.env.example`为`.env`
-3. 修改`.env`中的BotToken以及其他选项
-4. 输入`docker-compose up -d`来启动
-~~
+
 ### 搜索
 
 1. 去找BotFather创建一个Bot
