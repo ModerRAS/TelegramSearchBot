@@ -70,10 +70,14 @@ namespace TelegramSearchBot.Manager {
             var ToReturn = new List<string>();
 
             // This section processes the audio file and prints the results (start time, end time and text) to the console.
+            var startId = 1;
             await foreach (var result in processor.ProcessAsync(wavStream)) {
                 timeTaken = DateTime.UtcNow - startTime;
                 logger.LogInformation($"{result.Start.ToLongString()}-->{result.End.ToLongString()}: {result.Text,-150} [{timeTaken.ToLongString()}]");
-                ToReturn.Add(result.Text);
+                ToReturn.Add($"{startId}");
+                ToReturn.Add($"{result.Start.ToString(@"hh\:mm\:ss\,fff")} --> {result.End.ToString(@"hh\:mm\:ss\,fff")}");
+                ToReturn.Add($"{result.Text}\n");
+                startId++;
                 startTime = DateTime.UtcNow;
             }
 

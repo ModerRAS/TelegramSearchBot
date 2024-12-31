@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -33,6 +34,7 @@ namespace TelegramSearchBot.Controller {
                 logger.LogInformation($"Get Audio File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var AsrStr = await autoASRService.ExecuteAsync(new MemoryStream(AudioStream));
                 logger.LogInformation(AsrStr);
+                
                 await messageService.ExecuteAsync(new MessageOption {
                     ChatId = e.Message.Chat.Id,
                     MessageId = e.Message.MessageId,
@@ -42,14 +44,24 @@ namespace TelegramSearchBot.Controller {
                     User = e.Message.From,
                     Content = $"{e.Message?.Caption}\n{AsrStr}"
                 });
-
-                await Send.AddTask(async () => {
-                    var message = await botClient.SendTextMessageAsync(
-                    chatId: e.Message.Chat,
-                    text: AsrStr,
-                    replyParameters:  new ReplyParameters() { MessageId = e.Message.MessageId }
-                    );
-                }, e.Message.Chat.Id < 0);
+                if (AsrStr.Length > 4095) {
+                    await Send.AddTask(async () => {
+                        var message = await botClient.SendDocumentAsync(
+                        chatId: e.Message.Chat,
+                        document: InputFile.FromStream(new MemoryStream(Encoding.UTF8.GetBytes(AsrStr)), $"{e.Message.MessageId}.srt")
+                        replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
+                        );
+                    }, e.Message.Chat.Id < 0);
+                } else {
+                    await Send.AddTask(async () => {
+                        var message = await botClient.SendTextMessageAsync(
+                        chatId: e.Message.Chat,
+                        text: AsrStr,
+                        replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
+                        );
+                    }, e.Message.Chat.Id < 0);
+                }
+                
             } catch (Exception ex) when (
                   ex is CannotGetAudioException ||
                   ex is DirectoryNotFoundException
