@@ -50,7 +50,7 @@ namespace TelegramSearchBot {
             Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
             Directory.SetCurrentDirectory(Env.WorkDir);
             Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug() // 设置最低日志级别
+            .MinimumLevel.Information() // 设置最低日志级别
             .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
               rollingInterval: RollingInterval.Day,
