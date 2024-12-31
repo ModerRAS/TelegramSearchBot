@@ -48,7 +48,7 @@ namespace TelegramSearchBot.Controller {
                     await Send.AddTask(async () => {
                         var message = await botClient.SendDocumentAsync(
                         chatId: e.Message.Chat,
-                        document: InputFile.FromStream(new MemoryStream(Encoding.UTF8.GetBytes(AsrStr)), $"{e.Message.MessageId}.srt")
+                        document: InputFile.FromStream(new MemoryStream(Encoding.UTF8.GetBytes(AsrStr)), $"{e.Message.MessageId}.srt"),
                         replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
                         );
                     }, e.Message.Chat.Id < 0);
