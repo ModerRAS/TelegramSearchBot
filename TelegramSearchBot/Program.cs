@@ -139,7 +139,6 @@ namespace TelegramSearchBot {
                             Log.Error(ex, "Message Process Error");
                         }
                     }
-                    await Log.CloseAndFlushAsync();
                 });
 
             };
