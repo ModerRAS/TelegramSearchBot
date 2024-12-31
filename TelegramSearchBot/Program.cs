@@ -131,14 +131,14 @@ namespace TelegramSearchBot {
                         try {
                             await per.ExecuteAsync(update);
                         } catch (Exception ex) {
-                            Log.Error(ex, "Message Pre Process Error");
+                            Log.Error(ex, $"Message Pre Process Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Id}/{update.Message.MessageId}");
                         }
                     }
                     foreach (var per in all) {
                         try {
                             await per.ExecuteAsync(update);
                         } catch (Exception ex) {
-                            Log.Error(ex, "Message Process Error");
+                            Log.Error(ex, $"Message Process Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Id}/{update.Message.MessageId}");
                         }
                     }
                 });
