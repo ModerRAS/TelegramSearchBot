@@ -55,13 +55,9 @@ namespace TelegramSearchBot.Intrerface {
             string FileName = string.Empty;
             if (e?.Message?.Video is not null) {
                 FileId = e.Message.Video.FileId;
-                FileName = $"{e.Message.MessageId}{Path.GetExtension(e.Message.Video.FileName)}";
-            } else if (e?.Message?.Video is not null) {
-                FileId = e.Message.Video.FileId;
                 FileName = $"{e.Message.MessageId}.mp4";
             } else if (e?.Message?.Document is not null && IsVideo(e?.Message?.Document.FileName)) {
                 FileId = e?.Message?.Document.FileId;
-
                 FileName = $"{e.Message.MessageId}{Path.GetExtension(e?.Message?.Document.FileName)}";
             } else {
                 throw new CannotGetVideoException();
