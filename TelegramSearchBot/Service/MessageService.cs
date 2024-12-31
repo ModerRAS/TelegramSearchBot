@@ -111,7 +111,13 @@ namespace TelegramSearchBot.Service {
         }
 
         public async Task ExecuteAsync(MessageOption messageOption) {
-            await AddToSqlite(messageOption);
+            try {
+                await AddToSqlite(messageOption);
+            } catch (InvalidOperationException e) {
+                await Task.Delay(5000);
+                await AddToSqlite(messageOption);
+
+            }
             await AddToLiteDB(messageOption);
             await AddToLucene(messageOption);
         }

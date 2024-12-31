@@ -72,17 +72,19 @@ namespace TelegramSearchBot {
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             service = host.Services;
-            bot.StartReceiving(
-                HandleUpdateAsync(service), 
-                HandleErrorAsync(service), new() {
-                    AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
-            }, cts.Token);
+
             InitController(host.Services);
             using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
                 var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
                 //context.Database.EnsureCreated();
                 context.Database.Migrate();
             }
+            Thread.Sleep(5000);
+            bot.StartReceiving(
+                HandleUpdateAsync(service),
+                HandleErrorAsync(service), new() {
+                    AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
+            }, cts.Token);
             host.Run();
         }
         public static void AddController(IServiceCollection service) {
