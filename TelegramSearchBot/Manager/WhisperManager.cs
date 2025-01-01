@@ -75,24 +75,29 @@ namespace TelegramSearchBot.Manager {
             var repeatCount = 0; 
             var cts = new CancellationTokenSource();
             var token = cts.Token;
-            await foreach (var result in processor.ProcessAsync(wavStream, token)) {
-                timeTaken = DateTime.UtcNow - startTime;
-                logger.LogInformation($"{result.Start.ToLongString()}-->{result.End.ToLongString()}: {result.Text,-150} [{timeTaken.ToLongString()}]");
-                ToReturn.Add($"{startId}");
-                ToReturn.Add($"{result.Start.ToString(@"hh\:mm\:ss\,fff")} --> {result.End.ToString(@"hh\:mm\:ss\,fff")}");
-                ToReturn.Add($"{result.Text}\n");
-                startId++;
-                startTime = DateTime.UtcNow;
-                if (lastText.Equals(result.Text.Trim())) {
-                    repeatCount++;
-                } else {
-                    repeatCount = 0;
-                    lastText = result.Text.Trim();
+            try {
+                await foreach (var result in processor.ProcessAsync(wavStream, token)) {
+                    timeTaken = DateTime.UtcNow - startTime;
+                    logger.LogInformation($"{result.Start.ToLongString()}-->{result.End.ToLongString()}: {result.Text,-150} [{timeTaken.ToLongString()}]");
+                    ToReturn.Add($"{startId}");
+                    ToReturn.Add($"{result.Start.ToString(@"hh\:mm\:ss\,fff")} --> {result.End.ToString(@"hh\:mm\:ss\,fff")}");
+                    ToReturn.Add($"{result.Text}\n");
+                    startId++;
+                    startTime = DateTime.UtcNow;
+                    if (lastText.Equals(result.Text.Trim())) {
+                        repeatCount++;
+                    } else {
+                        repeatCount = 0;
+                        lastText = result.Text.Trim();
+                    }
+                    if (repeatCount > 100) {
+                        cts.Cancel();
+                    }
                 }
-                if (repeatCount > 100) {
-                    cts.Cancel();
-                }
+            } catch (TaskCanceledException ex) { 
+                logger.LogError(ex.ToString());
             }
+            
 
             logger.LogInformation("⟫ Completed Whisper processing...");
             
