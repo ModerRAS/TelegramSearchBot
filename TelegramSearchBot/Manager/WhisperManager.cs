@@ -71,7 +71,11 @@ namespace TelegramSearchBot.Manager {
 
             // This section processes the audio file and prints the results (start time, end time and text) to the console.
             var startId = 1;
-            await foreach (var result in processor.ProcessAsync(wavStream)) {
+            string lastText = string.Empty;
+            var repeatCount = 0; 
+            var cts = new CancellationTokenSource();
+            var token = cts.Token;
+            await foreach (var result in processor.ProcessAsync(wavStream, token)) {
                 timeTaken = DateTime.UtcNow - startTime;
                 logger.LogInformation($"{result.Start.ToLongString()}-->{result.End.ToLongString()}: {result.Text,-150} [{timeTaken.ToLongString()}]");
                 ToReturn.Add($"{startId}");
@@ -79,6 +83,15 @@ namespace TelegramSearchBot.Manager {
                 ToReturn.Add($"{result.Text}\n");
                 startId++;
                 startTime = DateTime.UtcNow;
+                if (lastText.Equals(result.Text.Trim())) {
+                    repeatCount++;
+                } else {
+                    repeatCount = 0;
+                    lastText = result.Text.Trim();
+                }
+                if (repeatCount > 100) {
+                    cts.Cancel();
+                }
             }
 
             logger.LogInformation("⟫ Completed Whisper processing...");
