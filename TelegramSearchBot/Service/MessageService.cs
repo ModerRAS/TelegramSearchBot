@@ -8,14 +8,12 @@ using ICU4N.Text;
 using System;
 using Telegram.Bot.Types.Enums;
 using System.Collections.Generic;
-using System.Threading;
 
 namespace TelegramSearchBot.Service {
     public class MessageService : IMessageService, IService {
         protected readonly LuceneManager lucene;
         protected readonly SendMessage Send;
         protected readonly DataDbContext DataContext;
-        private static SemaphoreSlim semaphore = new SemaphoreSlim(1);
 
         public string ServiceName => "MessageService";
 
@@ -66,8 +64,6 @@ namespace TelegramSearchBot.Service {
 
         public async Task AddToSqlite(MessageOption messageOption) {
 
-            await semaphore.WaitAsync().ConfigureAwait(false);
-
             var UserIsInGroup = from s in DataContext.UsersWithGroup
                                 where s.UserId == messageOption.UserId && 
                                       s.GroupId == messageOption.ChatId
@@ -112,16 +108,15 @@ namespace TelegramSearchBot.Service {
                 DateTime = messageOption.DateTime,
             });
             await DataContext.SaveChangesAsync();
-            semaphore.Release();
         }
 
         public async Task ExecuteAsync(MessageOption messageOption) {
             try {
                 await AddToSqlite(messageOption);
             } catch (InvalidOperationException e) {
-                semaphore.Release();
-            } catch (Exception e) {
-                semaphore.Release();
+                await Task.Delay(5000);
+                await AddToSqlite(messageOption);
+
             }
             await AddToLiteDB(messageOption);
             await AddToLucene(messageOption);
