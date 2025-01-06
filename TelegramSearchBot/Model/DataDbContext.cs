@@ -12,7 +12,7 @@ namespace TelegramSearchBot.Model {
         public DataDbContext(DbContextOptions<DataDbContext> options) : base(options) { }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {
             // 配置数据库连接字符串
-            optionsBuilder.UseSqlite($"Data Source={Env.WorkDir}/Data.sqlite");
+            optionsBuilder.UseSqlite($"Data Source={Env.WorkDir}/Data.sqlite;Cache=Shared;Mode=ReadWrite;");
             optionsBuilder.LogTo(Log.Logger.Information, LogLevel.Information);
         }
         public DbSet<Message> Messages { get; set; }
