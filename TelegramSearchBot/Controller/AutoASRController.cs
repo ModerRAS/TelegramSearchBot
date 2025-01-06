@@ -29,8 +29,11 @@ namespace TelegramSearchBot.Controller {
                 (string.IsNullOrEmpty(e?.Message?.Document?.FileName) && IProcessAudio.IsAudio(e?.Message?.Document?.FileName))) {
                 return await IProcessAudio.GetAudio(e);
             } else if (e?.Message?.Video is not null ||
-                (string.IsNullOrEmpty(e?.Message?.Document?.FileName) && IProcessVideo.IsVideo(e?.Message?.Document?.FileName))) { 
-                return await IProcessVideo.GetVideo(e);
+                (string.IsNullOrEmpty(e?.Message?.Document?.FileName) && IProcessVideo.IsVideo(e?.Message?.Document?.FileName))) {
+                if (Env.EnableVideoASR) {
+                    return await IProcessVideo.GetVideo(e);
+                }
+                throw new FileNotFoundException();
             } else {
                 throw new FileNotFoundException();
             }
