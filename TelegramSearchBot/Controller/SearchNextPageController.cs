@@ -47,7 +47,7 @@ namespace TelegramSearchBot.Controller {
             logger.LogInformation($"CallbackQuery is: {e.CallbackQuery}, ChatId is: {ChatId}");
             var IsGroup = e?.CallbackQuery?.Message?.Chat.Id < 0;
 #pragma warning disable CS8602 // 解引用可能出现空引用。
-            await botClient.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "搜索中。。。");
+            await botClient.AnswerCallbackQuery(e.CallbackQuery.Id, "搜索中。。。");
 #pragma warning restore CS8602 // 解引用可能出现空引用。
             try {
                 var cacheData = Cache.Find(c => c.UUID.Equals(e.CallbackQuery.Data)).First();
@@ -63,7 +63,7 @@ namespace TelegramSearchBot.Controller {
                     foreach (var i in searchOption.ToDelete) {
                         await Send.AddTask(async () => {
                             try {
-                                await botClient.DeleteMessageAsync(ChatId, (int)i);
+                                await botClient.DeleteMessage(ChatId, (int)i);
                             } catch (AggregateException) {
                                 logger.LogError("删除了不存在的消息");
                             }
