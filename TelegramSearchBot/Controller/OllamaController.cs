@@ -28,7 +28,7 @@ namespace TelegramSearchBot.Controller {
             if (string.IsNullOrEmpty(service.BotName)) {
                 service.BotName = BotName;
             } 
-            var Message = string.IsNullOrEmpty(e.Message.Text) ? e.Message.Caption : e.Message.Text;
+            var Message = string.IsNullOrEmpty(e?.Message?.Text) ? e?.Message?.Caption : e.Message.Text;
             if (string.IsNullOrEmpty(Message)) {
                 return;
             }
