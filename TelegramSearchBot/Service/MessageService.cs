@@ -8,13 +8,14 @@ using ICU4N.Text;
 using System;
 using Telegram.Bot.Types.Enums;
 using System.Collections.Generic;
+using Nito.AsyncEx;
 
 namespace TelegramSearchBot.Service {
     public class MessageService : IMessageService, IService {
         protected readonly LuceneManager lucene;
         protected readonly SendMessage Send;
         protected readonly DataDbContext DataContext;
-
+        private static readonly AsyncLock _asyncLock = new AsyncLock();
         public string ServiceName => "MessageService";
 
         public MessageService(LuceneManager lucene, SendMessage Send, DataDbContext context) {
@@ -111,15 +112,17 @@ namespace TelegramSearchBot.Service {
         }
 
         public async Task ExecuteAsync(MessageOption messageOption) {
-            try {
-                await AddToSqlite(messageOption);
-            } catch (InvalidOperationException e) {
-                await Task.Delay(5000);
-                await AddToSqlite(messageOption);
+            using (await _asyncLock.LockAsync()) {
+                try {
+                    await AddToSqlite(messageOption);
+                } catch (InvalidOperationException e) {
+                    await Task.Delay(5000);
+                    await AddToSqlite(messageOption);
 
+                }
+                await AddToLiteDB(messageOption);
+                await AddToLucene(messageOption);
             }
-            await AddToLiteDB(messageOption);
-            await AddToLucene(messageOption);
         }
     }
 }
