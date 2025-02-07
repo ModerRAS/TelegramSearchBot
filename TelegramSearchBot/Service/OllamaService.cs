@@ -50,7 +50,7 @@ namespace TelegramSearchBot.Service {
             var Messages = (from s in _dbContext.Messages
                            where s.GroupId == ChatId && s.DateTime > DateTime.Now.AddHours(-1)
                            select s).ToList();
-            _logger.LogInfomation($"Ollama获取数据库得到{ChatId}中的{Messages.Count}条结果。");
+            _logger.LogInformation($"Ollama获取数据库得到{ChatId}中的{Messages.Count}条结果。");
             var MessagesJson = JsonConvert.SerializeObject(Messages, Formatting.Indented);
             var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，在向你提问之前，我将给你提供以下聊天记录，以供参考,格式为Json格式的列表，其中每一条的聊天记录在Content字段内\n{MessagesJson}";
             var chat = new Chat(ollama, prompt);
