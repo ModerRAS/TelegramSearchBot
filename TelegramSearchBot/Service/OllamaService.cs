@@ -50,11 +50,11 @@ namespace TelegramSearchBot.Service {
             var Messages = (from s in _dbContext.Messages
                            where s.GroupId == ChatId && s.DateTime > DateTime.UtcNow.AddHours(-1)
                            select s).ToList();
-            if (Messages.Count < 100) {
+            if (Messages.Count < 10) {
                 Messages = (from s in _dbContext.Messages
                             where s.GroupId == ChatId
                             orderby s.DateTime descending
-                            select s).Take(100).ToList();
+                            select s).Take(10).ToList();
             }
 
             _logger.LogInformation($"Ollama获取数据库得到{ChatId}中的{Messages.Count}条结果。");
