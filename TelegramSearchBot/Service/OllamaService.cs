@@ -5,6 +5,7 @@ using OllamaSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
@@ -23,8 +24,10 @@ namespace TelegramSearchBot.Service {
             _logger = logger;
             _dbContext = context;
             // set up the client
-            var uri = new Uri(Env.OllamaHost);
-            ollama = new OllamaApiClient(uri);
+            HttpClient client = new HttpClient();
+            client.BaseAddress = new Uri(Env.OllamaHost);
+            client.Timeout = TimeSpan.FromSeconds(3000);
+            ollama = new OllamaApiClient(client);
 
             // select a model which should be used for further operations
             ollama.SelectedModel = Env.OllamaModelName;
