@@ -42,6 +42,15 @@ namespace TelegramSearchBot.Controller {
                 StringBuilder builder = new StringBuilder();
                 var num = 0;
                 await foreach(var PerMessage in service.ExecAsync(Message, e.Message.Chat.Id)) {
+                    if (builder.Length > 1900) {
+                        var tmpMessageId = sentMessage.MessageId;
+                        sentMessage = await botClient.SendMessage(
+                            chatId: e.Message.Chat.Id,
+                            text: "Initializing...",
+                            replyParameters: new ReplyParameters() { MessageId = tmpMessageId }
+                            );
+                        builder.Clear();
+                    }
                     builder.Append(PerMessage);
                     num++;
                     if (num % 10 == 0) {
@@ -54,14 +63,6 @@ namespace TelegramSearchBot.Controller {
                         }, e.Message.Chat.Id < 0);
                     }
                 }
-                await Send.AddTask(async () => {
-                    await botClient.EditMessageTextAsync(
-                        chatId: sentMessage.Chat.Id,
-                        messageId: sentMessage.MessageId,
-                        parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
-                        text: builder.ToString()
-                        );
-                }, e.Message.Chat.Id < 0);
             }
         }
     }
