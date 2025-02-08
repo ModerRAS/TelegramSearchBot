@@ -48,7 +48,7 @@ namespace TelegramSearchBot.Service {
                     _logger.LogInformation($"{status.Percent}% {status.Status}");
             }
             var Messages = (from s in _dbContext.Messages
-                           where s.GroupId == ChatId && s.DateTime > DateTime.Now.AddHours(-1)
+                           where s.GroupId == ChatId && s.DateTime > DateTime.UtcNow.AddHours(-1)
                            select s).ToList();
             _logger.LogInformation($"Ollama获取数据库得到{ChatId}中的{Messages.Count}条结果。");
             var MessagesJson = JsonConvert.SerializeObject(Messages, Formatting.Indented);
