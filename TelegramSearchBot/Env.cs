@@ -73,6 +73,6 @@ namespace TelegramSearchBot {
         public bool EnableOpenAI { get; set; } = false;
         public string OpenAIBaseURL { get; set; } = "https://api.openai.com/v1";
         public string OpenAIModelName { get; set; } = "gpt-4o";
-        public string OpenAiApiKey { get; set; }
+        public string OpenAIApiKey { get; set; }
     }
 }
