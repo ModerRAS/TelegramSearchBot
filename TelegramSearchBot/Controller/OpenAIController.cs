@@ -11,20 +11,20 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
-    public class OllamaController : IOnUpdate {
+    public class OpenAIController : IOnUpdate {
         private readonly ILogger logger;
-        private readonly OllamaService service;
+        private readonly OpenAIService service;
         private readonly SendMessage Send;
         public ITelegramBotClient botClient { get; set; }
-        public OllamaController(ITelegramBotClient botClient, OllamaService ollamaService, SendMessage Send, ILogger<OllamaController> logger) {
+        public OpenAIController(ITelegramBotClient botClient, OpenAIService openaiService, SendMessage Send, ILogger<OllamaController> logger) {
             this.logger = logger;
             this.botClient = botClient;
-            service = ollamaService;
+            service = openaiService;
             this.Send = Send;
 
         }
         public async Task ExecuteAsync(Update e) {
-            if (!Env.EnableOllama) {
+            if (!Env.EnableOpenAI) { 
                 return;
             }
             var BotName = (await botClient.GetMeAsync()).Username;
