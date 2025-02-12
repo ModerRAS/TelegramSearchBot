@@ -58,7 +58,7 @@ namespace TelegramSearchBot.Service {
             };
             var chat = new ChatClient(
                 model: Env.OpenAIModelName,
-                credential: new(Env.OpenAiApiKey),
+                credential: new(Env.OpenAIApiKey),
                 clientOptions);
             await foreach (var update in chat.CompleteChatStreamingAsync([new SystemChatMessage(prompt), new UserChatMessage(InputToken)])) {
                 foreach (ChatMessageContentPart updatePart in update.ContentUpdate) {

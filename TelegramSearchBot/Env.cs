@@ -30,7 +30,7 @@ namespace TelegramSearchBot {
             EnableOpenAI = config.EnableOpenAI;
             OpenAIBaseURL = config.OpenAIBaseURL;
             OpenAIModelName = config.OpenAIModelName;
-            OpenAiApiKey = config.OpenAiApiKey;
+            OpenAIApiKey = config.OpenAIApiKey;
         }
         public static readonly string BaseUrl;
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
@@ -53,7 +53,7 @@ namespace TelegramSearchBot {
         public static bool EnableOpenAI { get; set; } = false;
         public static string OpenAIBaseURL { get; set; }
         public static string OpenAIModelName { get; set; }
-        public static string OpenAiApiKey { get; set; }
+        public static string OpenAIApiKey { get; set; }
     }
     public class Config {
         public string BaseUrl { get; set; } = "https://api.telegram.org";
