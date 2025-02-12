@@ -66,6 +66,13 @@ namespace TelegramSearchBot.Controller {
                         }, e.Message.Chat.Id < 0);
                     }
                 }
+                await Send.AddTask(async () => {
+                    await botClient.EditMessageTextAsync(
+                        chatId: sentMessage.Chat.Id,
+                        messageId: sentMessage.MessageId,
+                        text: builder.ToString()
+                        );
+                }, e.Message.Chat.Id < 0);
             }
         }
     }
