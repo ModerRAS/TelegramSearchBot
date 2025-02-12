@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Markdig;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -41,6 +42,41 @@ namespace TelegramSearchBot {
             if (!Directory.Exists(FolderPath)) {
                 CreateDirectorys(FolderPath);
             }
+        }
+        /// <summary>
+        /// 检查 Markdown 是否符合标准（使用 Markdig 解析）。
+        /// </summary>
+        /// <param name="markdown">要验证的 Markdown 文本</param>
+        /// <returns>如果 Markdown 合法，则返回 true；否则返回 false</returns>
+        public static bool IsValidMarkdown(string markdown) {
+            if (string.IsNullOrWhiteSpace(markdown))
+                return false;
+
+            try {
+                var pipeline = new MarkdownPipelineBuilder().Build();
+                string html = Markdown.ToHtml(markdown, pipeline);
+                return !string.IsNullOrWhiteSpace(html); // 确保能成功转换为 HTML
+            } catch {
+                return false; // 解析失败，说明 Markdown 语法错误
+            }
+        }
+
+        /// <summary>
+        /// 转义 Markdown 以适配 Telegram 的 MarkdownV2 解析器。
+        /// </summary>
+        /// <param name="markdown">原始 Markdown 文本</param>
+        /// <returns>适配 Telegram 的 MarkdownV2 格式文本</returns>
+        public static string EscapeForTelegramMarkdownV2(string markdown) {
+            if (string.IsNullOrWhiteSpace(markdown))
+                return markdown;
+
+            string specialChars = "_*[]()~`>#+-=|{}.!";
+
+            foreach (char c in specialChars) {
+                markdown = markdown.Replace(c.ToString(), "\\" + c);
+            }
+
+            return markdown;
         }
     }
 }
