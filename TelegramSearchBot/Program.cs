@@ -1,4 +1,5 @@
 ﻿using LiteDB;
+using Orleans.Runtime;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -26,6 +27,7 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
+using Orleans.Hosting;
 
 namespace TelegramSearchBot {
     class Program {
@@ -33,6 +35,12 @@ namespace TelegramSearchBot {
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .UseSerilog()
+                .UseOrleans(siloBuilder =>
+                {
+                    siloBuilder
+                        .UseLocalhostClustering()
+                        .ConfigureLogging(logging => logging.AddSerilog());
+                })
                 .ConfigureServices(service => {
                     service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl)));
                     service.AddSingleton<SendMessage>();

@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Orleans.Runtime" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Sdk" Version="9.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TelegramSearchBot.Abstractions\TelegramSearchBot.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
