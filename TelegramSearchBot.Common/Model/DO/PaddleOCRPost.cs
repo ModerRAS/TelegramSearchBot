@@ -5,6 +5,7 @@ using System.Text;
 
 namespace TelegramSearchBot.Common.Model.DO
 {
+    [Obsolete]
     public class PaddleOCRPost
     {
         [JsonProperty("images")]
