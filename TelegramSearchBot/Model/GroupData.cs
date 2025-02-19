@@ -12,6 +12,7 @@ namespace TelegramSearchBot.Model {
         public string Type { get; set; }
         public string Title { get; set; }
         public bool? IsForum { get; set; }
+        public bool IsBlacklist { get; set; }
 
     }
 }
