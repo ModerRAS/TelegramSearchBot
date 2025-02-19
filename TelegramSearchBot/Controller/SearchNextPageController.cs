@@ -50,7 +50,7 @@ namespace TelegramSearchBot.Controller {
             await botClient.AnswerCallbackQuery(e.CallbackQuery.Id, "搜索中。。。");
 #pragma warning restore CS8602 // 解引用可能出现空引用。
             try {
-                var cacheData = Cache.Find(c => c.UUID.Equals(e.CallbackQuery.Data)).First();
+                var cacheData = Cache.Find(c => c.UUID.Equals(e.CallbackQuery.Data)).FirstOrDefault();
                 var searchOption = cacheData.searchOption;
                 Cache.Delete(cacheData.Id);
 
