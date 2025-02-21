@@ -4,8 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Abstractions.Interfaces
-{
-    public interface IQRGrains : IGrainWithStringKey {
+namespace TelegramSearchBot.Abstractions.Interfaces {
+    public interface IDialogGrain : IGrainWithGuidKey {
     }
 }

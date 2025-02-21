@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Abstractions.Interfaces
 {
-    public interface IASRGrains : IGrainWithStringKey
-    {
+    public interface IASRGrain : IGrainWithStringKey {
     }
 }
