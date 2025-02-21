@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -17,6 +18,7 @@ namespace TelegramSearchBot.Controller {
         private readonly ITelegramBotClient botClient;
         private readonly ILogger<AutoQRController> logger;
         private readonly WeChatQRService weChatQRService;
+        public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
         public AutoQRController(
             ILogger<AutoQRController> logger, 
             ITelegramBotClient botClient, 

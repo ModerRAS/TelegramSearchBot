@@ -22,6 +22,7 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller;
+using TelegramSearchBot.Executor;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
@@ -120,27 +121,15 @@ namespace TelegramSearchBot {
         }
 
         public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
-            var pre = service.GetServices<IPreUpdate>();
-            var all = service.GetServices<IOnUpdate>();
-            
-
-
             return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
                 _ = Task.Run(async () => {
-                    foreach (var per in pre) {
-                        try {
-                            await per.ExecuteAsync(update);
-                        } catch (Exception ex) {
-                            Log.Error(ex, $"Message Pre Process Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Title} {update.Message.Chat.Id}/{update.Message.MessageId}");
-                        }
+                    try {
+                        var exec = new ControllerExecutor(service.GetServices<IOnUpdate>());
+                        await exec.ExecuteControllers(update);
+                    } catch (Exception ex) {
+                        Log.Error(ex, $"Message ControllerExecutor Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Title} {update.Message.Chat.Id}/{update.Message.MessageId}");
                     }
-                    foreach (var per in all) {
-                        try {
-                            await per.ExecuteAsync(update);
-                        } catch (Exception ex) {
-                            Log.Error(ex, $"Message Process Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Title} {update.Message.Chat.Id}/{update.Message.MessageId}");
-                        }
-                    }
+                    
                 });
 
             };

@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -17,6 +18,9 @@ namespace TelegramSearchBot.Controller {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
         private readonly ILogger<AutoASRController> logger;
+
+        public List<Type> Dependencies => new List<Type>() { typeof(DownloadAudioController), typeof(DownloadVideoController) };
+
         public AutoASRController(ITelegramBotClient botClient, AutoASRService autoASRService, SendMessage Send, MessageService messageService, ILogger<AutoASRController> logger) {
             this.autoASRService = autoASRService;
             this.messageService = messageService;

@@ -12,9 +12,11 @@ using TelegramSearchBot.Intrerface;
 using File = System.IO.File;
 
 namespace TelegramSearchBot.Controller {
-    public class DownloadPhotoController : IPreUpdate {
+    public class DownloadPhotoController : IOnUpdate {
         public ITelegramBotClient botClient { get; private set; }
         public string PhotoDirectory { get; private set; } = Path.Combine(Env.WorkDir, "Photos");
+
+        public List<Type> Dependencies => new List<Type>();
 
         private readonly ILogger<DownloadPhotoController> logger;
         public DownloadPhotoController(ITelegramBotClient botClient, ILogger<DownloadPhotoController> logger) { 

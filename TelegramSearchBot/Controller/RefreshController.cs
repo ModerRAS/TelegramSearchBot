@@ -1,4 +1,6 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Telegram.Bot.Args;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Intrerface;
@@ -7,6 +9,7 @@ using TelegramSearchBot.Service;
 namespace TelegramSearchBot.Controller {
     class RefreshController : IOnUpdate {
         private readonly RefreshService refreshService;
+        public List<Type> Dependencies => new List<Type>();
         public RefreshController(RefreshService refreshService) {
             this.refreshService = refreshService;
         }

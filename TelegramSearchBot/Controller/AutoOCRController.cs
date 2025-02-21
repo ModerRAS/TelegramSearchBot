@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -23,6 +24,9 @@ namespace TelegramSearchBot.Controller {
             this.Send = Send;
             this.logger = logger;
         }
+
+        public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
+
         public async Task ExecuteAsync(Update e) {
             if (!Env.EnableAutoOCR) {
                 return;

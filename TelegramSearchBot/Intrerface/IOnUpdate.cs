@@ -8,6 +8,8 @@ using Telegram.Bot.Types;
 
 namespace TelegramSearchBot.Intrerface {
     public interface IOnUpdate {
+        List<Type> Dependencies { get; } // 每个Controller的依赖项
+
         public Task ExecuteAsync(Update e);
     }
 }

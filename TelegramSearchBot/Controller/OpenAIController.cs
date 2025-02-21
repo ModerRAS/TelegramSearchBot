@@ -15,6 +15,7 @@ namespace TelegramSearchBot.Controller {
         private readonly ILogger logger;
         private readonly OpenAIService service;
         private readonly SendMessage Send;
+        public List<Type> Dependencies => new List<Type>();
         public ITelegramBotClient botClient { get; set; }
         public OpenAIController(ITelegramBotClient botClient, OpenAIService openaiService, SendMessage Send, ILogger<OllamaController> logger) {
             this.logger = logger;

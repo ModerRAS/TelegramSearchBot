@@ -18,6 +18,7 @@ namespace TelegramSearchBot.Controller {
         private readonly ISearchService searchService;
         private readonly SendService sendService;
         private readonly ITelegramBotClient botClient;
+        public List<Type> Dependencies => new List<Type>();
         public SearchNextPageController(
             ITelegramBotClient botClient, 
             SendMessage Send, 

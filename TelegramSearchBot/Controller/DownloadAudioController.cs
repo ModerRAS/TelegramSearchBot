@@ -12,9 +12,11 @@ using TelegramSearchBot.Intrerface;
 using File = System.IO.File;
 
 namespace TelegramSearchBot.Controller {
-    public class DownloadAudioController : IPreUpdate {
+    public class DownloadAudioController : IOnUpdate {
         public ITelegramBotClient botClient { get; private set; }
         public string AudioDirectory { get; private set; } = Path.Combine(Env.WorkDir, "Audios");
+
+        public List<Type> Dependencies => new List<Type>();
 
         private readonly ILogger<DownloadAudioController> logger;
         public DownloadAudioController(ITelegramBotClient botClient, ILogger<DownloadAudioController> logger) { 

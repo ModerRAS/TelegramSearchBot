@@ -13,6 +13,9 @@ namespace TelegramSearchBot.Controller {
         protected CheckBanGroupService service;
         protected ITelegramBotClient botClient;
         private readonly SendMessage Send;
+
+        public List<Type> Dependencies => new List<Type>();
+
         public CheckBanGroupController(ITelegramBotClient botClient, CheckBanGroupService service, SendMessage Send) { 
             this.botClient = botClient;
             this.service = service;

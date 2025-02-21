@@ -4,11 +4,13 @@ using TelegramSearchBot.Service;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Model;
+using System;
 
 namespace TelegramSearchBot.Controller {
     class SearchController : IOnUpdate {
         private readonly ISearchService searchService;
         private readonly SendService sendService;
+        public List<Type> Dependencies => new List<Type>();
         public SearchController(
             SearchService searchService, 
             SendService sendService
