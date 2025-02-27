@@ -79,9 +79,7 @@ namespace TelegramSearchBot.AppBootstrap {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
                 }, cts.Token);
             Env.SchedulerPort = Utils.GetRandomAvailablePort();
-            Task.Run(() => {
-                Fork(["Scheduler", $"{Env.SchedulerPort}"]);
-            });
+            Fork(["Scheduler", $"{Env.SchedulerPort}"]);
             host.Run();
         }
         public static void AddController(IServiceCollection service) {
