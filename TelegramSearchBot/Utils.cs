@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.Sockets;
+using System.Net;
 using System.Text;
 using TelegramSearchBot.Model;
 
@@ -77,6 +79,27 @@ namespace TelegramSearchBot {
             }
 
             return markdown;
+        }
+
+        public static int GetRandomAvailablePort() {
+            // 尝试使用一个随机端口
+            TcpListener listener = null;
+            try {
+                // 创建一个监听器，绑定到任意端口
+                listener = new TcpListener(IPAddress.Loopback, 0); // 0表示随机端口
+                listener.Start();
+
+                // 获取分配的端口号
+                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+                return port;
+            } catch (Exception) {
+                // 若端口绑定失败，则返回-1
+                return -1;
+            } finally {
+                // 关闭监听器
+                listener?.Stop();
+            }
         }
     }
 }

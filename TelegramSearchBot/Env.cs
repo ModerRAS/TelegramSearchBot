@@ -54,6 +54,7 @@ namespace TelegramSearchBot {
         public static string OpenAIBaseURL { get; set; }
         public static string OpenAIModelName { get; set; }
         public static string OpenAIApiKey { get; set; }
+        public static int SchedulerPort { get; set; }
     }
     public class Config {
         public string BaseUrl { get; set; } = "https://api.telegram.org";
