@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,6 +20,7 @@ using TelegramSearchBot.Executor;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using Tsavorite.core;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
@@ -32,11 +34,17 @@ namespace TelegramSearchBot.AppBootstrap {
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
+                    // 配置 Redis 连接
+                    var redisConnectionString = $"localhost:{Env.SchedulerPort}"; // 自定义端口
+                    service.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
+
                     service.AddDbContext<DataDbContext>(ServiceLifetime.Transient);
                     AddController(service);
                     AddService(service);
                 });
         public static void Startup(string[] args) {
+            Env.SchedulerPort = Utils.GetRandomAvailablePort();
+            Fork(["Scheduler", $"{Env.SchedulerPort}"]);
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
 
             Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
@@ -78,8 +86,6 @@ namespace TelegramSearchBot.AppBootstrap {
                 HandleErrorAsync(service), new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
                 }, cts.Token);
-            Env.SchedulerPort = Utils.GetRandomAvailablePort();
-            Fork(["Scheduler", $"{Env.SchedulerPort}"]);
             host.Run();
         }
         public static void AddController(IServiceCollection service) {

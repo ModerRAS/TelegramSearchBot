@@ -48,7 +48,7 @@ namespace TelegramSearchBot.Manager {
             }
             return results;
         }
-        private PaddleOCRResult Execute(List<string> images) {
+        public PaddleOCRResult Execute(List<string> images) {
             var results = images
                     .Select(Convert.FromBase64String)
                     .Select(GetOcrResult)
