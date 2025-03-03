@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32.SafeHandles;
+using Nito.AsyncEx;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -161,7 +162,22 @@ namespace TelegramSearchBot.AppBootstrap {
                 throw new Exception("启动新进程失败");
             }
             childProcessManager.AddProcess(newProcess);
-            Log.Logger.Information($"主进程：{args[0]}已启动");
+            Log.Logger.Information($"主进程：{args[0]} {args[1]}已启动");
+        }
+        private static Dictionary<string, DateTime> ForkLock = new Dictionary<string, DateTime>();
+        private static readonly AsyncLock _asyncLock = new AsyncLock();
+        public static async Task RateLimitForkAsync(string[] args) {
+            using (await _asyncLock.LockAsync()) {
+                if (ForkLock.ContainsKey(args[0])) {
+                    if (DateTime.UtcNow - ForkLock[args[0]] > TimeSpan.FromMinutes(5)) {
+                        Fork(args);
+                        ForkLock[args[0]] = DateTime.UtcNow;
+                    }
+                } else {
+                    Fork(args);
+                    ForkLock.Add(args[0],DateTime.UtcNow);
+                }
+            }
         }
     }
 }
