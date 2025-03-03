@@ -14,7 +14,8 @@ namespace TelegramSearchBot.AppBootstrap {
             IDatabase db = redis.GetDatabase();
             var ocr = new PaddleOCR();
             var before = DateTime.UtcNow;
-            while (DateTime.UtcNow - before < TimeSpan.FromMinutes(10)) {
+            while (DateTime.UtcNow - before < TimeSpan.FromMinutes(10) ||
+                   db.ListLength("OCRTasks") > 0) {
                 if (db.ListLength("OCRTasks") == 0) {
                     Task.Delay(1000).Wait();
                     continue;
