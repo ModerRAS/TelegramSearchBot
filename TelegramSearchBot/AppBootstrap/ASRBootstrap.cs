@@ -29,11 +29,11 @@ namespace TelegramSearchBot.AppBootstrap {
                 }
 
                 var task = db.ListLeftPop("ASRTasks").ToString();
-                var audioPath = db.StringGetDelete($"ASRAudioStream-{task}").ToString();
+                var audioPath = db.StringGetDelete($"ASRPost-{task}").ToString();
                 var wave = await IProcessAudio.ConvertToWav(await File.ReadAllBytesAsync(audioPath));
                 using MemoryStream stream = new MemoryStream(wave);
                 var response = await asr.DetectAsync(stream);
-                db.StringSet($"ASRAudioText-{task}", response);
+                db.StringSet($"ASRResult-{task}", response);
             }
         }
         public static void Startup(string[] args) {

@@ -1,22 +1,16 @@
-﻿using SkiaSharp;
-using StackExchange.Redis;
+﻿using StackExchange.Redis;
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Extension;
-using TelegramSearchBot.Intrerface;
-using ZXing.SkiaSharp;
 
 namespace TelegramSearchBot.Service {
-    public class AutoQRService : IService {
-        public string ServiceName => "AutoQRService";
-        public IConnectionMultiplexer connectionMultiplexer { get; set; }
-        public AutoQRService(IConnectionMultiplexer connectionMultiplexer) {
-            this.connectionMultiplexer = connectionMultiplexer;
+    public class AutoQRService : SubProcessService {
+        public AutoQRService(IConnectionMultiplexer connectionMultiplexer) : base(connectionMultiplexer) {
+            ForkName = "QR";
         }
+
+        public new string ServiceName => "AutoQRService";
+        
 
         /// <summary>
         /// 按理说是进来文件出去字符的

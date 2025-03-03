@@ -21,7 +21,7 @@ namespace TelegramSearchBot.AppBootstrap {
                     continue;
                 }
                 var task = db.ListLeftPop("OCRTasks").ToString();
-                var photoBase64 = db.StringGetDelete($"OCRPhotoImg-{task}").ToString();
+                var photoBase64 = db.StringGetDelete($"OCRPost-{task}").ToString();
                 var response = ocr.Execute(new List<string>() { photoBase64 });
                 int status;
                 if (int.TryParse(response.Status, out status) && status == 0) {
@@ -31,9 +31,9 @@ namespace TelegramSearchBot.AppBootstrap {
                             StringList.Add(f.Text);
                         }
                     }
-                    db.StringSet($"OCRPhotoText-{task}", string.Join(" ", StringList));
+                    db.StringSet($"OCRResult-{task}", string.Join(" ", StringList));
                 } else {
-                    db.StringSet($"OCRPhotoText-{task}", "");
+                    db.StringSet($"OCRResult-{task}", "");
                 }
             }
         }
