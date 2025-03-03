@@ -12,14 +12,20 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Common.Model.DO;
 using TelegramSearchBot.Common.Model.DTO;
 using TelegramSearchBot.Manager;
+using StackExchange.Redis;
+using Nito.AsyncEx;
+using TelegramSearchBot.Extension;
 
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
         public string ServiceName => "PaddleOCRService";
-        public PaddleOCR PaddleOCR { get; set; }
 
-        public PaddleOCRService(PaddleOCR paddleOCR) {
-            PaddleOCR = paddleOCR;
+        private static readonly AsyncLock _asyncLock = new AsyncLock();
+        public static DateTime DateTime { get; private set; } = DateTime.MinValue;
+        public IConnectionMultiplexer connectionMultiplexer { get; set; }
+
+        public PaddleOCRService(IConnectionMultiplexer connectionMultiplexer) {
+            this.connectionMultiplexer = connectionMultiplexer;
         }
 
 
@@ -39,19 +45,26 @@ namespace TelegramSearchBot.Service {
             //tg_img.Save(stream, ImageFormat.Jpeg);
             var tg_img_arr = tg_img_data.ToArray();
             var tg_img_base64 = Convert.ToBase64String(tg_img_arr);
-            var response = await PaddleOCR.ExecuteAsync(new List<string>() { tg_img_base64 });
-            int status;
-            if (int.TryParse(response.Status, out status) && status == 0) {
-                var StringList = new List<string>();
-                foreach (var e in response.Results) {
-                    foreach (var f in e) {
-                        StringList.Add(f.Text);
-                    }
-                }
-                return string.Join(" ", StringList);
-            } else {
-                return "";
-            }
+            var db = connectionMultiplexer.GetDatabase();
+            var guid = Guid.NewGuid();
+            await db.ListRightPushAsync("OCRTasks", $"{guid}");
+            await db.StringSetAsync($"OCRPhotoImg-{guid}", tg_img_base64);
+            await AppBootstrap.AppBootstrap.RateLimitForkAsync(["OCR", $"{Env.SchedulerPort}"]);
+            return await db.StringWaitGetDeleteAsync($"OCRPhotoText-{guid}");
+            
+            //var response = await PaddleOCR.ExecuteAsync(new List<string>() { tg_img_base64 });
+            //int status;
+            //if (int.TryParse(response.Status, out status) && status == 0) {
+            //    var StringList = new List<string>();
+            //    foreach (var e in response.Results) {
+            //        foreach (var f in e) {
+            //            StringList.Add(f.Text);
+            //        }
+            //    }
+            //    return string.Join(" ", StringList);
+            //} else {
+            //    return "";
+            //}
         }
     }
 }

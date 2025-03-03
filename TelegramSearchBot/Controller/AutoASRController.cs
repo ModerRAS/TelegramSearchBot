@@ -29,7 +29,7 @@ namespace TelegramSearchBot.Controller {
             this.logger = logger;
         }
         public async Task<byte[]> GetFileAsync(Update e) {
-            if (e?.Message?.Audio is not null ||
+            if (e?.Message?.Audio is not null || e?.Message?.Voice is not null ||
                 (string.IsNullOrEmpty(e?.Message?.Document?.FileName) && IProcessAudio.IsAudio(e?.Message?.Document?.FileName))) {
                 return await IProcessAudio.GetAudio(e);
             } else if (e?.Message?.Video is not null ||
@@ -42,15 +42,30 @@ namespace TelegramSearchBot.Controller {
                 throw new FileNotFoundException();
             }
         }
+        public string GetFilePath(Update e) {
+            if (e?.Message?.Audio is not null || e?.Message?.Voice is not null ||
+                (string.IsNullOrEmpty(e?.Message?.Document?.FileName) && IProcessAudio.IsAudio(e?.Message?.Document?.FileName))) {
+                return IProcessAudio.GetAudioPath(e);
+            } else if (e?.Message?.Video is not null ||
+                (string.IsNullOrEmpty(e?.Message?.Document?.FileName) && IProcessVideo.IsVideo(e?.Message?.Document?.FileName))) {
+                if (Env.EnableVideoASR) {
+                    return IProcessVideo.GetVideoPath(e);
+                }
+                throw new FileNotFoundException();
+            } else {
+                throw new FileNotFoundException();
+            }
+        }
         public async Task ExecuteAsync(Update e) {
             if (!Env.EnableAutoASR) {
                 return;
             }
 
             try {
-                var AudioStream = await IProcessAudio.ConvertToWav(await GetFileAsync(e));
-                logger.LogInformation($"Get Audio File: {e.Message.Chat.Id}/{e.Message.MessageId}");
-                var AsrStr = await autoASRService.ExecuteAsync(new MemoryStream(AudioStream));
+                //var AudioStream = await IProcessAudio.ConvertToWav(await GetFileAsync(e));
+                //logger.LogInformation($"Get Audio File: {e.Message.Chat.Id}/{e.Message.MessageId}");
+                var path = GetFilePath(e);
+                var AsrStr = await autoASRService.ExecuteAsync(path);
                 logger.LogInformation(AsrStr);
                 
                 await messageService.ExecuteAsync(new MessageOption {
