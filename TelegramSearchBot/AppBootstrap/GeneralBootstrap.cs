@@ -43,8 +43,6 @@ namespace TelegramSearchBot.AppBootstrap {
                     AddService(service);
                 });
         public static void Startup(string[] args) {
-            Env.SchedulerPort = Utils.GetRandomAvailablePort();
-            Fork(["Scheduler", $"{Env.SchedulerPort}"]);
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
 
             Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
@@ -57,6 +55,9 @@ namespace TelegramSearchBot.AppBootstrap {
               rollingInterval: RollingInterval.Day,
               outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
+
+            Env.SchedulerPort = Utils.GetRandomAvailablePort();
+            Fork(["Scheduler", $"{Env.SchedulerPort}"]);
 
             IHost host = CreateHostBuilder(args)
                 //.ConfigureLogging(logging => {
