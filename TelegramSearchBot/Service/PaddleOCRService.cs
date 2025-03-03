@@ -14,6 +14,7 @@ using TelegramSearchBot.Common.Model.DTO;
 using TelegramSearchBot.Manager;
 using StackExchange.Redis;
 using Nito.AsyncEx;
+using TelegramSearchBot.Extension;
 
 namespace TelegramSearchBot.Service {
     public class PaddleOCRService : IStreamService, IService {
@@ -48,19 +49,8 @@ namespace TelegramSearchBot.Service {
             var guid = Guid.NewGuid();
             await db.ListRightPushAsync("OCRTasks", $"{guid}");
             await db.StringSetAsync($"OCRPhotoImg-{guid}", tg_img_base64);
-            using (await _asyncLock.LockAsync()) {
-                if (DateTime.UtcNow - DateTime > TimeSpan.FromMinutes(5)) {
-                    AppBootstrap.AppBootstrap.Fork(["OCR", $"{Env.SchedulerPort}"]);
-                    DateTime = DateTime.UtcNow;
-                }
-            }
-            while (true) {
-                if (!db.StringGetAsync($"OCRPhotoText-{guid}").Equals(RedisValue.Null)) {
-                    return (await db.StringGetDeleteAsync($"OCRPhotoText-{guid}")).ToString();
-                } else {
-                    await Task.Delay(1000);
-                }
-            }
+            await AppBootstrap.AppBootstrap.RateLimitForkAsync(["OCR", $"{Env.SchedulerPort}"]);
+            return await db.StringWaitGetDeleteAsync($"OCRPhotoText-{guid}");
             
             //var response = await PaddleOCR.ExecuteAsync(new List<string>() { tg_img_base64 });
             //int status;
