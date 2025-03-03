@@ -1,24 +1,17 @@
 ﻿using Microsoft.Extensions.Logging;
 using OpenCvSharp;
-using SkiaSharp;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
-using TelegramSearchBot.Controller;
-using TelegramSearchBot.Intrerface;
-using ZXing.SkiaSharp;
+using TelegramSearchBot.Service;
 
-namespace TelegramSearchBot.Service {
-    [Obsolete]
-    public class WeChatQRService : IService {
-        public string ServiceName => "WeChatQRService";
-        private readonly ILogger<WeChatQRService> logger;
+namespace TelegramSearchBot.Manager {
+    public class QRManager {
+        private readonly ILogger<QRManager> logger;
         public WeChatQRCode opencvDecoder { get; set; }
         public string _wechat_QCODE_detector_prototxt_path = $"{Env.WorkDir}/wechat_qrcode/detect.prototxt";
         public string _wechat_QCODE_detector_caffe_model_path = $"{Env.WorkDir}/wechat_qrcode/detect.caffemodel";
@@ -30,7 +23,7 @@ namespace TelegramSearchBot.Service {
         public string sr_caffe_model_url = "https://github.com/WeChatCV/opencv_3rdparty/raw/wechat_qrcode/sr.caffemodel";
         public string sr_prototxt_url = "https://github.com/WeChatCV/opencv_3rdparty/raw/wechat_qrcode/sr.prototxt";
 
-        public WeChatQRService(ILogger<WeChatQRService> logger) {
+        public QRManager(ILogger<QRManager> logger) {
             if (!Directory.Exists(Path.Combine(Env.WorkDir, "wechat_qrcode"))) {
                 Directory.CreateDirectory(Path.Combine(Env.WorkDir, "wechat_qrcode"));
             }
@@ -48,12 +41,12 @@ namespace TelegramSearchBot.Service {
                 client.DownloadFile(sr_caffe_model_url, _wechat_QCODE_super_resolution_caffe_model_path);
             }
 
-                opencvDecoder = WeChatQRCode.Create(
-                _wechat_QCODE_detector_prototxt_path,
-                _wechat_QCODE_detector_caffe_model_path, 
-                _wechat_QCODE_super_resolution_prototxt_path, 
-                _wechat_QCODE_super_resolution_caffe_model_path
-                );
+            opencvDecoder = WeChatQRCode.Create(
+            _wechat_QCODE_detector_prototxt_path,
+            _wechat_QCODE_detector_caffe_model_path,
+            _wechat_QCODE_super_resolution_prototxt_path,
+            _wechat_QCODE_super_resolution_caffe_model_path
+            );
             this.logger = logger;
         }
         public string DecodeByOpenCV(Mat img) {
@@ -92,6 +85,5 @@ namespace TelegramSearchBot.Service {
             }
 
         }
-#pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
     }
 }

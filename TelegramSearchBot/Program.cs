@@ -41,6 +41,8 @@ namespace TelegramSearchBot {
                     OCRBootstrap.Startup(args);
                 } else if (args[0].Equals("Scheduler")) {
                     SchedulerBootstrap.Startup(args);
+                } else if (args[0].Equals("QR")) {
+                    QRBootstrap.Startup(args);
                 }
             }
         }
