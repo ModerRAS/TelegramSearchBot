@@ -14,7 +14,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 return;
             }
             try {
-                using var server = new GarnetServer(["--port", args[1]]);
+                using var server = new GarnetServer(["bind", "127.0.0.1", "--port", args[1]]);
                 server.Start();
                 Thread.Sleep(Timeout.Infinite);
             } catch (Exception ex) {
