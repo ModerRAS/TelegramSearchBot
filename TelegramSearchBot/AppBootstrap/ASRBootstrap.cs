@@ -19,13 +19,6 @@ namespace TelegramSearchBot.AppBootstrap {
         public static async Task Process(string[] args) {
             ConnectionMultiplexer redis = ConnectionMultiplexer.Connect($"localhost:{args[1]}");
             IDatabase db = redis.GetDatabase();
-            Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information() // 设置最低日志级别
-            .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
-              rollingInterval: RollingInterval.Day,
-              outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
             var asr = new WhisperManager(new LoggerFactory().AddSerilog().CreateLogger<WhisperManager>());
             var before = DateTime.UtcNow;
             while (DateTime.UtcNow - before < TimeSpan.FromMinutes(10) ||
