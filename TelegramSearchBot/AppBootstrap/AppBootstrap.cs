@@ -140,15 +140,6 @@ namespace TelegramSearchBot.AppBootstrap {
                 GroupInformation = 11
             }
         }
-        static AppBootstrap() {
-            Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information() // 设置最低日志级别
-            .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
-              rollingInterval: RollingInterval.Day,
-              outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
-        }
 
         public static ChildProcessManager childProcessManager = new ChildProcessManager();
         public static void Fork(string[] args) {

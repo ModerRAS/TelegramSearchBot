@@ -48,13 +48,7 @@ namespace TelegramSearchBot.AppBootstrap {
             Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
             Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
             Directory.SetCurrentDirectory(Env.WorkDir);
-            Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information() // 设置最低日志级别
-            .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
-              rollingInterval: RollingInterval.Day,
-              outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
+            
 
             Env.SchedulerPort = Utils.GetRandomAvailablePort();
             Fork(["Scheduler", $"{Env.SchedulerPort}"]);
