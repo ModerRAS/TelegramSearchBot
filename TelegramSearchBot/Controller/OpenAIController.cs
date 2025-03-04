@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Controller {
@@ -17,11 +18,13 @@ namespace TelegramSearchBot.Controller {
         private readonly SendMessage Send;
         public List<Type> Dependencies => new List<Type>();
         public ITelegramBotClient botClient { get; set; }
-        public OpenAIController(ITelegramBotClient botClient, OpenAIService openaiService, SendMessage Send, ILogger<OllamaController> logger) {
+        public MessageService messageService { get; set; }
+        public OpenAIController(MessageService messageService, ITelegramBotClient botClient, OpenAIService openaiService, SendMessage Send, ILogger<OllamaController> logger) {
             this.logger = logger;
             this.botClient = botClient;
             service = openaiService;
             this.Send = Send;
+            this.messageService = messageService;
 
         }
         public async Task ExecuteAsync(Update e) {
@@ -44,7 +47,7 @@ namespace TelegramSearchBot.Controller {
                     replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
                 );
                 StringBuilder builder = new StringBuilder();
-                var num = 0;
+                var datetime = DateTime.UtcNow;
                 await foreach(var PerMessage in service.ExecAsync(Message, e.Message.Chat.Id)) {
                     if (builder.Length > 1900) {
                         var tmpMessageId = sentMessage.MessageId;
@@ -56,8 +59,8 @@ namespace TelegramSearchBot.Controller {
                         builder.Clear();
                     }
                     builder.Append(PerMessage);
-                    num++;
-                    if (num % 10 == 0) {
+                    if (DateTime.UtcNow - datetime > TimeSpan.FromSeconds(5)) {
+                        datetime = DateTime.UtcNow;
                         await Send.AddTask(async () => {
                             await botClient.EditMessageTextAsync(
                                 chatId: sentMessage.Chat.Id,
@@ -69,12 +72,22 @@ namespace TelegramSearchBot.Controller {
                     }
                 }
                 await Send.AddTask(async () => {
-                    await botClient.EditMessageTextAsync(
+                    var message = await botClient.EditMessageTextAsync(
                         chatId: sentMessage.Chat.Id,
                         messageId: sentMessage.MessageId,
                         parseMode: Telegram.Bot.Types.Enums.ParseMode.None,
                         text: builder.ToString()
                         );
+                    logger.LogInformation($"Send OpenAI result success {message.MessageId} {builder.ToString()}");
+                    await messageService.ExecuteAsync(new MessageOption() {
+                        ChatId = e.Message.Chat.Id,
+                        Chat = e.Message.Chat,
+                        DateTime = e.Message.Date,
+                        User = e.Message.From,
+                        Content = builder.ToString(),
+                        MessageId = message.MessageId,
+                        UserId = e.Message.From.Id
+                    });
                 }, e.Message.Chat.Id < 0);
             }
         }
