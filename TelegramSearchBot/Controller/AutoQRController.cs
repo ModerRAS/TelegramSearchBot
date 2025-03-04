@@ -42,9 +42,11 @@ namespace TelegramSearchBot.Controller {
                 }
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var QrStr = await autoQRSevice.ExecuteAsync(filePath);
-                logger.LogInformation(QrStr);
+                if (string.IsNullOrWhiteSpace(QrStr)) {
+                    return;
+                }
                 await Send.AddTask(async () => {
-                    logger.LogInformation($" Start send {QrStr}");
+                    logger.LogInformation($" Start send {e.Message.Chat.Id}/{e.Message.MessageId} {QrStr}");
                     var message = await botClient.SendTextMessageAsync(
                     chatId: e.Message.Chat,
                     text: QrStr,
