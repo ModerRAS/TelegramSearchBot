@@ -42,7 +42,8 @@ namespace TelegramSearchBot {
             .WriteTo.OpenTelemetry(options => {
                 options.Endpoint = Env.OLTPAuthUrl;
                 options.Headers = new Dictionary<string, string>() {
-                    { "Authorization", $"Basic {Env.OLTPAuth}" }
+                    { "Authorization", $"Basic {Env.OLTPAuth}" },
+                    { "stream-name", Env.OLTPName }
                 };
                 options.Protocol = OtlpProtocol.HttpProtobuf;
             })

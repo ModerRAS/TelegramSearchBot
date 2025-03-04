@@ -33,6 +33,7 @@ namespace TelegramSearchBot {
             OpenAIApiKey = config.OpenAIApiKey;
             OLTPAuth = config.OLTPAuth;
             OLTPAuthUrl = config.OLTPAuthUrl;
+            OLTPName = config.OLTPName;
         }
         public static readonly string BaseUrl;
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
@@ -59,6 +60,7 @@ namespace TelegramSearchBot {
         public static int SchedulerPort { get; set; }
         public static string OLTPAuth { get; set; }
         public static string OLTPAuthUrl { get; set; }
+        public static string OLTPName { get; set; }
     }
     public class Config {
         public string BaseUrl { get; set; } = "https://api.telegram.org";
@@ -81,5 +83,6 @@ namespace TelegramSearchBot {
         public string OpenAIApiKey { get; set; }
         public string OLTPAuth { get; set; }
         public string OLTPAuthUrl { get; set; }
+        public string OLTPName { get; set; }
     }
 }
