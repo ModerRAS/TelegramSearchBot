@@ -80,7 +80,7 @@ namespace TelegramSearchBot.Service {
             }
 
             var UserDataExists = from s in DataContext.UserData
-                                 where s.Id == messageOption.UserId
+                                 where s.Id == messageOption.User.Id
                                  select s;
             if (!UserDataExists.Any() && messageOption.User != null) {
                 await DataContext.UserData.AddAsync(new UserData() {
@@ -94,11 +94,11 @@ namespace TelegramSearchBot.Service {
             }
 
             var GroupDataExists = from s in DataContext.GroupData
-                                  where s.Id == messageOption.ChatId
+                                  where s.Id == messageOption.Chat.Id
                                   select s;
             if (!GroupDataExists.Any() && messageOption.Chat != null) {
                 await DataContext.GroupData.AddAsync(new GroupData() {
-                    Id = messageOption.ChatId,
+                    Id = messageOption.Chat.Id,
                     IsForum = messageOption.Chat.IsForum,
                     Title = messageOption.Chat.Title,
                     Type = Enum.GetName<ChatType>(messageOption.Chat.Type),

@@ -58,7 +58,7 @@ namespace TelegramSearchBot.Controller {
                         User = e.Message.From,
                         Content = QrStr,
                         MessageId = message.MessageId,
-                        UserId = (long)botClient.BotId
+                        UserId = e.Message.From.Id
                     });
                 }, e.Message.Chat.Id < 0);
             } catch (Exception ex) when (
