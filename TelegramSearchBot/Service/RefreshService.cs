@@ -7,12 +7,15 @@ using System.IO;
 using Newtonsoft.Json;
 using TelegramSearchBot.Model;
 using System.Collections.Generic;
+using Microsoft.Extensions.Logging;
 
 namespace TelegramSearchBot.Service {
     public class RefreshService : MessageService, IService {
         public new string ServiceName => "RefreshService";
+        private readonly ILogger<RefreshService> _logger;
 
-        public RefreshService(LuceneManager lucene, SendMessage Send, DataDbContext context) : base(lucene, Send, context) {
+        public RefreshService(ILogger<RefreshService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context) : base(logger, lucene, Send, context) {
+            _logger = logger;
         }
 
         private async Task RebuildIndex() {

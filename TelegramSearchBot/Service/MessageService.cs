@@ -9,19 +9,22 @@ using System;
 using Telegram.Bot.Types.Enums;
 using System.Collections.Generic;
 using Nito.AsyncEx;
+using Microsoft.Extensions.Logging;
 
 namespace TelegramSearchBot.Service {
     public class MessageService : IMessageService, IService {
         protected readonly LuceneManager lucene;
         protected readonly SendMessage Send;
         protected readonly DataDbContext DataContext;
+        protected readonly ILogger<MessageService> Logger;
         private static readonly AsyncLock _asyncLock = new AsyncLock();
         public string ServiceName => "MessageService";
 
-        public MessageService(LuceneManager lucene, SendMessage Send, DataDbContext context) {
+        public MessageService(ILogger<MessageService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context) {
             this.lucene = lucene;
             this.Send = Send;
             DataContext = context;
+            Logger = logger;
         }
 
         public async Task AddToLiteDB(MessageOption messageOption) {
@@ -64,7 +67,7 @@ namespace TelegramSearchBot.Service {
         }
 
         public async Task AddToSqlite(MessageOption messageOption) {
-
+            
             var UserIsInGroup = from s in DataContext.UsersWithGroup
                                 where s.UserId == messageOption.UserId && 
                                       s.GroupId == messageOption.ChatId
@@ -112,6 +115,7 @@ namespace TelegramSearchBot.Service {
         }
 
         public async Task ExecuteAsync(MessageOption messageOption) {
+            Logger.LogInformation($"UserId: {messageOption.UserId}\nUserName: {messageOption.User.Username} {messageOption.User.FirstName} {messageOption.User.LastName}\nChatId: {messageOption.ChatId}\nChatName: {messageOption.Chat.Username}\nMessage: {messageOption.MessageId} {messageOption.Content}");
             using (await _asyncLock.LockAsync()) {
                 try {
                     await AddToSqlite(messageOption);
