@@ -36,9 +36,27 @@ namespace TelegramSearchBot.Service {
             }
             return false;
         }
-
+        public async Task<(string, string)> SetModel(string ModelName, long ChatId) {
+            var GroupSetting = (from s in _dbContext.GroupSettings
+                                where s.GroupId == ChatId
+                                select s).FirstOrDefault();
+            var CurrentModelName = GroupSetting?.LLMModelName;
+            if (string.IsNullOrWhiteSpace(CurrentModelName)) {
+                await _dbContext.AddAsync(new GroupSettings() { GroupId = ChatId, LLMModelName = ModelName });
+            } else {
+                GroupSetting.LLMModelName = ModelName;
+            }
+            await _dbContext.SaveChangesAsync();
+            return (CurrentModelName, ModelName);
+        }
 
         public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId) {
+            var ModelName = (from s in _dbContext.GroupSettings
+                            where s.GroupId == ChatId
+                            select s).FirstOrDefault()?.LLMModelName;
+            if (string.IsNullOrWhiteSpace(ModelName)) {
+                yield break;
+            }
             var Messages = (from s in _dbContext.Messages
                             where s.GroupId == ChatId && s.DateTime > DateTime.UtcNow.AddHours(-1)
                             select s).ToList();
@@ -57,7 +75,7 @@ namespace TelegramSearchBot.Service {
                 Endpoint = new Uri(Env.OpenAIBaseURL),
             };
             var chat = new ChatClient(
-                model: Env.OpenAIModelName,
+                model: ModelName,
                 credential: new(Env.OpenAIApiKey),
                 clientOptions);
             await foreach (var update in chat.CompleteChatStreamingAsync([new SystemChatMessage(prompt), new UserChatMessage(InputToken)])) {

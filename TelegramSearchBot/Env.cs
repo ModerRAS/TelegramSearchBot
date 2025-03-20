@@ -12,28 +12,32 @@ namespace TelegramSearchBot {
             if (!Directory.Exists(WorkDir)) {
                 Directory.CreateDirectory(WorkDir);
             }
-            var config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(Path.Combine(WorkDir, "Config.json")));
-            BaseUrl = config.BaseUrl;
-            IsLocalAPI = config.IsLocalAPI;
-            BotToken = config.BotToken;
-            AdminId = config.AdminId;
-            EnableAutoOCR = config.EnableAutoOCR;
-            EnableAutoASR = config.EnableAutoASR;
-            //WorkDir = config.WorkDir;
-            TaskDelayTimeout = config.TaskDelayTimeout;
-            LocalApiFilePath = config.LocalApiFilePath;
-            SameServer = config.SameServer;
-            EnableOllama = config.EnableOllama;
-            OllamaHost = config.OllamaHost;
-            OllamaModelName = config.OllamaModelName;
-            EnableVideoASR = config.EnableVideoASR;
-            EnableOpenAI = config.EnableOpenAI;
-            OpenAIBaseURL = config.OpenAIBaseURL;
-            OpenAIModelName = config.OpenAIModelName;
-            OpenAIApiKey = config.OpenAIApiKey;
-            OLTPAuth = config.OLTPAuth;
-            OLTPAuthUrl = config.OLTPAuthUrl;
-            OLTPName = config.OLTPName;
+            try {
+                var config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(Path.Combine(WorkDir, "Config.json")));
+                BaseUrl = config.BaseUrl;
+                IsLocalAPI = config.IsLocalAPI;
+                BotToken = config.BotToken;
+                AdminId = config.AdminId;
+                EnableAutoOCR = config.EnableAutoOCR;
+                EnableAutoASR = config.EnableAutoASR;
+                //WorkDir = config.WorkDir;
+                TaskDelayTimeout = config.TaskDelayTimeout;
+                LocalApiFilePath = config.LocalApiFilePath;
+                SameServer = config.SameServer;
+                EnableOllama = config.EnableOllama;
+                OllamaHost = config.OllamaHost;
+                OllamaModelName = config.OllamaModelName;
+                EnableVideoASR = config.EnableVideoASR;
+                EnableOpenAI = config.EnableOpenAI;
+                OpenAIBaseURL = config.OpenAIBaseURL;
+                OpenAIModelName = config.OpenAIModelName;
+                OpenAIApiKey = config.OpenAIApiKey;
+                OLTPAuth = config.OLTPAuth;
+                OLTPAuthUrl = config.OLTPAuthUrl;
+                OLTPName = config.OLTPName;
+            } catch { 
+            }
+            
         }
         public static readonly string BaseUrl;
 #pragma warning disable CS8604 // 引用类型参数可能为 null。

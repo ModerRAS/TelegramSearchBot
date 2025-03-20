@@ -19,5 +19,6 @@ namespace TelegramSearchBot.Model {
         public DbSet<UserWithGroup> UsersWithGroup { get; set; }
         public DbSet<UserData> UserData { get; set; }
         public DbSet<GroupData> GroupData { get; set; }
+        public DbSet<GroupSettings> GroupSettings { get; set; }
     }
 }

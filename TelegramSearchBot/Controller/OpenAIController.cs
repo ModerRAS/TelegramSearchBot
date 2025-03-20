@@ -27,6 +27,57 @@ namespace TelegramSearchBot.Controller {
             this.messageService = messageService;
 
         }
+        public async Task SendMessage(Update e, string Message) {
+            // 初始化一条消息，准备编辑
+            var sentMessage = await botClient.SendMessage(
+                chatId: e.Message.Chat.Id,
+                text: "Initializing...",
+                replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
+            );
+            StringBuilder builder = new StringBuilder();
+            var datetime = DateTime.UtcNow;
+            await foreach (var PerMessage in service.ExecAsync(Message, e.Message.Chat.Id)) {
+                if (builder.Length > 1900) {
+                    var tmpMessageId = sentMessage.MessageId;
+                    sentMessage = await botClient.SendMessage(
+                        chatId: e.Message.Chat.Id,
+                        text: "Initializing...",
+                        replyParameters: new ReplyParameters() { MessageId = tmpMessageId }
+                        );
+                    builder.Clear();
+                }
+                builder.Append(PerMessage);
+                if (DateTime.UtcNow - datetime > TimeSpan.FromSeconds(5)) {
+                    datetime = DateTime.UtcNow;
+                    await Send.AddTask(async () => {
+                        await botClient.EditMessageTextAsync(
+                            chatId: sentMessage.Chat.Id,
+                            messageId: sentMessage.MessageId,
+                            parseMode: Telegram.Bot.Types.Enums.ParseMode.None,
+                            text: builder.ToString()
+                            );
+                    }, e.Message.Chat.Id < 0);
+                }
+            }
+            await Send.AddTask(async () => {
+                var message = await botClient.EditMessageTextAsync(
+                    chatId: sentMessage.Chat.Id,
+                    messageId: sentMessage.MessageId,
+                    parseMode: Telegram.Bot.Types.Enums.ParseMode.None,
+                    text: builder.ToString()
+                    );
+                logger.LogInformation($"Send OpenAI result success {message.MessageId} {builder.ToString()}");
+                await messageService.ExecuteAsync(new MessageOption() {
+                    ChatId = e.Message.Chat.Id,
+                    Chat = e.Message.Chat,
+                    DateTime = e.Message.Date,
+                    User = e.Message.From,
+                    Content = builder.ToString(),
+                    MessageId = message.MessageId,
+                    UserId = e.Message.From.Id
+                });
+            }, e.Message.Chat.Id < 0);
+        }
         public async Task ExecuteAsync(Update e) {
             if (!Env.EnableOpenAI) { 
                 return;
@@ -40,54 +91,16 @@ namespace TelegramSearchBot.Controller {
                 return;
             }
             if (Message.Contains(BotName)) {
-                // 初始化一条消息，准备编辑
-                var sentMessage = await botClient.SendMessage(
-                    chatId: e.Message.Chat.Id,
-                    text: "Initializing...",
-                    replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                );
-                StringBuilder builder = new StringBuilder();
-                var datetime = DateTime.UtcNow;
-                await foreach(var PerMessage in service.ExecAsync(Message, e.Message.Chat.Id)) {
-                    if (builder.Length > 1900) {
-                        var tmpMessageId = sentMessage.MessageId;
-                        sentMessage = await botClient.SendMessage(
-                            chatId: e.Message.Chat.Id,
-                            text: "Initializing...",
-                            replyParameters: new ReplyParameters() { MessageId = tmpMessageId }
-                            );
-                        builder.Clear();
-                    }
-                    builder.Append(PerMessage);
-                    if (DateTime.UtcNow - datetime > TimeSpan.FromSeconds(5)) {
-                        datetime = DateTime.UtcNow;
-                        await Send.AddTask(async () => {
-                            await botClient.EditMessageTextAsync(
-                                chatId: sentMessage.Chat.Id,
-                                messageId: sentMessage.MessageId,
-                                parseMode: Telegram.Bot.Types.Enums.ParseMode.None,
-                                text: builder.ToString()
-                                );
-                        }, e.Message.Chat.Id < 0);
-                    }
-                }
+                await SendMessage(e, Message);
+            }
+            if (Message.StartsWith("设置模型 ") && e.Message.From.Id.Equals(Env.AdminId)) { 
+                var (previous, current) = await service.SetModel(Message.Substring(5), e.Message.Chat.Id);
                 await Send.AddTask(async () => {
-                    var message = await botClient.EditMessageTextAsync(
-                        chatId: sentMessage.Chat.Id,
-                        messageId: sentMessage.MessageId,
-                        parseMode: Telegram.Bot.Types.Enums.ParseMode.None,
-                        text: builder.ToString()
+                    var sentMessage = await botClient.SendMessage(
+                        chatId: e.Message.Chat.Id,
+                        text: $"模型设置成功，原模型：{previous}，现模型：{current}",
+                        replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
                         );
-                    logger.LogInformation($"Send OpenAI result success {message.MessageId} {builder.ToString()}");
-                    await messageService.ExecuteAsync(new MessageOption() {
-                        ChatId = e.Message.Chat.Id,
-                        Chat = e.Message.Chat,
-                        DateTime = e.Message.Date,
-                        User = e.Message.From,
-                        Content = builder.ToString(),
-                        MessageId = message.MessageId,
-                        UserId = e.Message.From.Id
-                    });
                 }, e.Message.Chat.Id < 0);
             }
         }
