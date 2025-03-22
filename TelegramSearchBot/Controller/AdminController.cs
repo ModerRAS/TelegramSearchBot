@@ -17,13 +17,14 @@ namespace TelegramSearchBot.Controller {
         public AdminController(ITelegramBotClient botClient, AdminService adminService, SendMessage Send) {
             AdminService = adminService;
             this.Send = Send;
+            this.botClient = botClient;
         }
 
         public async Task ExecuteAsync(Update e) {
             if (e?.Message?.Chat?.Id > 0) {
                 return;
             }
-            if (e?.Message?.Chat?.Id != Env.AdminId) {
+            if (e?.Message?.From?.Id != Env.AdminId) {
                 return;
             }
             string Command;
