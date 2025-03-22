@@ -82,7 +82,7 @@ namespace TelegramSearchBot.Service {
         public async Task SendMessage(string Text, SearchOption searchOption, List<InlineKeyboardButton> keyboardList) {
             await Send.AddTask(async () => {
                 await botClient.SendMessage(
-            chatId: searchOption.Chat,
+            chatId: searchOption.ChatId,
             disableNotification: true,
             parseMode: ParseMode.Markdown,
             replyParameters: new Telegram.Bot.Types.ReplyParameters() { MessageId = searchOption.ReplyToMessageId },
