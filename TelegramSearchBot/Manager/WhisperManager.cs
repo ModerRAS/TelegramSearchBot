@@ -12,11 +12,11 @@ namespace TelegramSearchBot.Manager {
     public class WhisperManager {
 
 
-        const string modelName = "ggml-medium.bin";
+        const string modelName = "ggml-large-v3-turbo.bin";
         public string modelsDir { get; set; }
         public string modelPath { get; set; }
 
-        const GgmlType ggmlType = GgmlType.Medium;
+        const GgmlType ggmlType = GgmlType.LargeV3Turbo;
         private ILogger<WhisperManager> logger { get; set; }
 
         private static SemaphoreSlim semaphore = new SemaphoreSlim(1);
