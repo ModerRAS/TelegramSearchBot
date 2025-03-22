@@ -17,12 +17,21 @@ namespace TelegramSearchBot.Controller {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
         private readonly ILogger<AutoOCRController> logger;
-        public AutoOCRController(ITelegramBotClient botClient, PaddleOCRService paddleOCRService, SendMessage Send, MessageService messageService, ILogger<AutoOCRController> logger) {
+        private readonly SendMessageService SendMessageService;
+        public AutoOCRController(
+            ITelegramBotClient botClient, 
+            PaddleOCRService paddleOCRService, 
+            SendMessage Send, 
+            MessageService messageService, 
+            ILogger<AutoOCRController> logger,
+            SendMessageService sendMessageService
+            ) {
             this.paddleOCRService = paddleOCRService;
             this.messageService = messageService;
             this.botClient = botClient;
             this.Send = Send;
             this.logger = logger;
+            this.SendMessageService = sendMessageService;
         }
 
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
@@ -48,13 +57,7 @@ namespace TelegramSearchBot.Controller {
                 });
 
                 if (!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Length == 2 && e.Message.Caption.Equals("打印")) {
-                    await Send.AddTask(async () => {
-                        var message = await botClient.SendMessage(
-                        chatId: e.Message.Chat,
-                        text: OcrStr,
-                    replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                        );
-                    }, e.Message.Chat.Id < 0);
+                    await SendMessageService.SendMessage(OcrStr, e.Message.Chat.Id, e.Message.MessageId);
                 }
             } catch (Exception ex) when (
                   ex is CannotGetPhotoException ||

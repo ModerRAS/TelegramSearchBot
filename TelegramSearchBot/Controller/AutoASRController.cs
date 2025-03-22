@@ -15,18 +15,20 @@ namespace TelegramSearchBot.Controller {
     class AutoASRController : IOnUpdate {
         private readonly AutoASRService autoASRService;
         private readonly MessageService messageService;
-        private readonly ITelegramBotClient botClient;
-        private readonly SendMessage Send;
         private readonly ILogger<AutoASRController> logger;
 
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadAudioController), typeof(DownloadVideoController) };
-
-        public AutoASRController(ITelegramBotClient botClient, AutoASRService autoASRService, SendMessage Send, MessageService messageService, ILogger<AutoASRController> logger) {
+        public SendMessageService SendMessageService { get; set; }
+        public AutoASRController(
+            AutoASRService autoASRService, 
+            MessageService messageService, 
+            ILogger<AutoASRController> logger,
+            SendMessageService SendMessageService
+            ) {
             this.autoASRService = autoASRService;
             this.messageService = messageService;
-            this.botClient = botClient;
-            this.Send = Send;
             this.logger = logger;
+            this.SendMessageService = SendMessageService;
         }
         public async Task<byte[]> GetFileAsync(Update e) {
             if (e?.Message?.Audio is not null || e?.Message?.Voice is not null ||
@@ -78,21 +80,9 @@ namespace TelegramSearchBot.Controller {
                     Content = $"{e.Message?.Caption}\n{AsrStr}"
                 });
                 if (AsrStr.Length > 4095) {
-                    await Send.AddTask(async () => {
-                        var message = await botClient.SendDocument(
-                        chatId: e.Message.Chat,
-                        document: InputFile.FromStream(new MemoryStream(Encoding.UTF8.GetBytes(AsrStr)), $"{e.Message.MessageId}.srt"),
-                        replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                        );
-                    }, e.Message.Chat.Id < 0);
+                    await SendMessageService.SendDocument(AsrStr, $"{e.Message.MessageId}.srt", e.Message.Chat.Id, e.Message.MessageId);
                 } else {
-                    await Send.AddTask(async () => {
-                        var message = await botClient.SendMessage(
-                        chatId: e.Message.Chat,
-                        text: AsrStr,
-                        replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                        );
-                    }, e.Message.Chat.Id < 0);
+                    await SendMessageService.SendMessage(AsrStr, e.Message.Chat, e.Message.MessageId);
                 }
                 
             } catch (Exception ex) when (

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OllamaSharp.Models.Chat;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,19 +18,22 @@ namespace TelegramSearchBot.Controller {
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
         private readonly ILogger<AutoQRController> logger;
+        private readonly SendMessageService SendMessageService;
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
         public AutoQRController(
             ILogger<AutoQRController> logger, 
             ITelegramBotClient botClient, 
             AutoQRService autoQRSevice, 
             SendMessage Send, 
-            MessageService messageService
+            MessageService messageService,
+            SendMessageService sendMessageService
             ) {
             this.autoQRSevice = autoQRSevice;
             this.messageService = messageService;
             this.Send = Send;
             this.botClient = botClient;
             this.logger = logger;
+            this.SendMessageService = sendMessageService;
         }
         public async Task ExecuteAsync(Update e) {            
             try {
@@ -42,24 +46,17 @@ namespace TelegramSearchBot.Controller {
                 if (string.IsNullOrWhiteSpace(QrStr)) {
                     return;
                 }
-                await Send.AddTask(async () => {
-                    logger.LogInformation($" Start send {e.Message.Chat.Id}/{e.Message.MessageId} {QrStr}");
-                    var message = await botClient.SendMessage(
-                        chatId: e.Message.Chat,
-                        text: QrStr,
-                        replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                    );
-                    logger.LogInformation($"Send success {message.MessageId}");
-                    await messageService.ExecuteAsync(new MessageOption() {
-                        ChatId = e.Message.Chat.Id,
-                        Chat = e.Message.Chat,
-                        DateTime = e.Message.Date,
-                        User = e.Message.From,
-                        Content = QrStr,
-                        MessageId = message.MessageId,
-                        UserId = e.Message.From.Id
-                    });
-                }, e.Message.Chat.Id < 0);
+                await SendMessageService.SendMessage(QrStr, e.Message.Chat.Id, e.Message.MessageId);
+                logger.LogInformation($" Start send {e.Message.Chat.Id}/{e.Message.MessageId} {QrStr}");
+                await messageService.ExecuteAsync(new MessageOption() {
+                    ChatId = e.Message.Chat.Id,
+                    Chat = e.Message.Chat,
+                    DateTime = e.Message.Date,
+                    User = e.Message.From,
+                    Content = QrStr,
+                    MessageId = e.Message.MessageId,
+                    UserId = e.Message.From.Id
+                });
             } catch (Exception ex) when (
                   ex is CannotGetPhotoException ||
                   ex is DirectoryNotFoundException

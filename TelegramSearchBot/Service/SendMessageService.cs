@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -22,6 +23,21 @@ namespace TelegramSearchBot.Service {
             this.botClient = botClient;
             this.logger = logger;
         }
+        public async Task SendDocument(InputFile inputFile, long ChatId, int replyTo) {
+            await Send.AddTask(async () => {
+                var message = await botClient.SendDocument(
+                    chatId: ChatId,
+                    document: inputFile,
+                    replyParameters: new ReplyParameters() { MessageId = replyTo }
+                    );
+            }, ChatId < 0);
+        }
+        public Task SendDocument(Stream inputFile, string FileName, long ChatId, int replyTo) => SendDocument(InputFile.FromStream(inputFile, FileName), ChatId, replyTo);
+        public Task SendDocument(byte[] inputFile, string FileName, long ChatId, int replyTo) => SendDocument(InputFile.FromStream(new MemoryStream(inputFile), FileName), ChatId, replyTo);
+        public Task SendDocument(string inputFile, string FileName, long ChatId, int replyTo) => SendDocument(InputFile.FromStream(new MemoryStream(Encoding.UTF8.GetBytes(inputFile)), FileName), ChatId, replyTo);
+
+
+        public Task SendMessage(string Text, Chat ChatId, int replyTo) => SendMessage(Text, ChatId.Id, replyTo);
         public async Task SendMessage(string Text, long ChatId, int replyTo) {
             await Send.AddTask(async () => {
                 await botClient.SendMessage(
