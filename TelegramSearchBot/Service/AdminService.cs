@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,18 +24,13 @@ namespace TelegramSearchBot.Service {
         }
 
         public async Task<bool> IsNormalAdmin(long Id) {
-            var AdminersGroup = from s in DataContext.GroupSettings
-                                where s.IsManagerGroup
-                                select s;
-            foreach (var Adminer in AdminersGroup) {
-                var IsAdmin = from s in DataContext.UsersWithGroup
-                              where s.UserId == Id && s.GroupId == Adminer.GroupId
-                              select s;
-                if (IsAdmin.Any()) { 
-                    return true;
-                }
-            }
-            return false;
+            return await (from u in DataContext.UsersWithGroup
+                          where u.UserId == Id &&
+                                (from g in DataContext.GroupSettings
+                                 where g.IsManagerGroup
+                                 select g.GroupId)
+                                .Contains(u.GroupId)
+                          select u).AnyAsync();
         }
 
         public async Task<(bool, string)> ExecuteAsync(long UserId, long ChatId, string Command) {
