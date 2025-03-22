@@ -28,7 +28,7 @@ namespace TelegramSearchBot.Controller {
             if (!Env.EnableOllama) {
                 return;
             }
-            var BotName = (await botClient.GetMeAsync()).Username;
+            var BotName = (await botClient.GetMe()).Username;
             if (string.IsNullOrEmpty(service.BotName)) {
                 service.BotName = BotName;
             } 
@@ -59,7 +59,7 @@ namespace TelegramSearchBot.Controller {
                     num++;
                     if (num % 10 == 0) {
                         await Send.AddTask(async () => {
-                            await botClient.EditMessageTextAsync(
+                            await botClient.EditMessageText(
                                 chatId: sentMessage.Chat.Id,
                                 messageId: sentMessage.MessageId,
                                 parseMode: Utils.IsValidMarkdown(builder.ToString()) ? Telegram.Bot.Types.Enums.ParseMode.Markdown : Telegram.Bot.Types.Enums.ParseMode.None,
@@ -69,7 +69,7 @@ namespace TelegramSearchBot.Controller {
                     }
                 }
                 await Send.AddTask(async () => {
-                    await botClient.EditMessageTextAsync(
+                    await botClient.EditMessageText(
                         chatId: sentMessage.Chat.Id,
                         messageId: sentMessage.MessageId,
                         parseMode: Utils.IsValidMarkdown(builder.ToString()) ? Telegram.Bot.Types.Enums.ParseMode.Markdown : Telegram.Bot.Types.Enums.ParseMode.None,

@@ -79,7 +79,7 @@ namespace TelegramSearchBot.Controller {
                 });
                 if (AsrStr.Length > 4095) {
                     await Send.AddTask(async () => {
-                        var message = await botClient.SendDocumentAsync(
+                        var message = await botClient.SendDocument(
                         chatId: e.Message.Chat,
                         document: InputFile.FromStream(new MemoryStream(Encoding.UTF8.GetBytes(AsrStr)), $"{e.Message.MessageId}.srt"),
                         replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
@@ -87,7 +87,7 @@ namespace TelegramSearchBot.Controller {
                     }, e.Message.Chat.Id < 0);
                 } else {
                     await Send.AddTask(async () => {
-                        var message = await botClient.SendTextMessageAsync(
+                        var message = await botClient.SendMessage(
                         chatId: e.Message.Chat,
                         text: AsrStr,
                         replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }

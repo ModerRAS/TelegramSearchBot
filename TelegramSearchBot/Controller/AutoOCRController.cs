@@ -49,7 +49,7 @@ namespace TelegramSearchBot.Controller {
 
                 if (!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Length == 2 && e.Message.Caption.Equals("打印")) {
                     await Send.AddTask(async () => {
-                        var message = await botClient.SendTextMessageAsync(
+                        var message = await botClient.SendMessage(
                         chatId: e.Message.Chat,
                         text: OcrStr,
                     replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }

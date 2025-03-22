@@ -81,7 +81,7 @@ namespace TelegramSearchBot.Service {
 
         public async Task SendMessage(string Text, SearchOption searchOption, List<InlineKeyboardButton> keyboardList) {
             await Send.AddTask(async () => {
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
             chatId: searchOption.Chat,
             disableNotification: true,
             parseMode: ParseMode.Markdown,

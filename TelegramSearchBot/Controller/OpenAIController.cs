@@ -52,7 +52,7 @@ namespace TelegramSearchBot.Controller {
                 if (DateTime.UtcNow - datetime > TimeSpan.FromSeconds(5)) {
                     datetime = DateTime.UtcNow;
                     await Send.AddTask(async () => {
-                        await botClient.EditMessageTextAsync(
+                        await botClient.EditMessageText(
                             chatId: sentMessage.Chat.Id,
                             messageId: sentMessage.MessageId,
                             parseMode: Telegram.Bot.Types.Enums.ParseMode.None,
@@ -62,7 +62,7 @@ namespace TelegramSearchBot.Controller {
                 }
             }
             await Send.AddTask(async () => {
-                var message = await botClient.EditMessageTextAsync(
+                var message = await botClient.EditMessageText(
                     chatId: sentMessage.Chat.Id,
                     messageId: sentMessage.MessageId,
                     parseMode: Telegram.Bot.Types.Enums.ParseMode.None,
@@ -84,7 +84,7 @@ namespace TelegramSearchBot.Controller {
             if (!Env.EnableOpenAI) { 
                 return;
             }
-            var BotName = (await botClient.GetMeAsync()).Username;
+            var BotName = (await botClient.GetMe()).Username;
             if (string.IsNullOrEmpty(service.BotName)) {
                 service.BotName = BotName;
             } 

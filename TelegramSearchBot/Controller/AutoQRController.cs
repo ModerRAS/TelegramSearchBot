@@ -17,22 +17,19 @@ namespace TelegramSearchBot.Controller {
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
         private readonly ILogger<AutoQRController> logger;
-        private readonly WeChatQRService weChatQRService;
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
         public AutoQRController(
             ILogger<AutoQRController> logger, 
             ITelegramBotClient botClient, 
             AutoQRService autoQRSevice, 
             SendMessage Send, 
-            MessageService messageService,
-            WeChatQRService weChatQRService
+            MessageService messageService
             ) {
             this.autoQRSevice = autoQRSevice;
             this.messageService = messageService;
             this.Send = Send;
             this.botClient = botClient;
             this.logger = logger;
-            this.weChatQRService = weChatQRService;
         }
         public async Task ExecuteAsync(Update e) {            
             try {
@@ -47,10 +44,10 @@ namespace TelegramSearchBot.Controller {
                 }
                 await Send.AddTask(async () => {
                     logger.LogInformation($" Start send {e.Message.Chat.Id}/{e.Message.MessageId} {QrStr}");
-                    var message = await botClient.SendTextMessageAsync(
-                    chatId: e.Message.Chat,
-                    text: QrStr,
-                    replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
+                    var message = await botClient.SendMessage(
+                        chatId: e.Message.Chat,
+                        text: QrStr,
+                        replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
                     );
                     logger.LogInformation($"Send success {message.MessageId}");
                     await messageService.ExecuteAsync(new MessageOption() {
