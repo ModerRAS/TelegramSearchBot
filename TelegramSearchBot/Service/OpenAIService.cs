@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using OllamaSharp;
@@ -10,6 +11,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Telegram.Bot.Types;
 using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Service {
@@ -41,7 +43,7 @@ namespace TelegramSearchBot.Service {
                                 where s.GroupId == ChatId
                                 select s).FirstOrDefault();
             var CurrentModelName = GroupSetting?.LLMModelName;
-            if (string.IsNullOrWhiteSpace(CurrentModelName)) {
+            if (GroupSetting is null) {
                 await _dbContext.AddAsync(new GroupSettings() { GroupId = ChatId, LLMModelName = ModelName });
             } else {
                 GroupSetting.LLMModelName = ModelName;
@@ -49,11 +51,15 @@ namespace TelegramSearchBot.Service {
             await _dbContext.SaveChangesAsync();
             return (CurrentModelName, ModelName);
         }
-
+        public async Task<string> GetModel(long ChatId) {
+            var GroupSetting = await (from s in _dbContext.GroupSettings
+                                where s.GroupId == ChatId
+                                select s).FirstOrDefaultAsync();
+            var ModelName = GroupSetting?.LLMModelName;
+            return ModelName;
+        }
         public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId) {
-            var ModelName = (from s in _dbContext.GroupSettings
-                            where s.GroupId == ChatId
-                            select s).FirstOrDefault()?.LLMModelName;
+            var ModelName = await GetModel(ChatId);
             if (string.IsNullOrWhiteSpace(ModelName)) {
                 yield break;
             }
