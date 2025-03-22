@@ -25,7 +25,7 @@ namespace TelegramSearchBot.Controller {
         }
         public async Task Log(string Text) {
             await AddTask(async () => {
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: Env.AdminId,
                     disableNotification: true,
                     parseMode: ParseMode.MarkdownV2,

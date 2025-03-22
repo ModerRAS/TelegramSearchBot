@@ -19,12 +19,14 @@ namespace TelegramSearchBot.Controller {
         public List<Type> Dependencies => new List<Type>();
         public ITelegramBotClient botClient { get; set; }
         public MessageService messageService { get; set; }
-        public OpenAIController(MessageService messageService, ITelegramBotClient botClient, OpenAIService openaiService, SendMessage Send, ILogger<OllamaController> logger) {
+        public AdminService adminService { get; set; }
+        public OpenAIController(MessageService messageService, ITelegramBotClient botClient, OpenAIService openaiService, SendMessage Send, ILogger<OllamaController> logger, AdminService adminService) {
             this.logger = logger;
             this.botClient = botClient;
             service = openaiService;
             this.Send = Send;
             this.messageService = messageService;
+            this.adminService = adminService;
 
         }
         public async Task SendMessage(Update e, string Message) {
@@ -93,7 +95,7 @@ namespace TelegramSearchBot.Controller {
             if (Message.Contains(BotName)) {
                 await SendMessage(e, Message);
             }
-            if (Message.StartsWith("设置模型 ") && e.Message.From.Id.Equals(Env.AdminId)) { 
+            if (Message.StartsWith("设置模型 ") && await adminService.IsNormalAdmin(e.Message.From.Id)) { 
                 var (previous, current) = await service.SetModel(Message.Substring(5), e.Message.Chat.Id);
                 await Send.AddTask(async () => {
                     var sentMessage = await botClient.SendMessage(
