@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
@@ -6,9 +7,12 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Model {
+
+    [Index(nameof(GroupSettings.GroupId), IsUnique = true)]
     public class GroupSettings {
         [Key]
         public long Id { get; set; }
+        [Required]
         public long GroupId { get; set; }
         public string LLMModelName { get; set; }
         /// <summary>
