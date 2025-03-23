@@ -14,9 +14,6 @@ namespace TelegramSearchBot.Controller {
             this.messageService = messageService;
         }
         public async Task ExecuteAsync(Update e) {
-            if (e?.Message?.Chat.Id > 0) {
-                return;
-            }
             string ToAdd;
             if (!string.IsNullOrEmpty(e?.Message?.Text)) {
                 ToAdd = e.Message.Text;
