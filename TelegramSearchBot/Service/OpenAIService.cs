@@ -56,7 +56,7 @@ namespace TelegramSearchBot.Service {
         public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId) {
             var ModelName = await GetModel(ChatId);
             if (string.IsNullOrWhiteSpace(ModelName)) {
-                yield break;
+                ModelName = Env.OpenAIModelName;
             }
             var Messages = (from s in _dbContext.Messages
                             where s.GroupId == ChatId && s.DateTime > DateTime.UtcNow.AddHours(-1)
