@@ -32,6 +32,23 @@ namespace TelegramSearchBot.Intrerface {
                 return false;
             }
         }
+        public async static Task<byte[]> ConvertToWav(string path) {
+            using var outputStream = new MemoryStream();
+            await FFMpegArguments
+                .FromFileInput(path)
+                .OutputToPipe(new StreamPipeSink(outputStream), options => options
+                    .DisableChannel(FFMpegCore.Enums.Channel.Video)
+                    .WithAudioCodec("pcm_s16le")
+                    .WithAudioSamplingRate(16000)
+                    .WithCustomArgument("-ac 2 -f wav")
+                    .WithFastStart())
+                .ProcessAsynchronously();
+
+            outputStream.Position = 0;
+
+            // Write the image to the memorystream
+            return outputStream.ToArray();
+        }
 
         public async static Task<byte[]> ConvertToWav(byte[] source) {
             using var inputStream = new MemoryStream();

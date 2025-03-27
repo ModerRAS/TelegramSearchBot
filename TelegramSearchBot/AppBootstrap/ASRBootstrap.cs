@@ -30,7 +30,7 @@ namespace TelegramSearchBot.AppBootstrap {
 
                 var task = db.ListLeftPop("ASRTasks").ToString();
                 var audioPath = db.StringGetDelete($"ASRPost-{task}").ToString();
-                var wave = await IProcessAudio.ConvertToWav(await File.ReadAllBytesAsync(audioPath));
+                var wave = await IProcessAudio.ConvertToWav(audioPath);
                 using MemoryStream stream = new MemoryStream(wave);
                 var response = await asr.DetectAsync(stream);
                 db.StringSet($"ASRResult-{task}", response);
