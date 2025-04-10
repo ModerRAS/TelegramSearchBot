@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using OpenAI;
 using OpenAI.Chat;
@@ -9,8 +10,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using TelegramSearchBot.Model;
+using static OllamaSharp.Models.Chat.Message;
 
 namespace TelegramSearchBot.Service {
     public class OpenAIService {
@@ -19,10 +22,11 @@ namespace TelegramSearchBot.Service {
         private readonly ILogger _logger;
         public string BotName { get; set; }
         private DataDbContext _dbContext;
-
-        public OpenAIService(DataDbContext context, ILogger<OpenAIService> logger) {
+        private SearchService _searchService;
+        public OpenAIService(DataDbContext context, ILogger<OpenAIService> logger, SearchService searchService) {
             _logger = logger;
             _dbContext = context;
+            _searchService = searchService;
             // set up the client
             
 
@@ -136,7 +140,46 @@ namespace TelegramSearchBot.Service {
                 model: ModelName,
                 credential: new(Env.OpenAIApiKey),
                 clientOptions);
-            await foreach (var update in chat.CompleteChatStreamingAsync(ChatHistory)) {
+            // 创建聊天补全请求
+            var chatCompletionsOptions = new ChatCompletionOptions {
+                ToolChoice = ChatToolChoice.CreateRequiredChoice()
+            };
+            chatCompletionsOptions.Tools.Add(ChatTool.CreateFunctionTool("SearchChatHistory", "搜索历史聊天记录", BinaryData.FromString("""
+    {
+        "type": "object",
+        "properties": {
+            "search_text": {
+                "type": "string",
+                "description": "some text need to search"
+            }
+        },
+        "required": ["search_text"],
+        "additionalProperties": false
+    }
+    """)));
+
+            ChatCompletion completion = await chat.CompleteChatAsync(ChatHistory, chatCompletionsOptions);
+            foreach (var call in completion.ToolCalls) { 
+                if (call.FunctionName.Equals("SearchChatHistory")) {
+                    using JsonDocument argumentsJson = JsonDocument.Parse(call.FunctionArguments);
+                    bool search_text_boo = argumentsJson.RootElement.TryGetProperty("search_text", out JsonElement search_text);
+                    var firstSearch = new SearchOption() {
+                        Search = search_text.GetString(),
+                        ChatId = ChatId,
+                        IsGroup = ChatId < 0,
+                        Skip = 0,
+                        Take = 200,
+                        Count = -1,
+                        ToDelete = new List<long>(),
+                        ToDeleteNow = false,
+                        ReplyToMessageId = 0
+                    };
+                    var option = await _searchService.Search(firstSearch);
+                    ChatHistory.Add(ChatMessage.CreateToolMessage(call.Id, JsonConvert.SerializeObject(option.Messages)));
+                }
+            }
+            await foreach (var update in chat.CompleteChatStreamingAsync(ChatHistory, chatCompletionsOptions)) {
+                
                 foreach (ChatMessageContentPart updatePart in update.ContentUpdate) {
                     yield return updatePart.Text;
                 }
