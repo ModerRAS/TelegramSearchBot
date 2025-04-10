@@ -60,7 +60,7 @@ namespace TelegramSearchBot.Controller {
                         DateTime = PerMessage.DateTime,
                         MessageId = PerMessage.MessageId,
                         User = e.Message.From,
-                        ReplyTo = e.Message.ReplyToMessage?.Id ?? long.MinValue,
+                        ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
                         UserId = e.Message.From.Id
                     });
                 }

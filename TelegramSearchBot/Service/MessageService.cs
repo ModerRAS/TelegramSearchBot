@@ -104,7 +104,7 @@ namespace TelegramSearchBot.Service {
                     Type = Enum.GetName<ChatType>(messageOption.Chat.Type),
                 });
             }
-            if (messageOption.ReplyTo > long.MinValue) {
+            if (messageOption.ReplyTo != 0) {
                 await DataContext.Messages.AddAsync(new Message() {
                     GroupId = messageOption.ChatId,
                     MessageId = messageOption.MessageId,

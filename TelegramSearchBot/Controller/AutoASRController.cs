@@ -76,7 +76,7 @@ namespace TelegramSearchBot.Controller {
                     Chat = e.Message.Chat,
                     DateTime = e.Message.Date,
                     User = e.Message.From,
-                    ReplyTo = e.Message.ReplyToMessage?.Id ?? long.MinValue,
+                    ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
                     Content = $"{e.Message?.Caption}\n{AsrStr}"
                 });
                 if (AsrStr.Length > 4095) {

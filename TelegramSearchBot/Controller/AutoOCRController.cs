@@ -53,7 +53,7 @@ namespace TelegramSearchBot.Controller {
                     UserId = e.Message.From.Id,
                     DateTime = e.Message.Date,
                     User = e.Message.From,
-                    ReplyTo = e.Message.ReplyToMessage?.Id ?? long.MinValue,
+                    ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
                     Content = $"{e.Message?.Caption}\n{OcrStr}"
                 });
 
