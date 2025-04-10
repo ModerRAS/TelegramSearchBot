@@ -65,14 +65,18 @@ namespace TelegramSearchBot.Service {
                 replyParameters: new ReplyParameters() { MessageId = replyTo }
             );
             StringBuilder builder = new StringBuilder();
+            var tmpMessageId = sentMessage.MessageId;
             var datetime = DateTime.UtcNow;
             await foreach (var PerMessage in messages) {
                 if (builder.Length > 1900) {
-                    var tmpMessageId = sentMessage.MessageId;
+                    tmpMessageId = sentMessage.MessageId;
                     yield return new Model.Message() {
                         GroupId = ChatId,
                         MessageId = sentMessage.MessageId,
                         DateTime = sentMessage.Date,
+                        ReplyToUserId = (await botClient.GetMe()).Id,
+                        ReplyToMessageId = tmpMessageId,
+                        FromUserId = (await botClient.GetMe()).Id,
                         Content = builder.ToString(),
                     };
                     sentMessage = await botClient.SendMessage(
@@ -108,6 +112,9 @@ namespace TelegramSearchBot.Service {
                 GroupId = ChatId,
                 MessageId = sentMessage.MessageId,
                 DateTime = sentMessage.Date,
+                ReplyToUserId = (await botClient.GetMe()).Id,
+                FromUserId = (await botClient.GetMe()).Id,
+                ReplyToMessageId = tmpMessageId,
                 Content = builder.ToString(),
             };
         }

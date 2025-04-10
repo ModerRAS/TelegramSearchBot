@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using OpenAI;
@@ -55,6 +56,29 @@ namespace TelegramSearchBot.Service {
             var ModelName = GroupSetting?.LLMModelName;
             return ModelName;
         }
+        public async Task<bool> NeedReply(string InputToken, long ChatId) {
+            var prompt = $"你是一个判断助手，只负责判断一段消息是否为提问。\r\n判断标准：\r\n1. 如果消息是问题（无论是直接问句还是隐含的提问意图），返回“是”。\r\n2. 如果消息不是问题（陈述、感叹、命令、闲聊等），返回“否”。\r\n重要：只回答“是”或“否”，不要输出其他内容。";
+
+            var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt), new UserChatMessage($"消息：{InputToken}") };
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(Env.OpenAIBaseURL),
+            };
+            var chat = new ChatClient(
+                model: Env.OpenAIModelName,
+                credential: new(Env.OpenAIApiKey),
+                clientOptions);
+            var str = new StringBuilder();
+            await foreach (var update in chat.CompleteChatStreamingAsync(ChatHistory)) {
+                foreach (ChatMessageContentPart updatePart in update.ContentUpdate) {
+                    str.Append(updatePart.Text);
+                }
+            }
+            if (str.ToString().Contains('是')) {
+                return true;
+            } else {
+                return false;
+            }
+        }
         public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId) {
             var ModelName = await GetModel(ChatId);
             if (string.IsNullOrWhiteSpace(ModelName)) {
@@ -84,10 +108,13 @@ namespace TelegramSearchBot.Service {
                                        select $"{s.FirstName} {s.LastName}";
                     str.Append(await FromUserName.FirstOrDefaultAsync());
                 }
-                if (message.ReplyToUserId != 0) {
+                if (message.ReplyToMessageId != 0) {
                     str.Append('（');
+                    var ReplyToUserId = await (from s in _dbContext.Messages
+                                        where s.Id == message.ReplyToMessageId
+                                        select s.FromUserId).FirstOrDefaultAsync();
                     var FromUserName = from s in _dbContext.UserData
-                                       where s.Id == message.ReplyToUserId
+                                       where s.Id == ReplyToUserId
                                        select $"{s.FirstName} {s.LastName}";
                     str.Append(await FromUserName.FirstOrDefaultAsync());
                     str.Append('）');

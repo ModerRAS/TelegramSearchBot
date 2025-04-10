@@ -110,7 +110,7 @@ namespace TelegramSearchBot.Service {
                     MessageId = messageOption.MessageId,
                     FromUserId = messageOption.UserId,
                     Content = messageOption.Content,
-                    ReplyToUserId = messageOption.ReplyTo,
+                    ReplyToMessageId = messageOption.ReplyTo,
                     DateTime = messageOption.DateTime,
                 });
             } else {

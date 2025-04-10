@@ -14,6 +14,7 @@ namespace TelegramSearchBot.Model {
         public long MessageId { get; set; }
         public long FromUserId { get; set; }
         public long ReplyToUserId { get; set; }
+        public long ReplyToMessageId { get; set; }
         public string Content { get; set; }
     }
 }

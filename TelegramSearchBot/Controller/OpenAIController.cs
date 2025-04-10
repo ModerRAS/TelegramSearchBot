@@ -40,15 +40,21 @@ namespace TelegramSearchBot.Controller {
             if (!Env.EnableOpenAI) { 
                 return;
             }
-            var BotName = (await botClient.GetMe()).Username;
             if (string.IsNullOrEmpty(service.BotName)) {
+                var BotName = (await botClient.GetMe()).Username;
                 service.BotName = BotName;
             } 
             var Message = string.IsNullOrEmpty(e?.Message?.Text) ? e?.Message?.Caption : e.Message.Text;
             if (string.IsNullOrEmpty(Message)) {
                 return;
             }
-            if (Message.Contains(BotName)) {
+            if (Message.StartsWith("设置模型 ") && await adminService.IsNormalAdmin(e.Message.From.Id)) { 
+                var (previous, current) = await service.SetModel(Message.Substring(5), e.Message.Chat.Id);
+                logger.LogInformation($"群{e.Message.Chat.Id}模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{e.Message.MessageId}");
+                await SendMessageService.SendMessage($"模型设置成功，原模型：{previous}，现模型：{current}", e.Message.Chat.Id, e.Message.MessageId);
+                return;
+            }
+            if (Message.Contains(service.BotName) || await service.NeedReply(Message, e.Message.Chat.Id)) {
                 var ModelName = await service.GetModel(e.Message.Chat.Id);
                 var InitialContent = $"{ModelName}初始化中。。。";
                 var messages = SendMessageService.SendMessage(service.ExecAsync(Message, e.Message.Chat.Id), e.Message.Chat.Id, e.Message.MessageId, InitialContent);
@@ -59,21 +65,12 @@ namespace TelegramSearchBot.Controller {
                         Content = PerMessage.Content,
                         DateTime = PerMessage.DateTime,
                         MessageId = PerMessage.MessageId,
-                        User = e.Message.From,
+                        User = await botClient.GetMe(),
                         ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
-                        UserId = e.Message.From.Id
+                        UserId = (await botClient.GetMe()).Id,
                     });
                 }
-            }
-            if (Message.StartsWith("设置模型 ") && await adminService.IsNormalAdmin(e.Message.From.Id)) { 
-                var (previous, current) = await service.SetModel(Message.Substring(5), e.Message.Chat.Id);
-                await Send.AddTask(async () => {
-                    var sentMessage = await botClient.SendMessage(
-                        chatId: e.Message.Chat.Id,
-                        text: $"模型设置成功，原模型：{previous}，现模型：{current}",
-                        replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                        );
-                }, e.Message.Chat.Id < 0);
+                return;
             }
         }
     }
