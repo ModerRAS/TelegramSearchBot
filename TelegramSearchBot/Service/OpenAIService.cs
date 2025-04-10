@@ -121,7 +121,12 @@ namespace TelegramSearchBot.Service {
                 }
                 str.Append('：');
                 str.Append(message.Content);
-                ChatHistory.Add(new UserChatMessage(str.ToString()));
+
+                if (message.FromUserId == Env.BotId) {
+                    ChatHistory.Add(new AssistantChatMessage(str.ToString()));
+                } else {
+                    ChatHistory.Add(new UserChatMessage(str.ToString()));
+                }
             }
             ChatHistory.Add(new UserChatMessage(InputToken));
             var clientOptions = new OpenAIClientOptions {

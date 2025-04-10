@@ -41,7 +41,9 @@ namespace TelegramSearchBot.Controller {
                 return;
             }
             if (string.IsNullOrEmpty(service.BotName)) {
-                var BotName = (await botClient.GetMe()).Username;
+                var me = await botClient.GetMe();
+                Env.BotId = me.Id;
+                var BotName = me.Username;
                 service.BotName = BotName;
             } 
             var Message = string.IsNullOrEmpty(e?.Message?.Text) ? e?.Message?.Caption : e.Message.Text;
