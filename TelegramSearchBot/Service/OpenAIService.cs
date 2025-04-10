@@ -6,6 +6,8 @@ using OpenAI.Chat;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Model;
 
@@ -70,8 +72,31 @@ namespace TelegramSearchBot.Service {
             
             _logger.LogInformation($"OpenAI获取数据库得到{ChatId}中的{Messages.Count}条结果。");
             var MessagesJson = JsonConvert.SerializeObject(Messages, Formatting.Indented);
-            var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，在向你提问之前，我将给你提供以下聊天记录，以供参考,格式为Json格式的列表，其中每一条的聊天记录在Content字段内\n{MessagesJson}";
+            var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。这是一个群聊对话，格式为：[时间] 可选角色（可选回复）：内容。请注意时间的顺序和上下文关系。";
 
+            var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
+            foreach (var message in Messages) {
+                var str = new StringBuilder();
+                str.Append($"[{message.DateTime.ToString("yyyy-MM-dd HH:mm:ss zzz")}]");
+                if (message.FromUserId != 0) {
+                    var FromUserName = from s in _dbContext.UserData
+                                       where s.Id == message.FromUserId
+                                       select $"{s.FirstName} {s.LastName}";
+                    str.Append(await FromUserName.FirstOrDefaultAsync());
+                }
+                if (message.ReplyToUserId != 0) {
+                    str.Append('（');
+                    var FromUserName = from s in _dbContext.UserData
+                                       where s.Id == message.ReplyToUserId
+                                       select $"{s.FirstName} {s.LastName}";
+                    str.Append(await FromUserName.FirstOrDefaultAsync());
+                    str.Append('）');
+                }
+                str.Append('：');
+                str.Append(message.Content);
+                ChatHistory.Add(new UserChatMessage(str.ToString()));
+            }
+            ChatHistory.Add(new UserChatMessage(InputToken));
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(Env.OpenAIBaseURL),
             };
@@ -79,7 +104,7 @@ namespace TelegramSearchBot.Service {
                 model: ModelName,
                 credential: new(Env.OpenAIApiKey),
                 clientOptions);
-            await foreach (var update in chat.CompleteChatStreamingAsync([new SystemChatMessage(prompt), new UserChatMessage(InputToken)])) {
+            await foreach (var update in chat.CompleteChatStreamingAsync(ChatHistory)) {
                 foreach (ChatMessageContentPart updatePart in update.ContentUpdate) {
                     yield return updatePart.Text;
                 }
