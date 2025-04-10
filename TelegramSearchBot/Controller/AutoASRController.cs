@@ -69,7 +69,6 @@ namespace TelegramSearchBot.Controller {
                 var path = GetFilePath(e);
                 var AsrStr = await autoASRService.ExecuteAsync(path);
                 logger.LogInformation(AsrStr);
-                
                 await messageService.ExecuteAsync(new MessageOption {
                     ChatId = e.Message.Chat.Id,
                     MessageId = e.Message.MessageId,
@@ -77,6 +76,7 @@ namespace TelegramSearchBot.Controller {
                     Chat = e.Message.Chat,
                     DateTime = e.Message.Date,
                     User = e.Message.From,
+                    ReplyTo = e.Message.ReplyToMessage?.Id ?? long.MinValue,
                     Content = $"{e.Message?.Caption}\n{AsrStr}"
                 });
                 if (AsrStr.Length > 4095) {

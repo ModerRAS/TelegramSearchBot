@@ -30,6 +30,7 @@ namespace TelegramSearchBot.Controller {
                 Content = ToAdd,
                 DateTime = e.Message.Date,
                 User = e.Message.From,
+                ReplyTo = e.Message.ReplyToMessage?.Id ?? long.MinValue,
                 Chat = e.Message.Chat,
             });
         }

@@ -12,6 +12,8 @@ namespace TelegramSearchBot.Model {
         public DateTime DateTime { get; set; }
         public long GroupId { get; set; }
         public long MessageId { get; set; }
+        public long FromUserId { get; set; }
+        public long ReplyToUserId { get; set; }
         public string Content { get; set; }
     }
 }

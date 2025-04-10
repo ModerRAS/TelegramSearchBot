@@ -104,13 +104,24 @@ namespace TelegramSearchBot.Service {
                     Type = Enum.GetName<ChatType>(messageOption.Chat.Type),
                 });
             }
-
-            await DataContext.Messages.AddAsync(new Message() {
-                GroupId = messageOption.ChatId,
-                MessageId = messageOption.MessageId,
-                Content = messageOption.Content,
-                DateTime = messageOption.DateTime,
-            });
+            if (messageOption.ReplyTo > long.MinValue) {
+                await DataContext.Messages.AddAsync(new Message() {
+                    GroupId = messageOption.ChatId,
+                    MessageId = messageOption.MessageId,
+                    FromUserId = messageOption.UserId,
+                    Content = messageOption.Content,
+                    ReplyToUserId = messageOption.ReplyTo,
+                    DateTime = messageOption.DateTime,
+                });
+            } else {
+                await DataContext.Messages.AddAsync(new Message() {
+                    GroupId = messageOption.ChatId,
+                    MessageId = messageOption.MessageId,
+                    FromUserId = messageOption.UserId,
+                    Content = messageOption.Content,
+                    DateTime = messageOption.DateTime,
+                });
+            }
             await DataContext.SaveChangesAsync();
         }
 
