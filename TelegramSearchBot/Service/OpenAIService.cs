@@ -10,6 +10,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Telegram.Bot.Types;
 using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Service {
@@ -56,34 +57,8 @@ namespace TelegramSearchBot.Service {
             var ModelName = GroupSetting?.LLMModelName;
             return ModelName;
         }
-        public async Task<bool> NeedReply(string InputToken, long ChatId) {
-            var prompt = $"你是一个判断助手，只负责判断一段消息是否为提问。\r\n判断标准：\r\n1. 如果消息是问题（无论是直接问句还是隐含的提问意图），返回“是”。\r\n2. 如果消息不是问题（陈述、感叹、命令、闲聊等），返回“否”。\r\n重要：只回答“是”或“否”，不要输出其他内容。";
 
-            var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt), new UserChatMessage($"消息：{InputToken}") };
-            var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(Env.OpenAIBaseURL),
-            };
-            var chat = new ChatClient(
-                model: Env.OpenAIModelName,
-                credential: new(Env.OpenAIApiKey),
-                clientOptions);
-            var str = new StringBuilder();
-            await foreach (var update in chat.CompleteChatStreamingAsync(ChatHistory)) {
-                foreach (ChatMessageContentPart updatePart in update.ContentUpdate) {
-                    str.Append(updatePart.Text);
-                }
-            }
-            if (str.ToString().Contains('是')) {
-                return true;
-            } else {
-                return false;
-            }
-        }
-        public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId) {
-            var ModelName = await GetModel(ChatId);
-            if (string.IsNullOrWhiteSpace(ModelName)) {
-                ModelName = Env.OpenAIModelName;
-            }
+        public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory) {
             var Messages = (from s in _dbContext.Messages
                             where s.GroupId == ChatId && s.DateTime > DateTime.UtcNow.AddHours(-1)
                             select s).ToList();
@@ -93,12 +68,8 @@ namespace TelegramSearchBot.Service {
                             orderby s.DateTime descending
                             select s).Take(10).ToList();
             }
-            
-            _logger.LogInformation($"OpenAI获取数据库得到{ChatId}中的{Messages.Count}条结果。");
-            var MessagesJson = JsonConvert.SerializeObject(Messages, Formatting.Indented);
-            var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。这是一个群聊对话，格式为：[时间] 可选角色（可选回复）：内容。请注意时间的顺序和上下文关系。";
 
-            var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
+            _logger.LogInformation($"OpenAI获取数据库得到{ChatId}中的{Messages.Count}条结果。");
             foreach (var message in Messages) {
                 var str = new StringBuilder();
                 str.Append($"[{message.DateTime.ToString("yyyy-MM-dd HH:mm:ss zzz")}]");
@@ -111,8 +82,8 @@ namespace TelegramSearchBot.Service {
                 if (message.ReplyToMessageId != 0) {
                     str.Append('（');
                     var ReplyToUserId = await (from s in _dbContext.Messages
-                                        where s.Id == message.ReplyToMessageId
-                                        select s.FromUserId).FirstOrDefaultAsync();
+                                               where s.Id == message.ReplyToMessageId
+                                               select s.FromUserId).FirstOrDefaultAsync();
                     var FromUserName = from s in _dbContext.UserData
                                        where s.Id == ReplyToUserId
                                        select $"{s.FirstName} {s.LastName}";
@@ -128,6 +99,45 @@ namespace TelegramSearchBot.Service {
                     ChatHistory.Add(new UserChatMessage(str.ToString()));
                 }
             }
+            return ChatHistory;
+        }
+        public async Task<bool> NeedReply(string InputToken, long ChatId) {
+            var prompt = $"你是一个判断助手，只负责判断一段消息是否为提问。\r\n判断标准：\r\n1. 如果消息是问题（无论是直接问句还是隐含的提问意图），返回“是”。\r\n2. 如果消息不是问题（陈述、感叹、命令、闲聊等），返回“否”。\r\n重要：只回答“是”或“否”，不要输出其他内容。";
+
+            var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
+            ChatHistory = await GetChatHistory(ChatId, ChatHistory);
+            ChatHistory.Add(new UserChatMessage($"消息：{InputToken}"));
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(Env.OpenAIBaseURL),
+            };
+            var chat = new ChatClient(
+                model: Env.OpenAIModelName,
+                credential: new(Env.OpenAIApiKey),
+                clientOptions);
+            var str = new StringBuilder();
+            await foreach (var update in chat.CompleteChatStreamingAsync(ChatHistory)) {
+                foreach (ChatMessageContentPart updatePart in update.ContentUpdate) {
+                    str.Append(updatePart.Text);
+                }
+            }
+            if (str.Length < 2 && str.ToString().Contains('是')) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId) {
+            var ModelName = await GetModel(ChatId);
+            if (string.IsNullOrWhiteSpace(ModelName)) {
+                ModelName = Env.OpenAIModelName;
+            }
+
+            var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。这是一个群聊对话，格式为：[时间] 可选角色（可选回复）：内容。请注意时间的顺序和上下文关系。";
+
+            var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
+            ChatHistory = await GetChatHistory(ChatId, ChatHistory);
+
+
             ChatHistory.Add(new UserChatMessage(InputToken));
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(Env.OpenAIBaseURL),
