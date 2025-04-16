@@ -57,6 +57,24 @@ namespace TelegramSearchBot.Service {
             var ModelName = GroupSetting?.LLMModelName;
             return ModelName;
         }
+        public bool IsSameSender(Model.Message message1, Model.Message message2) {
+            if (message1.FromUserId != Env.BotId && message2.FromUserId != Env.BotId) {
+                return true;
+            } else if (message1.FromUserId == Env.BotId && message2.FromUserId == Env.BotId) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        // 小工具函数，减少重复判断
+        private void AddMessageToHistory(List<ChatMessage> ChatHistory, long fromUserId, string content) {
+            if (fromUserId == Env.BotId) {
+                ChatHistory.Add(new AssistantChatMessage(content.Trim()));
+            } else {
+                ChatHistory.Add(new UserChatMessage(content.Trim()));
+            }
+        }
 
         public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory) {
             var Messages = (from s in _dbContext.Messages
@@ -67,11 +85,18 @@ namespace TelegramSearchBot.Service {
                             where s.GroupId == ChatId
                             orderby s.DateTime descending
                             select s).Take(10).ToList();
+                Messages.Reverse(); // ✅ 记得倒序回来，按时间正序处理
             }
 
             _logger.LogInformation($"OpenAI获取数据库得到{ChatId}中的{Messages.Count}条结果。");
+
+            var str = new StringBuilder();
+            Model.Message previous = null;
             foreach (var message in Messages) {
-                var str = new StringBuilder();
+                if (previous != null && !IsSameSender(previous, message)) {
+                    AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
+                    str.Clear();
+                }
                 str.Append($"[{message.DateTime.ToString("yyyy-MM-dd HH:mm:ss zzz")}]");
                 if (message.FromUserId != 0) {
                     var FromUserName = from s in _dbContext.UserData
@@ -90,14 +115,13 @@ namespace TelegramSearchBot.Service {
                     str.Append(await FromUserName.FirstOrDefaultAsync());
                     str.Append('）');
                 }
-                str.Append('：');
-                str.Append(message.Content);
+                str.Append('：').Append(message.Content).Append("\r\n");
 
-                if (message.FromUserId == Env.BotId) {
-                    ChatHistory.Add(new AssistantChatMessage(str.ToString()));
-                } else {
-                    ChatHistory.Add(new UserChatMessage(str.ToString()));
-                }
+                previous = message;
+            }
+            // 处理最后一段未写入的内容
+            if (previous != null && str.Length > 0) {
+                AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
             }
             return ChatHistory;
         }
