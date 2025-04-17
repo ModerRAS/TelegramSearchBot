@@ -161,7 +161,7 @@ namespace TelegramSearchBot.Service {
                 ModelName = Env.OpenAIModelName;
             }
 
-            var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。这是一个群聊对话，格式为：[时间] 可选角色（可选回复）：内容。请注意时间的顺序和上下文关系。";
+            var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。这是一个群聊对话，格式为：[时间] 可选角色（可选回复）：内容。请注意时间的顺序和上下文关系。注：你回复时不需要按照这个格式回复，这是将复杂格式转换为方便你阅读的格式而制作的格式，你回复时只需要直接输出消息内容即可。";
 
             var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
             ChatHistory = await GetChatHistory(ChatId, ChatHistory, message);
