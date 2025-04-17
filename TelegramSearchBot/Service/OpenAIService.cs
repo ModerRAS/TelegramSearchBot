@@ -95,6 +95,9 @@ namespace TelegramSearchBot.Service {
             var str = new StringBuilder();
             Model.Message previous = null;
             foreach (var message in Messages) {
+                if (previous == null && message.FromUserId.Equals(Env.BotId)) {
+                    continue;
+                }
                 if (previous != null && !IsSameSender(previous, message)) {
                     AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
                     str.Clear();
