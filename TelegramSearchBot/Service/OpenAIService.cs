@@ -76,7 +76,7 @@ namespace TelegramSearchBot.Service {
             }
         }
 
-        public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, string InputToken) {
+        public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, Model.Message InputToken) {
             var Messages = (from s in _dbContext.Messages
                             where s.GroupId == ChatId && s.DateTime > DateTime.UtcNow.AddHours(-1)
                             select s).ToList();
@@ -87,7 +87,9 @@ namespace TelegramSearchBot.Service {
                             select s).Take(10).ToList();
                 Messages.Reverse(); // ✅ 记得倒序回来，按时间正序处理
             }
-
+            if (InputToken != null) {
+                Messages.Add(InputToken);
+            }
             _logger.LogInformation($"OpenAI获取数据库得到{ChatId}中的{Messages.Count}条结果。");
 
             var str = new StringBuilder();
@@ -121,7 +123,6 @@ namespace TelegramSearchBot.Service {
             }
             // 处理最后一段未写入的内容
             if (previous != null && str.Length > 0) {
-                str.Append($"{InputToken}\r\n");
                 AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
             }
             return ChatHistory;
@@ -130,8 +131,8 @@ namespace TelegramSearchBot.Service {
             var prompt = $"你是一个判断助手，只负责判断一段消息是否为提问。\r\n判断标准：\r\n1. 如果消息是问题（无论是直接问句还是隐含的提问意图），返回“是”。\r\n2. 如果消息不是问题（陈述、感叹、命令、闲聊等），返回“否”。\r\n重要：只回答“是”或“否”，不要输出其他内容。";
 
             var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
-            ChatHistory = await GetChatHistory(ChatId, ChatHistory, InputToken);
-            //ChatHistory.Add(new UserChatMessage($"消息：{InputToken}"));
+            ChatHistory = await GetChatHistory(ChatId, ChatHistory, null);
+            ChatHistory.Add(new UserChatMessage($"消息：{InputToken}"));
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(Env.OpenAIBaseURL),
             };
@@ -151,7 +152,7 @@ namespace TelegramSearchBot.Service {
                 return false;
             }
         }
-        public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId) {
+        public async IAsyncEnumerable<string> ExecAsync(Model.Message message, long ChatId) {
             var ModelName = await GetModel(ChatId);
             if (string.IsNullOrWhiteSpace(ModelName)) {
                 ModelName = Env.OpenAIModelName;
@@ -160,7 +161,7 @@ namespace TelegramSearchBot.Service {
             var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。这是一个群聊对话，格式为：[时间] 可选角色（可选回复）：内容。请注意时间的顺序和上下文关系。";
 
             var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
-            ChatHistory = await GetChatHistory(ChatId, ChatHistory, InputToken);
+            ChatHistory = await GetChatHistory(ChatId, ChatHistory, message);
 
 
             //ChatHistory.Add(new UserChatMessage(InputToken));

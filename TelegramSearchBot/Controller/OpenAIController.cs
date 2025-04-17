@@ -59,7 +59,15 @@ namespace TelegramSearchBot.Controller {
             if (Message.Contains(service.BotName)) {
                 var ModelName = await service.GetModel(e.Message.Chat.Id);
                 var InitialContent = $"{ModelName}初始化中。。。";
-                var messages = SendMessageService.SendMessage(service.ExecAsync(Message, e.Message.Chat.Id), e.Message.Chat.Id, e.Message.MessageId, InitialContent);
+                var messages = SendMessageService.SendMessage(service.ExecAsync(new Model.Message() {
+                    Content = Message,
+                    DateTime = e.Message.Date,
+                    FromUserId = e.Message.From.Id,
+                    GroupId = e.Message.Chat.Id,
+                    MessageId = e.Message.Id,
+                    ReplyToMessageId = e.Message.ReplyToMessage?.Id ?? 0,
+                    Id = -1,
+                }, e.Message.Chat.Id), e.Message.Chat.Id, e.Message.MessageId, InitialContent);
                 await foreach (var PerMessage in messages) {
                     await messageService.ExecuteAsync(new MessageOption() {
                         Chat = e.Message.Chat,
