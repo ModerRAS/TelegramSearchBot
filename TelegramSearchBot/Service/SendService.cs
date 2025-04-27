@@ -7,8 +7,10 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service {
+namespace TelegramSearchBot.Service
+{
 
     public class SendService {
         private readonly ITelegramBotClient botClient;
@@ -19,7 +21,7 @@ namespace TelegramSearchBot.Service {
             this.Send = Send;
             this.botClient = botClient;
         }
-        public static List<string> ConvertToList(IEnumerable<Model.Message> messages) {
+        public static List<string> ConvertToList(IEnumerable<Message> messages) {
             var list = new List<string>();
             foreach (var kv in messages) {
                 string text;
@@ -34,7 +36,7 @@ namespace TelegramSearchBot.Service {
 
         }
 
-        public string GenerateMessage(List<Model.Message> Finded, SearchOption searchOption) {
+        public string GenerateMessage(List<Message> Finded, SearchOption searchOption) {
             string Begin;
             if (searchOption.Count > 0) {
                 Begin = $"共找到 {searchOption.Count} 项结果, 当前为第{searchOption.Skip + 1}项到第{(searchOption.Skip + searchOption.Take < searchOption.Count ? searchOption.Skip + searchOption.Take : searchOption.Count)}项\n";
@@ -92,7 +94,7 @@ namespace TelegramSearchBot.Service {
             }, searchOption.IsGroup);
         }
 
-        public async Task ExecuteAsync(SearchOption searchOption, List<Model.Message> Finded) {
+        public async Task ExecuteAsync(SearchOption searchOption, List<Message> Finded) {
             var message = GenerateMessage(Finded, searchOption);
             var (keyboardList, searchOptionNext) = await GenerateKeyboard(searchOption);
             await SendMessage(message, searchOptionNext, keyboardList);

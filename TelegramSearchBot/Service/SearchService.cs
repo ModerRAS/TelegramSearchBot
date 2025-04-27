@@ -4,8 +4,10 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Manager;
 using System.Collections.Generic;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service {
+namespace TelegramSearchBot.Service
+{
     public class SearchService : ISearchService, IService {
         private readonly LuceneManager lucene;
         public SearchService(LuceneManager lucene) {

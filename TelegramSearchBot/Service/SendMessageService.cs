@@ -11,9 +11,9 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Model;
 
-namespace TelegramSearchBot.Service {
+namespace TelegramSearchBot.Service
+{
     public class SendMessageService {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
@@ -57,7 +57,7 @@ namespace TelegramSearchBot.Service {
                     );
             }, ChatId < 0);
         }
-        public async IAsyncEnumerable<Model.Message> SendMessage(IAsyncEnumerable<string> messages, long ChatId, int replyTo, string InitialContent = "Initializing...") {
+        public async IAsyncEnumerable<Model.Data.Message> SendMessage(IAsyncEnumerable<string> messages, long ChatId, int replyTo, string InitialContent = "Initializing...") {
             // 初始化一条消息，准备编辑
             var sentMessage = await botClient.SendMessage(
                 chatId: ChatId,
@@ -70,7 +70,7 @@ namespace TelegramSearchBot.Service {
             await foreach (var PerMessage in messages) {
                 if (builder.Length > 1900) {
                     tmpMessageId = sentMessage.MessageId;
-                    yield return new Model.Message() {
+                    yield return new Model.Data.Message() {
                         GroupId = ChatId,
                         MessageId = sentMessage.MessageId,
                         DateTime = sentMessage.Date,
@@ -108,7 +108,7 @@ namespace TelegramSearchBot.Service {
                     );
                 logger.LogInformation($"Send OpenAI result success {message.MessageId} {builder.ToString()}");
             }, ChatId < 0);
-            yield return new Model.Message() {
+            yield return new Model.Data.Message() {
                 GroupId = ChatId,
                 MessageId = sentMessage.MessageId,
                 DateTime = sentMessage.Date,

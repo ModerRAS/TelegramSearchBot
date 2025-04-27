@@ -5,8 +5,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Model {
-    public class GroupData {
+namespace TelegramSearchBot.Model.Data
+{
+    public class GroupData
+    {
         [Key]
         public long Id { get; set; }
         public string Type { get; set; }

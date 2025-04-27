@@ -12,8 +12,10 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service {
+namespace TelegramSearchBot.Service
+{
     public class OpenAIService {
         public string ServiceName => "OpenAIService";
 
@@ -57,7 +59,7 @@ namespace TelegramSearchBot.Service {
             var ModelName = GroupSetting?.LLMModelName;
             return ModelName;
         }
-        public bool IsSameSender(Model.Message message1, Model.Message message2) {
+        public bool IsSameSender(Model.Data.Message message1, Model.Data.Message message2) {
             if (message1.FromUserId != Env.BotId && message2.FromUserId != Env.BotId) {
                 return true;
             } else if (message1.FromUserId == Env.BotId && message2.FromUserId == Env.BotId) {
@@ -76,7 +78,7 @@ namespace TelegramSearchBot.Service {
             }
         }
 
-        public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, Model.Message InputToken) {
+        public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, Model.Data.Message InputToken) {
             var Messages = (from s in _dbContext.Messages
                             where s.GroupId == ChatId && s.DateTime > DateTime.UtcNow.AddHours(-1)
                             select s).ToList();
@@ -93,7 +95,7 @@ namespace TelegramSearchBot.Service {
             _logger.LogInformation($"OpenAI获取数据库得到{ChatId}中的{Messages.Count}条结果。");
 
             var str = new StringBuilder();
-            Model.Message previous = null;
+            Model.Data.Message previous = null;
             foreach (var message in Messages) {
                 if (previous == null && message.FromUserId.Equals(Env.BotId)) {
                     continue;
@@ -155,7 +157,7 @@ namespace TelegramSearchBot.Service {
                 return false;
             }
         }
-        public async IAsyncEnumerable<string> ExecAsync(Model.Message message, long ChatId) {
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId) {
             var ModelName = await GetModel(ChatId);
             if (string.IsNullOrWhiteSpace(ModelName)) {
                 ModelName = Env.OpenAIModelName;

@@ -12,9 +12,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Controller;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Manager {
+namespace TelegramSearchBot.Manager
+{
     public class LuceneManager {
         private SendMessage Send;
         public LuceneManager(SendMessage Send) {

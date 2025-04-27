@@ -10,8 +10,10 @@ using Telegram.Bot.Types.Enums;
 using System.Collections.Generic;
 using Nito.AsyncEx;
 using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service {
+namespace TelegramSearchBot.Service
+{
     public class MessageService : IMessageService, IService {
         protected readonly LuceneManager lucene;
         protected readonly SendMessage Send;

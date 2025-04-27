@@ -5,9 +5,10 @@ using System.IO;
 using System.Net.Sockets;
 using System.Net;
 using System.Text;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot {
+namespace TelegramSearchBot
+{
     class Utils {
         public static List<string> ConvertToList(IEnumerable<Message> messages, long ChatId) {
             var list = new List<string>();

@@ -8,9 +8,10 @@ using TelegramSearchBot.Service;
 using System.Threading.Tasks;
 using LiteDB;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Controller {
+namespace TelegramSearchBot.Controller
+{
     class SearchNextPageController : IOnUpdate {
         private readonly SendMessage Send;
         private readonly ILiteCollection<CacheData> Cache;

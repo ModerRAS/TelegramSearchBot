@@ -6,8 +6,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Model
+{
     public class DataDbContext : DbContext {
         public DataDbContext(DbContextOptions<DataDbContext> options) : base(options) { }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {

@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Text;
 using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Model
+{
     public class SearchOption {
         public string Search { get; set; }
         public int MessageId { get; set; }
@@ -22,6 +23,6 @@ namespace TelegramSearchBot.Model {
         public bool ToDeleteNow { get; set; }
         public int ReplyToMessageId { get; set; }
         public Chat Chat { get; set; }
-        public List<Message> Messages { get; set; }
+        public List<Data.Message> Messages { get; set; }
     }
 }

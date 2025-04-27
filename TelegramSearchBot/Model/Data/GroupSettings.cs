@@ -6,10 +6,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Model.Data
+{
 
-    [Index(nameof(GroupSettings.GroupId), IsUnique = true)]
-    public class GroupSettings {
+    [Index(nameof(GroupId), IsUnique = true)]
+    public class GroupSettings
+    {
         [Key]
         public long Id { get; set; }
         [Required]

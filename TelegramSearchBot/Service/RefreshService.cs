@@ -8,8 +8,10 @@ using Newtonsoft.Json;
 using TelegramSearchBot.Model;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service {
+namespace TelegramSearchBot.Service
+{
     public class RefreshService : MessageService, IService {
         public new string ServiceName => "RefreshService";
         private readonly ILogger<RefreshService> _logger;
