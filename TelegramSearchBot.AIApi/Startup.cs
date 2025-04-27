@@ -4,14 +4,14 @@ using Microsoft.Extensions.Hosting;
 
 namespace TelegramSearchBot.AIApi {
     public class Startup {
-        public static void BootStrap(string[] args) {
+        public static void Main(string[] args) {
 
 
             var builder = WebApplication.CreateBuilder(args);
 
             // 1. 在服务容器中注册 Controllers 服务
             builder.Services.AddControllers();
-
+            builder.WebHost.UseUrls("http://localhost:5000"); // 设置监听的 URL
             var app = builder.Build();
 
             // 配置 HTTP 请求管道
