@@ -6,9 +6,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Model;
-using TelegramSearchBot.Service;
+using TelegramSearchBot.Service.Manage;
 
-namespace TelegramSearchBot.Test.Admin {
+namespace TelegramSearchBot.Test.Admin
+{
     [TestClass]
     public class AdminServiceTests {
         /// <summary>

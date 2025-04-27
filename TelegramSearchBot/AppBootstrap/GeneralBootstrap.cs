@@ -15,14 +15,14 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using TelegramSearchBot.Controller;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using Tsavorite.core;
 
-namespace TelegramSearchBot.AppBootstrap {
+namespace TelegramSearchBot.AppBootstrap
+{
     public class GeneralBootstrap : AppBootstrap {
         private static IServiceProvider service;
         public static IHostBuilder CreateHostBuilder(string[] args) =>
@@ -104,8 +104,9 @@ namespace TelegramSearchBot.AppBootstrap {
         }
         public static void AddService(IServiceCollection service) {
             service.Scan(scan => scan
-            .FromCallingAssembly()
-            .AddClasses(classes => classes.InNamespaces(new string[] { "TelegramSearchBot.Service" }))
+            .FromAssemblyOf<IService>()
+            .AddClasses(classes => classes.AssignableTo<IService>())
+            //.AsImplementedInterfaces()
             .AsSelf()
             .WithTransientLifetime()
             );
