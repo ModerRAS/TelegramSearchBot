@@ -54,17 +54,16 @@ namespace TelegramSearchBot {
             .CreateLogger();
             if (args.Length == 0) {
                 GeneralBootstrap.Startup(args);
-            } else if (args.Length == 2) {
-                if (args[0].Equals("ASR")) {
-                    ASRBootstrap.Startup(args); 
-                } else if (args[0].Equals("OCR")) {
-                    OCRBootstrap.Startup(args);
-                } else if (args[0].Equals("Scheduler")) {
-                    SchedulerBootstrap.Startup(args);
-                } else if (args[0].Equals("QR")) {
-                    QRBootstrap.Startup(args);
+            } else if (args.Length >= 1) {
+                // 调用封装好的反射分发方法
+                bool success = AppBootstrap.AppBootstrap.TryDispatchStartupByReflection(args);
+                if (!success) {
+                    Log.Error("应用程序启动失败。");
                 }
+            } else {
+                Log.Error("参数数量无效。");
             }
+            
         }
     }
 }

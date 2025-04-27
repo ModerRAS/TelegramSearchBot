@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -179,5 +180,103 @@ namespace TelegramSearchBot.AppBootstrap {
                 }
             }
         }
+
+        // 定义 Bootstrap 类的后缀 (命名约定)
+        private const string BootstrapSuffix = "Bootstrap";
+        // 定义要调用的静态方法名 (命名约定)
+        private const string StartupMethodName = "Startup";
+
+        private const string TargetNamespace = "TelegramSearchBot.AppBootstrap";
+
+        /// <summary>
+        /// 尝试根据第一个命令行参数通过反射查找并执行相应的 Bootstrap 类的 Startup 方法。
+        /// </summary>
+        /// <param name="args">命令行参数数组，期望 args[0] 是启动类型关键字。</param>
+        /// <returns>如果成功找到并调用了 Startup 方法，则返回 true；否则返回 false。</returns>
+        public static bool TryDispatchStartupByReflection(string[] args) {
+            if (args == null || args.Length == 0) {
+                Console.WriteLine("错误：缺少启动参数。");
+                return false;
+            }
+
+            string startupKey = args[0];
+            // 1. 根据命名约定构造目标类型名称
+            string targetTypeName = startupKey + BootstrapSuffix;
+            Assembly currentAssembly = Assembly.GetExecutingAssembly(); // 获取当前程序集一次即可
+
+            try {
+                // 2. 在程序集中查找符合名称约定的类型 (忽略大小写)
+                Type bootstrapType = currentAssembly.GetTypes().FirstOrDefault(t =>
+                    t.IsClass &&
+                    string.Equals(t.Namespace, TargetNamespace, StringComparison.Ordinal) &&
+                    t.Name.Equals(targetTypeName, StringComparison.OrdinalIgnoreCase));
+
+                if (bootstrapType != null) {
+                    // 3. 查找目标类型中名为 StartupMethodName 的公共静态方法
+                    MethodInfo startupMethod = bootstrapType.GetMethod(
+                        StartupMethodName,
+                        BindingFlags.Static | BindingFlags.Public,
+                        null,
+                        new Type[] { typeof(string[]) },
+                        null
+                    );
+
+                    if (startupMethod != null) {
+                        // 4. 动态调用该静态方法
+                        startupMethod.Invoke(null, new object[] { args });
+                        return true; // 调用成功
+                    } else {
+                        // 在找到的类中未找到合适的 Startup 方法
+                        Log.Error($"错误：在类型 '{bootstrapType.FullName}' 中未找到有效的静态方法 '{StartupMethodName}(string[])'");
+                        PrintUsageHint(currentAssembly);
+                        return false; // 方法未找到
+                    }
+                } else {
+                    // 在程序集中未找到匹配的类型
+                    Log.Error($"在命名空间 '{TargetNamespace}' 下未找到启动类型对应的类: '{targetTypeName}'");
+                    PrintUsageHint(currentAssembly);
+                    return false; // 类型未找到
+                }
+            } catch (TargetInvocationException ex) {
+                // 被调用的 Startup 方法内部抛出了异常
+                Log.Error($"错误：启动过程 '{startupKey}' 中发生异常: {ex.InnerException?.Message ?? ex.Message}");
+                // 可以考虑记录更详细的堆栈信息 ex.InnerException.StackTrace
+                return false; // 目标方法执行失败
+            } catch (Exception ex) {
+                // 其他反射或运行时错误
+                Log.Error($"处理启动类型 '{startupKey}' 时发生意外错误: {ex.Message}");
+                return false; // 反射或其他错误
+            }
+        }
+
+        /// <summary>
+        /// (可选) 打印基于命名约定找到的可能启动类型的提示。
+        /// </summary>
+        /// <param name="assembly">要搜索的程序集。</param>
+        private static void PrintUsageHint(Assembly assembly) {
+            Console.WriteLine("\n可能的启动类型 (基于命名约定 *Bootstrap 类):");
+            try {
+                // 在传入的程序集中查找所有符合命名约定且包含 Startup(string[]) 方法的类
+                var possibleTypes = assembly.GetTypes()
+                    .Where(t => t.IsClass
+                                && string.Equals(t.Namespace, TargetNamespace, StringComparison.Ordinal)
+                                && t.Name.EndsWith(BootstrapSuffix, StringComparison.OrdinalIgnoreCase)
+                                && t.GetMethod(StartupMethodName, BindingFlags.Static | BindingFlags.Public, null, new Type[] { typeof(string[]) }, null) != null)
+                    .Select(t => t.Name.Substring(0, t.Name.Length - BootstrapSuffix.Length))
+                    .OrderBy(name => name); // 按字母顺序排序
+
+                if (possibleTypes.Any()) {
+                    foreach (var typeName in possibleTypes) {
+                        Log.Information($"  - {typeName}");
+                    }
+                } else {
+                    Log.Error("  (未找到符合约定的启动类型)");
+                }
+
+            } catch (Exception ex) {
+                Log.Error($"  (无法自动列出类型: {ex.Message})");
+            }
+        }
     }
 }
+
