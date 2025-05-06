@@ -34,6 +34,7 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
+                    service.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<GeneralBootstrap>());
                     // 配置 Redis 连接
                     var redisConnectionString = $"localhost:{Env.SchedulerPort}"; // 自定义端口
                     service.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
