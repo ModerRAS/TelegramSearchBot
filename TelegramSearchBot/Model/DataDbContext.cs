@@ -22,5 +22,7 @@ namespace TelegramSearchBot.Model
         public DbSet<UserData> UserData { get; set; }
         public DbSet<GroupData> GroupData { get; set; }
         public DbSet<GroupSettings> GroupSettings { get; set; }
+        public DbSet<LLMChannel> LLMChannels { get; set; }
+        public DbSet<ChannelWithModel> ChannelsWithModel { get; set; }
     }
 }
