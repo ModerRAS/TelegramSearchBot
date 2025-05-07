@@ -30,7 +30,7 @@ namespace TelegramSearchBot.Controller.AI.LLM
             ITelegramBotClient botClient,
             OpenAIService openaiService,
             SendMessage Send,
-            ILogger<OllamaController> logger,
+            ILogger<GeneralLLMController> logger,
             AdminService adminService,
             SendMessageService SendMessageService,
             GeneralLLMService generalLLMService

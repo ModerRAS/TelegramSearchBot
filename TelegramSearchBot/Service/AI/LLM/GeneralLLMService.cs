@@ -23,15 +23,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public GeneralLLMService(
             IConnectionMultiplexer connectionMultiplexer,
             DataDbContext dbContext,
-            OpenAIService openAIService,
+            ILogger<GeneralLLMService> logger,
             OllamaService ollamaService,
-            ILogger<GeneralLLMService> logger) 
+            OpenAIService openAIService
+            ) 
         {
             this.connectionMultiplexer = connectionMultiplexer;
             _dbContext = dbContext;
+            _logger = logger;
+            
+            // Initialize services with default values
             _openAIService = openAIService;
             _ollamaService = ollamaService;
-            _logger = logger;
         }
 
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId) {
@@ -41,7 +44,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                  select s.LLMModelName).FirstOrDefaultAsync();
             
             if (string.IsNullOrEmpty(modelName)) {
-                yield return "请指定模型名称";
+                _logger.LogWarning("请指定模型名称");
                 yield break;
             }
 
@@ -50,7 +53,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 .FirstOrDefaultAsync(c => c.ModelName == modelName);
                 
             if (channelWithModel == null) {
-                yield return $"找不到模型 {modelName} 的配置";
+                _logger.LogWarning($"找不到模型 {modelName} 的配置");
                 yield break;
             }
 
@@ -91,13 +94,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         try {
                             // 5. 根据Provider选择服务
                             switch (channel.Provider) {
-                                case LLMProvider.OpenAI:
-                                    await foreach (var response in _openAIService.ExecAsync(message, ChatId)) {
+                            case LLMProvider.OpenAI:
+                                    await foreach (var response in _openAIService.ExecAsync(message, ChatId, modelName, channel)) {
                                         yield return response;
                                     }
                                     break;
                                 case LLMProvider.Ollama:
-                                    await foreach (var response in _ollamaService.ExecAsync(message.Content, ChatId)) {
+                                    await foreach (var response in _ollamaService.ExecAsync(message, ChatId, modelName, channel)) {
                                         yield return response;
                                     }
                                     break;

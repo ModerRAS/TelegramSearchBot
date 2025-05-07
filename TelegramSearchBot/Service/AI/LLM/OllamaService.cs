@@ -1,19 +1,16 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using OllamaSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service.AI.LLM
-{
-    public class OllamaService : IService
+namespace TelegramSearchBot.Service.AI.LLM {
+    public class OllamaService : IService, ILLMService
     {
         public string ServiceName => "OllamaService";
 
@@ -26,22 +23,14 @@ namespace TelegramSearchBot.Service.AI.LLM
         {
             _logger = logger;
             _dbContext = context;
-            // set up the client
-            HttpClient client = new HttpClient();
-            client.BaseAddress = new Uri(Env.OllamaHost);
-            client.Timeout = TimeSpan.FromSeconds(3000);
-            ollama = new OllamaApiClient(client);
-
-            // select a model which should be used for further operations
-            ollama.SelectedModel = Env.OllamaModelName;
-
+            
         }
 
-        public bool CheckIfExists(IEnumerable<OllamaSharp.Models.Model> models)
+        public bool CheckIfExists(IEnumerable<OllamaSharp.Models.Model> models, string ModelName)
         {
             foreach (var model in models)
             {
-                if (model.Name.Equals(Env.OllamaModelName))
+                if (model.Name.Equals(ModelName))
                 {
                     return true;
                 }
@@ -50,12 +39,19 @@ namespace TelegramSearchBot.Service.AI.LLM
         }
 
 
-        public async IAsyncEnumerable<string> ExecAsync(string InputToken, long ChatId)
-        {
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel) {
+            // set up the client
+            HttpClient client = new HttpClient();
+            client.BaseAddress = new Uri(channel.Gateway);
+            client.Timeout = TimeSpan.FromSeconds(3000);
+            ollama = new OllamaApiClient(client);
+
+            // select a model which should be used for further operations
+            ollama.SelectedModel = modelName ?? Env.OllamaModelName;
             var models = await ollama.ListLocalModelsAsync();
-            if (!CheckIfExists(models))
+            if (!CheckIfExists(models, modelName))
             {
-                await foreach (var status in ollama.PullModelAsync(Env.OllamaModelName))
+                await foreach (var status in ollama.PullModelAsync(modelName))
                     _logger.LogInformation($"{status.Percent}% {status.Status}");
             }
             var Messages = (from s in _dbContext.Messages
@@ -67,6 +63,8 @@ namespace TelegramSearchBot.Service.AI.LLM
                             where s.GroupId == ChatId
                             orderby s.DateTime descending
                             select s).Take(10).ToList();
+
+                Messages.Reverse(); // ✅ 记得倒序回来，按时间正序处理
             }
 
             _logger.LogInformation($"Ollama获取数据库得到{ChatId}中的{Messages.Count}条结果。");
@@ -75,7 +73,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             var chat = new Chat(ollama, prompt);
 
 
-            await foreach (var answerToken in chat.SendAsync(InputToken))
+            await foreach (var answerToken in chat.SendAsync(message.Content))
             {
                 yield return answerToken;
             }

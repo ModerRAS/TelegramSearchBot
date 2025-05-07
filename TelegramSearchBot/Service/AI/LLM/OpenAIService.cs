@@ -1,24 +1,18 @@
-﻿using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using OpenAI;
 using OpenAI.Chat;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using Telegram.Bot.Types;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service.AI.LLM
-{
-    public class OpenAIService : IService
-    {
+namespace TelegramSearchBot.Service.AI.LLM {
+    public class OpenAIService : IService, ILLMService {
         public string ServiceName => "OpenAIService";
 
         private readonly ILogger _logger;
@@ -29,9 +23,6 @@ namespace TelegramSearchBot.Service.AI.LLM
         {
             _logger = logger;
             _dbContext = context;
-            // set up the client
-
-
         }
 
         public bool CheckIfExists(IEnumerable<OllamaSharp.Models.Model> models)
@@ -194,12 +185,11 @@ namespace TelegramSearchBot.Service.AI.LLM
                 return false;
             }
         }
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId)
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel)
         {
-            var ModelName = await GetModel(ChatId);
-            if (string.IsNullOrWhiteSpace(ModelName))
+            if (string.IsNullOrWhiteSpace(modelName))
             {
-                ModelName = Env.OpenAIModelName;
+                modelName = Env.OpenAIModelName;
             }
 
             var prompt = $"忘记你原有的名字，记住，你的名字叫：{BotName}，是一个问答机器人，现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。这是一个群聊对话，格式为：[时间] 可选角色（可选回复）：内容。请注意时间的顺序和上下文关系。注：你回复时不需要按照这个格式回复，这是将复杂格式转换为方便你阅读的格式而制作的格式，你回复时只需要直接输出消息内容即可。";
@@ -207,15 +197,13 @@ namespace TelegramSearchBot.Service.AI.LLM
             var ChatHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
             ChatHistory = await GetChatHistory(ChatId, ChatHistory, message);
 
-
-            //ChatHistory.Add(new UserChatMessage(InputToken));
             var clientOptions = new OpenAIClientOptions
             {
-                Endpoint = new Uri(Env.OpenAIBaseURL),
+                Endpoint = new Uri(channel.Gateway),
             };
             var chat = new ChatClient(
-                model: ModelName,
-                credential: new(Env.OpenAIApiKey),
+                model: modelName,
+                credential: new(channel.ApiKey),
                 clientOptions);
             await foreach (var update in chat.CompleteChatStreamingAsync(ChatHistory))
             {
