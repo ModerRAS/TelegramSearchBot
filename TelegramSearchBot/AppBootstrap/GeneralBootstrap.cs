@@ -39,7 +39,9 @@ namespace TelegramSearchBot.AppBootstrap
                     var redisConnectionString = $"localhost:{Env.SchedulerPort}"; // 自定义端口
                     service.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
 
-                    service.AddDbContext<DataDbContext>(ServiceLifetime.Transient);
+                    service.AddDbContext<DataDbContext>(options => {
+                        options.UseSqlite($"Data Source={Env.WorkDir}/Data.sqlite;Cache=Shared;Mode=ReadWrite;");
+                    }, ServiceLifetime.Transient);
                     AddController(service);
                     AddService(service);
                 });
