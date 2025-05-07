@@ -177,8 +177,9 @@ namespace TelegramSearchBot.Service.Manage {
         /// <param name="name">新名称(可选)</param>
         /// <param name="gateway">新网关地址(可选)</param>
         /// <param name="apiKey">新API密钥(可选)</param>
+        /// <param name="provider">新提供商类型(可选)</param>
         /// <returns>成功返回true，失败返回false</returns>
-        public async Task<bool> UpdateChannel(int channelId, string? name = null, string? gateway = null, string? apiKey = null) {
+        public async Task<bool> UpdateChannel(int channelId, string? name = null, string? gateway = null, string? apiKey = null, LLMProvider? provider = null) {
             using var transaction = await DataContext.Database.BeginTransactionAsync();
             try {
                 var channel = await DataContext.LLMChannels.FindAsync(channelId);
@@ -194,6 +195,9 @@ namespace TelegramSearchBot.Service.Manage {
                 }
                 if (!string.IsNullOrWhiteSpace(apiKey)) {
                     channel.ApiKey = apiKey;
+                }
+                if (provider.HasValue) {
+                    channel.Provider = provider.Value;
                 }
 
                 await DataContext.SaveChangesAsync();
@@ -216,6 +220,21 @@ namespace TelegramSearchBot.Service.Manage {
             if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
                 await db.StringSetAsync(stateKey, "awaiting_name");
                 return (true, "请输入渠道的名称");
+            }
+            else if (Command.Trim().Equals("编辑渠道", StringComparison.OrdinalIgnoreCase)) {
+                var channels = await GetAllChannels();
+                if (channels.Count == 0) {
+                    return (true, "当前没有可编辑的渠道");
+                }
+                
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要编辑的渠道ID：");
+                foreach (var channel in channels) {
+                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+                }
+                
+                await db.StringSetAsync(stateKey, "editing_select_channel");
+                return (true, sb.ToString());
             }
 
             switch (currentState.ToString()) {
@@ -261,6 +280,65 @@ namespace TelegramSearchBot.Service.Manage {
                     await db.KeyDeleteAsync(dataKey);
                     
                     return (true, result > 0 ? "渠道创建成功" : "渠道创建失败");
+                
+                case "editing_select_channel":
+                    if (!int.TryParse(Command, out var channelId)) {
+                        return (false, "请输入有效的渠道ID");
+                    }
+                    
+                    var channel = await GetChannelById(channelId);
+                    if (channel == null) {
+                        return (false, "找不到指定的渠道");
+                    }
+                    
+                    await db.StringSetAsync(dataKey, channelId.ToString());
+                    await db.StringSetAsync(stateKey, "editing_select_field");
+                    return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key");
+                
+                case "editing_select_field":
+                    var editChannelId = int.Parse(await db.StringGetAsync(dataKey));
+                    await db.StringSetAsync(dataKey, $"{editChannelId}|{Command}");
+                    
+                    if (Command == "3") {
+                        await db.StringSetAsync(stateKey, "editing_input_value");
+                        return (true, "请选择渠道类型：\n1. OpenAI\n2. Ollama");
+                    }
+                    else {
+                        await db.StringSetAsync(stateKey, "editing_input_value");
+                        return (true, "请输入新的值：");
+                    }
+                
+                case "editing_input_value":
+                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    var editId = int.Parse(parts[0]);
+                    var field = parts[1];
+                    
+                    bool updateResult = false;
+                    switch (field) {
+                        case "1":
+                            updateResult = await UpdateChannel(editId, name: Command);
+                            break;
+                        case "2":
+                            updateResult = await UpdateChannel(editId, gateway: Command);
+                            break;
+                        case "3":
+                            if (!Enum.TryParse<LLMProvider>(Command, out var newProvider)) {
+                                return (true, "无效的类型");
+                            }
+                            updateResult = await UpdateChannel(editId, provider: newProvider);
+                            break;
+                        case "4":
+                            updateResult = await UpdateChannel(editId, apiKey: Command);
+                            break;
+                        default:
+                            return (false, "无效的字段选择");
+                    }
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, updateResult ? "更新成功" : "更新失败");
                 
                 default:
                     // 非预期状态或初始状态
