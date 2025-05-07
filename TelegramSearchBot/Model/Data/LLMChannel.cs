@@ -14,5 +14,13 @@ namespace TelegramSearchBot.Model.Data {
         public string Gateway { get; set; }
         public string ApiKey { get; set; }
         public LLMProvider Provider { get; set; }
+        /// <summary>
+        /// 用来设置最大并行数量的
+        /// </summary>
+        public int Parallel { get; set; }
+        /// <summary>
+        /// 用来设置优先级，数字越大越优先
+        /// </summary>
+        public int Priority { get; set; }
     }
 }
