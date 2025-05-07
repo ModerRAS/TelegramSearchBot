@@ -61,13 +61,17 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync("awaiting_name")  // After first command
                 .ReturnsAsync("awaiting_gateway")
                 .ReturnsAsync("awaiting_provider")
+                .ReturnsAsync("awaiting_parallel")
+                .ReturnsAsync("awaiting_priority")
                 .ReturnsAsync("awaiting_apikey");
 
             // Setup data key responses
             _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:data", It.IsAny<CommandFlags>()))
                 .ReturnsAsync("Test Channel")  // After name input
                 .ReturnsAsync("Test Channel|http://test.com")  // After gateway input
-                .ReturnsAsync("Test Channel|http://test.com|1");  // After provider selection
+                .ReturnsAsync("Test Channel|http://test.com|1")  // After provider selection
+                .ReturnsAsync("Test Channel|http://test.com|1|1")  // After parallel input (default 1)
+                .ReturnsAsync("Test Channel|http://test.com|1|1|0");  // After priority input (default 0)
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("新建渠道", chatId);
@@ -84,16 +88,26 @@ namespace TelegramSearchBot.Test.Manage {
 
             var result4 = await _service.ExecuteAsync("1", chatId);
             Assert.IsTrue(result4.Item1);
-            Assert.AreEqual("请输入渠道的API Key", result4.Item2);
+            Assert.AreEqual("请输入渠道的最大并行数量(默认1):", result4.Item2);
 
-            var result5 = await _service.ExecuteAsync("test-api-key", chatId);
+            var result5 = await _service.ExecuteAsync("", chatId); // 使用默认值1
             Assert.IsTrue(result5.Item1);
-            Assert.AreEqual("渠道创建成功", result5.Item2);
+            Assert.AreEqual("请输入渠道的优先级(默认0):", result5.Item2);
+
+            var result6 = await _service.ExecuteAsync("", chatId); // 使用默认值0
+            Assert.IsTrue(result6.Item1);
+            Assert.AreEqual("请输入渠道的API Key", result6.Item2);
+
+            var result7 = await _service.ExecuteAsync("test-api-key", chatId);
+            Assert.IsTrue(result7.Item1);
+            Assert.AreEqual("渠道创建成功", result7.Item2);
 
             // Verify channel was created
             var channel = await _context.LLMChannels.FirstOrDefaultAsync();
             Assert.IsNotNull(channel);
             Assert.AreEqual("Test Channel", channel.Name);
+            Assert.AreEqual(1, channel.Parallel); // 验证默认并行数
+            Assert.AreEqual(0, channel.Priority); // 验证默认优先级
         }
 
         [TestMethod]
@@ -234,6 +248,128 @@ namespace TelegramSearchBot.Test.Manage {
             // Assert
             Assert.IsFalse(result.Item1);
             Assert.AreEqual("", result.Item2);
+        }
+
+        [TestMethod]
+        public async Task ExecuteAsync_NewChannel_WithParallelAndPriority() {
+            // Arrange
+            long chatId = 123;
+            // Setup state transitions
+            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)  // Initial state
+                .ReturnsAsync("awaiting_name")  
+                .ReturnsAsync("awaiting_gateway")
+                .ReturnsAsync("awaiting_provider")
+                .ReturnsAsync("awaiting_parallel")
+                .ReturnsAsync("awaiting_priority")
+                .ReturnsAsync("awaiting_apikey");
+
+            // Setup data key responses
+            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:data", It.IsAny<CommandFlags>()))
+                .ReturnsAsync("Test Channel")  
+                .ReturnsAsync("Test Channel|http://test.com")  
+                .ReturnsAsync("Test Channel|http://test.com|1")
+                .ReturnsAsync("Test Channel|http://test.com|1|5")  // Parallel = 5
+                .ReturnsAsync("Test Channel|http://test.com|1|5|2");  // Priority = 2
+
+            // Act & Assert
+            var result1 = await _service.ExecuteAsync("新建渠道", chatId);
+            Assert.IsTrue(result1.Item1);
+            Assert.AreEqual("请输入渠道的名称", result1.Item2);
+
+            var result2 = await _service.ExecuteAsync("Test Channel", chatId);
+            Assert.IsTrue(result2.Item1);
+            Assert.AreEqual("请输入渠道地址", result2.Item2);
+
+            var result3 = await _service.ExecuteAsync("http://test.com", chatId);
+            Assert.IsTrue(result3.Item1);
+            Assert.AreEqual("请选择渠道类型：\n1. OpenAI\n2. Ollama", result3.Item2);
+
+            var result4 = await _service.ExecuteAsync("1", chatId);
+            Assert.IsTrue(result4.Item1);
+            Assert.AreEqual("请输入渠道的最大并行数量(默认1):", result4.Item2);
+
+            var result5 = await _service.ExecuteAsync("5", chatId);
+            Assert.IsTrue(result5.Item1);
+            Assert.AreEqual("请输入渠道的优先级(默认0):", result5.Item2);
+
+            var result6 = await _service.ExecuteAsync("2", chatId);
+            Assert.IsTrue(result6.Item1);
+            Assert.AreEqual("请输入渠道的API Key", result6.Item2);
+
+            var result7 = await _service.ExecuteAsync("test-api-key", chatId);
+            Assert.IsTrue(result7.Item1);
+            Assert.AreEqual("渠道创建成功", result7.Item2);
+
+            // Verify channel was created with correct values
+            var channel = await _context.LLMChannels.FirstOrDefaultAsync();
+            Assert.IsNotNull(channel);
+            Assert.AreEqual("Test Channel", channel.Name);
+            Assert.AreEqual(5, channel.Parallel);
+            Assert.AreEqual(2, channel.Priority);
+        }
+
+        [TestMethod]
+        public async Task ExecuteAsync_UpdateParallelAndPriority() {
+            // Arrange
+            long chatId = 123;
+            var channel = new LLMChannel {
+                Name = "Test Channel",
+                Gateway = "http://test.com",
+                ApiKey = "test-key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 0
+            };
+            await _context.LLMChannels.AddAsync(channel);
+            await _context.SaveChangesAsync();
+
+            // Setup state transitions
+            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)  // Initial state
+                .ReturnsAsync("editing_select_channel")
+                .ReturnsAsync("editing_select_field")
+                .ReturnsAsync("editing_input_value")
+                .ReturnsAsync("editing_select_field")
+                .ReturnsAsync("editing_input_value");
+
+            // Setup data key responses
+            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:data", It.IsAny<CommandFlags>()))
+                .ReturnsAsync(channel.Id.ToString())
+                .ReturnsAsync($"{channel.Id}|5")  // Field 5 = Parallel
+                .ReturnsAsync($"{channel.Id}")  // Field 6 = Priority
+                .ReturnsAsync($"{channel.Id}|6")  // For parallel update
+                .ReturnsAsync($"{channel.Id}"); // For priority update
+
+            // Act & Assert
+            var result1 = await _service.ExecuteAsync("编辑渠道", chatId);
+            Assert.IsTrue(result1.Item1);
+            Assert.IsTrue(result1.Item2.Contains("请选择要编辑的渠道ID："));
+
+            var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
+            Assert.IsTrue(result2.Item1);
+            Assert.IsTrue(result2.Item2.Contains("请选择要编辑的字段："));
+
+            var result3 = await _service.ExecuteAsync("5", chatId); // Select Parallel
+            Assert.IsTrue(result3.Item1);
+            Assert.AreEqual("请输入新的值：", result3.Item2);
+
+            var result4 = await _service.ExecuteAsync("10", chatId); // Update Parallel to 10
+            Assert.IsTrue(result4.Item1);
+            Assert.AreEqual("更新成功", result4.Item2);
+            
+            var result5 = await _service.ExecuteAsync("6", chatId); // Select Priority
+            Assert.IsTrue(result5.Item1);
+            Assert.AreEqual("请输入新的值：", result5.Item2);
+
+            var result6 = await _service.ExecuteAsync("3", chatId); // Update Priority to 3
+            Assert.IsTrue(result6.Item1);
+            Assert.AreEqual("更新成功", result6.Item2);
+
+            // Verify updates
+            var updatedChannel = await _context.LLMChannels.FindAsync(channel.Id);
+            Assert.AreEqual(10, updatedChannel.Parallel);
+            Assert.AreEqual(3, updatedChannel.Priority);
         }
     }
 }

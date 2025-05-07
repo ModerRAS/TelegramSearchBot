@@ -31,13 +31,15 @@ namespace TelegramSearchBot.Service.Manage {
         /// <param name="ApiKey">API密钥</param>
         /// <param name="Provider">LLM提供商</param>
         /// <returns>成功返回添加记录的Id，失败返回-1</returns>
-        public async Task<int> AddChannel(string Name, string Gateway, string ApiKey, LLMProvider Provider) {
+        public async Task<int> AddChannel(string Name, string Gateway, string ApiKey, LLMProvider Provider, int Parallel = 1, int Priority = 0) {
             try {
                 var channel = new LLMChannel {
                     Name = Name,
                     Gateway = Gateway,
                     ApiKey = ApiKey,
-                    Provider = Provider
+                    Provider = Provider,
+                    Parallel = Parallel,
+                    Priority = Priority
                 };
                 
                 await DataContext.LLMChannels.AddAsync(channel);
@@ -214,7 +216,7 @@ namespace TelegramSearchBot.Service.Manage {
         /// <param name="apiKey">新API密钥(可选)</param>
         /// <param name="provider">新提供商类型(可选)</param>
         /// <returns>成功返回true，失败返回false</returns>
-        public async Task<bool> UpdateChannel(int channelId, string? name = null, string? gateway = null, string? apiKey = null, LLMProvider? provider = null) {
+        public async Task<bool> UpdateChannel(int channelId, string? name = null, string? gateway = null, string? apiKey = null, LLMProvider? provider = null, int? parallel = null, int? priority = null) {
             // Skip transaction for InMemory database
             if (DataContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory") {
                 try {
@@ -234,6 +236,12 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     if (provider.HasValue) {
                         channel.Provider = provider.Value;
+                    }
+                    if (parallel.HasValue) {
+                        channel.Parallel = parallel.Value;
+                    }
+                    if (priority.HasValue) {
+                        channel.Priority = priority.Value;
                     }
 
                     await DataContext.SaveChangesAsync();
@@ -262,6 +270,12 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     if (provider.HasValue) {
                         channel.Provider = provider.Value;
+                    }
+                    if (parallel.HasValue) {
+                        channel.Parallel = parallel.Value;
+                    }
+                    if (priority.HasValue) {
+                        channel.Priority = priority.Value;
                     }
 
                     await DataContext.SaveChangesAsync();
@@ -370,11 +384,25 @@ namespace TelegramSearchBot.Service.Manage {
                         return (false, "无效的类型选择，请输入1或2");
                     }
                     await db.StringSetAsync(dataKey, $"{nameAndGateway[0]}|{nameAndGateway[1]}|{provider}");
+                    await db.StringSetAsync(stateKey, "awaiting_parallel");
+                    return (true, "请输入渠道的最大并行数量(默认1):");
+                
+                case "awaiting_parallel":
+                    int parallel = string.IsNullOrEmpty(Command) ? 1 : int.Parse(Command);
+                    var parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    await db.StringSetAsync(dataKey, $"{parts[0]}|{parts[1]}|{parts[2]}|{parallel}");
+                    await db.StringSetAsync(stateKey, "awaiting_priority");
+                    return (true, "请输入渠道的优先级(默认0):");
+                
+                case "awaiting_priority":
+                    int priority = string.IsNullOrEmpty(Command) ? 0 : int.Parse(Command);
+                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    await db.StringSetAsync(dataKey, $"{parts[0]}|{parts[1]}|{parts[2]}|{parts[3]}|{priority}");
                     await db.StringSetAsync(stateKey, "awaiting_apikey");
                     return (true, "请输入渠道的API Key");
                 
                 case "awaiting_apikey":
-                    var parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
                     var apiKey = Command;
                     provider = (LLMProvider)Enum.Parse(typeof(LLMProvider), parts[2]);
                     
@@ -383,7 +411,9 @@ namespace TelegramSearchBot.Service.Manage {
                         parts[0], 
                         parts[1], 
                         apiKey, 
-                        provider);
+                        provider,
+                        int.Parse(parts[3]),
+                        int.Parse(parts[4]));
                     
                     // 清理状态
                     await db.KeyDeleteAsync(stateKey);
@@ -403,10 +433,11 @@ namespace TelegramSearchBot.Service.Manage {
                     
                     await db.StringSetAsync(dataKey, channelId.ToString());
                     await db.StringSetAsync(stateKey, "editing_select_field");
-                    return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key");
+                    return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key\n5. 最大并行数量 ({channel.Parallel})\n6. 优先级 ({channel.Priority})");
                 
                 case "editing_select_field":
-                    var editChannelId = int.Parse(await db.StringGetAsync(dataKey));
+                    var value = await db.StringGetAsync(dataKey);
+                    var editChannelId = int.Parse(value);
                     await db.StringSetAsync(dataKey, $"{editChannelId}|{Command}");
                     
                     if (Command == "3") {
@@ -543,6 +574,18 @@ namespace TelegramSearchBot.Service.Manage {
                             break;
                         case "4":
                             updateResult = await UpdateChannel(editId, apiKey: Command);
+                            break;
+                        case "5":
+                            if (!int.TryParse(Command, out var tmp_parallel)) {
+                                return (false, "请输入有效的数字");
+                            }
+                            updateResult = await UpdateChannel(editId, parallel: tmp_parallel);
+                            break;
+                        case "6":
+                            if (!int.TryParse(Command, out var tmp_priority)) {
+                                return (false, "请输入有效的数字");
+                            }
+                            updateResult = await UpdateChannel(editId, priority: tmp_priority);
                             break;
                         default:
                             return (false, "无效的字段选择");
