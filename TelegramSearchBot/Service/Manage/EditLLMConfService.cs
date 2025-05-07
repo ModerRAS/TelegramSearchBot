@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,30 +8,264 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.Manage {
     public class EditLLMConfService : IService {
         public string ServiceName => "EditLLMConfService";
         protected readonly DataDbContext DataContext;
-        public EditLLMConfService(DataDbContext context) {
+        protected IConnectionMultiplexer connectionMultiplexer { get; set; }
+        public EditLLMConfService(
+            DataDbContext context, 
+            IConnectionMultiplexer connectionMultiplexer
+            ) {
             DataContext = context;
+            this.connectionMultiplexer = connectionMultiplexer;
         }
 
         /// <summary>
         /// 添加一个新的LLM通道到数据库
         /// </summary>
-        /// <param name="Name"></param>
-        /// <param name="Gateway"></param>
-        /// <param name="ApiKey"></param>
-        /// <param name="Provider"></param>
-        /// <returns></returns>
-        public async Task<bool> AddChannel(string Name, string Gateway, string ApiKey, LLMProvider Provider) {
-            
-
+        /// <param name="Name">通道名称</param>
+        /// <param name="Gateway">网关地址</param>
+        /// <param name="ApiKey">API密钥</param>
+        /// <param name="Provider">LLM提供商</param>
+        /// <returns>成功返回添加记录的Id，失败返回-1</returns>
+        public async Task<int> AddChannel(string Name, string Gateway, string ApiKey, LLMProvider Provider) {
+            try {
+                var channel = new LLMChannel {
+                    Name = Name,
+                    Gateway = Gateway,
+                    ApiKey = ApiKey,
+                    Provider = Provider
+                };
+                
+                await DataContext.LLMChannels.AddAsync(channel);
+                await DataContext.SaveChangesAsync();
+                return channel.Id;
+            }
+            catch {
+                return -1;
+            }
         }
 
-        public async Task AddModelWithChannel() {
+        /// <summary>
+        /// 获取所有LLM通道列表
+        /// </summary>
+        /// <returns>包含所有LLM通道的列表，如果查询失败返回空列表</returns>
+        public async Task<List<LLMChannel>> GetAllChannels() {
+            try {
+                return await DataContext.LLMChannels.ToListAsync();
+            }
+            catch {
+                return new List<LLMChannel>();
+            }
+        }
 
+        /// <summary>
+        /// 根据ID获取单个LLM通道
+        /// </summary>
+        /// <param name="Id">通道ID</param>
+        /// <returns>匹配的通道，如果未找到或查询失败返回null</returns>
+        public async Task<LLMChannel?> GetChannelById(int Id) {
+            try {
+                return await DataContext.LLMChannels.FindAsync(Id);
+            }
+            catch {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 根据名称模糊查询LLM通道
+        /// </summary>
+        /// <param name="Name">通道名称</param>
+        /// <returns>匹配的通道列表，如果查询失败返回空列表</returns>
+        public async Task<List<LLMChannel>> GetChannelsByName(string Name) {
+            try {
+                return await DataContext.LLMChannels
+                    .Where(c => c.Name.Contains(Name))
+                    .ToListAsync();
+            }
+            catch {
+                return new List<LLMChannel>();
+            }
+        }
+
+        /// <summary>
+        /// 批量添加模型与通道的关联关系(字符串形式)
+        /// </summary>
+        /// <param name="channelId">LLM通道ID</param>
+        /// <param name="modelNames">要关联的模型名称字符串，用逗号或分号分隔</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        public async Task<bool> AddModelWithChannel(int channelId, string modelNames) {
+            if (string.IsNullOrWhiteSpace(modelNames)) {
+                return false;
+            }
+
+            var models = modelNames.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(m => m.Trim())
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .ToList();
+
+            return await AddModelWithChannel(channelId, models);
+        }
+
+        /// <summary>
+        /// 删除特定渠道中的特定模型关联
+        /// </summary>
+        /// <param name="channelId">渠道ID</param>
+        /// <param name="modelName">要删除的模型名称</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        public async Task<bool> RemoveModelFromChannel(int channelId, string modelName) {
+            if (string.IsNullOrWhiteSpace(modelName)) {
+                return false;
+            }
+
+            using var transaction = await DataContext.Database.BeginTransactionAsync();
+            try {
+                var model = await DataContext.ChannelsWithModel
+                    .FirstOrDefaultAsync(m => m.LLMChannelId == channelId && m.ModelName == modelName);
+                
+                if (model != null) {
+                    DataContext.ChannelsWithModel.Remove(model);
+                    await DataContext.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                return true;
+            }
+            catch {
+                await transaction.RollbackAsync();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 批量添加模型与通道的关联关系(列表形式)
+        /// </summary>
+        /// <param name="channelId">LLM通道ID</param>
+        /// <param name="modelNames">要关联的模型名称列表</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        /// <summary>
+        /// 更新LLM通道信息
+        /// </summary>
+        public async Task<bool> AddModelWithChannel(int channelId, List<string> modelNames) {
+            if (modelNames == null || modelNames.Count == 0) {
+                return false;
+            }
+
+            using var transaction = await DataContext.Database.BeginTransactionAsync();
+            try {
+                foreach (var modelName in modelNames) {
+                    await DataContext.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                        LLMChannelId = channelId,
+                        ModelName = modelName
+                    });
+                }
+                
+                await DataContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch {
+                await transaction.RollbackAsync();
+                return false;
+            }
+        }
+
+        /// <param name="channelId">要修改的通道ID</param>
+        /// <param name="name">新名称(可选)</param>
+        /// <param name="gateway">新网关地址(可选)</param>
+        /// <param name="apiKey">新API密钥(可选)</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        public async Task<bool> UpdateChannel(int channelId, string? name = null, string? gateway = null, string? apiKey = null) {
+            using var transaction = await DataContext.Database.BeginTransactionAsync();
+            try {
+                var channel = await DataContext.LLMChannels.FindAsync(channelId);
+                if (channel == null) {
+                    return false;
+                }
+
+                if (!string.IsNullOrWhiteSpace(name)) {
+                    channel.Name = name;
+                }
+                if (!string.IsNullOrWhiteSpace(gateway)) {
+                    channel.Gateway = gateway;
+                }
+                if (!string.IsNullOrWhiteSpace(apiKey)) {
+                    channel.ApiKey = apiKey;
+                }
+
+                await DataContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch {
+                await transaction.RollbackAsync();
+                return false;
+            }
+        }
+        public async Task<(bool, string)> ExecuteAsync(string Command, long ChatId) {
+            var db = connectionMultiplexer.GetDatabase();
+            string stateKey = $"llmconf:{ChatId}:state";
+            string dataKey = $"llmconf:{ChatId}:data";
+
+            // 获取当前状态
+            var currentState = await db.StringGetAsync(stateKey);
+            
+            if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
+                await db.StringSetAsync(stateKey, "awaiting_name");
+                return (true, "请输入渠道的名称");
+            }
+
+            switch (currentState.ToString()) {
+                case "awaiting_name":
+                    await db.StringSetAsync(dataKey, Command); // 存储名称
+                    await db.StringSetAsync(stateKey, "awaiting_gateway");
+                    return (true, "请输入渠道地址");
+                
+                case "awaiting_gateway":
+                    var name = await db.StringGetAsync(dataKey);
+                    await db.StringSetAsync(dataKey, $"{name}|{Command}"); // 追加地址
+                    await db.StringSetAsync(stateKey, "awaiting_provider");
+                    return (true, "请选择渠道类型：\n1. OpenAI\n2. Ollama");
+                
+                case "awaiting_provider":
+                    var nameAndGateway = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    LLMProvider provider;
+                    if (Command.Trim() == "1") {
+                        provider = LLMProvider.OpenAI;
+                    } else if (Command.Trim() == "2") {
+                        provider = LLMProvider.Ollama;
+                    } else {
+                        return (false, "无效的类型选择，请输入1或2");
+                    }
+                    await db.StringSetAsync(dataKey, $"{nameAndGateway[0]}|{nameAndGateway[1]}|{provider}");
+                    await db.StringSetAsync(stateKey, "awaiting_apikey");
+                    return (true, "请输入渠道的API Key");
+                
+                case "awaiting_apikey":
+                    var parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    var apiKey = Command;
+                    provider = (LLMProvider)Enum.Parse(typeof(LLMProvider), parts[2]);
+                    
+                    // 创建渠道
+                    var result = await AddChannel(
+                        parts[0], 
+                        parts[1], 
+                        apiKey, 
+                        provider);
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, result > 0 ? "渠道创建成功" : "渠道创建失败");
+                
+                default:
+                    // 非预期状态或初始状态
+                    return (false, "");
+            }
         }
     }
 }
