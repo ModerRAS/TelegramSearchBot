@@ -122,21 +122,39 @@ namespace TelegramSearchBot.Service.Manage {
                 return false;
             }
 
-            using var transaction = await DataContext.Database.BeginTransactionAsync();
-            try {
-                var model = await DataContext.ChannelsWithModel
-                    .FirstOrDefaultAsync(m => m.LLMChannelId == channelId && m.ModelName == modelName);
-                
-                if (model != null) {
-                    DataContext.ChannelsWithModel.Remove(model);
-                    await DataContext.SaveChangesAsync();
-                    await transaction.CommitAsync();
+            // Skip transaction for InMemory database
+            if (DataContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory") {
+                try {
+                    var model = await DataContext.ChannelsWithModel
+                        .FirstOrDefaultAsync(m => m.LLMChannelId == channelId && m.ModelName == modelName);
+                    
+                    if (model != null) {
+                        DataContext.ChannelsWithModel.Remove(model);
+                        await DataContext.SaveChangesAsync();
+                    }
+                    return true;
                 }
-                return true;
+                catch {
+                    return false;
+                }
             }
-            catch {
-                await transaction.RollbackAsync();
-                return false;
+            else {
+                using var transaction = await DataContext.Database.BeginTransactionAsync();
+                try {
+                    var model = await DataContext.ChannelsWithModel
+                        .FirstOrDefaultAsync(m => m.LLMChannelId == channelId && m.ModelName == modelName);
+                    
+                    if (model != null) {
+                        DataContext.ChannelsWithModel.Remove(model);
+                        await DataContext.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                    }
+                    return true;
+                }
+                catch {
+                    await transaction.RollbackAsync();
+                    return false;
+                }
             }
         }
 
@@ -154,22 +172,39 @@ namespace TelegramSearchBot.Service.Manage {
                 return false;
             }
 
-            using var transaction = await DataContext.Database.BeginTransactionAsync();
-            try {
-                foreach (var modelName in modelNames) {
-                    await DataContext.ChannelsWithModel.AddAsync(new ChannelWithModel {
-                        LLMChannelId = channelId,
-                        ModelName = modelName
-                    });
+            // Skip transaction for InMemory database
+            if (DataContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory") {
+                try {
+                    foreach (var modelName in modelNames) {
+                        await DataContext.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                            LLMChannelId = channelId,
+                            ModelName = modelName
+                        });
+                    }
+                    await DataContext.SaveChangesAsync();
+                    return true;
                 }
-                
-                await DataContext.SaveChangesAsync();
-                await transaction.CommitAsync();
-                return true;
+                catch {
+                    return false;
+                }
             }
-            catch {
-                await transaction.RollbackAsync();
-                return false;
+            else {
+                using var transaction = await DataContext.Database.BeginTransactionAsync();
+                try {
+                    foreach (var modelName in modelNames) {
+                        await DataContext.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                            LLMChannelId = channelId,
+                            ModelName = modelName
+                        });
+                    }
+                    await DataContext.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    return true;
+                }
+                catch {
+                    await transaction.RollbackAsync();
+                    return false;
+                }
             }
         }
 
@@ -180,33 +215,63 @@ namespace TelegramSearchBot.Service.Manage {
         /// <param name="provider">新提供商类型(可选)</param>
         /// <returns>成功返回true，失败返回false</returns>
         public async Task<bool> UpdateChannel(int channelId, string? name = null, string? gateway = null, string? apiKey = null, LLMProvider? provider = null) {
-            using var transaction = await DataContext.Database.BeginTransactionAsync();
-            try {
-                var channel = await DataContext.LLMChannels.FindAsync(channelId);
-                if (channel == null) {
+            // Skip transaction for InMemory database
+            if (DataContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory") {
+                try {
+                    var channel = await DataContext.LLMChannels.FindAsync(channelId);
+                    if (channel == null) {
+                        return false;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(name)) {
+                        channel.Name = name;
+                    }
+                    if (!string.IsNullOrWhiteSpace(gateway)) {
+                        channel.Gateway = gateway;
+                    }
+                    if (!string.IsNullOrWhiteSpace(apiKey)) {
+                        channel.ApiKey = apiKey;
+                    }
+                    if (provider.HasValue) {
+                        channel.Provider = provider.Value;
+                    }
+
+                    await DataContext.SaveChangesAsync();
+                    return true;
+                }
+                catch {
                     return false;
                 }
-
-                if (!string.IsNullOrWhiteSpace(name)) {
-                    channel.Name = name;
-                }
-                if (!string.IsNullOrWhiteSpace(gateway)) {
-                    channel.Gateway = gateway;
-                }
-                if (!string.IsNullOrWhiteSpace(apiKey)) {
-                    channel.ApiKey = apiKey;
-                }
-                if (provider.HasValue) {
-                    channel.Provider = provider.Value;
-                }
-
-                await DataContext.SaveChangesAsync();
-                await transaction.CommitAsync();
-                return true;
             }
-            catch {
-                await transaction.RollbackAsync();
-                return false;
+            else {
+                using var transaction = await DataContext.Database.BeginTransactionAsync();
+                try {
+                    var channel = await DataContext.LLMChannels.FindAsync(channelId);
+                    if (channel == null) {
+                        return false;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(name)) {
+                        channel.Name = name;
+                    }
+                    if (!string.IsNullOrWhiteSpace(gateway)) {
+                        channel.Gateway = gateway;
+                    }
+                    if (!string.IsNullOrWhiteSpace(apiKey)) {
+                        channel.ApiKey = apiKey;
+                    }
+                    if (provider.HasValue) {
+                        channel.Provider = provider.Value;
+                    }
+
+                    await DataContext.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    return true;
+                }
+                catch {
+                    await transaction.RollbackAsync();
+                    return false;
+                }
             }
         }
         public async Task<(bool, string)> ExecuteAsync(string Command, long ChatId) {
