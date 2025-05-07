@@ -14,7 +14,7 @@ using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Controller.AI.LLM
 {
-    public class OpenAIController : IOnUpdate
+    public class GeneralLLMController : IOnUpdate
     {
         private readonly ILogger logger;
         private readonly OpenAIService service;
@@ -24,14 +24,16 @@ namespace TelegramSearchBot.Controller.AI.LLM
         public MessageService messageService { get; set; }
         public AdminService adminService { get; set; }
         public SendMessageService SendMessageService { get; set; }
-        public OpenAIController(
+        public GeneralLLMService GeneralLLMService { get; set; }
+        public GeneralLLMController(
             MessageService messageService,
             ITelegramBotClient botClient,
             OpenAIService openaiService,
             SendMessage Send,
             ILogger<OllamaController> logger,
             AdminService adminService,
-            SendMessageService SendMessageService
+            SendMessageService SendMessageService,
+            GeneralLLMService generalLLMService
             )
         {
             this.logger = logger;
@@ -41,6 +43,7 @@ namespace TelegramSearchBot.Controller.AI.LLM
             this.messageService = messageService;
             this.adminService = adminService;
             this.SendMessageService = SendMessageService;
+            GeneralLLMService = generalLLMService;
 
         }
         public async Task ExecuteAsync(Update e)
@@ -72,7 +75,7 @@ namespace TelegramSearchBot.Controller.AI.LLM
             {
                 var ModelName = await service.GetModel(e.Message.Chat.Id);
                 var InitialContent = $"{ModelName}初始化中。。。";
-                var messages = SendMessageService.SendMessage(service.ExecAsync(new Model.Data.Message()
+                var messages = SendMessageService.SendMessage(GeneralLLMService.ExecAsync(new Model.Data.Message()
                 {
                     Content = Message,
                     DateTime = e.Message.Date,
