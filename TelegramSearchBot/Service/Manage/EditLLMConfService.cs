@@ -236,6 +236,51 @@ namespace TelegramSearchBot.Service.Manage {
                 await db.StringSetAsync(stateKey, "editing_select_channel");
                 return (true, sb.ToString());
             }
+            else if (Command.Trim().Equals("添加模型", StringComparison.OrdinalIgnoreCase)) {
+                var channels = await GetAllChannels();
+                if (channels.Count == 0) {
+                    return (true, "当前没有可添加模型的渠道");
+                }
+                
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要添加模型的渠道ID：");
+                foreach (var channel in channels) {
+                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+                }
+                
+                await db.StringSetAsync(stateKey, "adding_model_select_channel");
+                return (true, sb.ToString());
+            }
+            else if (Command.Trim().Equals("移除模型", StringComparison.OrdinalIgnoreCase)) {
+                var channels = await GetAllChannels();
+                if (channels.Count == 0) {
+                    return (true, "当前没有可移除模型的渠道");
+                }
+                
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要移除模型的渠道ID：");
+                foreach (var channel in channels) {
+                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+                }
+                
+                await db.StringSetAsync(stateKey, "removing_model_select_channel");
+                return (true, sb.ToString());
+            }
+            else if (Command.Trim().Equals("查看模型", StringComparison.OrdinalIgnoreCase)) {
+                var channels = await GetAllChannels();
+                if (channels.Count == 0) {
+                    return (true, "当前没有可查看模型的渠道");
+                }
+                
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要查看模型的渠道ID：");
+                foreach (var channel in channels) {
+                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+                }
+                
+                await db.StringSetAsync(stateKey, "viewing_model_select_channel");
+                return (true, sb.ToString());
+            }
 
             switch (currentState.ToString()) {
                 case "awaiting_name":
@@ -307,6 +352,110 @@ namespace TelegramSearchBot.Service.Manage {
                         await db.StringSetAsync(stateKey, "editing_input_value");
                         return (true, "请输入新的值：");
                     }
+                
+                case "adding_model_select_channel":
+                    if (!int.TryParse(Command, out var addModelChannelId)) {
+                        return (false, "请输入有效的渠道ID");
+                    }
+                    
+                    var addModelChannel = await GetChannelById(addModelChannelId);
+                    if (addModelChannel == null) {
+                        return (false, "找不到指定的渠道");
+                    }
+                    
+                    await db.StringSetAsync(dataKey, addModelChannelId.ToString());
+                    await db.StringSetAsync(stateKey, "adding_model_input");
+                    return (true, "请输入要添加的模型名称，多个模型用逗号或分号分隔");
+                
+                case "adding_model_input":
+                    var addChannelId = int.Parse(await db.StringGetAsync(dataKey));
+                    var ModelResult = await AddModelWithChannel(addChannelId, Command);
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, ModelResult ? "模型添加成功" : "模型添加失败");
+                
+                case "removing_model_select_channel":
+                    if (!int.TryParse(Command, out var removeModelChannelId)) {
+                        return (false, "请输入有效的渠道ID");
+                    }
+                    
+                    var removeModelChannel = await GetChannelById(removeModelChannelId);
+                    if (removeModelChannel == null) {
+                        return (false, "找不到指定的渠道");
+                    }
+                    
+                    // 获取该渠道下的所有模型
+                    var models = await DataContext.ChannelsWithModel
+                        .Where(m => m.LLMChannelId == removeModelChannelId)
+                        .Select(m => m.ModelName)
+                        .ToListAsync();
+                    
+                    if (models.Count == 0) {
+                        return (true, "该渠道下没有可移除的模型");
+                    }
+                    
+                    var sb = new StringBuilder();
+                    sb.AppendLine("请选择要移除的模型：");
+                    for (int i = 0; i < models.Count; i++) {
+                        sb.AppendLine($"{i + 1}. {models[i]}");
+                    }
+                    
+                    await db.StringSetAsync(dataKey, $"{removeModelChannelId}|{string.Join(",", models)}");
+                    await db.StringSetAsync(stateKey, "removing_model_select");
+                    return (true, sb.ToString());
+                
+                case "removing_model_select":
+                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    var removeChannelId = int.Parse(parts[0]);
+                    var modelList = parts[1].Split(',');
+                    
+                    if (!int.TryParse(Command, out var modelIndex) || modelIndex < 1 || modelIndex > modelList.Length) {
+                        return (false, "请输入有效的模型序号");
+                    }
+                    
+                    var modelName = modelList[modelIndex - 1];
+                    var removeResult = await RemoveModelFromChannel(removeChannelId, modelName);
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, removeResult ? "模型移除成功" : "模型移除失败");
+                
+                case "viewing_model_select_channel":
+                    if (!int.TryParse(Command, out var viewModelChannelId)) {
+                        return (false, "请输入有效的渠道ID");
+                    }
+                    
+                    var viewModelChannel = await GetChannelById(viewModelChannelId);
+                    if (viewModelChannel == null) {
+                        return (false, "找不到指定的渠道");
+                    }
+                    
+                    // 获取该渠道下的所有模型
+                    var channelModels = await DataContext.ChannelsWithModel
+                        .Where(m => m.LLMChannelId == viewModelChannelId)
+                        .Select(m => m.ModelName)
+                        .ToListAsync();
+                    
+                    var modelSb = new StringBuilder();
+                    modelSb.AppendLine($"渠道 {viewModelChannel.Name} 下的模型列表：");
+                    if (channelModels.Count == 0) {
+                        modelSb.AppendLine("暂无模型");
+                    } else {
+                        foreach (var model in channelModels) {
+                            modelSb.AppendLine($"- {model}");
+                        }
+                    }
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, modelSb.ToString());
                 
                 case "editing_input_value":
                     parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
