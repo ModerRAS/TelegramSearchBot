@@ -40,7 +40,7 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
 
                     service.AddDbContext<DataDbContext>(options => {
-                        options.UseSqlite($"Data Source={Env.WorkDir}/Data.sqlite;Cache=Shared;Mode=ReadWrite;");
+                        options.UseSqlite($"Data Source={Path.Combine(Env.WorkDir, "Data.sqlite")};Cache=Shared;Mode=ReadWriteCreate;");
                     }, ServiceLifetime.Transient);
                     AddController(service);
                     AddService(service);
