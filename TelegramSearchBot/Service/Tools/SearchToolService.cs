@@ -164,14 +164,21 @@ namespace TelegramSearchBot.Service.Tools
                 }
                 else if (!string.IsNullOrWhiteSpace(senderNameHint))
                 {
-                    // Find user IDs matching the name hint
+                    // Find user IDs matching the name hint using client-side evaluation for case-insensitive contains
                     var lowerHint = senderNameHint.ToLowerInvariant();
-                    var matchingUserIds = await _dbContext.UserData
+                    
+                    // Fetch minimal data needed for filtering
+                    var potentialUsers = await _dbContext.UserData
+                        .Select(u => new { u.Id, u.FirstName, u.LastName }) 
+                        .ToListAsync(); // Evaluate on client to allow ToLowerInvariant/Contains
+
+                    // Filter in memory
+                    var matchingUserIds = potentialUsers
                         .Where(u => (u.FirstName != null && u.FirstName.ToLowerInvariant().Contains(lowerHint)) || 
                                     (u.LastName != null && u.LastName.ToLowerInvariant().Contains(lowerHint)))
                         .Select(u => u.Id)
                         .Distinct()
-                        .ToListAsync(); // Execute this subquery
+                        .ToList(); 
 
                     if (matchingUserIds.Any())
                     {
