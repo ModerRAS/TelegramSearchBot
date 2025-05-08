@@ -5,6 +5,7 @@ using TelegramSearchBot.Service.Common; // For ChatContextProvider
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using TelegramSearchBot.Intrerface; // Added for IService
 
 namespace TelegramSearchBot.Service.Tools
 {
@@ -24,8 +25,10 @@ namespace TelegramSearchBot.Service.Tools
         public string ContentPreview { get; set; }
     }
 
-    public class SearchToolService
+    public class SearchToolService : IService
     {
+        public string ServiceName => "SearchToolService";
+
         private readonly LuceneManager _luceneManager;
         // Optional: Inject ILogger<SearchToolService> if you need logging within this service
         // private readonly ILogger<SearchToolService> _logger; 
