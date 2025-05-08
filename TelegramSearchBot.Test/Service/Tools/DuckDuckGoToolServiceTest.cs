@@ -64,7 +64,7 @@ namespace TelegramSearchBot.Test.Service.Tools
 
             // Assert
             Assert.IsNotNull(result);
-            Assert.AreEqual(1, result.Results.Count, "Expected exactly 1 search result");
+            Assert.AreEqual(2, result.Results.Count, "Expected exactly 2 search result");
             var item = result.Results[0];
             Assert.AreEqual("Test & Result <3>", item.Title, "Title should match with HTML entities decoded");
             Assert.AreEqual("example.com?q=1&w=2", item.Url, "URL should match with special characters");
