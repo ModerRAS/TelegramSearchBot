@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Reflection;
-using System.Text.Json;
+// using System.Text.Json; // Removed
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Service.Common; // For ChatContextProvider
 using TelegramSearchBot.Model;
@@ -272,6 +272,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                     if (McpToolHelper.TryParseToolCall(llmFullResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
                     {
+                        // Use Newtonsoft.Json for logging arguments
                         _logger.LogInformation($"LLM requested tool: {parsedToolName} with arguments: {JsonConvert.SerializeObject(toolArguments)}");
                         
                         // ChatId is now handled by ChatContextProvider within the tool method itself if needed.
@@ -287,7 +288,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             } else if (toolResultObject is string s) {
                                 toolResultString = s;
                             } else {
-                                toolResultString = JsonConvert.SerializeObject(toolResultObject);
+                                // Use Newtonsoft.Json for serializing result
+                                toolResultString = JsonConvert.SerializeObject(toolResultObject); 
                             }
 
                             _logger.LogInformation($"Tool {parsedToolName} executed. Result: {toolResultString}");

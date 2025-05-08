@@ -8,6 +8,7 @@ using System.Globalization;
 using Microsoft.Extensions.DependencyInjection; // For potential DI later
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json; // Added for Json.NET
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -268,12 +269,14 @@ namespace TelegramSearchBot.Service.AI.LLM
                 
                 // For complex types, you might try JSON deserialization if stringValue is JSON
                 // This is a simplification; robust JSON handling would be more involved.
-                if (!targetType.IsPrimitive && !targetType.IsEnum && targetType != typeof(string) && targetType != typeof(DateTime)) {
-                     try {
-                        return System.Text.Json.JsonSerializer.Deserialize(stringValue, targetType);
-                     } catch (Exception jsonEx) {
-                        _logger?.LogWarning(jsonEx, $"Failed to deserialize '{stringValue}' to type {targetType.Name} for parameter {paramNameForError}. Falling back to string or default if possible.");
-                        // Fallback or re-throw depending on strictness, for now, we'll let it fail below if not string.
+                 if (!targetType.IsPrimitive && !targetType.IsEnum && targetType != typeof(string) && targetType != typeof(DateTime)) {
+                      try {
+                        // Use Newtonsoft.Json for deserialization
+                        return JsonConvert.DeserializeObject(stringValue, targetType);
+                      } catch (Exception jsonEx) {
+                         _logger?.LogWarning(jsonEx, $"Failed to deserialize '{stringValue}' to type {targetType.Name} using Newtonsoft.Json for parameter {paramNameForError}.");
+                         // If deserialization fails, re-throw or handle as appropriate
+                         // For now, let the ArgumentException below handle it if conversion isn't possible otherwise.
                      }
                 }
 
