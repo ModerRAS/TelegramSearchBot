@@ -78,23 +78,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var ModelName = GroupSetting?.LLMModelName;
             return ModelName;
         }
+        // This method is needed again for message merging
         public bool IsSameSender(Model.Data.Message message1, Model.Data.Message message2)
         {
-            if (message1.FromUserId != Env.BotId && message2.FromUserId != Env.BotId)
-            {
-                return true;
-            }
-            else if (message1.FromUserId == Env.BotId && message2.FromUserId == Env.BotId)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+            if (message1 == null || message2 == null) return false; // Guard against nulls
+
+            // Treat non-bot users as the same sender role ("User")
+            bool msg1IsUser = message1.FromUserId != Env.BotId;
+            bool msg2IsUser = message2.FromUserId != Env.BotId;
+            
+            return msg1IsUser == msg2IsUser; // Both users or both bots count as same sender role
         }
 
-        // 小工具函数，减少重复判断
+        // 小工具函数，减少重复判断 - This helper is needed again
         private void AddMessageToHistory(List<ChatMessage> ChatHistory, long fromUserId, string content)
         {
             if (fromUserId == Env.BotId)
@@ -126,50 +122,63 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
             _logger.LogInformation($"OpenAI获取数据库得到{ChatId}中的{Messages.Count}条结果。");
 
+            // Restore merging logic
             var str = new StringBuilder();
             Model.Data.Message previous = null;
             foreach (var message in Messages)
             {
-                if (previous == null && message.FromUserId.Equals(Env.BotId))
-                {
-                    continue;
-                }
+                // Skip initial bot messages if they are the very first in the history segment
+                 if (previous == null && !ChatHistory.Any(ch => ch is UserChatMessage || ch is AssistantChatMessage) && message.FromUserId.Equals(Env.BotId))
+                 {
+                     previous = message; // Still need to track it as previous for next iteration's IsSameSender check
+                     continue;
+                 }
+
+                // If the sender role changes, add the accumulated block for the previous sender
                 if (previous != null && !IsSameSender(previous, message))
                 {
                     AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
                     str.Clear();
                 }
+
+                // Append current message details to the buffer
                 str.Append($"[{message.DateTime.ToString("yyyy-MM-dd HH:mm:ss zzz")}]");
                 if (message.FromUserId != 0)
                 {
-                    var FromUserName = from s in _dbContext.UserData
-                                       where s.Id == message.FromUserId
-                                       select $"{s.FirstName} {s.LastName}";
-                    str.Append(await FromUserName.FirstOrDefaultAsync());
+                    var fromUserName = await (from s in _dbContext.UserData
+                                              where s.Id == message.FromUserId
+                                              select $"{s.FirstName} {s.LastName}").FirstOrDefaultAsync();
+                    str.Append(fromUserName ?? $"User({message.FromUserId})");
                 }
+                else
+                {
+                     str.Append("System/Unknown"); // Or BotName
+                }
+
                 if (message.ReplyToMessageId != 0)
                 {
                     str.Append('（');
-                    var ReplyToUserId = await (from s in _dbContext.Messages
+                    var replyToUserId = await (from s in _dbContext.Messages
                                                where s.Id == message.ReplyToMessageId
                                                select s.FromUserId).FirstOrDefaultAsync();
-                    var FromUserName = from s in _dbContext.UserData
-                                       where s.Id == ReplyToUserId
-                                       select $"{s.FirstName} {s.LastName}";
-                    str.Append(await FromUserName.FirstOrDefaultAsync());
+                    var replyToUserName = await (from s in _dbContext.UserData
+                                                 where s.Id == replyToUserId
+                                                 select $"{s.FirstName} {s.LastName}").FirstOrDefaultAsync();
+                    str.Append($"Reply to {replyToUserName ?? $"User({replyToUserId})"}");
                     str.Append('）');
                 }
-                str.Append('：').Append(message.Content).Append("\r\n");
+                str.Append('：').Append(message.Content).Append("\n"); // Use newline to separate messages within a block
 
-                previous = message;
+                previous = message; // Update previous message
             }
-            // 处理最后一段未写入的内容
+            // Add the last accumulated block after the loop finishes
             if (previous != null && str.Length > 0)
             {
                 AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
             }
             return ChatHistory;
         }
+
         public async Task<bool> NeedReply(string InputToken, long ChatId)
         {
             var prompt = $"你是一个判断助手，只负责判断一段消息是否为提问。\r\n判断标准：\r\n1. 如果消息是问题（无论是直接问句还是隐含的提问意图），返回“是”。\r\n2. 如果消息不是问题（陈述、感叹、命令、闲聊等），返回“否”。\r\n重要：只回答“是”或“否”，不要输出其他内容。";
@@ -281,17 +290,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             }
 
                             _logger.LogInformation($"Tool {parsedToolName} executed. Result: {toolResultString}");
+                            // Revert to using SystemChatMessage for tool feedback
                             string toolFeedback = $"[Tool Output for '{parsedToolName}']: {toolResultString}";
-                            chatHistory.Add(new SystemChatMessage(toolFeedback));
-                            _logger.LogInformation($"Added to history for LLM: {toolFeedback}");
+                            chatHistory.Add(new UserChatMessage(toolFeedback));
+                            _logger.LogInformation($"Added SystemChatMessage to history for LLM: {toolFeedback}");
                         }
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, $"Error executing tool {parsedToolName}.");
                             string errorMessage = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                            // Revert to using SystemChatMessage for tool error feedback
                             string errorFeedback = $"[Tool Error for '{parsedToolName}']: {errorMessage}";
                             chatHistory.Add(new SystemChatMessage(errorFeedback));
-                            _logger.LogInformation($"Added to history for LLM: {errorFeedback}");
+                            _logger.LogInformation($"Added SystemChatMessage to history for LLM: {errorFeedback}");
                         }
                     }
                     else
