@@ -13,6 +13,7 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Service.Common; // For ChatContextProvider
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using Newtonsoft.Json;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     public class OpenAIService : IService, ILLMService {
@@ -271,7 +272,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                     if (McpToolHelper.TryParseToolCall(llmFullResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
                     {
-                        _logger.LogInformation($"LLM requested tool: {parsedToolName} with arguments: {JsonSerializer.Serialize(toolArguments)}");
+                        _logger.LogInformation($"LLM requested tool: {parsedToolName} with arguments: {JsonConvert.SerializeObject(toolArguments)}");
                         
                         // ChatId is now handled by ChatContextProvider within the tool method itself if needed.
                         // No need to inject it here anymore.
@@ -286,23 +287,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             } else if (toolResultObject is string s) {
                                 toolResultString = s;
                             } else {
-                                toolResultString = JsonSerializer.Serialize(toolResultObject, new JsonSerializerOptions { WriteIndented = false });
+                                toolResultString = JsonConvert.SerializeObject(toolResultObject);
                             }
 
                             _logger.LogInformation($"Tool {parsedToolName} executed. Result: {toolResultString}");
-                            // Revert to using SystemChatMessage for tool feedback
-                            string toolFeedback = $"[Tool Output for '{parsedToolName}']: {toolResultString}";
-                            chatHistory.Add(new UserChatMessage(toolFeedback));
-                            _logger.LogInformation($"Added SystemChatMessage to history for LLM: {toolFeedback}");
+                            // Use UserChatMessage for tool feedback as requested by user
+                            string toolFeedbackForLlm = $"[Executed Tool '{parsedToolName}'. Result: {toolResultString}]";
+                            chatHistory.Add(new UserChatMessage(toolFeedbackForLlm));
+                            _logger.LogInformation($"Added UserChatMessage to history for LLM: {toolFeedbackForLlm}");
                         }
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, $"Error executing tool {parsedToolName}.");
                             string errorMessage = $"Error executing tool {parsedToolName}: {ex.Message}.";
-                            // Revert to using SystemChatMessage for tool error feedback
-                            string errorFeedback = $"[Tool Error for '{parsedToolName}']: {errorMessage}";
-                            chatHistory.Add(new SystemChatMessage(errorFeedback));
-                            _logger.LogInformation($"Added SystemChatMessage to history for LLM: {errorFeedback}");
+                            // Use UserChatMessage for tool error feedback as requested by user
+                            string errorFeedbackForLlm = $"[Tool '{parsedToolName}' Execution Failed. Error: {errorMessage}]";
+                            chatHistory.Add(new UserChatMessage(errorFeedbackForLlm));
+                            _logger.LogInformation($"Added UserChatMessage to history for LLM: {errorFeedbackForLlm}");
                         }
                     }
                     else
