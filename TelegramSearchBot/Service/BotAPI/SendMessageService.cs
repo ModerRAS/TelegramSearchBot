@@ -68,7 +68,7 @@ namespace TelegramSearchBot.Service.BotAPI
                     );
             }, ChatId < 0);
         }
-        public async IAsyncEnumerable<Model.Data.Message> SendMessage(IAsyncEnumerable<string> messages, long ChatId, int replyTo, string InitialContent = "Initializing...")
+        public async IAsyncEnumerable<Model.Data.Message> SendMessage(IAsyncEnumerable<string> messages, long ChatId, int replyTo, string InitialContent = "Initializing...", ParseMode parseMode = ParseMode.Markdown)
         {
             // 初始化一条消息，准备编辑
             var sentMessage = await botClient.SendMessage(
@@ -110,7 +110,7 @@ namespace TelegramSearchBot.Service.BotAPI
                         await botClient.EditMessageText(
                             chatId: sentMessage.Chat.Id,
                             messageId: sentMessage.MessageId,
-                            parseMode: ParseMode.None,
+                            parseMode: parseMode,
                             text: builder.ToString()
                             );
                     }, ChatId < 0);
@@ -121,7 +121,7 @@ namespace TelegramSearchBot.Service.BotAPI
                 var message = await botClient.EditMessageText(
                     chatId: sentMessage.Chat.Id,
                     messageId: sentMessage.MessageId,
-                    parseMode: ParseMode.None,
+                    parseMode: parseMode,
                     text: builder.ToString()
                     );
                 logger.LogInformation($"Send OpenAI result success {message.MessageId} {builder.ToString()}");
