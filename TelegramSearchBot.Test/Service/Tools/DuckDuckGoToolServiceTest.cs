@@ -32,13 +32,54 @@ namespace TelegramSearchBot.Test.Service.Tools
         }
 
         [TestMethod]
-        public void ParseHtml_ShouldHandleEmptyHtml()
+        public void ParseHtml_ShouldHandleEmptyResults()
         {
             // Arrange
             var service = new DuckDuckGoToolService();
+            var assembly = typeof(DuckDuckGoToolServiceTest).Assembly;
+            using var stream = assembly.GetManifestResourceStream("TelegramSearchBot.Test.TestData.EmptyResults.html");
+            using var reader = new StreamReader(stream);
+            var html = reader.ReadToEnd();
             
             // Act
-            var result = service.ParseHtml("", "test query");
+            var result = service.ParseHtml(html, "test query");
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.AreEqual(0, result.Results.Count);
+        }
+
+        [TestMethod]
+        public void ParseHtml_ShouldHandleSpecialCharacters()
+        {
+            // Arrange
+            var service = new DuckDuckGoToolService();
+            var assembly = typeof(DuckDuckGoToolServiceTest).Assembly;
+            using var stream = assembly.GetManifestResourceStream("TelegramSearchBot.Test.TestData.SpecialCharsResults.html");
+            using var reader = new StreamReader(stream);
+            var html = reader.ReadToEnd();
+            
+            // Act
+            var result = service.ParseHtml(html, "test query");
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.AreEqual(1, result.Results.Count, "Expected exactly 1 search result");
+            var item = result.Results[0];
+            Assert.AreEqual("Test & Result <3>", item.Title, "Title should match with HTML entities decoded");
+            Assert.AreEqual("example.com?q=1&w=2", item.Url, "URL should match with special characters");
+            Assert.AreEqual("Description with \"quotes\" & special chars", item.Description, "Description should match with special characters");
+        }
+
+        [TestMethod]
+        public void ParseHtml_ShouldHandleMissingFields()
+        {
+            // Arrange
+            var service = new DuckDuckGoToolService();
+            var html = "<html><body><div class='result'></div></body></html>";
+            
+            // Act
+            var result = service.ParseHtml(html, "test query");
 
             // Assert
             Assert.IsNotNull(result);
