@@ -18,9 +18,6 @@ using CommonChat = OpenAI.Chat;
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
-    // Make the base class generic on the provider's message type
-    // Note: TProviderMessage is currently not used due to ExecAsync being abstract,
-    // but kept for potential future refactoring if common loop logic is moved back here.
     public abstract class BaseLlmService<TProviderMessage> : IService, ILLMService where TProviderMessage : class 
     {
         public abstract string ServiceName { get; } 
@@ -53,7 +50,7 @@ namespace TelegramSearchBot.Service.AI.LLM
              _logger.LogInformation("BaseLlmService initialized. Found tools: {HasTools}", !string.IsNullOrWhiteSpace(_availableToolsPromptPart) && !_availableToolsPromptPart.Contains("No tools"));
         }
 
-        // --- Common Helper Methods (Available for Derived Classes) ---
+        // --- Common Helper Methods ---
 
         protected bool IsSameSender(Model.Data.Message message1, Model.Data.Message message2)
         {
@@ -159,15 +156,134 @@ namespace TelegramSearchBot.Service.AI.LLM
          }
 
         // --- Abstract Methods for Derived Classes ---
-        
-        // Only ExecAsync needs to be implemented by derived classes now.
-        public abstract IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel);
 
-        // Removed other abstract methods as ExecAsync is now abstract:
-        // protected abstract string GetSystemPrompt(long chatId);
-        // protected abstract List<TProviderMessage> MapHistoryToProviderFormat(List<CommonChat.ChatMessage> commonHistory);
-        // protected abstract Task<string> GetLlmResponseAsync(List<TProviderMessage> providerHistory, string modelName, LLMChannel channel, CancellationToken cancellationToken = default);
-        // protected abstract void AddAssistantResponseToHistory(List<TProviderMessage> providerHistory, string llmFullResponse);
-        // protected abstract void AddToolFeedbackToHistory(List<TProviderMessage> providerHistory, string toolName, string toolResult, bool isError);
+        /// <summary>
+        /// Gets the provider-specific system prompt string.
+        /// </summary>
+        protected abstract string GetSystemPrompt(long chatId);
+
+        /// <summary>
+        /// Maps the common internal chat history format to the provider-specific format.
+        /// </summary>
+        protected abstract List<TProviderMessage> MapHistoryToProviderFormat(List<CommonChat.ChatMessage> commonHistory);
+        
+        /// <summary>
+        /// Sends the request to the LLM provider and streams the response chunks.
+        /// </summary>
+        /// <returns>An async stream of response content chunks.</returns>
+        protected abstract IAsyncEnumerable<string> StreamLlmResponseAsync(List<TProviderMessage> providerHistory, string modelName, LLMChannel channel);
+
+        /// <summary>
+        /// Adds the assistant's response message to the provider-specific history list.
+        /// </summary>
+        protected abstract void AddAssistantResponseToHistory(List<TProviderMessage> providerHistory, string llmFullResponse);
+
+        /// <summary>
+        /// Adds the tool feedback message (as User role workaround) to the provider-specific history list.
+        /// </summary>
+        protected abstract void AddToolFeedbackToHistory(List<TProviderMessage> providerHistory, string toolName, string toolResult, bool isError);
+
+
+        // --- Main Execution Logic (Common Tool Loop in Base Class) ---
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel)
+        {
+            // Validation
+             if (string.IsNullOrWhiteSpace(modelName)) {
+                 _logger.LogError("{ServiceName}: Model name was not provided and no default is set.", ServiceName);
+                 yield return $"Error: {ServiceName} model name is not configured.";
+                 yield break;
+             }
+             if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway)) {
+                 _logger.LogError("{ServiceName}: Channel or Gateway is not configured for model {ModelName}.", ServiceName, modelName);
+                 yield return $"Error: {ServiceName} channel/gateway is not configured.";
+                 yield break;
+             }
+
+            // Setup
+            string systemPrompt = GetSystemPrompt(ChatId);
+            List<CommonChat.ChatMessage> commonHistory = new List<CommonChat.ChatMessage>() { new CommonChat.SystemChatMessage(systemPrompt) };
+            commonHistory = await GetChatHistory(ChatId, commonHistory, message); 
+            var providerHistory = MapHistoryToProviderFormat(commonHistory); 
+
+            ChatContextProvider.SetCurrentChatId(ChatId);
+            try
+            {
+                int maxToolCycles = 5;
+                for (int cycle = 0; cycle < maxToolCycles; cycle++)
+                {
+                    var llmResponseAccumulator = new StringBuilder();
+                    
+                    // Call provider-specific streaming method
+                    await foreach (var chunk in StreamLlmResponseAsync(providerHistory, modelName, channel)) 
+                    {
+                        llmResponseAccumulator.Append(chunk);
+                    }
+                    string llmFullResponse = llmResponseAccumulator.ToString().Trim();
+                    
+                    // Clean the response
+                    string cleanedResponse = McpToolHelper.CleanLlmResponse(llmFullResponse);
+
+                     _logger.LogDebug("{ServiceName} raw response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponse);
+                     if (llmFullResponse.Length != cleanedResponse.Length) {
+                          _logger.LogDebug("{ServiceName} cleaned response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, cleanedResponse);
+                     }
+
+                    if (string.IsNullOrWhiteSpace(cleanedResponse) && cycle < maxToolCycles -1) {
+                         if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
+                             _logger.LogWarning("{ServiceName}: LLM response contained only thinking tags during tool cycle {Cycle}.", ServiceName, cycle + 1);
+                         } else {
+                             _logger.LogWarning("{ServiceName}: LLM returned empty response during tool cycle {Cycle}.", ServiceName, cycle + 1);
+                         }
+                         // If response was only thinking tags or empty, we might need to break or send specific feedback.
+                         // For now, add the raw (empty or thinking) response to history and let the loop continue/fail.
+                    }
+
+                    // Add Assistant response (raw) to provider history BEFORE checking for tool call
+                    AddAssistantResponseToHistory(providerHistory, llmFullResponse); 
+
+                    // Check cleaned response for tool call
+                    if (McpToolHelper.TryParseToolCall(cleanedResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
+                    {
+                        _logger.LogInformation("{ServiceName}: LLM requested tool: {ToolName} with arguments: {Arguments}", ServiceName, parsedToolName, JsonConvert.SerializeObject(toolArguments));
+                        
+                        string toolResultString;
+                        bool isError = false;
+                        try
+                        {
+                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments);
+                            toolResultString = ConvertToolResultToString(toolResultObject); 
+                            _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
+                        }
+                        catch (Exception ex)
+                        {
+                            isError = true;
+                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, parsedToolName);
+                            toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                        }
+                        
+                        // Add tool feedback to provider history
+                        AddToolFeedbackToHistory(providerHistory, parsedToolName, toolResultString, isError); 
+                        // Continue loop
+                    }
+                    else
+                    {
+                        // Not a tool call, yield the cleaned response
+                        if (!string.IsNullOrWhiteSpace(cleanedResponse)) {
+                             yield return cleanedResponse;
+                        } else {
+                             _logger.LogWarning("{ServiceName}: LLM returned empty final response after cleaning for ChatId {ChatId}.", ServiceName, ChatId);
+                        }
+                        yield break; 
+                    }
+                }
+
+                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}.", ServiceName, ChatId);
+                yield return "I seem to be stuck in a loop trying to use tools. Please try rephrasing your request or check tool definitions.";
+            }
+            finally
+            {
+                ChatContextProvider.Clear();
+            }
+        }
     }
 }

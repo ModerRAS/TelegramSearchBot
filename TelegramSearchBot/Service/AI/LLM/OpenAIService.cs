@@ -19,82 +19,146 @@ using CommonChat = OpenAI.Chat;
 
 namespace TelegramSearchBot.Service.AI.LLM 
 {
-    // Inherit from generic base class, specifying OpenAI.Chat.ChatMessage as the provider message type
-    public class OpenAIService : BaseLlmService<CommonChat.ChatMessage>, ILLMService // Base class already implements IService
+    // Standalone implementation, not inheriting from BaseLlmService
+    public class OpenAIService : IService, ILLMService 
     {
-        // ServiceName is now abstract in base class
-        public override string ServiceName => "OpenAIService";
+        public string ServiceName => "OpenAIService";
 
-        // Constructor accepting dependencies and passing them to the base class
-        // Added IHttpClientFactory to match base constructor signature
+        private readonly ILogger<OpenAIService> _logger;
+        public string BotName { get; set; }
+        private DataDbContext _dbContext;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly IHttpClientFactory _httpClientFactory; // Keep for consistency, though not used directly here
+        private readonly string _availableToolsPromptPart;
+
         public OpenAIService(
             DataDbContext context, 
-            ILogger<OpenAIService> logger, // Use specific logger type
+            ILogger<OpenAIService> logger, 
             IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory) 
-            : base(logger, context, serviceProvider, httpClientFactory) // Pass dependencies to base
+            IHttpClientFactory httpClientFactory) // Added httpClientFactory
         {
-            // Base constructor handles McpToolHelper initialization and tool string generation
+            _logger = logger;
+            _dbContext = context;
+            _serviceProvider = serviceProvider;
+            _httpClientFactory = httpClientFactory; // Store it
+
+            McpToolHelper.Initialize(_serviceProvider, _logger); 
+
+            _availableToolsPromptPart = McpToolHelper.RegisterToolsAndGetPromptString(Assembly.GetExecutingAssembly());
+            if (string.IsNullOrWhiteSpace(_availableToolsPromptPart))
+            {
+                _availableToolsPromptPart = "<!-- No tools are currently available. -->";
+            }
         }
 
-        // --- Methods specific to OpenAI implementation ---
-        // These were previously overriding abstract methods, now just regular protected methods
+        // --- Helper Methods (Defined locally again) ---
 
-        protected string GetSystemPrompt(long chatId) // Removed 'override'
+        public bool IsSameSender(Model.Data.Message message1, Model.Data.Message message2)
         {
-            // Construct the system prompt using the tool list from the base class
-             return $"你的名字是 {BotName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。群聊Id为:{chatId}\n\n" +
-                    $"你正在参与一个群聊。历史消息的格式为：[时间] 用户名 (可选回复对象)：内容。请仔细理解上下文。\n\n" +
-                    $"你的核心任务是协助用户。为此，你可以调用外部工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
-                    $"{_availableToolsPromptPart}\n\n" + // Use field from base class
-                    $"如果你判断需要使用上述列表中的某个工具，你的回复必须严格遵循以下XML格式，并且不包含任何其他文本（不要在XML前后添加任何说明或聊天内容）：\n" +
-                    $"<tool_name>\n" + 
-                    $"  <parameter1_name>value1</parameter1_name>\n" +
-                    $"  <parameter2_name>value2</parameter2_name>\n" +
-                    $"  ...\n" +
-                    $"</tool_name>\n" +
-                    $"或者\n" +
-                    $"<tool name=\"tool_name\">\n" +
-                    $"  <parameters>\n" +
-                    $"    <parameter1_name>value1</parameter1_name>\n" +
-                    $"  </parameters>\n" +
-                    $"</tool>\n" +
-                    $"(请将 'tool_name' 和参数替换为所选工具的实际名称和值。确保XML格式正确无误。)\n\n" +
-                    "重要提示：如果你调用一个工具（特别是搜索类工具）后没有找到你需要的信息，或者结果不理想，你可以尝试以下操作：\n" +
-                    "1. 修改你的查询参数（例如，使用更宽泛或更具体的关键词，尝试不同的搜索选项等），然后再次调用同一个工具。\n" +
-                    "2. 如果多次尝试仍不理想，或者你认为其他工具可能更合适，可以尝试调用其他可用工具。\n" +
-                    "3. 在进行多次尝试时，建议在思考过程中记录并调整你的策略。\n" +
-                    "如果你认为已经获得了足够的信息，或者不需要再使用工具，请继续下一步。\n\n" +
-                    $"在决定是否使用工具时，请仔细分析用户的请求。如果不需要工具，或者工具执行完毕后，请直接以自然语言回复用户。\n" +
-                    $"当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
+            if (message1 == null || message2 == null) return false; 
+            bool msg1IsUser = message1.FromUserId != Env.BotId;
+            bool msg2IsUser = message2.FromUserId != Env.BotId;
+            return msg1IsUser == msg2IsUser; 
         }
 
-        // Mapping is trivial since common format IS the provider format for OpenAI
-        protected List<CommonChat.ChatMessage> MapHistoryToProviderFormat(List<CommonChat.ChatMessage> commonHistory) // Removed 'override'
+        private void AddMessageToHistory(List<ChatMessage> ChatHistory, long fromUserId, string content)
         {
-            // In this case, the provider format is the same as the common format
-            return commonHistory;
+             if (string.IsNullOrWhiteSpace(content)) return;
+             content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
+
+            if (fromUserId == Env.BotId)
+            {
+                ChatHistory.Add(new AssistantChatMessage(content.Trim()));
+            }
+            else
+            {
+                ChatHistory.Add(new UserChatMessage(content.Trim()));
+            }
         }
 
-        // Add Assistant response to the history list (OpenAI format)
-        protected void AddAssistantResponseToHistory(List<CommonChat.ChatMessage> providerHistory, string llmFullResponse) // Removed 'override'
+        public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, Model.Data.Message InputToken)
         {
-             providerHistory.Add(new CommonChat.AssistantChatMessage(llmFullResponse));
-        }
-        
-        // Add Tool feedback to the history list (OpenAI format, using User role workaround)
-        protected void AddToolFeedbackToHistory(List<CommonChat.ChatMessage> providerHistory, string toolName, string toolResult, bool isError) // Removed 'override'
-        {
-            string feedbackPrefix = isError ? $"[Tool '{toolName}' Execution Failed. Error: " : $"[Executed Tool '{toolName}'. Result: ";
-            string feedback = $"{feedbackPrefix}{toolResult}]";
-            providerHistory.Add(new CommonChat.UserChatMessage(feedback)); // Using User role as requested
-             _logger.LogInformation("Added UserChatMessage to history for LLM: {Feedback}", feedback);
+            var Messages = await _dbContext.Messages.AsNoTracking()
+                            .Where(m => m.GroupId == ChatId && m.DateTime > DateTime.UtcNow.AddHours(-1))
+                            .OrderBy(m => m.DateTime) 
+                            .ToListAsync();
+            if (Messages.Count < 10)
+            {
+                Messages = await _dbContext.Messages.AsNoTracking()
+                            .Where(m => m.GroupId == ChatId)
+                            .OrderByDescending(m => m.DateTime)
+                            .Take(10)
+                            .OrderBy(m => m.DateTime) 
+                            .ToListAsync();
+            }
+            if (InputToken != null)
+            {
+                Messages.Add(InputToken);
+            }
+            _logger.LogInformation($"OpenAI GetChatHistory: Found {Messages.Count} messages for ChatId {ChatId}.");
+
+            var str = new StringBuilder();
+            Model.Data.Message previous = null;
+            var userCache = new Dictionary<long, UserData>(); 
+
+            foreach (var message in Messages)
+            {
+                 if (previous == null && !ChatHistory.Any(ch => ch is UserChatMessage || ch is AssistantChatMessage) && message.FromUserId.Equals(Env.BotId))
+                 {
+                     previous = message; 
+                     continue;
+                 }
+
+                if (previous != null && !IsSameSender(previous, message))
+                {
+                    AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
+                    str.Clear();
+                }
+
+                str.Append($"[{message.DateTime.ToString("yyyy-MM-dd HH:mm:ss zzz")}]");
+                if (message.FromUserId != 0)
+                {
+                     if (!userCache.TryGetValue(message.FromUserId, out var fromUser))
+                    {
+                        fromUser = await _dbContext.UserData.AsNoTracking().FirstOrDefaultAsync(u => u.Id == message.FromUserId);
+                        if (fromUser != null) userCache[message.FromUserId] = fromUser;
+                    }
+                    str.Append(fromUser != null ? $"{fromUser.FirstName} {fromUser.LastName}".Trim() : $"User({message.FromUserId})");
+                }
+                else { str.Append("System/Unknown"); }
+
+                if (message.ReplyToMessageId != 0)
+                {
+                    str.Append('（');
+                     // Simplified reply info
+                    str.Append($"Reply to msg {message.ReplyToMessageId}"); 
+                    str.Append('）');
+                }
+                str.Append('：').Append(message.Content).Append("\n"); 
+
+                previous = message; 
+            }
+            if (previous != null && str.Length > 0)
+            {
+                AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
+            }
+            return ChatHistory;
         }
 
-        // Implement the main execution logic, reusing base class helpers where possible
-        public override async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel)
+         private string ConvertToolResultToString(object toolResultObject) {
+             if (toolResultObject == null) {
+                 return "Tool executed successfully with no return value.";
+             } else if (toolResultObject is string s) {
+                 return s;
+             } else {
+                 return JsonConvert.SerializeObject(toolResultObject); 
+             }
+         }
+
+        // --- Main Execution Logic ---
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel)
         {
-             if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName; // Use default if needed
+             if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName; 
 
              if (string.IsNullOrWhiteSpace(modelName)) {
                  _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
@@ -108,18 +172,14 @@ namespace TelegramSearchBot.Service.AI.LLM
              }
 
             // --- History and Prompt Setup ---
-            string systemPrompt = GetSystemPrompt(ChatId);
-            // Use base class GetChatHistory
-            List<CommonChat.ChatMessage> commonHistory = new List<CommonChat.ChatMessage>() { new CommonChat.SystemChatMessage(systemPrompt) };
-            commonHistory = await base.GetChatHistory(ChatId, commonHistory, message); 
-            // Mapping is direct for OpenAI
-            var providerHistory = MapHistoryToProviderFormat(commonHistory); 
+            // Use helper method to format the prompt
+            string systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId, _availableToolsPromptPart);
+            List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
+            providerHistory = await GetChatHistory(ChatId, providerHistory, message); // Use local GetChatHistory
 
             // --- Client Setup ---
-            // TODO: Consider if client needs recreation per call or can be reused/cached based on channel
              var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(channel.Gateway) };
              var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
-
 
             ChatContextProvider.SetCurrentChatId(ChatId); 
             try
@@ -130,14 +190,10 @@ namespace TelegramSearchBot.Service.AI.LLM
                     var llmResponseAccumulator = new StringBuilder();
                     
                     // --- Call LLM ---
-                    // Use the specific OpenAI client call
                     await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory))
                     {
-                        // Note: OpenAI SDK might structure updates differently. Adapt as needed.
-                        // Assuming update.ContentUpdate gives text parts.
                         foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>())
                         {
-                             // Check if updatePart itself is null or its Text property
                              if (updatePart?.Text != null) {
                                  llmResponseAccumulator.Append(updatePart.Text);
                              }
@@ -146,16 +202,29 @@ namespace TelegramSearchBot.Service.AI.LLM
                     string llmFullResponse = llmResponseAccumulator.ToString().Trim();
                     _logger.LogDebug("{ServiceName} raw response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponse);
 
-                    if (string.IsNullOrWhiteSpace(llmFullResponse) && cycle < maxToolCycles -1) {
-                        _logger.LogWarning("{ServiceName}: LLM returned empty response during tool cycle {Cycle}.", ServiceName, cycle + 1);
-                        // Handle empty response? Maybe break or add specific feedback? Add assistant message anyway.
+                    // --- Preprocess response using McpToolHelper ---
+                    string cleanedResponse = McpToolHelper.CleanLlmResponse(llmFullResponse);
+                    if (llmFullResponse.Length != cleanedResponse.Length) {
+                         _logger.LogDebug("{ServiceName} cleaned response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, cleanedResponse);
                     }
 
-                    // Add Assistant response to history
-                    AddAssistantResponseToHistory(providerHistory, llmFullResponse);
+                    if (string.IsNullOrWhiteSpace(cleanedResponse) && cycle < maxToolCycles -1) {
+                         if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
+                             _logger.LogWarning("{ServiceName}: LLM response contained only thinking tags during tool cycle {Cycle}.", ServiceName, cycle + 1);
+                         } else {
+                             _logger.LogWarning("{ServiceName}: LLM returned empty response during tool cycle {Cycle}.", ServiceName, cycle + 1);
+                         }
+                    }
+                    
+                    // Add Assistant response (raw) to history 
+                    if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
+                         providerHistory.Add(new AssistantChatMessage(llmFullResponse));
+                     } else {
+                          _logger.LogWarning("{ServiceName}: Attempted to add empty assistant response to history.", ServiceName);
+                     }
 
-                    // --- Tool Handling ---
-                    if (McpToolHelper.TryParseToolCall(llmFullResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
+                    // --- Tool Handling (using cleanedResponse) ---
+                    if (McpToolHelper.TryParseToolCall(cleanedResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
                     {
                         _logger.LogInformation("{ServiceName}: LLM requested tool: {ToolName} with arguments: {Arguments}", ServiceName, parsedToolName, JsonConvert.SerializeObject(toolArguments));
                         
@@ -163,10 +232,8 @@ namespace TelegramSearchBot.Service.AI.LLM
                         bool isError = false;
                         try
                         {
-                            // Execute Tool (uses McpToolHelper from base class context)
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments);
-                            // Use base class helper for conversion
-                            toolResultString = base.ConvertToolResultToString(toolResultObject); 
+                            toolResultString = ConvertToolResultToString(toolResultObject); // Use local helper
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         }
                         catch (Exception ex)
@@ -176,23 +243,25 @@ namespace TelegramSearchBot.Service.AI.LLM
                             toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
                         }
                         
-                        // Add tool feedback to history
-                        AddToolFeedbackToHistory(providerHistory, parsedToolName, toolResultString, isError); 
-                        // Continue loop for LLM to process feedback
+                        // Add tool feedback to history (using User role workaround)
+                        string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
+                        string feedback = $"{feedbackPrefix}{toolResultString}]";
+                        providerHistory.Add(new UserChatMessage(feedback)); 
+                        _logger.LogInformation("Added UserChatMessage to history for LLM: {Feedback}", feedback);
+                        // Continue loop 
                     }
                     else
                     {
-                        // Not a tool call, this is the final answer.
-                        if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
-                             yield return llmFullResponse;
+                        // Not a tool call, yield the cleaned response
+                        if (!string.IsNullOrWhiteSpace(cleanedResponse)) {
+                             yield return cleanedResponse;
                         } else {
-                             _logger.LogWarning("{ServiceName}: LLM returned empty final response for ChatId {ChatId}.", ServiceName, ChatId);
+                             _logger.LogWarning("{ServiceName}: LLM returned empty final response after cleaning for ChatId {ChatId}.", ServiceName, ChatId);
                         }
-                        yield break; // Exit loop and method
+                        yield break; 
                     }
                 }
 
-                // If loop finishes due to maxToolCycles
                 _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}.", ServiceName, ChatId);
                 yield return "I seem to be stuck in a loop trying to use tools. Please try rephrasing your request or check tool definitions.";
             }
@@ -202,36 +271,20 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        // --- Methods not needed as they are in BaseLlmService ---
-        // GetChatHistory
-        // IsSameSender
-        // AddMessageToHistory (internal helper used by GetChatHistory in base)
-        // ConvertToolResultToString
-
-        // --- Methods specific to OpenAIService (if any) or potentially moved to base ---
-        // NeedReply, SetModel, GetModel - Keep them here for now if specific to OpenAI workflow or not abstracted yet.
+        // --- Methods specific to OpenAIService ---
          public async Task<bool> NeedReply(string InputToken, long ChatId)
         {
-            // This method might need refactoring if it uses history differently now
-            // For now, keep original logic but ensure GetChatHistory is called correctly if needed
-            // It currently creates its own history list, which might be inefficient.
-            // TODO: Refactor NeedReply to potentially reuse history building logic or integrate better.
-            
             var prompt = $"你是一个判断助手，只负责判断一段消息是否为提问。\r\n判断标准：\r\n1. 如果消息是问题（无论是直接问句还是隐含的提问意图），返回“是”。\r\n2. 如果消息不是问题（陈述、感叹、命令、闲聊等），返回“否”。\r\n重要：只回答“是”或“否”，不要输出其他内容。";
 
-            // Temporarily create history for this check
-            List<CommonChat.ChatMessage> checkHistory = new List<CommonChat.ChatMessage>() { new CommonChat.SystemChatMessage(prompt) };
-            // Use base GetChatHistory, passing null for inputToken as we add the current one separately
-            checkHistory = await base.GetChatHistory(ChatId, checkHistory, null); 
-            checkHistory.Add(new CommonChat.UserChatMessage($"消息：{InputToken}")); 
+            List<ChatMessage> checkHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
+            // Use local GetChatHistory
+            checkHistory = await GetChatHistory(ChatId, checkHistory, null); 
+            checkHistory.Add(new UserChatMessage($"消息：{InputToken}")); 
 
-            // Use a temporary client for this check
-            // TODO: Optimize client usage
-             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(Env.OpenAIBaseURL) }; // Assuming a default endpoint for this check
-             var chat = new ChatClient(model: Env.OpenAIModelName, credential: new(Env.OpenAIApiKey), clientOptions); // Assuming default model/key for this check
+             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(Env.OpenAIBaseURL) }; 
+             var chat = new ChatClient(model: Env.OpenAIModelName, credential: new(Env.OpenAIApiKey), clientOptions); 
 
             var str = new StringBuilder();
-            // Use the mapped history if the SDK requires it, but CompleteChatStreamingAsync takes List<ChatMessage>
             await foreach (var update in chat.CompleteChatStreamingAsync(checkHistory)) 
             {
                 foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>())
@@ -264,7 +317,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                 GroupSetting.LLMModelName = ModelName;
             }
             await _dbContext.SaveChangesAsync();
-            return (CurrentModelName ?? "Default", ModelName); // Return default if null
+            return (CurrentModelName ?? "Default", ModelName); 
         }
         public async Task<string> GetModel(long ChatId)
         {
@@ -272,10 +325,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                                       .Where(s => s.GroupId == ChatId)
                                       .FirstOrDefaultAsync();
             var ModelName = GroupSetting?.LLMModelName;
-            return ModelName; // Returns null if not set
+            return ModelName; 
         }
-
-        // CheckIfExists seems Ollama specific, remove from here
-        // public bool CheckIfExists(IEnumerable<OllamaSharp.Models.Model> models) { ... } 
     }
 }

@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection; // For potential DI later
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json; // Added for Json.NET
+using System.Text.RegularExpressions; // Added for Regex cleaning
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -114,6 +115,65 @@ namespace TelegramSearchBot.Service.AI.LLM
                 sb.AppendLine($"  </tool>");
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Formats the standard system prompt incorporating tool descriptions and usage instructions.
+        /// Uses the structure previously defined directly in the services.
+        /// </summary>
+        public static string FormatSystemPrompt(string botName, long chatId, string availableToolsXml)
+        {
+             if (string.IsNullOrWhiteSpace(botName)) botName = "AI Assistant";
+             if (string.IsNullOrWhiteSpace(availableToolsXml)) availableToolsXml = "<!-- No tools are currently available for you to use. -->";
+
+             // Exact prompt structure from OpenAIService/OllamaService
+             return $"你的名字是 {botName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{chatId}。\n\n" + 
+                    $"你的核心任务是协助用户。为此，你可以调用外部工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
+                    $"{availableToolsXml}\n\n" + 
+                    $"如果你判断需要使用上述列表中的某个工具，你的回复必须严格遵循以下XML格式，并且不包含任何其他文本（不要在XML前后添加任何说明或聊天内容）：\n" +
+                    $"<tool_name>\n" + 
+                    $"  <parameter1_name>value1</parameter1_name>\n" +
+                    $"  <parameter2_name>value2</parameter2_name>\n" +
+                    $"  ...\n" +
+                    $"</tool_name>\n" +
+                    $"或者\n" +
+                    $"<tool name=\"tool_name\">\n" +
+                    $"  <parameters>\n" +
+                    $"    <parameter1_name>value1</parameter1_name>\n" +
+                    $"  </parameters>\n" +
+                    $"</tool>\n" +
+                    $"(请将 'tool_name' 和参数替换为所选工具的实际名称和值。确保XML格式正确无误。)\n\n" +
+                    "重要提示：如果你调用一个工具（特别是搜索类工具）后没有找到你需要的信息，或者结果不理想，你可以尝试以下操作：\n" +
+                    "1. 修改你的查询参数（例如，使用更宽泛或更具体的关键词，尝试不同的搜索选项等），然后再次调用同一个工具。\n" +
+                    "2. 如果多次尝试仍不理想，或者你认为其他工具可能更合适，可以尝试调用其他可用工具。\n" +
+                    "3. 在进行多次尝试时，建议在思考过程中记录并调整你的策略。\n" +
+                    "如果你认为已经获得了足够的信息，或者不需要再使用工具，请继续下一步。\n\n" +
+                    $"在决定是否使用工具时，请仔细分析用户的请求。如果不需要工具，或者工具执行完毕后，请直接以自然语言回复用户。\n" +
+                    $"当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
+        }
+
+        /// <summary>
+        /// Removes thinking tags and trims whitespace from raw LLM response.
+        /// </summary>
+        /// <param name="rawResponse">The raw response string from the LLM.</param>
+        /// <returns>The cleaned response string.</returns>
+        public static string CleanLlmResponse(string rawResponse)
+        {
+            if (string.IsNullOrEmpty(rawResponse))
+            {
+                return rawResponse;
+            }
+
+            // Remove <think>...</think> blocks
+            string cleaned = Regex.Replace(
+                rawResponse, 
+                @"<think>.*?</think>", // Corrected tag
+                "", 
+                RegexOptions.Singleline | RegexOptions.IgnoreCase
+            );
+
+            // Trim leading/trailing whitespace that might be left
+            return cleaned.Trim();
         }
         
         public static bool TryParseToolCall(string xmlString, out string toolName, out Dictionary<string, string> arguments)
