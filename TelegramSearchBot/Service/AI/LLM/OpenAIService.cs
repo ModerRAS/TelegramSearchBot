@@ -253,8 +253,8 @@ namespace TelegramSearchBot.Service.AI.LLM
                     else
                     {
                         // Not a tool call, yield the cleaned response
-                        if (!string.IsNullOrWhiteSpace(cleanedResponse)) {
-                             yield return cleanedResponse;
+                        if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
+                             yield return llmFullResponse;
                         } else {
                              _logger.LogWarning("{ServiceName}: LLM returned empty final response after cleaning for ChatId {ChatId}.", ServiceName, ChatId);
                         }
