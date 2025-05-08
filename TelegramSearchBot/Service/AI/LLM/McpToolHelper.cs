@@ -164,13 +164,17 @@ namespace TelegramSearchBot.Service.AI.LLM
                 return rawResponse;
             }
 
-            // Remove <think>...</think> blocks
+            // Step 1: Remove <think>...</think> blocks
             string cleaned = Regex.Replace(
                 rawResponse, 
-                @"<think>.*?</think>", // Corrected tag
+                @"<think>.*?</think>", // Original tag removal
                 "", 
                 RegexOptions.Singleline | RegexOptions.IgnoreCase
             );
+            
+            // Step 2: Collapse multiple whitespace chars into a single space
+            cleaned = Regex.Replace(cleaned, @"\s{2,}", " ");
+            // Removed extra parenthesis from previous line
 
             // Trim leading/trailing whitespace that might be left
             return cleaned.Trim();
