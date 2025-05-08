@@ -8,38 +8,46 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions; // Added for Regex
 using System.Threading.Tasks;
 using System.Reflection;
-// using System.Text.Json; // Removed
-using Newtonsoft.Json; // Added for Json.NET
+using Newtonsoft.Json; // Using Newtonsoft
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
-// using OpenAIChat = OpenAI.Chat; // No longer needed if GetChatHistory is removed
+// using OpenAIChat = OpenAI.Chat; // No longer needed as history helpers are removed
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
-    public class OllamaService : IService, ILLMService
+    // Not inheriting from BaseLlmService for now due to API/history handling differences
+    public class OllamaService : IService, ILLMService 
     {
         public string ServiceName => "OllamaService";
 
         private readonly ILogger<OllamaService> _logger;
-        private readonly DataDbContext _dbContext; // Keep for now, might be needed by other methods or future tools
+        private readonly DataDbContext _dbContext; 
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _availableToolsPromptPart;
         public string BotName { get; set; }
 
-        public OllamaService(DataDbContext context, ILogger<OllamaService> logger, IServiceProvider serviceProvider, IHttpClientFactory httpClientFactory)
+        // Constructor requires dependencies needed directly by this class
+        public OllamaService(
+            DataDbContext context, 
+            ILogger<OllamaService> logger, 
+            IServiceProvider serviceProvider, 
+            IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
-            _dbContext = context; // Keep DbContext injection
+            _dbContext = context; 
             _serviceProvider = serviceProvider;
             _httpClientFactory = httpClientFactory;
 
+            // Initialize McpToolHelper (still needed)
             McpToolHelper.Initialize(_serviceProvider, _logger);
 
+            // Register tools and generate the prompt part once (still needed)
             _availableToolsPromptPart = McpToolHelper.RegisterToolsAndGetPromptString(Assembly.GetExecutingAssembly());
             if (string.IsNullOrWhiteSpace(_availableToolsPromptPart))
             {
@@ -47,7 +55,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        // --- Helper methods ---
+        // --- Helper methods specific to this service ---
 
         public async Task<bool> CheckAndPullModelAsync(OllamaApiClient ollama, string modelName)
         {
@@ -64,13 +72,10 @@ namespace TelegramSearchBot.Service.AI.LLM
                 _logger.LogInformation("Model {ModelName} not found locally. Pulling...", modelName);
                 
                 // Consume the stream from PullModelAsync
-                // Assuming the second parameter is CancellationToken, not a progress lambda
                 await foreach (var status in ollama.PullModelAsync(modelName, System.Threading.CancellationToken.None))
                 {
-                    // Log status updates received from the stream
                     if (status != null) {
                          // Adjust property names (Percent, Status) if they differ in your OllamaSharp version
-                         // Removed .HasValue check as status.Percent is likely double, not double?
                          _logger.LogInformation("[{ModelName}] Pulling model {Percent}% - {Status}", modelName, status.Percent, status.Status);
                     }
                 }
@@ -92,18 +97,22 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        // GetChatHistory, IsSameSender, AddMessageToHistory, MapToOllamaMessage are removed as OllamaSharp.Chat handles history internally.
-
-        // --- Main Execution Logic ---
+        // --- Main Execution Logic (Using OllamaSharp.Chat helper) ---
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel)
         {
             modelName = modelName ?? Env.OllamaModelName;
             if (string.IsNullOrWhiteSpace(modelName)) {
-                 _logger.LogError("Ollama model name is not configured.");
-                 yield return "Error: Ollama model name is not configured.";
+                 _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
+                 yield return $"Error: {ServiceName} model name is not configured.";
+                 yield break;
+            }
+             if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway)) {
+                 _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
+                 yield return $"Error: {ServiceName} channel/gateway is not configured.";
                  yield break;
             }
 
+            // --- Client and Model Setup ---
             HttpClient httpClient = _httpClientFactory?.CreateClient("OllamaClient") ?? new HttpClient(); 
             httpClient.BaseAddress = new Uri(channel.Gateway);
             var ollama = new OllamaApiClient(httpClient, modelName);
@@ -114,8 +123,10 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
             ollama.SelectedModel = modelName;
 
-            // NOTE: History context is limited compared to OpenAIService as OllamaSharp.Chat manages it based on this initial prompt + SendAsync calls.
-            var systemPrompt = $"你的名字是 {BotName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{ChatId}。\n\n" + // Provide ChatId here for context if needed, though tools get it internally.
+            // --- History and Prompt Setup ---
+            // NOTE: History context is limited as OllamaSharp.Chat manages it based on this initial prompt + SendAsync calls.
+            // We are NOT using the GetChatHistory method here.
+            var systemPrompt = $"你的名字是 {BotName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{ChatId}。\n\n" + 
                                $"你的核心任务是协助用户。为此，你可以调用外部工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
                                $"{_availableToolsPromptPart}\n\n" +
                                $"如果你判断需要使用上述列表中的某个工具，你的回复必须严格遵循以下XML格式，并且不包含任何其他文本（不要在XML前后添加任何说明或聊天内容）：\n" +
@@ -132,7 +143,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             // Instantiate the Chat helper with the system prompt
             var chat = new OllamaSharp.Chat(ollama, systemPrompt);
 
-            ChatContextProvider.SetCurrentChatId(ChatId);
+            ChatContextProvider.SetCurrentChatId(ChatId); 
             try
             {
                 string nextMessageToSend = message.Content; // Start with the user's current message
@@ -142,66 +153,87 @@ namespace TelegramSearchBot.Service.AI.LLM
                 {
                     var llmResponseAccumulator = new StringBuilder();
                     
-                    // Use the Chat helper's SendAsync method
+                    // --- Call LLM using OllamaSharp.Chat helper ---
+                    _logger.LogDebug("Sending to Ollama (Cycle {Cycle}): {Message}", cycle + 1, nextMessageToSend);
                     await foreach (var token in chat.SendAsync(nextMessageToSend))
                     {
                         llmResponseAccumulator.Append(token);
-                        // yield return token; // Optionally yield intermediate tokens
+                        // yield return token; // Optionally yield intermediate tokens for faster perceived response
                     }
                     string llmFullResponse = llmResponseAccumulator.ToString().Trim();
                     _logger.LogDebug("LLM raw response (Cycle {Cycle}): {Response}", cycle + 1, llmFullResponse);
 
-                    // Note: The 'chat' object internally stores history. We don't manage ollamaMessages list here.
+                    // --- Preprocess response: Remove thinking tags ---
+                    string cleanedResponse = Regex.Replace(
+                        llmFullResponse, 
+                        @"<think>.*?</think>", 
+                        "", 
+                        RegexOptions.Singleline | RegexOptions.IgnoreCase
+                    ).Trim();
 
-                    if (McpToolHelper.TryParseToolCall(llmFullResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
+                    if (llmFullResponse.Length != cleanedResponse.Length) {
+                         _logger.LogDebug("LLM cleaned response (Cycle {Cycle}): {Response}", cycle + 1, cleanedResponse);
+                    }
+                    
+                    // Note: The 'chat' object internally stores history based on SendAsync calls.
+
+                    // --- Tool Handling (using cleanedResponse) ---
+                    if (McpToolHelper.TryParseToolCall(cleanedResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
                     {
-                        // Use Newtonsoft.Json for logging arguments
-                        _logger.LogInformation($"LLM requested tool: {parsedToolName} with arguments: {JsonConvert.SerializeObject(toolArguments)}");
-
+                        _logger.LogInformation("{ServiceName}: LLM requested tool: {ToolName} with arguments: {Arguments}", ServiceName, parsedToolName, JsonConvert.SerializeObject(toolArguments));
+                        
+                        string toolResultString;
+                        bool isError = false;
                         try
                         {
+                            // Execute Tool
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments);
-                            string toolResultString = ConvertToolResultToString(toolResultObject);
-
-                            _logger.LogInformation($"Tool {parsedToolName} executed. Result: {toolResultString}");
-                            // Prepare the feedback for the *next* SendAsync call
-                            nextMessageToSend = $"[Executed Tool '{parsedToolName}'. Result: {toolResultString}]"; 
-                            _logger.LogInformation($"Prepared feedback for next LLM call: {nextMessageToSend}");
-                            // Continue the loop - the next chat.SendAsync will send this feedback
+                            // Use helper for conversion (defined below)
+                            toolResultString = ConvertToolResultToString(toolResultObject); 
+                            _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, $"Error executing tool {parsedToolName}.");
-                            string errorMessage = $"Error executing tool {parsedToolName}: {ex.Message}.";
-                            // Prepare the error feedback for the *next* SendAsync call
-                            nextMessageToSend = $"[Tool '{parsedToolName}' Execution Failed. Error: {errorMessage}]";
-                            _logger.LogInformation($"Prepared error feedback for next LLM call: {nextMessageToSend}");
-                            // Continue the loop - the next chat.SendAsync will send this error feedback
+                            isError = true;
+                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, parsedToolName);
+                            toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
                         }
+                        
+                        // Prepare the feedback for the *next* SendAsync call
+                        string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
+                        nextMessageToSend = $"{feedbackPrefix}{toolResultString}]"; 
+                        _logger.LogInformation("Prepared feedback for next LLM call: {Feedback}", nextMessageToSend);
+                        // Continue the loop - the next chat.SendAsync will send this feedback
                     }
                     else
                     {
-                        // Not a tool call, this is the final answer.
-                        if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
-                             yield return llmFullResponse;
+                        // Not a tool call, yield the cleaned response as the final answer.
+                        if (!string.IsNullOrWhiteSpace(cleanedResponse)) {
+                             yield return cleanedResponse;
                         } else {
-                             _logger.LogWarning("LLM returned empty final response for ChatId {ChatId}.", ChatId);
+                             // Log if the original response wasn't empty but the cleaned one is (meaning it was only thinking tags)
+                             if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
+                                 _logger.LogWarning("{ServiceName}: LLM response contained only thinking tags for ChatId {ChatId}.", ServiceName, ChatId);
+                             } else {
+                                 _logger.LogWarning("{ServiceName}: LLM returned empty final response for ChatId {ChatId}.", ServiceName, ChatId);
+                             }
+                             // Yield nothing if the cleaned response is empty
                         }
                         yield break; // Exit loop and method
                     }
                 }
 
                 // If loop finishes due to maxToolCycles
-                _logger.LogWarning("Max tool call cycles reached for chat {ChatId}.", ChatId);
+                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}.", ServiceName, ChatId);
                 yield return "I seem to be stuck in a loop trying to use tools. Please try rephrasing your request or check tool definitions.";
             }
             finally
             {
-                ChatContextProvider.Clear();
+                ChatContextProvider.Clear(); 
             }
         }
 
-         // Helper to convert tool result to string (kept as it's independent of history)
+         // Helper to convert tool result to string 
          private string ConvertToolResultToString(object toolResultObject) {
              if (toolResultObject == null) {
                  return "Tool executed successfully with no return value.";
@@ -212,8 +244,5 @@ namespace TelegramSearchBot.Service.AI.LLM
                  return JsonConvert.SerializeObject(toolResultObject);
              }
          }
-         
-         // Add SetModel/GetModel/NeedReply if required for OllamaService parity and feasible with OllamaSharp.Chat helper
-         // Note: Implementing these might be difficult if OllamaSharp.Chat manages state internally.
     }
 }
