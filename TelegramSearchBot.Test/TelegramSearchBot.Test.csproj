@@ -20,4 +20,7 @@
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
     <ProjectReference Include="..\TelegramSearchBot\TelegramSearchBot.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="TestData\DuckDuckGoSearchResult.html" />
+  </ItemGroup>
 </Project>
