@@ -132,6 +132,51 @@ namespace TelegramSearchBot.Service.Manage
                      return (true, "抱歉，只有全局管理员才能查看BiliCookie状态。");
                  }
             }
+            if (Command.StartsWith("/setbilimaxsize ", StringComparison.OrdinalIgnoreCase) || Command.StartsWith("设置B站最大下载大小 ", StringComparison.OrdinalIgnoreCase))
+            {
+                if (IsGlobalAdmin(UserId))
+                {
+                    var parts = Command.Split(new[] { ' ' }, 2);
+                    if (parts.Length < 2 || string.IsNullOrWhiteSpace(parts[1]))
+                    {
+                        return (true, "请提供大小值 (MB)。用法: /setbilimaxsize <MB数>");
+                    }
+                    if (int.TryParse(parts[1].Trim(), out int sizeInMB) && sizeInMB > 0)
+                    {
+                        await _appConfigService.SetConfigurationValueAsync(AppConfigurationService.BiliMaxDownloadSizeMBKey, sizeInMB.ToString());
+                        return (true, $"Bilibili视频最大下载大小已成功设置为 {sizeInMB}MB。");
+                    }
+                    else
+                    {
+                        return (true, "无效的大小值。请输入一个正整数 (MB)。");
+                    }
+                }
+                else
+                {
+                    return (true, "抱歉，只有全局管理员才能设置此项。");
+                }
+            }
+            if (Command.Equals("/getbilimaxsize", StringComparison.OrdinalIgnoreCase) || Command.Equals("获取B站最大下载大小", StringComparison.OrdinalIgnoreCase))
+            {
+                 if (IsGlobalAdmin(UserId))
+                 {
+                    string configuredSizeMB = await _appConfigService.GetConfigurationValueAsync(AppConfigurationService.BiliMaxDownloadSizeMBKey);
+                    if (!string.IsNullOrWhiteSpace(configuredSizeMB) && int.TryParse(configuredSizeMB, out int sizeMB) && sizeMB > 0)
+                    {
+                        return (true, $"Bilibili视频最大下载大小当前设置为: {sizeMB}MB。");
+                    }
+                    else
+                    {
+                        // Fallback to the default value used in BiliMessageController if not explicitly set
+                        long defaultMaxFileSizeMB = 48; // Keep this consistent with BiliMessageController's default
+                        return (true, $"Bilibili视频最大下载大小当前未在数据库中配置，将使用程序默认值 (当前为 {defaultMaxFileSizeMB}MB)。");
+                    }
+                 }
+                 else
+                 {
+                     return (true, "抱歉，只有全局管理员才能查看此项设置。");
+                 }
+            }
             return (false, string.Empty);
         }
     }

@@ -11,7 +11,10 @@ public class AppConfigurationService : IAppConfigurationService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AppConfigurationService> _logger;
-    public const string BiliCookieKey = "BiliCookie"; // Define a constant for the key
+    
+    // Configuration Keys
+    public const string BiliCookieKey = "BiliCookie";
+    public const string BiliMaxDownloadSizeMBKey = "BiliMaxDownloadSizeMB"; // Added for configurable download size limit
 
     public AppConfigurationService(IServiceScopeFactory scopeFactory, ILogger<AppConfigurationService> logger)
     {

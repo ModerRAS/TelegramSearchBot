@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics; // Keep for potential future use, but not for ffmpeg call
 using System.IO;
+using System.Linq; // Added for Any()
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -52,8 +53,11 @@ public class DownloadService : IDownloadService
             {
                 request.Headers.Referrer = new Uri(referer);
             }
-            // Add User-Agent if not already default on the client
-            // request.Headers.UserAgent.ParseAdd("..."); 
+            // Add User-Agent, consistent with BiliApiService
+            if (!request.Headers.UserAgent.Any()) // Add if not already set by a default policy for BiliApiClient
+            {
+                request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+            }
 
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();

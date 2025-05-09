@@ -59,16 +59,7 @@ public class DashStreamInfo
 {
     public DashMedia VideoStream { get; set; }
     public DashMedia AudioStream { get; set; }
-    public long EstimatedTotalSizeBytes
-    {
-        get
-        {
-            long total = 0;
-            if (VideoStream != null) total += VideoStream.SizeBytes;
-            if (AudioStream != null) total += AudioStream.SizeBytes;
-            return total;
-        }
-    }
+    public long EstimatedTotalSizeBytes { get; set; } // Made settable
 }
 
 public class DashMedia
