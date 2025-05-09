@@ -34,7 +34,8 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
-                    service.AddHttpClient();
+                    service.AddHttpClient("BiliApiClient"); // Named HttpClient for BiliApiService
+                    service.AddHttpClient(); // Default HttpClient if still needed elsewhere
                     service.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<GeneralBootstrap>());
                     // 配置 Redis 连接
                     var redisConnectionString = $"localhost:{Env.SchedulerPort}"; // 自定义端口
@@ -45,6 +46,15 @@ namespace TelegramSearchBot.AppBootstrap
                     }, ServiceLifetime.Transient);
                     AddController(service);
                     AddService(service);
+
+                    // Manually register BiliApiService and its interface
+                    service.AddTransient<TelegramSearchBot.Service.Bilibili.IBiliApiService, TelegramSearchBot.Service.Bilibili.BiliApiService>();
+                    // Manually register DownloadService and its interface
+                    service.AddTransient<TelegramSearchBot.Service.Bilibili.IDownloadService, TelegramSearchBot.Service.Bilibili.DownloadService>();
+                    // Manually register TelegramFileCacheService and its interface
+                    service.AddTransient<TelegramSearchBot.Service.Bilibili.ITelegramFileCacheService, TelegramSearchBot.Service.Bilibili.TelegramFileCacheService>();
+                    // Manually register AppConfigurationService and its interface
+                    service.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
                 });
         public static void Startup(string[] args) {
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
