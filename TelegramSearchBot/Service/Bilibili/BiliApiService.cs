@@ -8,7 +8,8 @@ using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Model.Bilibili;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using TelegramSearchBot.Manager; // For Env
+using TelegramSearchBot.Manager; // For Env (though BiliCookie will now come from service)
+using TelegramSearchBot.Service.Common; // For IAppConfigurationService
 // Removed: using Telegram.Bot.Extensions.MarkdownV2; 
 
 namespace TelegramSearchBot.Service.Bilibili;
@@ -17,6 +18,7 @@ public class BiliApiService : IBiliApiService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<BiliApiService> _logger;
+    private readonly IAppConfigurationService _appConfigService;
 
     // Bilibili API endpoints
     private const string BiliApiBaseUrl = "https://api.bilibili.com";
@@ -31,13 +33,14 @@ public class BiliApiService : IBiliApiService
     private static readonly char[] MarkdownV2EscapeChars = { '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
 
 
-    public BiliApiService(IHttpClientFactory httpClientFactory, ILogger<BiliApiService> logger)
+    public BiliApiService(IHttpClientFactory httpClientFactory, ILogger<BiliApiService> logger, IAppConfigurationService appConfigService)
     {
         _httpClient = httpClientFactory.CreateClient("BiliApiClient");
         // Configure HttpClient
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
         _httpClient.DefaultRequestHeaders.Referrer = new Uri("https://www.bilibili.com/");
         _logger = logger;
+        _appConfigService = appConfigService; // Store injected service
     }
 
     // Helper method to escape text for MarkdownV2 parse mode
@@ -410,6 +413,13 @@ public class BiliApiService : IBiliApiService
         {
             int redirectCount = 0;
             string currentUrl = shortUrl;
+
+            // Ensure the URL has a scheme
+            if (!Uri.TryCreate(currentUrl, UriKind.Absolute, out Uri testUri) || testUri.Scheme == null)
+            {
+                currentUrl = "https://" + currentUrl; // Default to https
+            }
+            
             // Use a temporary handler to disable automatic redirects for this specific task
             using var handler = new HttpClientHandler { AllowAutoRedirect = false };
             using var tempClient = new HttpClient(handler);
@@ -417,7 +427,7 @@ public class BiliApiService : IBiliApiService
 
             while (redirectCount < 5) // Limit redirects
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, currentUrl); // Use GET as HEAD might not return Location reliably
+                var request = new HttpRequestMessage(HttpMethod.Get, currentUrl); 
                 var response = await tempClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
                 if (response.Headers.Location != null)
@@ -458,14 +468,19 @@ public class BiliApiService : IBiliApiService
         try
         {
             var request = new HttpRequestMessage(HttpMethod.Get, uriBuilder.Uri);
-            // Commented out Cookie usage until Env.BiliCookie is confirmed/configured
-            // if (useCookies && !string.IsNullOrWhiteSpace(Env.BiliCookie)) 
-            // {
-            //     request.Headers.Add("Cookie", Env.BiliCookie);
-            //     _logger.LogDebug("Using BiliCookie for API request: {ApiUrl}", uriBuilder.ToString());
-            // } else if (useCookies) {
-            //     _logger.LogWarning("BiliCookie requested but not configured in Env.cs for API: {ApiUrl}", uriBuilder.ToString());
-            // }
+            if (useCookies)
+            {
+                string biliCookie = await _appConfigService.GetConfigurationValueAsync(AppConfigurationService.BiliCookieKey);
+                if (!string.IsNullOrWhiteSpace(biliCookie))
+                {
+                    request.Headers.Add("Cookie", biliCookie);
+                    _logger.LogDebug("Using BiliCookie from AppConfigurationService for API request: {ApiUrl}", uriBuilder.ToString());
+                }
+                else
+                {
+                    _logger.LogWarning("BiliCookie use was requested for API call to {ApiUrl}, but it's not configured in the database.", uriBuilder.ToString());
+                }
+            }
 
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode(); // Throws if not 2xx

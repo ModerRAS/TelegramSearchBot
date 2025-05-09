@@ -26,5 +26,6 @@ namespace TelegramSearchBot.Model
         public DbSet<GroupSettings> GroupSettings { get; set; }
         public DbSet<LLMChannel> LLMChannels { get; set; }
         public DbSet<ChannelWithModel> ChannelsWithModel { get; set; }
+        public DbSet<AppConfigurationItem> AppConfigurationItems { get; set; } // Added for BiliCookie and other app configs
     }
 }
