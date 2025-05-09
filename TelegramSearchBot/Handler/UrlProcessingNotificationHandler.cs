@@ -47,7 +47,7 @@ namespace TelegramSearchBot.Handler
                 
                 await _sendMessage.AddTask(async () =>
                 {
-                    await _botClient.SendTextMessageAsync(
+                    await _botClient.SendMessage(
                         chatId: notification.ChatId,
                         text: replyText,
                         parseMode: ParseMode.Html,

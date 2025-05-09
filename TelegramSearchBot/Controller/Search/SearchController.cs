@@ -4,49 +4,62 @@ using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Model;
 using System;
+using MediatR;
+using System.Threading;
+using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Model.Notifications;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.Service.BotAPI;
 
+
 namespace TelegramSearchBot.Controller.Search
 {
-    class SearchController : IOnUpdate
+    class SearchController : INotificationHandler<TelegramUpdateReceivedNotification>
     {
-        private readonly ISearchService searchService;
-        private readonly SendService sendService;
-        public List<Type> Dependencies => new List<Type>();
+        private readonly ISearchService _searchService;
+        private readonly SendService _sendService;
+        // public List<Type> Dependencies => new List<Type>(); // Obsolete with MediatR
+
         public SearchController(
-            SearchService searchService,
+            SearchService searchService, // Assuming SearchService implements ISearchService or is the concrete type used
             SendService sendService
             )
         {
-            this.searchService = searchService;
-            this.sendService = sendService;
+            _searchService = searchService;
+            _sendService = sendService;
         }
 
-        public async Task ExecuteAsync(Update e)
+        public async Task Handle(TelegramUpdateReceivedNotification notification, CancellationToken cancellationToken)
         {
-            if (!string.IsNullOrEmpty(e?.Message?.Text))
+            var update = notification.Update;
+
+            if (update.Type != UpdateType.Message || update.Message?.Text == null)
             {
-                if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 "))
+                return;
+            }
+
+            var message = update.Message;
+
+            if (message.Text.Length >= 4 && message.Text.StartsWith("搜索 "))
+            {
+                var firstSearch = new SearchOption()
                 {
-                    var firstSearch = new SearchOption()
-                    {
-                        Search = e.Message.Text.Substring(3),
-                        ChatId = e.Message.Chat.Id,
-                        IsGroup = e.Message.Chat.Id < 0,
-                        Skip = 0,
-                        Take = 20,
-                        Count = -1,
-                        ToDelete = new List<long>(),
-                        ToDeleteNow = false,
-                        ReplyToMessageId = e.Message.MessageId,
-                        Chat = e.Message.Chat
-                    };
+                    Search = message.Text.Substring(3),
+                    ChatId = message.Chat.Id,
+                    IsGroup = message.Chat.Id < 0, // Consider using message.Chat.Type for more clarity
+                    Skip = 0,
+                    Take = 20,
+                    Count = -1,
+                    ToDelete = new List<long>(),
+                    ToDeleteNow = false,
+                    ReplyToMessageId = message.MessageId,
+                    Chat = message.Chat
+                };
 
-                    var searchOption = await searchService.Search(firstSearch);
+                var searchOption = await _searchService.Search(firstSearch);
 
-                    await sendService.ExecuteAsync(searchOption, searchOption.Messages);
-                }
+                // Assuming sendService.ExecuteAsync is designed to handle cancellationToken if needed
+                await _sendService.ExecuteAsync(searchOption, searchOption.Messages);
             }
         }
     }

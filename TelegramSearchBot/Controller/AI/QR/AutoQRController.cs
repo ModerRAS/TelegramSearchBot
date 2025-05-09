@@ -18,11 +18,13 @@ using TelegramSearchBot.Model; // Added for MessageOption
 using TelegramSearchBot.Controller.Download; 
 using TelegramSearchBot.Exceptions; 
 using TelegramSearchBot.Manager; 
-using TelegramSearchBot.Service.BotAPI; // Added for SendMessageService
+using TelegramSearchBot.Service.BotAPI; 
+using System.Threading; // Added for CancellationToken
 
 namespace TelegramSearchBot.Controller.AI.QR
 {
-    class AutoQRController : IOnUpdate, IProcessPhoto
+    // Now handles PhotoDownloadedNotification
+    class AutoQRController : INotificationHandler<PhotoDownloadedNotification>
     {
         private readonly AutoQRService _autoQRService;
         private readonly MessageService _messageService;
@@ -30,7 +32,8 @@ namespace TelegramSearchBot.Controller.AI.QR
         private readonly IMediator _mediator;
         private readonly SendMessageService _sendMessageService;
 
-        public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
+        // Dependencies list is likely no longer needed or managed differently with MediatR.
+        // public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) }; 
 
         public AutoQRController(
             ILogger<AutoQRController> logger,
@@ -47,49 +50,55 @@ namespace TelegramSearchBot.Controller.AI.QR
             _sendMessageService = sendMessageService;
         }
 
-        public async Task ExecuteAsync(Update e)
+        public async Task Handle(PhotoDownloadedNotification notification, CancellationToken cancellationToken)
         {
+            var filePath = notification.FilePath;
+            var originalUpdate = notification.OriginalUpdate;
+
+            // Ensure the original update contained a message (which it should if a photo was downloaded from it)
+            if (originalUpdate.Message == null)
+            {
+                _logger.LogWarning("PhotoDownloadedNotification received without an original message context.");
+                return;
+            }
+            var message = originalUpdate.Message;
+
             try
             {
-                var filePath = IProcessPhoto.GetPhotoPath(e);
-                if (filePath == null)
-                {
-                    throw new CannotGetPhotoException();
-                }
-                _logger.LogInformation("Get Photo File: {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
+                _logger.LogInformation("Processing downloaded photo for QR: {FilePath} from original message {ChatId}/{MessageId}", filePath, message.Chat.Id, message.MessageId);
                 var qrStr = await _autoQRService.ExecuteAsync(filePath);
 
                 if (string.IsNullOrWhiteSpace(qrStr))
                 {
+                    _logger.LogInformation("No QR code content found in {FilePath} for {ChatId}/{MessageId}", filePath, message.Chat.Id, message.MessageId);
                     return;
                 }
 
-                _logger.LogInformation("QR Code recognized for {ChatId}/{MessageId}. Content: {QrStr}", e.Message.Chat.Id, e.Message.MessageId, qrStr);
+                _logger.LogInformation("QR Code recognized for {ChatId}/{MessageId}. Content: {QrStr}", message.Chat.Id, message.MessageId, qrStr);
 
                 // 1. Original logic: Send the raw QR string back to the user.
-                await _sendMessageService.SendMessage(qrStr, e.Message.Chat.Id, e.Message.MessageId);
-                _logger.LogInformation("Sent raw QR content for {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
+                await _sendMessageService.SendMessage(qrStr, message.Chat.Id, message.MessageId);
+                _logger.LogInformation("Sent raw QR content for {ChatId}/{MessageId}", message.Chat.Id, message.MessageId);
 
                 // 2. New logic: Publish notification for URL processing.
-                // The UrlProcessingNotificationHandler will pick this up.
                 await _mediator.Publish(new TextMessageReceivedNotification(
                     qrStr,
-                    e.Message.Chat.Id,
-                    e.Message.MessageId,
-                    e.Message.Chat.Type
-                ));
+                    message.Chat.Id,
+                    message.MessageId,
+                    message.Chat.Type
+                ), cancellationToken);
                 
                 // 3. Storing the raw QR content as a message.
                 await _messageService.ExecuteAsync(new MessageOption()
                 {
-                    ChatId = e.Message.Chat.Id,
-                    Chat = e.Message.Chat,
-                    DateTime = e.Message.Date,
-                    User = e.Message.From,
-                    Content = qrStr, // Corrected variable name
-                    MessageId = e.Message.MessageId,
-                    ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
-                    UserId = e.Message.From.Id
+                    ChatId = message.Chat.Id,
+                    Chat = message.Chat,
+                    DateTime = message.Date,
+                    User = message.From,
+                    Content = qrStr, 
+                    MessageId = message.MessageId,
+                    ReplyTo = message.ReplyToMessage?.Id ?? 0,
+                    UserId = message.From.Id
                 });
             }
             catch (Exception ex) when (

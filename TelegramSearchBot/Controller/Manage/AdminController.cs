@@ -4,6 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
+using MediatR;
+using System.Threading;
+using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Model.Notifications;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
@@ -11,52 +15,66 @@ using TelegramSearchBot.Service.Manage;
 
 namespace TelegramSearchBot.Controller.Manage
 {
-    public class AdminController : IOnUpdate
+    public class AdminController : INotificationHandler<TelegramUpdateReceivedNotification>
     {
-        public List<Type> Dependencies => new List<Type>();
-        public AdminService AdminService { get; set; }
-        public SendMessage Send { get; set; }
-        public ITelegramBotClient botClient { get; set; }
-        public AdminController(ITelegramBotClient botClient, AdminService adminService, SendMessage Send)
+        // public List<Type> Dependencies => new List<Type>(); // Obsolete
+        private readonly AdminService _adminService;
+        private readonly SendMessage _sendManager; // Renamed for consistency
+        private readonly ITelegramBotClient _botClient;
+
+        public AdminController(ITelegramBotClient botClient, AdminService adminService, SendMessage sendManager)
         {
-            AdminService = adminService;
-            this.Send = Send;
-            this.botClient = botClient;
+            _adminService = adminService;
+            _sendManager = sendManager;
+            _botClient = botClient;
         }
 
-        public async Task ExecuteAsync(Update e)
+        public async Task Handle(TelegramUpdateReceivedNotification notification, CancellationToken cancellationToken)
         {
-            if (e?.Message?.Chat?.Id > 0)
+            var update = notification.Update;
+
+            if (update.Type != UpdateType.Message || update.Message == null)
             {
                 return;
-            }
-            if (e?.Message?.From?.Id != Env.AdminId)
-            {
-                return;
-            }
-            string Command;
-            if (!string.IsNullOrEmpty(e.Message.Text))
-            {
-                Command = e.Message.Text;
-            }
-            else if (!string.IsNullOrEmpty(e.Message.Caption))
-            {
-                Command = e.Message.Caption;
-            }
-            else return;
-            var (status, message) = await AdminService.ExecuteAsync(e.Message.From.Id, e.Message.Chat.Id, Command);
-            if (status)
-            {
-                await Send.AddTask(async () =>
-                {
-                    await botClient.SendMessage(
-                    chatId: e.Message.Chat.Id,
-                    text: message,
-                    replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                );
-                }, e.Message.Chat.Id < 0);
             }
 
+            var message = update.Message;
+
+            // Admin commands are typically in group chats and from the admin user
+            if (message.Chat?.Id > 0) // Not a group chat (or supergroup)
+            {
+                return;
+            }
+            if (message.From?.Id != Env.AdminId) // Not from admin
+            {
+                return;
+            }
+
+            string commandText;
+            if (!string.IsNullOrEmpty(message.Text))
+            {
+                commandText = message.Text;
+            }
+            else if (!string.IsNullOrEmpty(message.Caption))
+            {
+                commandText = message.Caption;
+            }
+            else return; // No command text
+
+            var (status, responseMessage) = await _adminService.ExecuteAsync(message.From.Id, message.Chat.Id, commandText);
+            
+            if (status && !string.IsNullOrEmpty(responseMessage))
+            {
+                await _sendManager.AddTask(async () =>
+                {
+                    await _botClient.SendTextMessageAsync(
+                        chatId: message.Chat.Id,
+                        text: responseMessage,
+                        replyParameters: new ReplyParameters() { MessageId = message.MessageId },
+                        cancellationToken: cancellationToken
+                    );
+                }, message.Chat.Type != ChatType.Private); // Determine if it's a group for rate limiting
+            }
         }
     }
 }

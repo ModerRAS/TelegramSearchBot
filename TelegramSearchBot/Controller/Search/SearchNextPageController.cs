@@ -10,88 +10,109 @@ using Telegram.Bot.Types;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.Search;
+using MediatR;
+using System.Threading;
+using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Model.Notifications;
 using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.Controller.Search
 {
-    class SearchNextPageController : IOnUpdate
+    class SearchNextPageController : INotificationHandler<TelegramUpdateReceivedNotification>
     {
-        private readonly SendMessage Send;
-        private readonly ILiteCollection<CacheData> Cache;
-        private readonly ILogger logger;
-        private readonly ISearchService searchService;
-        private readonly SendService sendService;
-        private readonly ITelegramBotClient botClient;
-        public List<Type> Dependencies => new List<Type>();
+        private readonly SendMessage _sendManager; // Renamed Send to _sendManager to avoid conflict with keyword
+        private readonly ILiteCollection<CacheData> _cache;
+        private readonly ILogger<SearchNextPageController> _logger;
+        private readonly ISearchService _searchService;
+        private readonly SendService _sendService;
+        private readonly ITelegramBotClient _botClient;
+        // public List<Type> Dependencies => new List<Type>(); // Obsolete with MediatR
+
         public SearchNextPageController(
             ITelegramBotClient botClient,
-            SendMessage Send,
+            SendMessage sendManager, // Renamed Send to sendManager
             ILogger<SearchNextPageController> logger,
-            SearchService searchService,
+            SearchService searchService, // Assuming SearchService implements ISearchService
             SendService sendService
             )
         {
-            this.sendService = sendService;
-            this.searchService = searchService;
-            this.Send = Send;
-            Cache = Env.Cache.GetCollection<CacheData>("CacheData");
-            this.logger = logger;
-            this.botClient = botClient;
+            _sendService = sendService;
+            _searchService = searchService;
+            _sendManager = sendManager;
+            _cache = Env.Cache.GetCollection<CacheData>("CacheData");
+            _logger = logger;
+            _botClient = botClient;
         }
 
-        public async Task ExecuteAsync(Update e)
+        public async Task Handle(TelegramUpdateReceivedNotification notification, CancellationToken cancellationToken)
         {
-            //Console.WriteLine(e.CallbackQuery.Message.Text);
-            //Console.WriteLine(e.CallbackQuery.Id);
-            //Console.WriteLine(e.CallbackQuery.Data);//这才是关键的东西，就是上面在按钮上写的那个sendmessage
-            if (e.CallbackQuery == null)
+            var update = notification.Update;
+
+            if (update.Type != UpdateType.CallbackQuery || update.CallbackQuery == null)
             {
                 return;
             }
-            var ChatId = e?.CallbackQuery?.Message?.Chat.Id;
-            if (ChatId == null)
+
+            var callbackQuery = update.CallbackQuery;
+            var chatId = callbackQuery.Message?.Chat?.Id; // Null-conditional access
+
+            if (chatId == null)
             {
+                _logger.LogWarning("CallbackQuery received without ChatId. CallbackQueryId: {CallbackQueryId}", callbackQuery.Id);
                 return;
             }
-            logger.LogInformation($"CallbackQuery is: {e.CallbackQuery}, ChatId is: {ChatId}");
-            var IsGroup = e?.CallbackQuery?.Message?.Chat.Id < 0;
-#pragma warning disable CS8602 // 解引用可能出现空引用。
-            await botClient.AnswerCallbackQuery(e.CallbackQuery.Id, "搜索中。。。");
-#pragma warning restore CS8602 // 解引用可能出现空引用。
+            
+            _logger.LogInformation("Handling CallbackQuery: {CallbackQueryData} for ChatId: {ChatId}", callbackQuery.Data, chatId);
+            
+            bool isGroup = callbackQuery.Message.Chat.Type != ChatType.Private; // More robust check for group
+
             try
             {
-                var cacheData = Cache.Find(c => c.UUID.Equals(e.CallbackQuery.Data)).FirstOrDefault();
+                // Answer callback query immediately to provide feedback to the user.
+                await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "处理中...", cancellationToken: cancellationToken);
+
+                var cacheData = _cache.Find(c => c.UUID.Equals(callbackQuery.Data)).FirstOrDefault();
+                if (cacheData == null || cacheData.searchOption == null)
+                {
+                    _logger.LogWarning("CacheData not found or searchOption is null for CallbackQueryData: {CallbackQueryData}", callbackQuery.Data);
+                    // Optionally send a message to the user that the action has expired or is invalid.
+                    // await _botClient.SendTextMessageAsync(chatId, "此操作已过期或无效。", cancellationToken: cancellationToken);
+                    return;
+                }
+                
                 var searchOption = cacheData.searchOption;
-                Cache.Delete(cacheData.Id);
+                _cache.Delete(cacheData.Id);
 
-                searchOption.ToDelete.Add(e.CallbackQuery.Message.MessageId);
+                if (callbackQuery.Message != null) // Ensure message context exists
+                {
+                    searchOption.ToDelete.Add(callbackQuery.Message.MessageId);
+                    searchOption.ReplyToMessageId = callbackQuery.Message.MessageId; // This might be confusing if we delete this message
+                    searchOption.Chat = callbackQuery.Message.Chat;
+                }
 
-                searchOption.ReplyToMessageId = e.CallbackQuery.Message.MessageId;
-                searchOption.Chat = e.CallbackQuery.Message.Chat;
 
                 if (searchOption.ToDeleteNow)
                 {
-                    foreach (var i in searchOption.ToDelete)
+                    foreach (var messageIdToDelete in searchOption.ToDelete)
                     {
-                        await Send.AddTask(async () =>
+                        // Using _sendManager (renamed from Send)
+                        await _sendManager.AddTask(async () =>
                         {
                             try
                             {
-                                await botClient.DeleteMessage(ChatId, (int)i);
+                                await _botClient.DeleteMessageAsync(chatId, (int)messageIdToDelete, cancellationToken: cancellationToken);
                             }
-                            catch (AggregateException)
+                            catch (Exception ex) // Catch more specific exceptions if possible
                             {
-                                logger.LogError("删除了不存在的消息");
+                                _logger.LogError(ex, "Failed to delete message {MessageIdToDelete} in chat {ChatId}", messageIdToDelete, chatId);
                             }
-                        }, IsGroup);
-
+                        }, isGroup);
                     }
-                    return;
+                    return; // Assuming ToDeleteNow means no further search/send
                 }
 
-                var searchOptionNext = await searchService.Search(searchOption);
-
-                await sendService.ExecuteAsync(searchOption, searchOptionNext.Messages);
+                var searchOptionNext = await _searchService.Search(searchOption);
+                await _sendService.ExecuteAsync(searchOption, searchOptionNext.Messages); // Pass CancellationToken if SendService supports it
 
             }
             catch (KeyNotFoundException)

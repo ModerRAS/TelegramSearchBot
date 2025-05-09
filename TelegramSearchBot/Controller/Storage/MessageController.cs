@@ -7,16 +7,18 @@ using System.Collections.Generic;
 using System.Linq; // Added for Enumerable.Any
 using TelegramSearchBot.Service.Storage;
 using MediatR; // Added for IMediator
-using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
-using Telegram.Bot.Types.Enums; 
+using TelegramSearchBot.Model.Notifications;
+using Telegram.Bot.Types.Enums;
+using System.Threading; // Added for CancellationToken
 
 namespace TelegramSearchBot.Controller.Storage
 {
-    class MessageController : IOnUpdate
+    // Changed from IOnUpdate to INotificationHandler<TelegramUpdateReceivedNotification>
+    class MessageController : INotificationHandler<TelegramUpdateReceivedNotification>
     {
         private readonly MessageService _messageService;
         private readonly IMediator _mediator;
-        public List<Type> Dependencies => new List<Type>();
+        // public List<Type> Dependencies => new List<Type>(); // This might be obsolete with MediatR
 
         public MessageController(
             MessageService messageService,
@@ -26,57 +28,72 @@ namespace TelegramSearchBot.Controller.Storage
             _mediator = mediator;
         }
 
-        public async Task ExecuteAsync(Update e)
+        public async Task Handle(TelegramUpdateReceivedNotification notification, CancellationToken cancellationToken)
         {
-            // Store the message first
-            await StoreMessageAsync(e);
+            var update = notification.Update;
 
-            string? messageText = e?.Message?.Text ?? e?.Message?.Caption;
+            // Only handle Message updates
+            if (update.Type != UpdateType.Message)
+            {
+                return;
+            }
+
+            var message = update.Message;
+            if (message == null) return;
+
+            // Store the message first
+            await StoreMessageAsync(update); // Pass the full Update object
+
+            string? messageText = message.Text ?? message.Caption;
 
             if (string.IsNullOrWhiteSpace(messageText))
             {
                 return;
             }
             
+            // Avoid publishing for "搜索 " commands
             if (messageText.Length > 3 && messageText.StartsWith("搜索 "))
             {
                 return;
             }
 
-            if (e.Message != null) 
-            {
-                 await _mediator.Publish(new TextMessageReceivedNotification(
-                    messageText,
-                    e.Message.Chat.Id,
-                    e.Message.MessageId,
-                    e.Message.Chat.Type // Pass ChatType
-                ));
-            }
+            // Publish a secondary notification for URL processing
+            await _mediator.Publish(new TextMessageReceivedNotification(
+                messageText,
+                message.Chat.Id,
+                message.MessageId,
+                message.Chat.Type
+            ), cancellationToken);
         }
         
-        private async Task StoreMessageAsync(Update e)
+        // StoreMessageAsync now takes Update directly
+        private async Task StoreMessageAsync(Update update)
         {
+            // Ensure we are dealing with a message
+            if (update.Message == null) return;
+            var message = update.Message;
+
             string ToAdd;
-            if (!string.IsNullOrEmpty(e?.Message?.Text))
+            if (!string.IsNullOrEmpty(message.Text))
             {
-                ToAdd = e.Message.Text;
+                ToAdd = message.Text;
             }
-            else if (!string.IsNullOrEmpty(e?.Message?.Caption))
+            else if (!string.IsNullOrEmpty(message.Caption))
             {
-                ToAdd = e.Message.Caption;
+                ToAdd = message.Caption;
             }
             else return;
 
             await _messageService.ExecuteAsync(new MessageOption
             {
-                ChatId = e.Message.Chat.Id,
-                MessageId = e.Message.MessageId,
-                UserId = e.Message.From.Id,
+                ChatId = message.Chat.Id,
+                MessageId = message.MessageId,
+                UserId = message.From.Id,
                 Content = ToAdd,
-                DateTime = e.Message.Date,
-                User = e.Message.From,
-                ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
-                Chat = e.Message.Chat,
+                DateTime = message.Date,
+                User = message.From,
+                ReplyTo = message.ReplyToMessage?.Id ?? 0,
+                Chat = message.Chat,
             });
         }
     }

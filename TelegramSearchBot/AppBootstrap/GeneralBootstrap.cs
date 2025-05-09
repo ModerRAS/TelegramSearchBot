@@ -19,6 +19,10 @@ using TelegramSearchBot.Executor;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Notifications; 
+using MediatR; 
+using Microsoft.Extensions.DependencyInjection; 
+using Microsoft.Extensions.Logging; // Added for ILogger<T>
 using Tsavorite.core;
 
 namespace TelegramSearchBot.AppBootstrap
@@ -43,8 +47,8 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddDbContext<DataDbContext>(options => {
                         options.UseSqlite($"Data Source={Path.Combine(Env.WorkDir, "Data.sqlite")};Cache=Shared;Mode=ReadWriteCreate;");
                     }, ServiceLifetime.Transient);
-                    AddController(service);
-                    AddService(service);
+                    // AddController(service); // Removed as controllers are now MediatR handlers
+                    AddService(service); // Services are still registered this way
                 });
         public static void Startup(string[] args) {
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
@@ -87,25 +91,8 @@ namespace TelegramSearchBot.AppBootstrap
                 }, cts.Token);
             host.Run();
         }
-        public static void AddController(IServiceCollection service) {
-            service.Scan(scan => scan
-            .FromAssemblyOf<IOnUpdate>()
-            .AddClasses(classes => classes.AssignableTo<IOnUpdate>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
-
-            .FromAssemblyOf<IPreUpdate>()
-            .AddClasses(classes => classes.AssignableTo<IPreUpdate>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
-
-            .FromAssemblyOf<IOnCallbackQuery>()
-            .AddClasses(classes => classes.AssignableTo<IOnCallbackQuery>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
-            );
-
-        }
+        // public static void AddController(IServiceCollection service) { // Method removed as it's no longer needed
+        // }
         public static void AddService(IServiceCollection service) {
             service.Scan(scan => scan
             .FromAssemblyOf<IService>()
@@ -120,21 +107,44 @@ namespace TelegramSearchBot.AppBootstrap
             _ = service.GetRequiredService<SendMessage>().Run();
         }
 
-        public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
+        public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider serviceProvider) {
+            // Note: Renamed 'service' parameter to 'serviceProvider' to avoid conflict with the static field 'service'.
             return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
+                // Run the processing in a background task to avoid blocking the receiver loop.
                 _ = Task.Run(async () => {
+                    // Create a scope for the request/update processing.
+                    using var scope = serviceProvider.CreateScope();
+                    var scopedServiceProvider = scope.ServiceProvider;
                     try {
-                        var exec = new ControllerExecutor(service.GetServices<IOnUpdate>());
-                        await exec.ExecuteControllers(update);
+                        // Resolve Mediator within the scope.
+                        var mediator = scopedServiceProvider.GetRequiredService<IMediator>();
+                        
+                        // Publish the generic update notification.
+                        // Handlers subscribing to this notification will filter and process the update.
+                        await mediator.Publish(new TelegramUpdateReceivedNotification(update), cancellationToken);
+
                     } catch (Exception ex) {
-                        Log.Error(ex, $"Message ControllerExecutor Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Title} {update.Message.Chat.Id}/{update.Message.MessageId}");
+                        // Log errors using the logger from the scope if possible, or fallback to static logger.
+                        var logger = scopedServiceProvider.GetService<ILogger<GeneralBootstrap>>();
+                        var chatId = update.Message?.Chat?.Id ?? update.CallbackQuery?.Message?.Chat?.Id ?? 0;
+                        var messageId = update.Message?.MessageId ?? update.CallbackQuery?.Message?.MessageId ?? 0;
+                        
+                        if (logger != null) {
+                            logger.LogError(ex, "Error processing update for ChatId {ChatId}, MessageId {MessageId}.", chatId, messageId);
+                        } else {
+                            // Fallback static logging if logger isn't resolved
+                            Log.Error(ex, "Error processing update for ChatId {ChatId}, MessageId {MessageId}.", chatId, messageId);
+                        }
                     }
+                }, cancellationToken); // Pass cancellationToken to Task.Run if needed, though it might not be directly usable inside easily.
 
-                });
-
+                // Return completed task immediately as the work is offloaded.
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+                await Task.CompletedTask; 
+#pragma warning restore CS1998
             };
         }
-#pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
+
         public static Func<ITelegramBotClient, Exception, CancellationToken, Task> HandleErrorAsync(IServiceProvider service) {
             return async (ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) => {
                 if (exception is ApiRequestException apiRequestException) {
