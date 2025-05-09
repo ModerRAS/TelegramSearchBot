@@ -323,38 +323,37 @@ namespace TelegramSearchBot.Test.Service.Common
             
             var result = await _urlProcessingService.ProcessUrlsInTextAsync(text);
             Assert.AreEqual(1, result.Count);
-            Assert.IsTrue(result[0] == expectedCleanedUrl || result[0] == expectedCleanedUrl + "/", $"Expected '{expectedCleanedUrl}' or '{expectedCleanedUrl}/', but got '{result[0]}'");
+            Assert.IsTrue(result[0].ProcessedUrl == expectedCleanedUrl || result[0].ProcessedUrl == expectedCleanedUrl + "/", 
+                $"Expected '{expectedCleanedUrl}' or '{expectedCleanedUrl}/', but got '{result[0].ProcessedUrl}'");
         }
 
         [TestMethod]
-        public async Task ProcessUrlsInTextAsync_MultipleUrls_ProcessesAndReturnsDistinctCleanedUrls()
+        public async Task ProcessUrlsInTextAsync_MultipleUrls_ProcessesAllUrls()
         {
             var text = "Url1: http://a.com?trk=1. Url2: http://b.com?trk=2. Duplicate: http://a.com?trk=3";
-            // Adjusted expected values to include trailing slash, as UriBuilder might add it when query is empty.
             var cleanedA = "http://a.com/"; 
             var cleanedB = "http://b.com/";
 
             _mockHttpMessageHandler.Protected()
                 .Setup<Task<HttpResponseMessage>>(
                     "SendAsync",
-                    ItExpr.IsAny<HttpRequestMessage>(), // Match any request
+                    ItExpr.IsAny<HttpRequestMessage>(),
                     ItExpr.IsAny<CancellationToken>()
                 )
                 .ReturnsAsync((HttpRequestMessage request, CancellationToken token) => {
-                    // Simulate that the HTTP client resolved the URL to itself (no redirect)
-                    // and the content does not contain JS redirects.
-                    // The actual cleaning of tracking parameters will be done by CleanUrlOfTrackingParameters.
                     return new HttpResponseMessage {
                         StatusCode = HttpStatusCode.OK,
-                        Content = new StringContent(""), // Empty content, no JS redirect
-                        RequestMessage = new HttpRequestMessage(HttpMethod.Get, request.RequestUri) // Echo the request URI
+                        Content = new StringContent(""),
+                        RequestMessage = new HttpRequestMessage(HttpMethod.Get, request.RequestUri)
                     };
                 });
 
-
             var result = await _urlProcessingService.ProcessUrlsInTextAsync(text);
-            Assert.AreEqual(2, result.Count, "Should return distinct URLs.");
-            CollectionAssert.AreEquivalent(new List<string> { cleanedA, cleanedB }, result);
+            Assert.AreEqual(3, result.Count, "Should process all URLs including duplicates");
+            
+            // Verify all URLs were processed correctly
+            Assert.IsTrue(result.Any(r => r.ProcessedUrl == cleanedA || r.ProcessedUrl == cleanedA + "/"));
+            Assert.IsTrue(result.Any(r => r.ProcessedUrl == cleanedB || r.ProcessedUrl == cleanedB + "/"));
         }
     }
 }

@@ -225,6 +225,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                     XElement paramsContainer = null;
 
                     // Case 1: <tool name="ToolName"><parameters>...</parameters></tool>
+                    // or <tool name="ToolName"><parameter name="...">value</parameter></tool>
                     if (elementToParse.Name.LocalName == "tool" && elementToParse.Attribute("name") != null)
                     {
                         var nameAttr = elementToParse.Attribute("name")?.Value;
@@ -234,7 +235,16 @@ namespace TelegramSearchBot.Service.AI.LLM
                             paramsContainer = elementToParse.Element("parameters");
                             if (paramsContainer == null)
                             {
-                                _logger?.LogWarning("Tool call format <tool name='{ToolName}'> used, but <parameters> child element is missing.", currentToolName);
+                                // Check for direct <parameter> children if no <parameters> container
+                                var directParams = elementToParse.Elements("parameter");
+                                if (directParams.Any())
+                                {
+                                    paramsContainer = elementToParse;
+                                }
+                                else
+                                {
+                                    _logger?.LogWarning("Tool call format <tool name='{ToolName}'> used, but neither <parameters> nor direct <parameter> elements found.", currentToolName);
+                                }
                             }
                         }
                     }
