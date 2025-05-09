@@ -163,7 +163,7 @@ namespace TelegramSearchBot.Service.Storage
                     await AddToSqlite(messageOption);
 
                 }
-                await AddToLiteDB(messageOption);
+                //await AddToLiteDB(messageOption);
                 await AddToLucene(messageOption);
             }
         }
