@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http; // Added for IHttpClientFactory
 using System.Text;
+using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using System.Reflection;
 using TelegramSearchBot.Intrerface;
@@ -156,9 +157,10 @@ namespace TelegramSearchBot.Service.AI.LLM
          }
 
         // --- Main Execution Logic ---
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel)
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-             if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName; 
+             if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName;
 
              if (string.IsNullOrWhiteSpace(modelName)) {
                  _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
@@ -187,46 +189,50 @@ namespace TelegramSearchBot.Service.AI.LLM
                 int maxToolCycles = 5;
                 for (int cycle = 0; cycle < maxToolCycles; cycle++)
                 {
-                    var llmResponseAccumulator = new StringBuilder();
+                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                    var currentMessageContentBuilder = new StringBuilder(); // Used to build the current full message for yielding
+                    var llmResponseAccumulatorForToolParsing = new StringBuilder(); // Accumulates the full response text if needed for tool parsing later
                     
                     // --- Call LLM ---
-                    await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory))
+                    await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, cancellationToken: cancellationToken).WithCancellation(cancellationToken))
                     {
+                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                         foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>())
                         {
                              if (updatePart?.Text != null) {
-                                 llmResponseAccumulator.Append(updatePart.Text);
+                                 currentMessageContentBuilder.Append(updatePart.Text);
+                                 llmResponseAccumulatorForToolParsing.Append(updatePart.Text);
+                                 yield return currentMessageContentBuilder.ToString(); // Yield current full message
                              }
                         }
                     }
-                    string llmFullResponse = llmResponseAccumulator.ToString().Trim();
-                    _logger.LogDebug("{ServiceName} raw response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponse);
-
-                    // --- Preprocess response using McpToolHelper ---
-                    string cleanedResponse = McpToolHelper.CleanLlmResponse(llmFullResponse);
-                    if (llmFullResponse.Length != cleanedResponse.Length) {
-                         _logger.LogDebug("{ServiceName} cleaned response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, cleanedResponse);
-                    }
-
-                    if (string.IsNullOrWhiteSpace(cleanedResponse) && cycle < maxToolCycles -1) {
-                         if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
-                             _logger.LogWarning("{ServiceName}: LLM response contained only thinking tags during tool cycle {Cycle}.", ServiceName, cycle + 1);
-                         } else {
-                             _logger.LogWarning("{ServiceName}: LLM returned empty response during tool cycle {Cycle}.", ServiceName, cycle + 1);
-                         }
-                    }
+                    string llmFullResponseText = llmResponseAccumulatorForToolParsing.ToString().Trim();
+                    _logger.LogDebug("{ServiceName} raw full response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
                     
-                    // Add Assistant response (raw) to history 
-                    if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
-                         providerHistory.Add(new AssistantChatMessage(llmFullResponse));
-                     } else {
-                          _logger.LogWarning("{ServiceName}: Attempted to add empty assistant response to history.", ServiceName);
-                     }
+                    // Add Assistant response (full text) to history 
+                    if (!string.IsNullOrWhiteSpace(llmFullResponseText)) {
+                         providerHistory.Add(new AssistantChatMessage(llmFullResponseText));
+                    } else if (cycle < maxToolCycles - 1) { // Only log warning if not the last cycle and response was empty
+                          _logger.LogWarning("{ServiceName}: LLM returned empty response during tool cycle {Cycle}.", ServiceName, cycle + 1);
+                          // Consider adding an empty assistant message to history if strict turn structure is needed by the model
+                          // providerHistory.Add(new AssistantChatMessage("")); 
+                    }
 
-                    // --- Tool Handling (using cleanedResponse) ---
-                    if (McpToolHelper.TryParseToolCall(cleanedResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
+                    // --- Tool Handling (using the full accumulated response text) ---
+                    // Note: McpToolHelper.CleanLlmResponse is not used before TryParseToolCall here, assuming tool calls are not in <think> tags.
+                    // If tool calls could be in <think> tags, llmFullResponseText would need cleaning first.
+                    if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any())
                     {
+                        var firstToolCall = parsedToolCalls[0];
+                        string parsedToolName = firstToolCall.toolName;
+                        Dictionary<string, string> toolArguments = firstToolCall.arguments;
+
                         _logger.LogInformation("{ServiceName}: LLM requested tool: {ToolName} with arguments: {Arguments}", ServiceName, parsedToolName, JsonConvert.SerializeObject(toolArguments));
+                        if (parsedToolCalls.Count > 1)
+                        {
+                            _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
+                        }
                         
                         string toolResultString;
                         bool isError = false;
@@ -252,17 +258,18 @@ namespace TelegramSearchBot.Service.AI.LLM
                     }
                     else
                     {
-                        // Not a tool call, yield the cleaned response
-                        if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
-                             yield return llmFullResponse;
-                        } else {
-                             _logger.LogWarning("{ServiceName}: LLM returned empty final response after cleaning for ChatId {ChatId}.", ServiceName, ChatId);
+                        // Not a tool call. The stream of cumulative messages has already been yielded.
+                        // We just need to end the ExecAsync's IAsyncEnumerable.
+                        if (string.IsNullOrWhiteSpace(llmFullResponseText)) { // Check if the final response was actually empty
+                             _logger.LogWarning("{ServiceName}: LLM returned empty final non-tool response for ChatId {ChatId}.", ServiceName, ChatId);
                         }
                         yield break; 
                     }
                 }
 
                 _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}.", ServiceName, ChatId);
+                // Yield a final message indicating the loop termination.
+                // This will be the last item in the stream for SendFullMessageStream.
                 yield return "I seem to be stuck in a loop trying to use tools. Please try rephrasing your request or check tool definitions.";
             }
             finally

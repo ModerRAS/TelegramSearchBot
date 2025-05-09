@@ -167,10 +167,10 @@ namespace TelegramSearchBot.Service.AI.LLM
             return cleaned.Trim();
         }
         
-        public static bool TryParseToolCall(string xmlString, out string toolName, out Dictionary<string, string> arguments)
+        public static bool TryParseToolCalls(string xmlString, out List<(string toolName, Dictionary<string, string> arguments)> parsedToolCalls)
         {
-            toolName = null;
-            arguments = new Dictionary<string, string>();
+            parsedToolCalls = new List<(string toolName, Dictionary<string, string> arguments)>();
+            
             try
             {
                 // Trim potential markdown code block fences and whitespace
@@ -182,70 +182,103 @@ namespace TelegramSearchBot.Service.AI.LLM
 
                 if (!xmlString.StartsWith("<") || !xmlString.EndsWith(">")) return false;
 
-                var xDoc = XDocument.Parse(xmlString, LoadOptions.None);
-                var root = xDoc.Root;
-                if (root == null) return false;
-
-                XElement paramsContainer = null; // The element containing the actual parameter tags
-
-                // Case 1: <tool name="ToolName"><parameters><parameter name="arg">val</parameter>...</parameters></tool>
-                if (root.Name.LocalName == "tool" && root.Attribute("name") != null)
+                XDocument xDoc = null;
+                try
                 {
-                    var nameAttr = root.Attribute("name")?.Value;
-                    if (nameAttr == null || !ToolRegistry.ContainsKey(nameAttr)) return false; 
-                    toolName = nameAttr;
-                    paramsContainer = root.Element("parameters"); 
-                    // If <parameters> tag is missing, we might assume direct children of <tool> are params,
-                    // but the example implies <parameters> is used. If null, loop below won't run.
-                    if (paramsContainer == null) {
-                         _logger?.LogWarning("Tool call format <tool name='{ToolName}'> used, but <parameters> child element is missing.", toolName);
-                         // We could try root as container, but let's require <parameters> for this structure
-                         // based on the user's example. If paramsContainer remains null, no args will be parsed.
+                    xDoc = XDocument.Parse(xmlString, LoadOptions.None);
+                }
+                catch (System.Xml.XmlException ex) when (ex.Message != null && ex.Message.ToLowerInvariant().Contains("multiple root elements"))
+                {
+                    _logger?.LogWarning(ex, $"TryParseToolCall: Multiple root elements detected. Wrapping in <tools_wrapper> and retrying. Original: {xmlString}");
+                    try
+                    {
+                        xDoc = XDocument.Parse($"<tools_wrapper>{xmlString}</tools_wrapper>", LoadOptions.None);
+                    }
+                    catch (System.Xml.XmlException ex2)
+                    {
+                        _logger?.LogError(ex2, $"TryParseToolCall: Failed to parse even after wrapping with <tools_wrapper>. Original: {xmlString}");
+                        return false;
                     }
                 }
-                // Case 2: <ToolName><arg>val</arg>...</ToolName>
-                else if (ToolRegistry.ContainsKey(root.Name.LocalName))
+                
+                if (xDoc == null || xDoc.Root == null) return false;
+
+                XElement rootElement = xDoc.Root;
+                if (rootElement == null) return false;
+
+                IEnumerable<XElement> elementsToConsider;
+                if (rootElement.Name.LocalName == "tools_wrapper")
                 {
-                    toolName = root.Name.LocalName;
-                    paramsContainer = root; // Parameters are direct children of the root
+                    elementsToConsider = rootElement.Elements();
                 }
-                // Case 3: <tool_name><SpecificToolName><arg>val</arg>...</SpecificToolName></tool_name> (Less common)
-                 else if (root.Name.LocalName == "tool_name" && root.Elements().Count() == 1) {
-                     var innerElement = root.Elements().First();
-                     if (ToolRegistry.ContainsKey(innerElement.Name.LocalName)) {
-                         toolName = innerElement.Name.LocalName;
-                         paramsContainer = innerElement;
-                     } else {
-                          return false;
-                     }
-                 }
                 else
                 {
-                    return false; // Unrecognized root element or unregistered tool
+                    elementsToConsider = new List<XElement> { rootElement };
                 }
 
-                // Parse parameters from the container
-                if (paramsContainer != null) {
-                    foreach (var element in paramsContainer.Elements())
+                foreach (var elementToParse in elementsToConsider)
+                {
+                    string currentToolName = null;
+                    Dictionary<string, string> currentArguments = new Dictionary<string, string>();
+                    XElement paramsContainer = null;
+
+                    // Case 1: <tool name="ToolName"><parameters>...</parameters></tool>
+                    if (elementToParse.Name.LocalName == "tool" && elementToParse.Attribute("name") != null)
                     {
-                        // Handle <parameter name="key">value</parameter> structure
-                        if (element.Name.LocalName == "parameter" && element.Attribute("name") != null) {
-                            string key = element.Attribute("name").Value;
-                            string value = element.Value;
-                            if (!string.IsNullOrEmpty(key)) // Ensure key is valid
+                        var nameAttr = elementToParse.Attribute("name")?.Value;
+                        if (nameAttr != null && ToolRegistry.ContainsKey(nameAttr))
+                        {
+                            currentToolName = nameAttr;
+                            paramsContainer = elementToParse.Element("parameters");
+                            if (paramsContainer == null)
                             {
-                                 arguments[key] = value;
+                                _logger?.LogWarning("Tool call format <tool name='{ToolName}'> used, but <parameters> child element is missing.", currentToolName);
                             }
-                        } 
-                        // Handle <key>value</key> structure (direct children)
-                        else {
-                            arguments[element.Name.LocalName] = element.Value;
                         }
                     }
-                }
+                    // Case 2: <ToolName><arg>val</arg>...</ToolName>
+                    else if (ToolRegistry.ContainsKey(elementToParse.Name.LocalName))
+                    {
+                        currentToolName = elementToParse.Name.LocalName;
+                        paramsContainer = elementToParse;
+                    }
+                    // Case 3: <tool_name><SpecificToolName>...</SpecificToolName></tool_name> (Less common)
+                    else if (elementToParse.Name.LocalName == "tool_name" && elementToParse.Elements().Count() == 1)
+                    {
+                        var innerElement = elementToParse.Elements().First();
+                        if (ToolRegistry.ContainsKey(innerElement.Name.LocalName))
+                        {
+                            currentToolName = innerElement.Name.LocalName;
+                            paramsContainer = innerElement;
+                        }
+                    }
 
-                // Parsing succeeded if we found a valid tool name
-                return !string.IsNullOrEmpty(toolName); 
+                    if (currentToolName != null)
+                    {
+                        if (paramsContainer != null)
+                        {
+                            foreach (var element in paramsContainer.Elements())
+                            {
+                                if (element.Name.LocalName == "parameter" && element.Attribute("name") != null)
+                                {
+                                    string key = element.Attribute("name").Value;
+                                    string value = element.Value;
+                                    if (!string.IsNullOrEmpty(key)) currentArguments[key] = value;
+                                }
+                                else
+                                {
+                                    currentArguments[element.Name.LocalName] = element.Value;
+                                }
+                            }
+                        }
+                        parsedToolCalls.Add((currentToolName, currentArguments));
+                    }
+                    else
+                    {
+                         _logger?.LogWarning($"TryParseToolCalls: Skipped unrecognized element '{elementToParse.Name.LocalName}' during multi-tool parse attempt. Element: {elementToParse}");
+                    }
+                }
+                return parsedToolCalls.Any();
             }
             catch (Exception ex)
             {

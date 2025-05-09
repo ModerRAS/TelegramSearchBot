@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -71,32 +72,68 @@ namespace TelegramSearchBot.Controller.AI.LLM
                 await SendMessageService.SendMessage($"模型设置成功，原模型：{previous}，现模型：{current}", e.Message.Chat.Id, e.Message.MessageId);
                 return;
             }
-            if (Message.Contains(service.BotName))
+            if (Message.Contains(service.BotName)) // service is OpenAIService, BotName is set on it.
             {
-                var ModelName = await service.GetModel(e.Message.Chat.Id);
-                var InitialContent = $"{ModelName}初始化中。。。";
-                var messages = SendMessageService.SendMessage(GeneralLLMService.ExecAsync(new Model.Data.Message()
+                // TODO: Consider getting BotName in a more generic way if GeneralLLMService is to be truly general
+                // For now, this relies on OpenAIService instance's BotName being set.
+
+                var modelName = await service.GetModel(e.Message.Chat.Id); // Still uses OpenAIService for GetModel
+                var initialContentPlaceholder = $"{modelName}初始化中。。。";
+
+                // Prepare the input message for GeneralLLMService
+                var inputLlMessage = new Model.Data.Message()
                 {
                     Content = Message,
-                    DateTime = e.Message.Date,
+                    DateTime = e.Message.Date, // This is DateTimeOffset, Model.Data.Message.DateTime is DateTime. Ensure conversion if needed.
                     FromUserId = e.Message.From.Id,
                     GroupId = e.Message.Chat.Id,
-                    MessageId = e.Message.Id,
-                    ReplyToMessageId = e.Message.ReplyToMessage?.Id ?? 0,
-                    Id = -1,
-                }, e.Message.Chat.Id), e.Message.Chat.Id, e.Message.MessageId, InitialContent);
-                await foreach (var PerMessage in messages)
+                    MessageId = e.Message.MessageId, // Original user message ID
+                    ReplyToMessageId = e.Message.ReplyToMessage?.MessageId ?? 0, // ReplyToMessage is a Message object
+                    Id = -1, // Placeholder, DB will assign
+                };
+
+                // Call GeneralLLMService.ExecAsync to get the stream of full markdown messages
+                // Pass CancellationToken.None as IOnUpdate doesn't provide a natural CancellationToken source here.
+                IAsyncEnumerable<string> fullMessageStream = GeneralLLMService.ExecAsync(inputLlMessage, e.Message.Chat.Id, CancellationToken.None);
+
+                // Call the new SendFullMessageStream method
+                List<Model.Data.Message> sentMessagesForDb = await SendMessageService.SendFullMessageStream(
+                    fullMessageStream,
+                    e.Message.Chat.Id,
+                    e.Message.MessageId, // Reply to the original user's message
+                    initialContentPlaceholder, // Corrected variable name
+                    CancellationToken.None // Pass a CancellationToken here as well
+                );
+
+                // Process the list of messages returned for DB logging
+                User botUser = null; // Cache bot user info
+                foreach (var dbMessage in sentMessagesForDb)
                 {
+                    if (botUser == null)
+                    {
+                        botUser = await botClient.GetMe();
+                    }
+                    // dbMessage already contains FromUserId (bot's ID) and Content (markdown chunk)
+                    // and MessageId (the ID of the Telegram message segment)
+                    // and ReplyToMessageId (the ID it replied to)
+                    // DateTime is also from the Telegram Message object.
+                    
+                    // We need to ensure messageService.ExecuteAsync can handle Model.Data.Message directly
+                    // or adapt it to MessageOption.
+                    // Assuming messageService.ExecuteAsync is for saving to DB.
+                    // The `dbMessage` objects are already what we want to save.
+                    // However, messageService.ExecuteAsync takes MessageOption.
+                    
                     await messageService.ExecuteAsync(new MessageOption()
                     {
-                        Chat = e.Message.Chat,
-                        ChatId = e.Message.Chat.Id,
-                        Content = PerMessage.Content,
-                        DateTime = PerMessage.DateTime,
-                        MessageId = PerMessage.MessageId,
-                        User = await botClient.GetMe(),
-                        ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
-                        UserId = (await botClient.GetMe()).Id,
+                        Chat = e.Message.Chat, // Original chat context
+                        ChatId = dbMessage.GroupId, 
+                        Content = dbMessage.Content, 
+                        DateTime = dbMessage.DateTime, 
+                        MessageId = dbMessage.MessageId, 
+                        User = botUser, 
+                        ReplyTo = dbMessage.ReplyToMessageId, 
+                        UserId = dbMessage.FromUserId, 
                     });
                 }
                 return;

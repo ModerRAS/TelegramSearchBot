@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
@@ -37,7 +38,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _ollamaService = ollamaService;
         }
 
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId) {
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, 
+                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             // 1. 获取模型名称
             var modelName = await (from s in _dbContext.GroupSettings
                                  where s.GroupId == ChatId
@@ -95,20 +97,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             // 5. 根据Provider选择服务
                             switch (channel.Provider) {
                             case LLMProvider.OpenAI:
-                                    await foreach (var response in _openAIService.ExecAsync(message, ChatId, modelName, channel)) {
+                                    await foreach (var response in _openAIService.ExecAsync(message, ChatId, modelName, channel, cancellationToken).WithCancellation(cancellationToken)) {
+                                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                                         yield return response;
                                     }
                                     break;
                                 case LLMProvider.Ollama:
-                                    await foreach (var response in _ollamaService.ExecAsync(message, ChatId, modelName, channel)) {
+                                    await foreach (var response in _ollamaService.ExecAsync(message, ChatId, modelName, channel, cancellationToken).WithCancellation(cancellationToken)) {
+                                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                                         yield return response;
                                     }
                                     break;
                                 default:
                                     _logger.LogError($"不支持的LLM提供商: {channel.Provider}");
-                                    yield break;
+                                    yield break; // Or throw, depending on desired error handling for unsupported provider
                             }
-                            yield break;
+                            // If a service was successfully called and completed its stream, we should exit.
+                            // The yield break here ensures we don't try other channels after a successful stream.
+                            yield break; 
                         } finally {
                             // 释放锁
                             await redisDb.StringDecrementAsync(redisKey);

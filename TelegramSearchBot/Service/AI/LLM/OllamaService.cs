@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions; // For Regex
+using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using System.Reflection;
 using Newtonsoft.Json; // Using Newtonsoft
@@ -97,7 +98,8 @@ namespace TelegramSearchBot.Service.AI.LLM
         }
 
         // --- Main Execution Logic (Using OllamaSharp.Chat helper) ---
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel)
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             modelName = modelName ?? Env.OllamaModelName;
             if (string.IsNullOrWhiteSpace(modelName)) {
@@ -137,26 +139,39 @@ namespace TelegramSearchBot.Service.AI.LLM
 
                 for (int cycle = 0; cycle < maxToolCycles; cycle++)
                 {
-                    var llmResponseAccumulator = new StringBuilder();
+                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                    var currentLlmResponseBuilder = new StringBuilder(); // Accumulates tokens for the current LLM response
+                    bool receivedAnyToken = false;
                     
                     _logger.LogDebug("Sending to Ollama (Cycle {Cycle}): {Message}", cycle + 1, nextMessageToSend);
-                    await foreach (var token in chat.SendAsync(nextMessageToSend))
+                    await foreach (var token in chat.SendAsync(nextMessageToSend, cancellationToken).WithCancellation(cancellationToken))
                     {
-                        llmResponseAccumulator.Append(token);
+                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+                        currentLlmResponseBuilder.Append(token);
+                        receivedAnyToken = true;
+                        yield return currentLlmResponseBuilder.ToString(); // Yield current full message
                     }
-                    string llmFullResponse = llmResponseAccumulator.ToString().Trim();
-                    _logger.LogDebug("LLM raw response (Cycle {Cycle}): {Response}", cycle + 1, llmFullResponse);
+                    string llmFullResponseText = currentLlmResponseBuilder.ToString().Trim();
+                    _logger.LogDebug("LLM raw full response (Cycle {Cycle}): {Response}", cycle + 1, llmFullResponseText);
 
-                    // --- Preprocess response using McpToolHelper ---
-                    string cleanedResponse = McpToolHelper.CleanLlmResponse(llmFullResponse);
-                    if (llmFullResponse.Length != cleanedResponse.Length) {
-                         _logger.LogDebug("LLM cleaned response (Cycle {Cycle}): {Response}", cycle + 1, cleanedResponse);
+                    if (!receivedAnyToken && cycle < maxToolCycles -1 && !string.IsNullOrEmpty(nextMessageToSend)) {
+                         _logger.LogWarning("{ServiceName}: Ollama returned empty stream during tool cycle {Cycle} for input '{Input}'.", ServiceName, cycle + 1, nextMessageToSend);
                     }
                     
-                    // --- Tool Handling (using cleanedResponse) ---
-                    if (McpToolHelper.TryParseToolCall(cleanedResponse, out string parsedToolName, out Dictionary<string, string> toolArguments))
+                    // --- Tool Handling (using the full accumulated response text) ---
+                    // No need for McpToolHelper.CleanLlmResponse before TryParseToolCall if tool calls are expected in raw response.
+                    if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any())
                     {
+                        var firstToolCall = parsedToolCalls[0];
+                        string parsedToolName = firstToolCall.toolName;
+                        Dictionary<string, string> toolArguments = firstToolCall.arguments;
+
                         _logger.LogInformation("{ServiceName}: LLM requested tool: {ToolName} with arguments: {Arguments}", ServiceName, parsedToolName, JsonConvert.SerializeObject(toolArguments));
+                        if (parsedToolCalls.Count > 1)
+                        {
+                            _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
+                        }
                         
                         string toolResultString;
                         bool isError = false;
@@ -180,15 +195,11 @@ namespace TelegramSearchBot.Service.AI.LLM
                     }
                     else
                     {
-                        // Not a tool call, yield the cleaned response
-                        if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
-                             yield return llmFullResponse;
-                        } else {
-                             if (!string.IsNullOrWhiteSpace(llmFullResponse)) {
-                                 _logger.LogWarning("{ServiceName}: LLM response contained only thinking tags for ChatId {ChatId}.", ServiceName, ChatId);
-                             } else {
-                                 _logger.LogWarning("{ServiceName}: LLM returned empty final response for ChatId {ChatId}.", ServiceName, ChatId);
-                             }
+                        // Not a tool call. The stream has already yielded the full content.
+                        if (string.IsNullOrWhiteSpace(llmFullResponseText) && receivedAnyToken) {
+                             _logger.LogWarning("{ServiceName}: LLM returned empty final non-tool response after trimming for ChatId {ChatId}.", ServiceName, ChatId);
+                        } else if (!receivedAnyToken && string.IsNullOrEmpty(llmFullResponseText)) {
+                             _logger.LogWarning("{ServiceName}: LLM returned empty stream and empty final non-tool response for ChatId {ChatId}.", ServiceName, ChatId);
                         }
                         yield break; 
                     }
