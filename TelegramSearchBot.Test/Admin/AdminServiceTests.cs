@@ -8,11 +8,16 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Manage;
+using Moq;
+using TelegramSearchBot.Intrerface; // Keep this if other interfaces from here are used
+using TelegramSearchBot.Service.Common; // Add this for IAppConfigurationService
 
 namespace TelegramSearchBot.Test.Admin
 {
     [TestClass]
     public class AdminServiceTests {
+        private Mock<IAppConfigurationService> _mockAppConfigService;
+
         /// <summary>
         /// 使用 InMemory 数据库创建 DataDbContext，每次测试创建全新的数据库实例
         /// </summary>
@@ -62,10 +67,18 @@ namespace TelegramSearchBot.Test.Admin
             return loggerFactory.CreateLogger<AdminService>();
         }
 
+        private void SetupMocks()
+        {
+            _mockAppConfigService = new Mock<IAppConfigurationService>();
+            // 你可以在这里为 _mockAppConfigService 设置一些默认的 Setup，如果需要的话
+            // 例如: _mockAppConfigService.Setup(s => s.GetConfigurationValueAsync(It.IsAny<string>())).ReturnsAsync("DefaultValue");
+        }
+
         [TestMethod]
         public async Task UserIsAdmin_ShouldReturnTrue() {
+            SetupMocks();
             using (var context = await GetDbContextAsync()) {
-                var service = new AdminService(CreateLogger(), context);
+                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object);
                 var result = await service.IsNormalAdmin(1);
                 Assert.IsTrue(result, "用户 1 属于管理员组，结果应为 true");
             }
@@ -73,8 +86,9 @@ namespace TelegramSearchBot.Test.Admin
 
         [TestMethod]
         public async Task UserIsNotAdmin_ShouldReturnFalse() {
+            SetupMocks();
             using (var context = await GetDbContextAsync()) {
-                var service = new AdminService(CreateLogger(), context);
+                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object);
                 var result = await service.IsNormalAdmin(2);
                 Assert.IsFalse(result, "用户 2 不在管理员组中，结果应为 false");
             }
@@ -82,8 +96,9 @@ namespace TelegramSearchBot.Test.Admin
 
         [TestMethod]
         public async Task UserInNonAdminGroup_ShouldReturnFalse() {
+            SetupMocks();
             using (var context = await GetDbContextAsync()) {
-                var service = new AdminService(CreateLogger(), context);
+                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object);
                 var result = await service.IsNormalAdmin(3);
                 Assert.IsFalse(result, "用户 3 属于普通组，不是管理员组，结果应为 false");
             }
@@ -91,8 +106,9 @@ namespace TelegramSearchBot.Test.Admin
 
         [TestMethod]
         public async Task UserNotExists_ShouldReturnFalse() {
+            SetupMocks();
             using (var context = await GetDbContextAsync()) {
-                var service = new AdminService(CreateLogger(), context);
+                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object);
                 var result = await service.IsNormalAdmin(999);
                 Assert.IsFalse(result, "用户 999 不存在，结果应为 false");
             }
