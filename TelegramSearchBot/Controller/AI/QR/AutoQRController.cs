@@ -72,11 +72,14 @@ namespace TelegramSearchBot.Controller.AI.QR
 
                 // 2. New logic: Publish notification for URL processing.
                 // The UrlProcessingNotificationHandler will pick this up.
+                // We pass qrStr as the text, and the original e.Message as the context.
+                // The MessageId here refers to the photo message that contained the QR code.
                 await _mediator.Publish(new TextMessageReceivedNotification(
-                    qrStr,
-                    e.Message.Chat.Id,
-                    e.Message.MessageId,
-                    e.Message.Chat.Type
+                    qrStr, 
+                    e.Message.Chat.Id, 
+                    e.Message.MessageId, 
+                    e.Message.Chat.Type,
+                    e.Message // Pass the original photo message as context
                 ));
                 
                 // 3. Storing the raw QR content as a message.

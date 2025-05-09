@@ -19,6 +19,16 @@ namespace TelegramSearchBot.Model
             // 数据库配置应该由外部通过DbContextOptions提供
             // 不要在这里配置默认数据库
         }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<ShortUrlMapping>()
+                .HasIndex(s => s.OriginalUrl); // Changed from ShortCode, removed IsUnique()
+            
+            // You can add other configurations here if needed
+        }
         public DbSet<Message> Messages { get; set; }
         public DbSet<UserWithGroup> UsersWithGroup { get; set; }
         public DbSet<UserData> UserData { get; set; }
@@ -27,5 +37,6 @@ namespace TelegramSearchBot.Model
         public DbSet<LLMChannel> LLMChannels { get; set; }
         public DbSet<ChannelWithModel> ChannelsWithModel { get; set; }
         public DbSet<AppConfigurationItem> AppConfigurationItems { get; set; } // Added for BiliCookie and other app configs
+        public DbSet<ShortUrlMapping> ShortUrlMappings { get; set; } = null!;
     }
 }

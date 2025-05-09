@@ -45,12 +45,8 @@ namespace TelegramSearchBot.Controller.Storage
 
             if (e.Message != null) 
             {
-                 await _mediator.Publish(new TextMessageReceivedNotification(
-                    messageText,
-                    e.Message.Chat.Id,
-                    e.Message.MessageId,
-                    e.Message.Chat.Type // Pass ChatType
-                ));
+                 // Pass the full Message object to the constructor
+                 await _mediator.Publish(new TextMessageReceivedNotification(e.Message));
             }
         }
         

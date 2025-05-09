@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TelegramSearchBot.Model;
 
@@ -10,9 +11,11 @@ using TelegramSearchBot.Model;
 namespace TelegramSearchBot.Migrations
 {
     [DbContext(typeof(DataDbContext))]
-    partial class DataDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250509112403_AddShortUrlMappingTable")]
+    partial class AddShortUrlMappingTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0");
@@ -163,17 +166,19 @@ namespace TelegramSearchBot.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ExpandedUrl")
+                    b.Property<string>("LongUrl")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("OriginalUrl")
+                    b.Property<string>("ShortCode")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OriginalUrl");
+                    b.HasIndex("ShortCode")
+                        .IsUnique();
 
                     b.ToTable("ShortUrlMappings");
                 });

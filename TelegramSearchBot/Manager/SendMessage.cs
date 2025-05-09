@@ -52,6 +52,34 @@ namespace TelegramSearchBot.Manager
             //queue.Append(new SendModel() { Action = func, IsGroup = IsGroup });
             //Console.WriteLine(queue.Count());
         }
+
+        public Task AddTextMessageToSend(
+            long chatId, 
+            string text, 
+            ParseMode? parseMode = null, 
+            Telegram.Bot.Types.ReplyParameters? replyParameters = null, 
+            bool disableNotification = false,
+            bool highPriorityForGroup = false, // To determine if it's a group message for rate limiting
+            CancellationToken cancellationToken = default)
+        {
+            Func<Task> action = async () =>
+            {
+                await botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: text,
+                    parseMode: parseMode.HasValue ? parseMode.Value : default, // Use default if null, or omit if API handles null
+                    replyParameters: replyParameters,
+                    disableNotification: disableNotification,
+                    cancellationToken: cancellationToken
+                );
+            };
+            // The 'IsGroup' parameter in AddTask seems to control which rate limiter to use.
+            // We'll use highPriorityForGroup to map to IsGroup.
+            // If it's a group message (highPriorityForGroup = true), it uses GroupLimit then GlobalLimit.
+            // If not (highPriorityForGroup = false), it uses only GlobalLimit.
+            return AddTask(action, highPriorityForGroup);
+        }
+
         public async Task Run()
         {
 

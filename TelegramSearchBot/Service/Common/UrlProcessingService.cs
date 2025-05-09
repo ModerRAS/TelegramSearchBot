@@ -10,7 +10,8 @@ using TelegramSearchBot.Intrerface;
 
 namespace TelegramSearchBot.Service.Common
 {
-    
+    public record UrlProcessResult(string OriginalUrl, string? ProcessedUrl); // Define the result record
+
     public class UrlProcessingService : IService
     {
         public string ServiceName => nameof(UrlProcessingService);
@@ -208,25 +209,29 @@ namespace TelegramSearchBot.Service.Common
             return CleanUrlOfTrackingParameters(finalUrl);
         }
 
-        public async Task<List<string>> ProcessUrlsInTextAsync(string text)
+        public async Task<List<UrlProcessResult>> ProcessUrlsInTextAsync(string text)
         {
             var extractedUrls = ExtractUrls(text);
-            var processedUrls = new List<string>();
+            var results = new List<UrlProcessResult>();
 
             if (!extractedUrls.Any())
             {
-                return processedUrls;
+                return results;
             }
 
-            foreach (var url in extractedUrls)
+            foreach (var originalUrl in extractedUrls)
             {
-                var processedUrl = await ProcessUrlAsync(url).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(processedUrl))
-                {
-                    processedUrls.Add(processedUrl);
-                }
+                var processedUrl = await ProcessUrlAsync(originalUrl).ConfigureAwait(false);
+                // We add a result regardless of whether processing was successful or not,
+                // so the handler can decide what to do (e.g., log failures, store only successes).
+                // If processedUrl is null, it means processing failed or returned no valid URL.
+                results.Add(new UrlProcessResult(originalUrl, processedUrl));
             }
-            return processedUrls.Distinct().ToList(); 
+            // The Distinct() here might not be what we want if we care about each instance of an original URL.
+            // However, if multiple identical original URLs are processed, they'd yield same results.
+            // For now, let's return all results. If distinctness is needed based on OriginalUrl or ProcessedUrl,
+            // it can be handled by the caller or refined here.
+            return results; 
         }
     }
 }
