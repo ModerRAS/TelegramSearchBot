@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent; // Added for ConcurrentDictionary
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
@@ -19,7 +20,7 @@ namespace TelegramSearchBot.Service.AI.LLM
     /// </summary>
     public static class McpToolHelper
     {
-        private static readonly Dictionary<string, (MethodInfo Method, Type OwningType)> ToolRegistry = new Dictionary<string, (MethodInfo, Type)>();
+        private static readonly ConcurrentDictionary<string, (MethodInfo Method, Type OwningType)> ToolRegistry = new ConcurrentDictionary<string, (MethodInfo, Type)>();
         private static IServiceProvider _serviceProvider; // For DI-based instance resolution
         private static ILogger _logger;
 
@@ -50,12 +51,41 @@ namespace TelegramSearchBot.Service.AI.LLM
                 var toolName = string.IsNullOrWhiteSpace(toolAttr.Name) ? method.Name : toolAttr.Name;
                 toolName = toolName.Split('`')[0]; // Sanitize
 
-                if (ToolRegistry.ContainsKey(toolName))
+                // Use TryAdd for ConcurrentDictionary to handle race conditions more gracefully if multiple threads were to register the exact same tool name simultaneously,
+                // though the Clear() at the beginning makes this less of an issue for distinct calls to RegisterToolsAndGetPromptString.
+                // However, the primary issue is concurrent calls to RegisterToolsAndGetPromptString itself, each operating on the shared static ToolRegistry.
+                if (!ToolRegistry.TryAdd(toolName, (method, method.DeclaringType)))
                 {
-                    _logger?.LogWarning($"Duplicate tool name '{toolName}' found. Method {method.DeclaringType.FullName}.{method.Name} will be ignored.");
-                    continue;
+                    // If TryAdd fails, it means the key already exists. This check is slightly different from ContainsKey + Add,
+                    // but given the Clear() at the start of this method, if this method is called sequentially,
+                    // ContainsKey would be false. If called concurrently, TryAdd is safer.
+                    // The original log message for duplicate is still relevant if different methods map to the same sanitized toolName.
+                    _logger?.LogWarning($"Duplicate tool name '{toolName}' found or failed to add. Method {method.DeclaringType.FullName}.{method.Name} might be ignored or overwritten by a concurrent call.");
+                    // If we want to strictly prevent overwriting and log the original "ignored" message,
+                    // we might need a slightly different approach, but ConcurrentDictionary handles the concurrent access safely.
+                    // For simplicity and to address the core concurrency bug, TryAdd is sufficient.
+                    // If it was already added by another concurrent call, this instance of the tool might not be the one stored.
+                    // The duplicate tool name warnings from the user log suggest this is a valid concern.
+                    // Let's stick to a pattern closer to the original to ensure the warning logic remains:
+                    if (ToolRegistry.ContainsKey(toolName)) // Check first
+                    {
+                         _logger?.LogWarning($"Duplicate tool name '{toolName}' found. Method {method.DeclaringType.FullName}.{method.Name} will be ignored.");
+                         continue;
+                    }
+                    // If, after the check, another thread adds it, ToolRegistry[toolName] could throw or overwrite.
+                    // So, TryAdd is indeed better. Let's re-evaluate.
+                    // The goal is: if toolName is new, add it. If it exists, log warning and skip.
+                    // This needs to be atomic.
+                    var toolTuple = (method, method.DeclaringType);
+                    if (!ToolRegistry.TryAdd(toolName, toolTuple))
+                    {
+                        // This means toolName was already present (added by this thread in a previous iteration for a *different* method mapping to the same name, or by another thread).
+                        _logger?.LogWarning($"Duplicate tool name '{toolName}' encountered for method {method.DeclaringType.FullName}.{method.Name}. This tool registration will be skipped.");
+                        continue;
+                    }
+                    // If TryAdd succeeded, it's in the dictionary.
                 }
-                ToolRegistry[toolName] = (method, method.DeclaringType);
+                // ToolRegistry[toolName] = (method, method.DeclaringType); // This line is now handled by TryAdd
 
                 sb.AppendLine($"- <tool name=\"{toolName}\">");
                 sb.AppendLine($"    <description>{toolAttr.Description}</description>");
