@@ -17,6 +17,7 @@ using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
+using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -178,7 +179,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                         try
                         {
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments);
-                            toolResultString = ConvertToolResultToString(toolResultObject); 
+                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject); 
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         }
                         catch (Exception ex)
@@ -214,15 +215,6 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-         // Helper to convert tool result to string 
-         private string ConvertToolResultToString(object toolResultObject) {
-             if (toolResultObject == null) {
-                 return "Tool executed successfully with no return value.";
-             } else if (toolResultObject is string s) {
-                 return s;
-             } else {
-                 return JsonConvert.SerializeObject(toolResultObject);
-             }
-         }
+        // ConvertToolResultToString has been moved to McpToolHelper
     }
 }

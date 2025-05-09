@@ -15,6 +15,7 @@ using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using Newtonsoft.Json; 
+using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
 // Using alias for the common internal ChatMessage format
 using CommonChat = OpenAI.Chat; 
 
@@ -146,15 +147,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             return ChatHistory;
         }
 
-         private string ConvertToolResultToString(object toolResultObject) {
-             if (toolResultObject == null) {
-                 return "Tool executed successfully with no return value.";
-             } else if (toolResultObject is string s) {
-                 return s;
-             } else {
-                 return JsonConvert.SerializeObject(toolResultObject); 
-             }
-         }
+        // ConvertToolResultToString is now in McpToolHelper
 
         // --- Main Execution Logic ---
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
@@ -239,7 +232,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                         try
                         {
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments);
-                            toolResultString = ConvertToolResultToString(toolResultObject); // Use local helper
+                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject); // Use McpToolHelper
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         }
                         catch (Exception ex)

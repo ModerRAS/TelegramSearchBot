@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using TelegramSearchBot.Service.AI.LLM;
 using Microsoft.Extensions.DependencyInjection;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Test.Service.AI.LLM
 {
@@ -150,71 +151,135 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [TestMethod]
-        public void TryParseToolCall_DirectParams_ParsesCorrectly()
+        public void TryParseToolCalls_DirectParams_ParsesSingleToolCorrectly()
         {
             var xml = "<StaticTool><arg1>hello</arg1><arg2>10</arg2></StaticTool>";
-            bool result = McpToolHelper.TryParseToolCall(xml, out string toolName, out var args);
+            bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
             Assert.IsTrue(result);
-            Assert.AreEqual("StaticTool", toolName);
-            Assert.AreEqual(2, args.Count);
-            Assert.AreEqual("hello", args["arg1"]);
-            Assert.AreEqual("10", args["arg2"]);
+            Assert.AreEqual(1, parsedToolCalls.Count);
+            var firstTool = parsedToolCalls[0];
+            Assert.AreEqual("StaticTool", firstTool.toolName);
+            Assert.AreEqual(2, firstTool.arguments.Count);
+            Assert.AreEqual("hello", firstTool.arguments["arg1"]);
+            Assert.AreEqual("10", firstTool.arguments["arg2"]);
         }
 
         [TestMethod]
-        public void TryParseToolCall_NestedParams_ParsesCorrectly()
+        public void TryParseToolCalls_NestedParams_ParsesSingleToolCorrectly()
         {
             var xml = "<tool name=\"InstanceTool\"><parameters><parameter name=\"input\">true</parameter></parameters></tool>";
-             bool result = McpToolHelper.TryParseToolCall(xml, out string toolName, out var args);
+            bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
             Assert.IsTrue(result);
-            Assert.AreEqual("InstanceTool", toolName);
-            Assert.AreEqual(1, args.Count);
-            Assert.AreEqual("true", args["input"]);
+            Assert.AreEqual(1, parsedToolCalls.Count);
+            var firstTool = parsedToolCalls[0];
+            Assert.AreEqual("InstanceTool", firstTool.toolName);
+            Assert.AreEqual(1, firstTool.arguments.Count);
+            Assert.AreEqual("true", firstTool.arguments["input"]);
         }
         
         [TestMethod]
-        public void TryParseToolCall_NestedParams_HandlesMissingParametersTag()
+        public void TryParseToolCalls_NestedParams_HandlesMissingParametersTagForSingleTool()
         {
-            // Although our prompt shows <parameters>, test robustness if LLM omits it
             var xml = "<tool name=\"InstanceTool\"><parameter name=\"input\">false</parameter></tool>";
-             bool result = McpToolHelper.TryParseToolCall(xml, out string toolName, out var args);
+            bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
-            Assert.IsTrue(result); // Should still find tool name
-             Assert.AreEqual("InstanceTool", toolName);
-             // Current logic requires <parameters> tag for the <tool name="..."> format.
-             // If <parameters> is missing, paramsContainer will be null, and the loop won't run.
-             Assert.AreEqual(0, args.Count); 
+            Assert.IsTrue(result); 
+            Assert.AreEqual(1, parsedToolCalls.Count);
+            var firstTool = parsedToolCalls[0];
+            Assert.AreEqual("InstanceTool", firstTool.toolName);
+            // Current logic for <tool name="..."><parameter name="arg">value</parameter></tool>
+            // (without an encapsulating <parameters> tag) will result in 'input' being a direct child of 'tool'
+            // and thus parsed as a parameter.
+            Assert.AreEqual(1, firstTool.arguments.Count, "A direct child <parameter> should be parsed.");
+            Assert.AreEqual("false", firstTool.arguments["input"]);
         }
 
         [TestMethod]
-        public void TryParseToolCall_InvalidXml_ReturnsFalse()
+        public void TryParseToolCalls_InvalidXml_ReturnsFalse()
         {
             var xml = "<StaticTool><arg1>hello</arg1"; // Malformed
-            bool result = McpToolHelper.TryParseToolCall(xml, out _, out _);
+            bool result = McpToolHelper.TryParseToolCalls(xml, out _);
             Assert.IsFalse(result);
         }
 
         [TestMethod]
-        public void TryParseToolCall_UnregisteredTool_ReturnsFalse()
+        public void TryParseToolCalls_UnregisteredTool_ReturnsFalseOrEmpty() 
         {
+            // If the XML is well-formed but the tool name isn't registered,
+            // TryParseToolCalls might return true but an empty list, or false.
+            // Current logic in McpToolHelper for unrecognized elements logs a warning and skips them.
+            // So, if only unrecognized tools are present, it should return true with an empty list, or false if nothing is parsable.
             var xml = "<NotARealTool><arg1>hello</arg1></NotARealTool>";
-            bool result = McpToolHelper.TryParseToolCall(xml, out _, out _);
+            bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
+            
+            // Depending on strictness: if it parses the structure but finds no *registered* tools,
+            // parsedToolCalls would be empty. If the structure itself is rejected due to no known tool pattern, result is false.
+            // The current TryParseToolCalls logs a warning and skips if elementToParse is not a known tool pattern.
+            // So, if "NotARealTool" is not a registered tool, it will be skipped.
+            // If it's the *only* element, parsedToolCalls will be empty, and the method returns parsedToolCalls.Any()
+            Assert.IsFalse(parsedToolCalls.Any()); // More robust: ensure no valid tools were parsed.
+                                               // result itself could be true if the XML was valid but contained no *recognized* tools.
+                                               // Let's refine: if no *registered* tools are found, it should effectively be a "no tool call" scenario.
+                                               // The method returns parsedToolCalls.Any(). So if list is empty, result is false.
             Assert.IsFalse(result);
         }
         
         [TestMethod]
-        public void TryParseToolCall_WithMarkdownFences_ParsesCorrectly()
+        public void TryParseToolCalls_WithMarkdownFences_ParsesSingleToolCorrectly()
         {
             var xml = "```xml\n<StaticTool><arg1>fenced</arg1></StaticTool>\n```";
-            bool result = McpToolHelper.TryParseToolCall(xml, out string toolName, out var args);
+            bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
             Assert.IsTrue(result);
-            Assert.AreEqual("StaticTool", toolName);
-            Assert.AreEqual(1, args.Count);
-            Assert.AreEqual("fenced", args["arg1"]);
+            Assert.AreEqual(1, parsedToolCalls.Count);
+            var firstTool = parsedToolCalls[0];
+            Assert.AreEqual("StaticTool", firstTool.toolName);
+            Assert.AreEqual(1, firstTool.arguments.Count);
+            Assert.AreEqual("fenced", firstTool.arguments["arg1"]);
         }
+
+        [TestMethod]
+        public void TryParseToolCalls_MultipleRootElements_ParsesFirstTool()
+        {
+            var xml = "<StaticTool><arg1>first</arg1></StaticTool><InstanceTool><input>true</input></InstanceTool>";
+            bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(2, parsedToolCalls.Count, "Should parse both tools when wrapped.");
+            
+            var firstTool = parsedToolCalls.FirstOrDefault(t => t.toolName == "StaticTool");
+            Assert.IsNotNull(firstTool);
+            Assert.AreEqual("StaticTool", firstTool.toolName);
+            Assert.AreEqual(1, firstTool.arguments.Count);
+            Assert.AreEqual("first", firstTool.arguments["arg1"]);
+
+            var secondTool = parsedToolCalls.FirstOrDefault(t => t.toolName == "InstanceTool");
+            Assert.IsNotNull(secondTool);
+            Assert.AreEqual("InstanceTool", secondTool.toolName);
+            Assert.AreEqual(1, secondTool.arguments.Count);
+            Assert.AreEqual("true", secondTool.arguments["input"]);
+        }
+        
+        [TestMethod]
+        public void TryParseToolCalls_MultipleNestedToolElements_ParsesAll()
+        {
+            var xml = "<tools_wrapper><tool name=\"StaticTool\"><parameters><arg1>val1</arg1></parameters></tool><tool name=\"InstanceTool\"><parameters><input>true</input></parameters></tool></tools_wrapper>";
+            // This case is already handled by the <tools_wrapper> logic if the outer parse fails.
+            // If LLM outputs this directly, XDocument.Parse will succeed with <tools_wrapper> as root.
+            bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(2, parsedToolCalls.Count);
+
+            Assert.AreEqual("StaticTool", parsedToolCalls[0].toolName);
+            Assert.AreEqual("val1", parsedToolCalls[0].arguments["arg1"]);
+            
+            Assert.AreEqual("InstanceTool", parsedToolCalls[1].toolName);
+            Assert.AreEqual("true", parsedToolCalls[1].arguments["input"]);
+        }
+
 
         [TestMethod]
         public async Task ExecuteRegisteredToolAsync_StaticMethod_Executes()

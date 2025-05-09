@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json; // Added for Json.NET
 using System.Text.RegularExpressions; // Added for Regex cleaning
 using TelegramSearchBot.Attributes; // Added to reference McpToolAttribute and McpParameterAttribute
+using TelegramSearchBot.Service.Tools; // For DuckDuckGoSearchResult
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -135,6 +136,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                     "2. 如果多次尝试仍不理想，或者你认为其他工具可能更合适，可以尝试调用其他可用工具。\n" +
                     "3. 在进行多次尝试时，建议在思考过程中记录并调整你的策略。\n" +
                     "如果你认为已经获得了足够的信息，或者不需要再使用工具，请继续下一步。\n\n" +
+                    "引用说明：当你使用工具（特别是搜索工具）获取信息并在回答中使用了这些信息时，如果工具结果提供了来源(Source)或链接(URL)，请务必在你的回答中清晰地注明来源。你可以使用Markdown链接格式，例如 `[来源标题](URL)`，或者在回答末尾列出引用来源列表。确保用户可以追溯信息的原始出处。\n\n" +
                     $"在决定是否使用工具时，请仔细分析用户的请求。如果不需要工具，或者工具执行完毕后，请直接以自然语言回复用户。\n" +
                     $"当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
         }
@@ -421,6 +423,52 @@ namespace TelegramSearchBot.Service.AI.LLM
             if (underlyingType != null) return GetSimplifiedTypeName(underlyingType) + "?"; // e.g. int?
             
             return type.Name;
+        }
+
+        public static string ConvertToolResultToString(object toolResultObject) 
+        {
+            if (toolResultObject == null) {
+                return "Tool executed successfully with no return value.";
+            } else if (toolResultObject is string s) {
+                return s;
+            }
+            else if (toolResultObject is DuckDuckGoSearchResult ddgResult)
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine($"Search Results for \"{ddgResult.Query}\" (Page {ddgResult.CurrentPage}):");
+                if (ddgResult.Results == null || !ddgResult.Results.Any())
+                {
+                    sb.AppendLine("No results found.");
+                }
+                else
+                {
+                    int count = 1;
+                    foreach (var item in ddgResult.Results)
+                    {
+                        sb.AppendLine($"{count}. Title: {item.Title}");
+                        if (!string.IsNullOrWhiteSpace(item.Description))
+                        {
+                            sb.AppendLine($"   Snippet: {item.Description.Replace("\n", " ").Trim()}");
+                        }
+                        sb.AppendLine($"   Source: {item.Url}");
+                        count++;
+                    }
+                    sb.AppendLine($"--- End of {ddgResult.Results.Count} results ---");
+                }
+                return sb.ToString();
+            }
+            else {
+                try 
+                {
+                    return JsonConvert.SerializeObject(toolResultObject, Formatting.Indented, 
+                        new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore });
+                } 
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Failed to serialize tool result object to JSON. Returning .ToString().");
+                    return toolResultObject.ToString();
+                }
+            }
         }
     }
 }

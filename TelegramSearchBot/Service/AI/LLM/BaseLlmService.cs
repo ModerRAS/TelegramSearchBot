@@ -13,6 +13,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using Newtonsoft.Json; 
+using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
 // Using alias for the common internal ChatMessage format
 using CommonChat = OpenAI.Chat; 
 
@@ -150,8 +151,12 @@ namespace TelegramSearchBot.Service.AI.LLM
                  return "Tool executed successfully with no return value.";
              } else if (toolResultObject is string s) {
                  return s;
-             } else {
-                 return JsonConvert.SerializeObject(toolResultObject); 
+             }
+             // else if (toolResultObject is DuckDuckGoSearchResult ddgResult) ... (This logic is now in McpToolHelper)
+             else {
+                 // Delegate to McpToolHelper for consistent formatting including DuckDuckGo.
+                 // This ensures BaseLlmService also uses the centralized formatter if its ConvertToolResultToString is ever called.
+                 return McpToolHelper.ConvertToolResultToString(toolResultObject);
              }
          }
 
