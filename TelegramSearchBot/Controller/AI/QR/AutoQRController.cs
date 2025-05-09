@@ -8,40 +8,45 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Exceptions;
-using TelegramSearchBot.Intrerface;
-using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Service.AI.QR;
-using TelegramSearchBot.Service.BotAPI;
-using TelegramSearchBot.Service.Storage;
+using MediatR; // Added for IMediator
+using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
+using Telegram.Bot.Types.Enums; // For ChatType
+using TelegramSearchBot.Intrerface; // Added for IOnUpdate, IProcessPhoto
+using TelegramSearchBot.Service.AI.QR; // Added for AutoQRService
+using TelegramSearchBot.Service.Storage; // Added for MessageService
+using TelegramSearchBot.Model; // Added for MessageOption
+using TelegramSearchBot.Controller.Download; 
+using TelegramSearchBot.Exceptions; 
+using TelegramSearchBot.Manager; 
+using TelegramSearchBot.Service.BotAPI; // Added for SendMessageService
 
 namespace TelegramSearchBot.Controller.AI.QR
 {
     class AutoQRController : IOnUpdate, IProcessPhoto
     {
-        private readonly AutoQRService autoQRSevice;
-        private readonly SendMessage Send;
-        private readonly MessageService messageService;
-        private readonly ITelegramBotClient botClient;
-        private readonly ILogger<AutoQRController> logger;
-        private readonly SendMessageService SendMessageService;
+        private readonly AutoQRService _autoQRService;
+        private readonly MessageService _messageService;
+        private readonly ILogger<AutoQRController> _logger;
+        private readonly IMediator _mediator;
+        private readonly SendMessageService _sendMessageService;
+
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
+
         public AutoQRController(
             ILogger<AutoQRController> logger,
-            ITelegramBotClient botClient,
-            AutoQRService autoQRSevice,
-            SendMessage Send,
+            AutoQRService autoQRService,
             MessageService messageService,
+            IMediator mediator,
             SendMessageService sendMessageService
             )
         {
-            this.autoQRSevice = autoQRSevice;
-            this.messageService = messageService;
-            this.Send = Send;
-            this.botClient = botClient;
-            this.logger = logger;
-            SendMessageService = sendMessageService;
+            _autoQRService = autoQRService;
+            _messageService = messageService;
+            _logger = logger;
+            _mediator = mediator;
+            _sendMessageService = sendMessageService;
         }
+
         public async Task ExecuteAsync(Update e)
         {
             try
@@ -51,21 +56,37 @@ namespace TelegramSearchBot.Controller.AI.QR
                 {
                     throw new CannotGetPhotoException();
                 }
-                logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
-                var QrStr = await autoQRSevice.ExecuteAsync(filePath);
-                if (string.IsNullOrWhiteSpace(QrStr))
+                _logger.LogInformation("Get Photo File: {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
+                var qrStr = await _autoQRService.ExecuteAsync(filePath);
+
+                if (string.IsNullOrWhiteSpace(qrStr))
                 {
                     return;
                 }
-                await SendMessageService.SendMessage(QrStr, e.Message.Chat.Id, e.Message.MessageId);
-                logger.LogInformation($" Start send {e.Message.Chat.Id}/{e.Message.MessageId} {QrStr}");
-                await messageService.ExecuteAsync(new MessageOption()
+
+                _logger.LogInformation("QR Code recognized for {ChatId}/{MessageId}. Content: {QrStr}", e.Message.Chat.Id, e.Message.MessageId, qrStr);
+
+                // 1. Original logic: Send the raw QR string back to the user.
+                await _sendMessageService.SendMessage(qrStr, e.Message.Chat.Id, e.Message.MessageId);
+                _logger.LogInformation("Sent raw QR content for {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
+
+                // 2. New logic: Publish notification for URL processing.
+                // The UrlProcessingNotificationHandler will pick this up.
+                await _mediator.Publish(new TextMessageReceivedNotification(
+                    qrStr,
+                    e.Message.Chat.Id,
+                    e.Message.MessageId,
+                    e.Message.Chat.Type
+                ));
+                
+                // 3. Storing the raw QR content as a message.
+                await _messageService.ExecuteAsync(new MessageOption()
                 {
                     ChatId = e.Message.Chat.Id,
                     Chat = e.Message.Chat,
                     DateTime = e.Message.Date,
                     User = e.Message.From,
-                    Content = QrStr,
+                    Content = qrStr, // Corrected variable name
                     MessageId = e.Message.MessageId,
                     ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
                     UserId = e.Message.From.Id
@@ -76,7 +97,7 @@ namespace TelegramSearchBot.Controller.AI.QR
                   ex is DirectoryNotFoundException
                   )
             {
-                //logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
+                // Errors are logged by the global error handler or can be logged here if specific handling is needed.
             }
 
         }

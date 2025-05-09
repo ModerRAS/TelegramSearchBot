@@ -18,19 +18,19 @@ namespace TelegramSearchBot.Service.Common
         private readonly HttpClient _httpClient;
         private readonly ILogger<UrlProcessingService> _logger;
 
-        // Common tracking parameters. This list can be expanded or moved to configuration if it grows too large.
+        // Common tracking parameters to be removed from URLs.
         private static readonly HashSet<string> TrackingParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            // Bilibili specific (from user example)
-            "buvid", "from_spmid", "is_story_h5", "mid", "plat_id", "share_from", "share_medium", "share_plat",
-            "share_session_id", "share_source", "share_tag", "spmid", "timestamp", // Removed start_progress
+            // Bilibili specific
+            "buvid", "from_spmid", "is_story_h5", "mid", "plat_id", "share_from", "share_medium", "share_plat", "share_pattern", 
+            "share_session_id", "share_source", "share_tag", "spmid", "timestamp", 
             "unique_k", "up_id", "vd_source", "seid", "b_lsid", "launch_id", "session_id", "ab_id",
             // Common UTM parameters
             "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-            // Taobao specific (from user example)
-            "tk", "suid", "shareUniqueId", "ut_sk", "un", "share_crt_v", "un_site", "spm", // Added spm
+            // Taobao specific
+            "tk", "suid", "shareUniqueId", "ut_sk", "un", "share_crt_v", "un_site", "spm", 
             "wxsign", "tbSocialPopKey", "sp_tk", "cpp", "shareurl", "short_name", "bxsign", "app",
-            "sourceType", // sourceType appears twice, adding it once. If it's sometimes needed, this might be too aggressive.
+            "sourceType", 
             // Other common tracking parameters
             "fbclid", "gclid", "msclkid", "mc_eid", "yclid", "_hsenc", "_hsmi",
             "vero_conv", "vero_id", "trk", "trkCampaign", "sc_ichannel", "otc",
@@ -59,7 +59,6 @@ namespace TelegramSearchBot.Service.Common
             }
 
             // Regex to find URLs (http, https, www).
-            // It tries to avoid matching URLs ending with punctuation that's part of the sentence.
             const string urlPattern = @"\b(?:https?://|www\.)[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$]";
             var matches = Regex.Matches(text, urlPattern, RegexOptions.IgnoreCase);
             
@@ -67,7 +66,7 @@ namespace TelegramSearchBot.Service.Common
             foreach (Match match in matches.Cast<Match>())
             {
                 string url = match.Value;
-                // Prepend http:// to www URLs for Uri class compatibility if no scheme is present
+                // Prepend http:// to www URLs if no scheme is present
                 if (url.StartsWith("www.", StringComparison.OrdinalIgnoreCase) && 
                     !url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && 
                     !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
@@ -98,6 +97,7 @@ namespace TelegramSearchBot.Service.Common
                 var resolvedByHttpClientUrl = response.RequestMessage?.RequestUri?.ToString();
                 _logger.LogInformation("Original URL: {OriginalUrl} -> HttpClient initially resolved to: {ResolvedByHttpClientUrl}", originalUrl, resolvedByHttpClientUrl);
 
+                // Check if HttpClient already resolved to a likely final target (e.g., different host)
                 bool isLikelyHttpRedirectedToFinal = resolvedByHttpClientUrl != null && 
                                                      Uri.TryCreate(originalUrl, UriKind.Absolute, out var originalUriObj) &&
                                                      Uri.TryCreate(resolvedByHttpClientUrl, UriKind.Absolute, out var resolvedUriObj) &&
@@ -105,11 +105,13 @@ namespace TelegramSearchBot.Service.Common
 
                 if (isLikelyHttpRedirectedToFinal)
                 {
+                    // Assume standard HTTP redirect is sufficient if host changed
                     _logger.LogInformation("Assuming HTTP redirect to {ResolvedByHttpClientUrl} is sufficient for {OriginalUrl}.", resolvedByHttpClientUrl, originalUrl);
                     return resolvedByHttpClientUrl;
                 }
                 else
                 {
+                    // If host didn't change, try parsing HTML for JS pattern as fallback
                     _logger.LogInformation("HTTP client did not significantly redirect for {OriginalUrl}. Reading content to check for JS redirect pattern.", originalUrl);
                     string htmlContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
@@ -120,7 +122,7 @@ namespace TelegramSearchBot.Service.Common
                         _logger.LogInformation("Extracted URL from JS: {ExtractedUrl} for original: {OriginalUrl}", extractedUrl, originalUrl);
                         if (Uri.TryCreate(extractedUrl, UriKind.Absolute, out _))
                         {
-                            return extractedUrl;
+                            return extractedUrl; // Return URL found in JS
                         }
                         else
                         {
@@ -132,6 +134,7 @@ namespace TelegramSearchBot.Service.Common
                         _logger.LogInformation("JS redirect pattern not found in HTML content for original URL: {OriginalUrl}", originalUrl);
                     }
                     
+                    // Fallback to whatever HttpClient gave us if JS parsing fails
                     _logger.LogInformation("Falling back to HttpClient's resolved URL: {ResolvedByHttpClientUrl} for original: {OriginalUrl}", resolvedByHttpClientUrl, originalUrl);
                     return resolvedByHttpClientUrl; 
                 }
