@@ -5,17 +5,20 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web; // For HttpUtility. NuGet: System.Web.HttpUtility if not available by default
-using TelegramSearchBot.Intrerface; // Added for IService
+using Microsoft.Extensions.Logging; // Added for ILogger
+using TelegramSearchBot.Intrerface;
 
 namespace TelegramSearchBot.Service.Common
 {
     
-    public class UrlProcessingService : IService // Implements IService
+    public class UrlProcessingService : IService
     {
-        public string ServiceName => nameof(UrlProcessingService); // Implementation of IService.ServiceName
+        public string ServiceName => nameof(UrlProcessingService);
 
         private readonly HttpClient _httpClient;
-        // Common tracking parameters. This list can be expanded or moved to configuration.
+        private readonly ILogger<UrlProcessingService> _logger;
+
+        // Common tracking parameters. This list can be expanded or moved to configuration if it grows too large.
         private static readonly HashSet<string> TrackingParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             // Bilibili specific (from user example)
@@ -24,6 +27,10 @@ namespace TelegramSearchBot.Service.Common
             "unique_k", "up_id", "vd_source", "seid", "b_lsid", "launch_id", "session_id", "ab_id",
             // Common UTM parameters
             "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+            // Taobao specific (from user example)
+            "tk", "suid", "shareUniqueId", "ut_sk", "un", "share_crt_v", "un_site", "spm", // Added spm
+            "wxsign", "tbSocialPopKey", "sp_tk", "cpp", "shareurl", "short_name", "bxsign", "app",
+            "sourceType", // sourceType appears twice, adding it once. If it's sometimes needed, this might be too aggressive.
             // Other common tracking parameters
             "fbclid", "gclid", "msclkid", "mc_eid", "yclid", "_hsenc", "_hsmi",
             "vero_conv", "vero_id", "trk", "trkCampaign", "sc_ichannel", "otc",
@@ -38,9 +45,10 @@ namespace TelegramSearchBot.Service.Common
             "_openstat" // Yandex Metrica
         };
 
-        public UrlProcessingService(HttpClient httpClient)
+        public UrlProcessingService(HttpClient httpClient, ILogger<UrlProcessingService> logger)
         {
             _httpClient = httpClient;
+            _logger = logger;
         }
 
         public List<string> ExtractUrls(string text)
@@ -75,32 +83,72 @@ namespace TelegramSearchBot.Service.Common
         {
             if (!Uri.TryCreate(originalUrl, UriKind.Absolute, out var uri))
             {
-                // Consider logging this invalid URL format
+                _logger.LogWarning("Invalid URL format: {OriginalUrl}", originalUrl);
                 return null;
             }
 
             try
             {
                 HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, uri);
-                // SendAsync with HttpCompletionOption.ResponseHeadersRead is efficient
-                HttpResponseMessage response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36");
                 
-                // The final URL after all redirects
-                return response.RequestMessage?.RequestUri?.ToString();
+                HttpResponseMessage response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode(); 
+
+                var resolvedByHttpClientUrl = response.RequestMessage?.RequestUri?.ToString();
+                _logger.LogInformation("Original URL: {OriginalUrl} -> HttpClient initially resolved to: {ResolvedByHttpClientUrl}", originalUrl, resolvedByHttpClientUrl);
+
+                bool isLikelyHttpRedirectedToFinal = resolvedByHttpClientUrl != null && 
+                                                     Uri.TryCreate(originalUrl, UriKind.Absolute, out var originalUriObj) &&
+                                                     Uri.TryCreate(resolvedByHttpClientUrl, UriKind.Absolute, out var resolvedUriObj) &&
+                                                     originalUriObj.Host != resolvedUriObj.Host;
+
+                if (isLikelyHttpRedirectedToFinal)
+                {
+                    _logger.LogInformation("Assuming HTTP redirect to {ResolvedByHttpClientUrl} is sufficient for {OriginalUrl}.", resolvedByHttpClientUrl, originalUrl);
+                    return resolvedByHttpClientUrl;
+                }
+                else
+                {
+                    _logger.LogInformation("HTTP client did not significantly redirect for {OriginalUrl}. Reading content to check for JS redirect pattern.", originalUrl);
+                    string htmlContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                    Match match = Regex.Match(htmlContent, @"var\s+url\s*=\s*'([^']+)';"); 
+                    if (match.Success)
+                    {
+                        string extractedUrl = match.Groups[1].Value;
+                        _logger.LogInformation("Extracted URL from JS: {ExtractedUrl} for original: {OriginalUrl}", extractedUrl, originalUrl);
+                        if (Uri.TryCreate(extractedUrl, UriKind.Absolute, out _))
+                        {
+                            return extractedUrl;
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Extracted URL '{ExtractedUrl}' from JS for original '{OriginalUrl}' is not a valid absolute URI.", extractedUrl, originalUrl);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("JS redirect pattern not found in HTML content for original URL: {OriginalUrl}", originalUrl);
+                    }
+                    
+                    _logger.LogInformation("Falling back to HttpClient's resolved URL: {ResolvedByHttpClientUrl} for original: {OriginalUrl}", resolvedByHttpClientUrl, originalUrl);
+                    return resolvedByHttpClientUrl; 
+                }
             }
             catch (HttpRequestException e)
             {
-                Console.Error.WriteLine($"Error fetching URL '{originalUrl}': {e.Message}"); // Replace with proper logging
+                _logger.LogError(e, "Error fetching URL '{OriginalUrl}' due to HttpRequestException.", originalUrl);
                 return null;
             }
             catch (TaskCanceledException e) // Handles timeouts
             {
-                Console.Error.WriteLine($"Timeout fetching URL '{originalUrl}': {e.Message}"); // Replace with proper logging
+                _logger.LogWarning(e, "Timeout fetching URL '{OriginalUrl}'.", originalUrl);
                 return null;
             }
             catch (Exception e) // Catch-all for other unexpected errors
             {
-                Console.Error.WriteLine($"Unexpected error fetching URL '{originalUrl}': {e.Message}"); // Replace with proper logging
+                _logger.LogError(e, "Unexpected error fetching URL '{OriginalUrl}'.", originalUrl);
                 return null;
             }
         }
@@ -114,8 +162,8 @@ namespace TelegramSearchBot.Service.Common
 
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                // Consider logging this
-                return url; // Return original if it's not a valid absolute URI
+                _logger.LogWarning("Cannot clean URL as it's not a valid absolute URI: {Url}", url);
+                return url; 
             }
 
             var queryParameters = HttpUtility.ParseQueryString(uri.Query);
@@ -150,8 +198,7 @@ namespace TelegramSearchBot.Service.Common
             
             if (finalUrl == null)
             {
-                // Failed to get final redirected URL. As per requirement, we need the link *after* 301.
-                // So, if redirection fails, we return null.
+                _logger.LogWarning("Failed to get final URL for {OriginalUrl} after attempting redirects and JS parsing.", originalUrl);
                 return null; 
             }
 
@@ -173,13 +220,9 @@ namespace TelegramSearchBot.Service.Common
                 var processedUrl = await ProcessUrlAsync(url).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(processedUrl))
                 {
-                    // Optional: Add only if cleaned URL is different from original extracted one,
-                    // or if it's significantly shorter (e.g. after unshortening)
-                    // For now, add any successfully processed URL.
                     processedUrls.Add(processedUrl);
                 }
             }
-            // Return distinct processed URLs, in case multiple original URLs resolve to the same cleaned URL
             return processedUrls.Distinct().ToList(); 
         }
     }
