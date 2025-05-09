@@ -5,6 +5,7 @@ using HtmlAgilityPack;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Tools
 {
