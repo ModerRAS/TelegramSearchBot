@@ -15,8 +15,9 @@ using Markdig;
 using Telegram.Bot.Exceptions;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
-using System.Linq;
+// System.Linq is already included via using System.Collections.Generic;
 using System.Web;
+using System.Threading; // For CancellationToken
 
 namespace TelegramSearchBot.Service.BotAPI
 {
@@ -622,6 +623,261 @@ namespace TelegramSearchBot.Service.BotAPI
             result = Regex.Replace(result, @"([\r\n]) ", "$1"); // Remove space after newline
             result = Regex.Replace(result, @"([\r\n]){2,}", "\n\n"); // Max 2 consecutive newlines
             return result.Trim();
+        }
+
+        // New method requested by user
+        public async Task<List<Model.Data.Message>> SendFullMessageStream( // Changed return type
+            IAsyncEnumerable<string> fullMessagesStream,
+            long chatId,
+            int replyTo,
+            string initialPlaceholderContent = "⏳", // Brief placeholder
+            CancellationToken cancellationToken = default) // Removed EnumeratorCancellation attribute as it's not IAsyncEnumerable anymore
+        {
+            List<Message> sentTelegramMessages = new List<Message>();
+            DateTime lastApiCallTime = DateTime.MinValue;
+            TimeSpan apiCallInterval = TimeSpan.FromSeconds(1.5); // Throttle API calls
+
+            string currentFullMarkdown = string.Empty;
+            List<string> finalMarkdownChunks = new List<string>(); // To store the chunks of the last processed full markdown
+            bool isFirstMessageInStream = true;
+            
+            // No GetCurrentReplyToId helper needed here as reply logic is per-iteration based on nextIterationSentMessages
+
+            await foreach (var markdownContentFromStream in fullMessagesStream.WithCancellation(cancellationToken))
+            {
+                if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                currentFullMarkdown = markdownContentFromStream;
+
+                // Throttle Telegram API calls
+                var timeSinceLastCall = DateTime.UtcNow - lastApiCallTime;
+                if (timeSinceLastCall < apiCallInterval && !isFirstMessageInStream)
+                {
+                    var delay = apiCallInterval - timeSinceLastCall;
+                    if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken);
+                }
+                if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+                
+                lastApiCallTime = DateTime.UtcNow;
+                isFirstMessageInStream = false;
+
+                List<string> markdownChunks = SplitMarkdownIntoChunks(currentFullMarkdown, 1900); // Adjusted maxLength to 1900
+                if (!markdownChunks.Any() && !string.IsNullOrEmpty(currentFullMarkdown))
+                {
+                    markdownChunks.Add(string.Empty); // Represents clearing content
+                }
+                if (!markdownChunks.Any() && sentTelegramMessages.Count == 0) // Nothing to send, nothing was sent
+                {
+                    continue;
+                }
+
+
+                List<Message> nextIterationSentMessages = new List<Message>();
+                int effectiveReplyTo = replyTo; // This will be updated to the ID of the previously sent segment
+
+                for (int i = 0; i < markdownChunks.Count; i++)
+                {
+                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+                    string mdChunk = markdownChunks[i];
+                    string htmlChunk = ConvertMarkdownToTelegramHtml(mdChunk);
+
+                    // Determine the reply_to_message_id for the current segment
+                    if (i == 0) effectiveReplyTo = replyTo; // First chunk replies to the original message
+                    else if (nextIterationSentMessages.Any()) // Subsequent chunks reply to the previous chunk of this stream
+                    {
+                         var lastSentValidMsg = nextIterationSentMessages.LastOrDefault(m => m != null && m.MessageId != 0);
+                         if(lastSentValidMsg != null) effectiveReplyTo = lastSentValidMsg.MessageId;
+                         // else it remains what it was (e.g. original replyTo if all previous failed)
+                    }
+
+
+                    if (i < sentTelegramMessages.Count) // Existing Telegram message for this chunk index
+                    {
+                        Message existingTgMessage = sentTelegramMessages[i];
+                        if (existingTgMessage == null || existingTgMessage.MessageId == 0) continue; // Should not happen if list is managed well
+
+                        if (!string.IsNullOrWhiteSpace(htmlChunk))
+                        {
+                            Message editedMsg = null;
+                            try
+                            {
+                                await Send.AddTask(async () => {
+                                    editedMsg = await botClient.EditMessageText(
+                                        chatId: chatId,
+                                        messageId: existingTgMessage.MessageId,
+                                        text: htmlChunk,
+                                        parseMode: ParseMode.Html,
+                                        cancellationToken: cancellationToken);
+                                }, chatId < 0);
+                                
+                                if (editedMsg != null && editedMsg.MessageId != 0) {
+                                    nextIterationSentMessages.Add(editedMsg);
+                                } else {
+                                    logger?.LogWarning($"Editing TG message {existingTgMessage.MessageId} for chunk {i} returned null or invalid message. Assuming it failed.");
+                                     // Keep old message in list for next iteration's count if edit fails, or remove?
+                                     // If we add existingTgMessage, it might be retried. For now, don't add if edit fails.
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                logger?.LogError(ex, $"Error editing TG message {existingTgMessage.MessageId} for chunk {i}. HTML: {htmlChunk.Substring(0, Math.Min(100, htmlChunk.Length))}");
+                                // Don't add to nextIterationSentMessages if edit fails
+                            }
+                        }
+                        else // htmlChunk is empty/whitespace, so delete the corresponding Telegram message
+                        {
+                            try
+                            {
+                                await Send.AddTask(async () => {
+                                    await botClient.DeleteMessage(chatId, existingTgMessage.MessageId, cancellationToken: cancellationToken);
+                                }, chatId < 0);
+                            }
+                            catch (Exception ex) { logger?.LogError(ex, $"Error deleting TG message {existingTgMessage.MessageId} for empty chunk {i}."); }
+                        }
+                    }
+                    else // New chunk, need to send a new Telegram message
+                    {
+                        if (!string.IsNullOrWhiteSpace(htmlChunk))
+                        {
+                            Message newTgMsg = null;
+                            try
+                            {
+                                await Send.AddTask(async () => {
+                                    newTgMsg = await botClient.SendMessage(
+                                        chatId: chatId,
+                                        text: htmlChunk,
+                                        parseMode: ParseMode.Html,
+                                        replyParameters: new ReplyParameters { MessageId = effectiveReplyTo },
+                                        cancellationToken: cancellationToken);
+                                }, chatId < 0);
+
+                                if (newTgMsg != null && newTgMsg.MessageId != 0) {
+                                   nextIterationSentMessages.Add(newTgMsg);
+                                } else {
+                                     logger?.LogWarning($"Sending new TG message for chunk {i} returned null or invalid message.");
+                                }
+                            }
+                            catch (Exception ex) { logger?.LogError(ex, $"Error sending new TG message for chunk {i}. HTML: {htmlChunk.Substring(0, Math.Min(100, htmlChunk.Length))}"); }
+                        }
+                    }
+                }
+
+                // Delete any remaining old Telegram messages if the new content has fewer chunks
+                for (int i = markdownChunks.Count; i < sentTelegramMessages.Count; i++)
+                {
+                    if (sentTelegramMessages[i] == null || sentTelegramMessages[i].MessageId == 0) continue;
+                    try
+                    {
+                         await Send.AddTask(async () => {
+                            await botClient.DeleteMessage(chatId, sentTelegramMessages[i].MessageId, cancellationToken: cancellationToken);
+                         }, chatId < 0);
+                    }
+                    catch (Exception ex) { logger?.LogError(ex, $"Error deleting superfluous TG message {sentTelegramMessages[i].MessageId}."); }
+                }
+                
+                sentTelegramMessages = new List<Message>(nextIterationSentMessages); // Update the main list with successfully sent/edited messages
+
+                // Store the chunks from the current (potentially last) fullMarkdownContent
+                finalMarkdownChunks = markdownChunks; 
+                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+            }
+
+            // After the loop, construct the result list based on the final state
+            var resultMessagesForDb = new List<Model.Data.Message>();
+            User botUser = null; // Cache bot user info
+
+            for(int i = 0; i < sentTelegramMessages.Count; i++)
+            {
+                var tgMsg = sentTelegramMessages[i];
+                if (tgMsg == null || tgMsg.MessageId == 0) continue;
+
+                if (botUser == null) // Get bot user info once
+                {
+                    try
+                    {
+                        await Send.AddTask(async () => {
+                             botUser = await botClient.GetMe(cancellationToken: cancellationToken);
+                        }, chatId < 0); // Assuming chatId < 0 for group context for Send.AddTask
+                    }
+                    catch(Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to get bot user info for DB logging.");
+                        // Potentially throw or handle, for now, FromUserId might be missing or default
+                    }
+                }
+
+                int msgReplyToId;
+                if (i == 0) msgReplyToId = replyTo;
+                else if (i > 0 && sentTelegramMessages[i-1] != null && sentTelegramMessages[i-1].MessageId != 0) msgReplyToId = sentTelegramMessages[i-1].MessageId;
+                else msgReplyToId = replyTo; 
+
+                resultMessagesForDb.Add(new Model.Data.Message() {
+                    GroupId = chatId,
+                    MessageId = tgMsg.MessageId,
+                    DateTime = tgMsg.Date.ToUniversalTime(),
+                    Content = (i < finalMarkdownChunks.Count) ? finalMarkdownChunks[i] : "", // Use final chunks
+                    FromUserId = botUser?.Id ?? 0, // Use cached botUser.Id
+                    ReplyToMessageId = msgReplyToId,
+                });
+            }
+            return resultMessagesForDb;
+        }
+
+        private List<string> SplitMarkdownIntoChunks(string markdown, int maxLength)
+        {
+            var chunks = new List<string>();
+            if (string.IsNullOrEmpty(markdown)) return chunks;
+            if (maxLength <= 0) { // Safety check
+                chunks.Add(markdown);
+                return chunks;
+            }
+
+            int currentPosition = 0;
+            while (currentPosition < markdown.Length)
+            {
+                int lengthToTake = Math.Min(maxLength, markdown.Length - currentPosition);
+                
+                string chunk;
+                if (markdown.Length - currentPosition <= maxLength) // Last chunk or fits entirely
+                {
+                    chunk = markdown.Substring(currentPosition);
+                    lengthToTake = chunk.Length; // Actual length of the last chunk
+                }
+                else
+                {
+                    // Try to find a good split point within lengthToTake
+                    int splitPoint = -1;
+                    // Prefer to split at double newlines (paragraph end) backwards from lengthToTake
+                    for (int i = lengthToTake - 2; i > maxLength / 3; i--) // Search in the latter 2/3
+                    {
+                        if (markdown[currentPosition + i] == '\n' && markdown[currentPosition + i + 1] == '\n')
+                        {
+                            splitPoint = i + 2; // Split after the double newline
+                            break;
+                        }
+                    }
+
+                    if (splitPoint == -1) // If no double newline, try single newline
+                    {
+                        for (int i = lengthToTake - 1; i > maxLength / 3; i--)
+                        {
+                            if (markdown[currentPosition + i] == '\n')
+                            {
+                                splitPoint = i + 1; // Split after the newline
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (splitPoint != -1) lengthToTake = splitPoint;
+                    // If no good split point found, it will be a hard split at maxLength
+                    chunk = markdown.Substring(currentPosition, lengthToTake);
+                }
+                
+                chunks.Add(chunk);
+                currentPosition += lengthToTake;
+            }
+            return chunks;
         }
     }
 }
