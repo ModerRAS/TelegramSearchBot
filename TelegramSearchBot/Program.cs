@@ -33,7 +33,7 @@ using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot {
     class Program {
-        static void Main(string[] args) {
+        static void Main(string[] args) { // Changed back to void Main
             Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information() // 设置最低日志级别
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Debug) // SQL 语句只在 Debug 级别输出
@@ -53,7 +53,7 @@ namespace TelegramSearchBot {
             })
             .CreateLogger();
             if (args.Length == 0) {
-                GeneralBootstrap.Startup(args);
+                GeneralBootstrap.Startup(args); // Call synchronous Startup
             } else if (args.Length >= 1) {
                 // 调用封装好的反射分发方法
                 bool success = AppBootstrap.AppBootstrap.TryDispatchStartupByReflection(args);

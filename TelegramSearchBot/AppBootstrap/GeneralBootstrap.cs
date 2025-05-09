@@ -19,6 +19,7 @@ using TelegramSearchBot.Executor;
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Service.BotAPI; // Added for BotCommandService
 using Tsavorite.core;
 
 namespace TelegramSearchBot.AppBootstrap
@@ -31,6 +32,7 @@ namespace TelegramSearchBot.AppBootstrap
                 .ConfigureServices(service => {
                     service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl)));
                     service.AddSingleton<SendMessage>();
+                    service.AddHostedService<BotCommandService>(); // Register as HostedService
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
@@ -56,7 +58,7 @@ namespace TelegramSearchBot.AppBootstrap
                     // Manually register AppConfigurationService and its interface
                     service.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
                 });
-        public static void Startup(string[] args) {
+        public static void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
 
             Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
@@ -90,12 +92,15 @@ namespace TelegramSearchBot.AppBootstrap
                 context.Database.Migrate();
             }
             Thread.Sleep(5000);
+
+
             bot.StartReceiving(
                 HandleUpdateAsync(service),
                 HandleErrorAsync(service), new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
                 }, cts.Token);
-            host.Run();
+            
+            host.Run(); // Changed back to Run() as Startup is now synchronous
         }
         public static void AddController(IServiceCollection service) {
             service.Scan(scan => scan

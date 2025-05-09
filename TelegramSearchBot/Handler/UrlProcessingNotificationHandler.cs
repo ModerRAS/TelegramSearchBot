@@ -12,10 +12,12 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Notifications;
-using TelegramSearchBot.Service.Common; // Re-add UrlProcessingService namespace
+using TelegramSearchBot.Service.Common; 
+using TelegramSearchBot.Attributes; // Add this using directive
 
 namespace TelegramSearchBot.Handler
 {
+    [BotCommand("resolveurls", "解析文本中的链接并存储原始链接与解析后链接的映射。")]
     public class UrlProcessingNotificationHandler : INotificationHandler<TextMessageReceivedNotification>
     {
         private readonly SendMessage _sendMessage;
