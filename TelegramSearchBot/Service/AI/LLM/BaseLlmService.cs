@@ -27,7 +27,6 @@ namespace TelegramSearchBot.Service.AI.LLM
         protected readonly DataDbContext _dbContext;
         protected readonly IServiceProvider _serviceProvider;
         protected readonly IHttpClientFactory _httpClientFactory;
-        protected readonly string _availableToolsPromptPart;
         public string BotName { get; set; }
 
         protected BaseLlmService(
@@ -40,15 +39,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             _dbContext = context;
             _serviceProvider = serviceProvider;
             _httpClientFactory = httpClientFactory;
-
-            McpToolHelper.Initialize(_serviceProvider, _logger);
-
-            _availableToolsPromptPart = McpToolHelper.RegisterToolsAndGetPromptString(Assembly.GetExecutingAssembly());
-            if (string.IsNullOrWhiteSpace(_availableToolsPromptPart))
-            {
-                _availableToolsPromptPart = "<!-- No tools are currently available. -->";
-            }
-             _logger.LogInformation("BaseLlmService initialized. Found tools: {HasTools}", !string.IsNullOrWhiteSpace(_availableToolsPromptPart) && !_availableToolsPromptPart.Contains("No tools"));
+            _logger.LogInformation("BaseLlmService instance created. McpToolHelper should be initialized at application startup.");
         }
 
         // --- Common Helper Methods ---

@@ -22,22 +22,65 @@ namespace TelegramSearchBot.Service.AI.LLM
     public static class McpToolHelper
     {
         private static readonly ConcurrentDictionary<string, (MethodInfo Method, Type OwningType)> ToolRegistry = new ConcurrentDictionary<string, (MethodInfo, Type)>();
-        private static IServiceProvider _serviceProvider; // For DI-based instance resolution
-        private static ILogger _logger;
+        private static IServiceProvider _sServiceProvider; // For DI-based instance resolution
+        private static ILogger _sLogger;
+        private static string _sCachedToolsXml;
+        private static bool _sIsInitialized = false;
+        private static readonly object _initializationLock = new object();
 
-        public static void Initialize(IServiceProvider serviceProvider, ILogger logger)
+        private static void Initialize(IServiceProvider serviceProvider, ILogger logger)
         {
-            _serviceProvider = serviceProvider;
-            _logger = logger;
+            _sServiceProvider = serviceProvider;
+            _sLogger = logger;
+        }
+
+        /// <summary>
+        /// Ensures that McpToolHelper is initialized, tools are registered, and the prompt string is cached.
+        /// This method should be called once at application startup.
+        /// </summary>
+        public static void EnsureInitialized(Assembly assembly, IServiceProvider serviceProvider, ILogger logger)
+        {
+            if (_sIsInitialized)
+            {
+                return;
+            }
+
+            lock (_initializationLock)
+            {
+                if (_sIsInitialized)
+                {
+                    return;
+                }
+
+                Initialize(serviceProvider, logger); // Sets _sServiceProvider and _sLogger
+
+                _sLogger?.LogInformation("McpToolHelper.EnsureInitialized: Starting tool registration...");
+                _sCachedToolsXml = RegisterToolsAndGetPromptString(assembly);
+                if (string.IsNullOrWhiteSpace(_sCachedToolsXml))
+                {
+                    _sCachedToolsXml = "<!-- No tools are currently available. -->";
+                    _sLogger?.LogWarning("McpToolHelper.EnsureInitialized: No tools found or registered. Prompt will indicate no tools available.");
+                }
+                else
+                {
+                    _sLogger?.LogInformation("McpToolHelper.EnsureInitialized: Tools registered and XML prompt cached successfully.");
+                }
+                
+                _sIsInitialized = true;
+            }
         }
         
         /// <summary>
         /// Scans an assembly for methods marked with McpToolAttribute and registers them.
         /// Also generates the descriptive string for the LLM prompt.
+        /// This method is called by EnsureInitialized.
         /// </summary>
-        public static string RegisterToolsAndGetPromptString(Assembly assembly)
+        private static string RegisterToolsAndGetPromptString(Assembly assembly)
         {
             ToolRegistry.Clear(); // Clear previous registrations if any
+            
+            var loggerForRegistration = _sLogger; 
+
             var methods = assembly.GetTypes()
                                   .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))
                                   .Where(m => m.GetCustomAttribute<McpToolAttribute>() != null)
@@ -61,35 +104,35 @@ namespace TelegramSearchBot.Service.AI.LLM
                     // but given the Clear() at the start of this method, if this method is called sequentially,
                     // ContainsKey would be false. If called concurrently, TryAdd is safer.
                     // The original log message for duplicate is still relevant if different methods map to the same sanitized toolName.
-                    _logger?.LogWarning($"Duplicate tool name '{toolName}' found or failed to add. Method {method.DeclaringType.FullName}.{method.Name} might be ignored or overwritten by a concurrent call.");
+                    loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found or failed to add. Method {method.DeclaringType.FullName}.{method.Name} might be ignored or overwritten by a concurrent call.");
                     // If we want to strictly prevent overwriting and log the original "ignored" message,
                     // we might need a slightly different approach, but ConcurrentDictionary handles the concurrent access safely.
                     // For simplicity and to address the core concurrency bug, TryAdd is sufficient.
                     // If it was already added by another concurrent call, this instance of the tool might not be the one stored.
                     // The duplicate tool name warnings from the user log suggest this is a valid concern.
                     // Let's stick to a pattern closer to the original to ensure the warning logic remains:
-                    if (ToolRegistry.ContainsKey(toolName)) // Check first
-                    {
-                         _logger?.LogWarning($"Duplicate tool name '{toolName}' found. Method {method.DeclaringType.FullName}.{method.Name} will be ignored.");
-                         continue;
-                    }
-                    // If, after the check, another thread adds it, ToolRegistry[toolName] could throw or overwrite.
-                    // So, TryAdd is indeed better. Let's re-evaluate.
-                    // The goal is: if toolName is new, add it. If it exists, log warning and skip.
-                    // This needs to be atomic.
-                    var toolTuple = (method, method.DeclaringType);
-                    if (!ToolRegistry.TryAdd(toolName, toolTuple))
-                    {
-                        // This means toolName was already present (added by this thread in a previous iteration for a *different* method mapping to the same name, or by another thread).
-                        _logger?.LogWarning($"Duplicate tool name '{toolName}' encountered for method {method.DeclaringType.FullName}.{method.Name}. This tool registration will be skipped.");
-                        continue;
-                    }
-                    // If TryAdd succeeded, it's in the dictionary.
+                if (ToolRegistry.ContainsKey(toolName)) // Check first
+                {
+                     loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found. Method {method.DeclaringType.FullName}.{method.Name} will be ignored.");
+                     continue;
                 }
-                // ToolRegistry[toolName] = (method, method.DeclaringType); // This line is now handled by TryAdd
+                // If, after the check, another thread adds it, ToolRegistry[toolName] could throw or overwrite.
+                // So, TryAdd is indeed better. Let's re-evaluate.
+                // The goal is: if toolName is new, add it. If it exists, log warning and skip.
+                // This needs to be atomic.
+                var toolTuple = (method, method.DeclaringType);
+                if (!ToolRegistry.TryAdd(toolName, toolTuple))
+                {
+                    // This means toolName was already present (added by this thread in a previous iteration for a *different* method mapping to the same name, or by another thread).
+                    loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' encountered for method {method.DeclaringType.FullName}.{method.Name}. This tool registration will be skipped.");
+                    continue;
+                }
+                // If TryAdd succeeded, it's in the dictionary.
+            }
+            // ToolRegistry[toolName] = (method, method.DeclaringType); // This line is now handled by TryAdd
 
-                sb.AppendLine($"- <tool name=\"{toolName}\">");
-                sb.AppendLine($"    <description>{toolAttr.Description}</description>");
+            sb.AppendLine($"- <tool name=\"{toolName}\">");
+            sb.AppendLine($"    <description>{toolAttr.Description}</description>");
                 sb.AppendLine($"    <parameters>");
                 foreach (var param in method.GetParameters())
                 {
@@ -106,20 +149,25 @@ namespace TelegramSearchBot.Service.AI.LLM
         }
 
         /// <summary>
-        /// Formats the standard system prompt incorporating tool descriptions and usage instructions.
-        /// Uses the structure previously defined directly in the services.
-        /// </summary>
-        public static string FormatSystemPrompt(string botName, long chatId, string availableToolsXml)
-        {
-             if (string.IsNullOrWhiteSpace(botName)) botName = "AI Assistant";
-             if (string.IsNullOrWhiteSpace(availableToolsXml)) availableToolsXml = "<!-- No tools are currently available for you to use. -->";
+    /// Formats the standard system prompt incorporating tool descriptions and usage instructions.
+    /// </summary>
+    public static string FormatSystemPrompt(string botName, long chatId)
+    {
+         if (!_sIsInitialized)
+         {
+            _sLogger?.LogCritical("McpToolHelper.FormatSystemPrompt called before EnsureInitialized. Tool descriptions will be missing or incorrect.");
+            // Consider throwing an InvalidOperationException here if this state is truly unrecoverable.
+         }
 
-             // Exact prompt structure from OpenAIService/OllamaService
-             return $"你的名字是 {botName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{chatId}。\n\n" + 
-                    $"你的核心任务是协助用户。为此，你可以调用外部工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
-                    $"{availableToolsXml}\n\n" + 
-                    $"如果你判断需要使用上述列表中的某个工具，你的回复必须严格遵循以下XML格式，并且不包含任何其他文本（不要在XML前后添加任何说明或聊天内容）：\n" +
-                    $"<tool_name>\n" + 
+         if (string.IsNullOrWhiteSpace(botName)) botName = "AI Assistant";
+         string toolsXmlToUse = _sCachedToolsXml ?? "<!-- Tools not initialized or no tools available. -->";
+
+         // Exact prompt structure from OpenAIService/OllamaService
+         return $"你的名字是 {botName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{chatId}。\n\n" + 
+                $"你的核心任务是协助用户。为此，你可以调用外部工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
+                $"{toolsXmlToUse}\n\n" + 
+                $"如果你判断需要使用上述列表中的某个工具，你的回复必须严格遵循以下XML格式，并且不包含任何其他文本（不要在XML前后添加任何说明或聊天内容）：\n" +
+                $"<tool_name>\n" + 
                     $"  <parameter1_name>value1</parameter1_name>\n" +
                     $"  <parameter2_name>value2</parameter2_name>\n" +
                     $"  ...\n" +
@@ -191,14 +239,14 @@ namespace TelegramSearchBot.Service.AI.LLM
                 }
                 catch (System.Xml.XmlException ex) when (ex.Message != null && ex.Message.ToLowerInvariant().Contains("multiple root elements"))
                 {
-                    _logger?.LogWarning(ex, $"TryParseToolCall: Multiple root elements detected. Wrapping in <tools_wrapper> and retrying. Original: {xmlString}");
+                    _sLogger?.LogWarning(ex, $"TryParseToolCall: Multiple root elements detected. Wrapping in <tools_wrapper> and retrying. Original: {xmlString}");
                     try
                     {
                         xDoc = XDocument.Parse($"<tools_wrapper>{xmlString}</tools_wrapper>", LoadOptions.None);
                     }
                     catch (System.Xml.XmlException ex2)
                     {
-                        _logger?.LogError(ex2, $"TryParseToolCall: Failed to parse even after wrapping with <tools_wrapper>. Original: {xmlString}");
+                        _sLogger?.LogError(ex2, $"TryParseToolCall: Failed to parse even after wrapping with <tools_wrapper>. Original: {xmlString}");
                         return false;
                     }
                 }
@@ -243,7 +291,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                                 }
                                 else
                                 {
-                                    _logger?.LogWarning("Tool call format <tool name='{ToolName}'> used, but neither <parameters> nor direct <parameter> elements found.", currentToolName);
+                                    _sLogger?.LogWarning("Tool call format <tool name='{ToolName}'> used, but neither <parameters> nor direct <parameter> elements found.", currentToolName);
                                 }
                             }
                         }
@@ -287,14 +335,14 @@ namespace TelegramSearchBot.Service.AI.LLM
                     }
                     else
                     {
-                         _logger?.LogWarning($"TryParseToolCalls: Skipped unrecognized element '{elementToParse.Name.LocalName}' during multi-tool parse attempt. Element: {elementToParse}");
+                         _sLogger?.LogWarning($"TryParseToolCalls: Skipped unrecognized element '{elementToParse.Name.LocalName}' during multi-tool parse attempt. Element: {elementToParse}");
                     }
                 }
                 return parsedToolCalls.Any();
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, $"Error parsing tool call XML: {xmlString}");
+                _sLogger?.LogError(ex, $"Error parsing tool call XML: {xmlString}");
                 return false;
             }
         }
@@ -340,23 +388,22 @@ namespace TelegramSearchBot.Service.AI.LLM
             object instance = null;
             if (!method.IsStatic)
             {
-                if (_serviceProvider != null)
+                if (_sServiceProvider != null)
                 {
-                    instance = _serviceProvider.GetService(owningType);
+                    instance = _sServiceProvider.GetService(owningType);
                     if (instance == null)
                     {
-                        // Try to activate if not in DI and has parameterless constructor
                         if (owningType.GetConstructor(Type.EmptyTypes) != null)
                             instance = Activator.CreateInstance(owningType);
                     }
                 }
-                else if (owningType.GetConstructor(Type.EmptyTypes) != null)
+                else if (owningType.GetConstructor(Type.EmptyTypes) != null) 
                 {
                      instance = Activator.CreateInstance(owningType);
                 }
                 
                 if (instance == null)
-                    throw new InvalidOperationException($"Could not create an instance of type '{owningType.FullName}' to execute non-static tool '{toolName}'. Register it in DI or ensure it has a parameterless constructor.");
+                    throw new InvalidOperationException($"Could not create an instance of type '{owningType.FullName}' to execute non-static tool '{toolName}'. Ensure McpToolHelper.EnsureInitialized was called with a valid IServiceProvider and the type is registered in DI or has a parameterless constructor.");
             }
 
             var result = method.Invoke(instance, convertedArgs);
@@ -399,7 +446,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                         // Use Newtonsoft.Json for deserialization
                         return JsonConvert.DeserializeObject(stringValue, targetType);
                       } catch (Exception jsonEx) {
-                         _logger?.LogWarning(jsonEx, $"Failed to deserialize '{stringValue}' to type {targetType.Name} using Newtonsoft.Json for parameter {paramNameForError}.");
+                         _sLogger?.LogWarning(jsonEx, $"Failed to deserialize '{stringValue}' to type {targetType.Name} using Newtonsoft.Json for parameter {paramNameForError}.");
                          // If deserialization fails, re-throw or handle as appropriate
                          // For now, let the ArgumentException below handle it if conversion isn't possible otherwise.
                      }
@@ -410,7 +457,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, $"Error converting value '{stringValue}' to type {targetType.Name} for parameter '{paramNameForError}'.");
+                _sLogger?.LogError(ex, $"Error converting value '{stringValue}' to type {targetType.Name} for parameter '{paramNameForError}'.");
                 throw new ArgumentException($"Error converting value '{stringValue}' for parameter '{paramNameForError}': {ex.Message}", ex);
             }
         }
@@ -475,7 +522,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                 } 
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, "Failed to serialize tool result object to JSON. Returning .ToString().");
+                    _sLogger?.LogError(ex, "Failed to serialize tool result object to JSON. Returning .ToString().");
                     return toolResultObject.ToString();
                 }
             }

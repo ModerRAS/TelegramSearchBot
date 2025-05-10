@@ -30,7 +30,6 @@ namespace TelegramSearchBot.Service.AI.LLM
         private readonly DataDbContext _dbContext; 
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly string _availableToolsPromptPart;
         public string BotName { get; set; }
 
         // Constructor requires dependencies needed directly by this class
@@ -44,16 +43,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             _dbContext = context; 
             _serviceProvider = serviceProvider;
             _httpClientFactory = httpClientFactory;
-
-            // Initialize McpToolHelper (still needed)
-            McpToolHelper.Initialize(_serviceProvider, _logger);
-
-            // Register tools and generate the prompt part once (still needed)
-            _availableToolsPromptPart = McpToolHelper.RegisterToolsAndGetPromptString(Assembly.GetExecutingAssembly());
-            if (string.IsNullOrWhiteSpace(_availableToolsPromptPart))
-            {
-                _availableToolsPromptPart = "<!-- No tools are currently available. -->";
-            }
+            _logger.LogInformation("OllamaService instance created. McpToolHelper should be initialized at application startup.");
         }
 
         // --- Helper methods specific to this service ---
@@ -127,8 +117,7 @@ namespace TelegramSearchBot.Service.AI.LLM
 
             // --- History and Prompt Setup ---
             // NOTE: History context is limited as OllamaSharp.Chat manages it.
-            // Use helper method to format the prompt
-            var systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId, _availableToolsPromptPart); 
+            var systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId);
 
             var chat = new OllamaSharp.Chat(ollama, systemPrompt);
 

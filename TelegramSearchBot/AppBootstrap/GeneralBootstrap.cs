@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging; // Added for ILoggerFactory
 using Serilog;
 using StackExchange.Redis;
 using System;
@@ -84,6 +85,12 @@ namespace TelegramSearchBot.AppBootstrap
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             service = host.Services;
+
+            var loggerFactory = service.GetRequiredService<ILoggerFactory>();
+            var mcpLogger = loggerFactory.CreateLogger("McpToolHelperInitialization"); 
+            var mainAssembly = typeof(GeneralBootstrap).Assembly; 
+            TelegramSearchBot.Service.AI.LLM.McpToolHelper.EnsureInitialized(mainAssembly, service, mcpLogger);
+            Log.Information("McpToolHelper has been initialized.");
 
             InitController(host.Services);
             using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {

@@ -30,27 +30,19 @@ namespace TelegramSearchBot.Service.AI.LLM
         public string BotName { get; set; }
         private DataDbContext _dbContext;
         private readonly IServiceProvider _serviceProvider;
-        private readonly IHttpClientFactory _httpClientFactory; // Keep for consistency, though not used directly here
-        private readonly string _availableToolsPromptPart;
+        private readonly IHttpClientFactory _httpClientFactory;
 
         public OpenAIService(
             DataDbContext context, 
             ILogger<OpenAIService> logger, 
             IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory) // Added httpClientFactory
+            IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
             _dbContext = context;
             _serviceProvider = serviceProvider;
-            _httpClientFactory = httpClientFactory; // Store it
-
-            McpToolHelper.Initialize(_serviceProvider, _logger); 
-
-            _availableToolsPromptPart = McpToolHelper.RegisterToolsAndGetPromptString(Assembly.GetExecutingAssembly());
-            if (string.IsNullOrWhiteSpace(_availableToolsPromptPart))
-            {
-                _availableToolsPromptPart = "<!-- No tools are currently available. -->";
-            }
+            _httpClientFactory = httpClientFactory;
+            _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
         }
 
         // --- Helper Methods (Defined locally again) ---
@@ -167,8 +159,7 @@ namespace TelegramSearchBot.Service.AI.LLM
              }
 
             // --- History and Prompt Setup ---
-            // Use helper method to format the prompt
-            string systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId, _availableToolsPromptPart);
+            string systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId);
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
             providerHistory = await GetChatHistory(ChatId, providerHistory, message); // Use local GetChatHistory
 
