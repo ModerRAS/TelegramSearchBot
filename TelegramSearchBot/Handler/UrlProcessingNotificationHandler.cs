@@ -1,19 +1,18 @@
 using MediatR;
 using System;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Telegram.Bot;
 using Telegram.Bot.Types;
-using System.Collections.Generic; // Added for List<>
+using System.Collections.Generic;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Notifications;
-using TelegramSearchBot.Service.Common; 
-using TelegramSearchBot.Attributes; // Add this using directive
+using TelegramSearchBot.Service.Common;
+using TelegramSearchBot.Attributes;
+using Microsoft.EntityFrameworkCore; // Required for ToListAsync, ToDictionaryAsync etc.
+using TelegramSearchBot.Model; // Added for DataDbContext
 
 namespace TelegramSearchBot.Handler
 {
@@ -23,12 +22,12 @@ namespace TelegramSearchBot.Handler
         private readonly SendMessage _sendMessage;
         private readonly DataDbContext _dbContext;
         private readonly UrlProcessingService _urlProcessingService;
-        private const string ResolveUrlsCommand = "/resolveurls"; // Renamed command
+        private const string ResolveUrlsCommand = "/resolveurls";
 
         public UrlProcessingNotificationHandler(
             SendMessage sendMessage,
             DataDbContext dbContext,
-            UrlProcessingService urlProcessingService) // Add UrlProcessingService, remove ITelegramBotClient
+            UrlProcessingService urlProcessingService)
         {
             _sendMessage = sendMessage;
             _dbContext = dbContext;
@@ -42,68 +41,132 @@ namespace TelegramSearchBot.Handler
                 return;
             }
 
-            var text = notification.Text.Trim(); // This line is redundant due to currentMessageText
             var currentMessageText = notification.Text.Trim();
-            string replyText = string.Empty;
-            bool commandProcessed = false;
+            
+            // --- Step 1: Silent URL Processing and Storing for every message ---
+            var silentProcessingResults = await _urlProcessingService.ProcessUrlsInTextAsync(currentMessageText);
+            if (silentProcessingResults != null && silentProcessingResults.Any())
+            {
+                var mappingsToConsiderSaving = new List<ShortUrlMapping>();
+                foreach (var result in silentProcessingResults)
+                {
+                    // Only consider saving if the URL was actually expanded (OriginalUrl != ProcessedUrl)
+                    // and ProcessedUrl is not null/empty.
+                    if (!string.IsNullOrWhiteSpace(result.ProcessedUrl) && result.OriginalUrl != result.ProcessedUrl)
+                    {
+                        mappingsToConsiderSaving.Add(new ShortUrlMapping
+                        {
+                            OriginalUrl = result.OriginalUrl,
+                            ExpandedUrl = result.ProcessedUrl,
+                            CreationDate = DateTime.UtcNow
+                        });
+                    }
+                }
 
+                if (mappingsToConsiderSaving.Any())
+                {
+                    // Deduplicate mappings from the current message based on OriginalUrl
+                    var distinctNewMappingsFromMessage = mappingsToConsiderSaving
+                        .GroupBy(m => m.OriginalUrl)
+                        .Select(g => g.First())
+                        .ToList();
+
+                    // Find which of these OriginalUrls are already in the database
+                    var existingOriginalUrlsInDb = await _dbContext.ShortUrlMappings
+                        .Where(dbMapping => distinctNewMappingsFromMessage.Select(m => m.OriginalUrl).Contains(dbMapping.OriginalUrl))
+                        .Select(dbMapping => dbMapping.OriginalUrl)
+                        .ToListAsync(cancellationToken);
+
+                    // Filter out mappings that already exist in the database
+                    var finalMappingsToSave = distinctNewMappingsFromMessage
+                        .Where(m => !existingOriginalUrlsInDb.Contains(m.OriginalUrl))
+                        .ToList();
+                    
+                    if (finalMappingsToSave.Any())
+                    {
+                        _dbContext.ShortUrlMappings.AddRange(finalMappingsToSave);
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                    }
+                }
+            }
+
+            // --- Step 2: Command Handling for /resolveurls ---
             if (currentMessageText.StartsWith(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase))
             {
-                commandProcessed = true;
-                string? textToProcess = null;
+                string replyText = string.Empty;
+                string? textToAnalyzeForCommand = null;
                 var commandArgs = currentMessageText.Substring(ResolveUrlsCommand.Length).Trim();
 
                 if (!string.IsNullOrWhiteSpace(commandArgs))
                 {
-                    textToProcess = commandArgs;
+                    textToAnalyzeForCommand = commandArgs;
                 }
                 else if (notification.OriginalMessage?.ReplyToMessage != null && 
                          !string.IsNullOrWhiteSpace(notification.OriginalMessage.ReplyToMessage.Text))
                 {
-                    textToProcess = notification.OriginalMessage.ReplyToMessage.Text;
+                    textToAnalyzeForCommand = notification.OriginalMessage.ReplyToMessage.Text;
                 }
 
-                if (!string.IsNullOrWhiteSpace(textToProcess))
+                if (!string.IsNullOrWhiteSpace(textToAnalyzeForCommand))
                 {
-                    var urlProcessingResults = await _urlProcessingService.ProcessUrlsInTextAsync(textToProcess);
+                    // Perform live processing on the target text for the command
+                    var liveCommandProcessingResults = await _urlProcessingService.ProcessUrlsInTextAsync(textToAnalyzeForCommand);
                     
-                    if (urlProcessingResults != null && urlProcessingResults.Any())
+                    if (liveCommandProcessingResults != null && liveCommandProcessingResults.Any())
                     {
                         var replyMessages = new List<string>();
-                        var mappingsToSave = new List<ShortUrlMapping>();
+                        var distinctOriginalUrlsInCommandText = liveCommandProcessingResults
+                                                                .Select(r => r.OriginalUrl)
+                                                                .Where(u => !string.IsNullOrWhiteSpace(u))
+                                                                .Distinct()
+                                                                .ToList();
 
-                        foreach (var result in urlProcessingResults)
+                        // Query DB for stored mappings of these specific URLs
+                        var storedMappingsDict = await _dbContext.ShortUrlMappings
+                            .Where(m => distinctOriginalUrlsInCommandText.Contains(m.OriginalUrl))
+                            .ToDictionaryAsync(m => m.OriginalUrl, m => m.ExpandedUrl, cancellationToken);
+
+                        foreach (var liveResult in liveCommandProcessingResults)
                         {
-                            if (!string.IsNullOrWhiteSpace(result.ProcessedUrl) && result.OriginalUrl != result.ProcessedUrl)
+                            if (string.IsNullOrWhiteSpace(liveResult.OriginalUrl)) continue;
+
+                            if (storedMappingsDict.TryGetValue(liveResult.OriginalUrl, out var expandedUrlFromDb))
                             {
-                                replyMessages.Add($"{result.OriginalUrl}\n-> {result.ProcessedUrl}");
-                                mappingsToSave.Add(new ShortUrlMapping
+                                // Prefer DB result
+                                if (liveResult.OriginalUrl != expandedUrlFromDb) // Check if it's an actual expansion
                                 {
-                                    OriginalUrl = result.OriginalUrl,
-                                    ExpandedUrl = result.ProcessedUrl, // Corrected field name
-                                    CreationDate = DateTime.UtcNow
-                                });
+                                   replyMessages.Add($"{liveResult.OriginalUrl}\n-> {expandedUrlFromDb} (来自数据库)");
+                                }
+                                else // Stored as "no change" or was already long
+                                {
+                                   replyMessages.Add($"{liveResult.OriginalUrl} (无变化, 来自数据库)");
+                                }
                             }
-                            else if (!string.IsNullOrWhiteSpace(result.ProcessedUrl)) // Original and Processed are same but valid
+                            // If not in DB, use the live processing result from this command's execution
+                            else if (!string.IsNullOrWhiteSpace(liveResult.ProcessedUrl)) 
                             {
-                                replyMessages.Add($"{result.OriginalUrl} (无变化)");
+                                if (liveResult.OriginalUrl != liveResult.ProcessedUrl)
+                                {
+                                    replyMessages.Add($"{liveResult.OriginalUrl}\n-> {liveResult.ProcessedUrl} (实时处理)");
+                                }
+                                else
+                                {
+                                    replyMessages.Add($"{liveResult.OriginalUrl} (无变化, 实时处理)");
+                                }
                             }
-                            // else: Original URL could not be processed or resulted in null/empty ProcessedUrl
+                            // If not in DB and live processing also failed (ProcessedUrl is null/empty), it's implicitly skipped for reply.
                         }
+                        
+                        // Ensure distinct reply lines, as the same URL might appear multiple times in text
+                        var distinctReplyMessages = replyMessages.Distinct().ToList();
 
-                        if (mappingsToSave.Any())
+                        if (distinctReplyMessages.Any())
                         {
-                            _dbContext.ShortUrlMappings.AddRange(mappingsToSave);
-                            await _dbContext.SaveChangesAsync(cancellationToken);
-                        }
-
-                        if (replyMessages.Any())
-                        {
-                            replyText = "链接处理结果：\n" + string.Join("\n\n", replyMessages);
+                            replyText = "链接处理结果：\n" + string.Join("\n\n", distinctReplyMessages);
                         }
                         else
                         {
-                            replyText = "在提供的文本中没有检测到需要扩展或已成功处理的链接。";
+                            replyText = "在提供的文本中没有检测到链接，或无法处理其中的链接。";
                         }
                     }
                     else
@@ -115,22 +178,19 @@ namespace TelegramSearchBot.Handler
                 {
                     replyText = $"使用方法: {ResolveUrlsCommand} <包含链接的文本>\n或回复一条包含链接的消息并使用 {ResolveUrlsCommand}。";
                 }
-            }
 
-            if (commandProcessed && !string.IsNullOrWhiteSpace(replyText))
-            {
-                await _sendMessage.AddTextMessageToSend(
-                    chatId: notification.ChatId,
-                    text: replyText,
-                    parseMode: null, // Send as plain text, or specify Markdown/Html if needed and text is formatted accordingly
-                    replyParameters: new Telegram.Bot.Types.ReplyParameters { MessageId = notification.MessageId },
-                    highPriorityForGroup: notification.ChatType != ChatType.Private,
-                    cancellationToken: cancellationToken
-                );
+                if (!string.IsNullOrWhiteSpace(replyText))
+                {
+                    await _sendMessage.AddTextMessageToSend(
+                        chatId: notification.ChatId,
+                        text: replyText,
+                        parseMode: null, 
+                        replyParameters: new Telegram.Bot.Types.ReplyParameters { MessageId = notification.MessageId },
+                        highPriorityForGroup: notification.ChatType != ChatType.Private,
+                        cancellationToken: cancellationToken
+                    );
+                }
             }
         }
-
-        // IsValidUrl and ExtractUrlFromText are no longer needed here as UrlProcessingService handles extraction and validation.
-        // GenerateShortCode is also removed.
     }
 }
