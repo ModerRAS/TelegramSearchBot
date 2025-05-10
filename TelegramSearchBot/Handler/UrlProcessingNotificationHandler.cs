@@ -96,17 +96,51 @@ namespace TelegramSearchBot.Handler
             }
 
             // --- Step 2: Command Handling for /resolveurls ---
-            if (currentMessageText.StartsWith(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase))
+            bool isResolveUrlsCommandTriggered = false;
+            string commandArguments = string.Empty;
+
+            // Prioritize entity-based command detection
+            var commandEntity = notification.OriginalMessage?.Entities?.FirstOrDefault(e => e.Type == MessageEntityType.BotCommand && e.Offset == 0);
+
+            if (commandEntity != null)
+            {
+                // Use notification.Text for Substring, as entity offsets/lengths are based on the original message text.
+                // notification.Text is the raw text from the message.
+                string commandTextWithPotentialAtMention = notification.Text.Substring(commandEntity.Offset, commandEntity.Length);
+                string baseCommand = commandTextWithPotentialAtMention.Split('@')[0];
+
+                if (baseCommand.Equals(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase))
+                {
+                    isResolveUrlsCommandTriggered = true;
+                    // Arguments are whatever follows the full command entity in the original text
+                    commandArguments = notification.Text.Substring(commandEntity.Offset + commandEntity.Length).Trim();
+                }
+            }
+            // Fallback for simple "/resolveurls" command if no entities were found or command entity was not at offset 0.
+            // currentMessageText is notification.Text.Trim().
+            else if (currentMessageText.StartsWith(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase))
+            {
+                // This fallback should only trigger if the command is exactly "/resolveurls" or "/resolveurls arguments"
+                // and NOT "/resolveurls@botname arguments" to avoid misparsing if entities were somehow missed.
+                string commandWord = currentMessageText.Split(' ')[0]; // First word of the trimmed message
+                if (commandWord.Equals(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase)) // Ensures it's not /resolveurls@bot
+                {
+                    isResolveUrlsCommandTriggered = true;
+                    // commandArguments are from the trimmed message text after the known command length
+                    commandArguments = currentMessageText.Substring(ResolveUrlsCommand.Length).Trim();
+                }
+            }
+
+            if (isResolveUrlsCommandTriggered)
             {
                 string replyText = string.Empty;
                 string? textToAnalyzeForCommand = null;
-                var commandArgs = currentMessageText.Substring(ResolveUrlsCommand.Length).Trim();
-
-                if (!string.IsNullOrWhiteSpace(commandArgs))
+                
+                if (!string.IsNullOrWhiteSpace(commandArguments))
                 {
-                    textToAnalyzeForCommand = commandArgs;
+                    textToAnalyzeForCommand = commandArguments;
                 }
-                else if (notification.OriginalMessage?.ReplyToMessage != null && 
+                else if (notification.OriginalMessage?.ReplyToMessage != null &&
                          !string.IsNullOrWhiteSpace(notification.OriginalMessage.ReplyToMessage.Text))
                 {
                     textToAnalyzeForCommand = notification.OriginalMessage.ReplyToMessage.Text;
