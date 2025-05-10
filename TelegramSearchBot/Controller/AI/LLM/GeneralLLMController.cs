@@ -1,10 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Linq; // Added for LINQ methods
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums; // Added for MessageEntityType
 using TelegramSearchBot.Intrerface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
@@ -57,14 +59,34 @@ namespace TelegramSearchBot.Controller.AI.LLM
             {
                 var me = await botClient.GetMe();
                 Env.BotId = me.Id;
-                var BotName = me.Username;
-                service.BotName = BotName;
+                service.BotName = me.Username; // service.BotName is the username, e.g., "MyBot"
             }
+
             var Message = string.IsNullOrEmpty(e?.Message?.Text) ? e?.Message?.Caption : e.Message.Text;
             if (string.IsNullOrEmpty(Message))
             {
                 return;
             }
+
+            // Check if the message is a bot command specifically targeting this bot
+            // service.BotName should be initialized by the block above.
+            if (e.Message.Entities != null && !string.IsNullOrEmpty(service.BotName) &&
+                e.Message.Entities.Any(entity => entity.Type == MessageEntityType.BotCommand))
+            {
+                var botCommandEntity = e.Message.Entities.First(entity => entity.Type == MessageEntityType.BotCommand);
+                // Ensure the command is at the beginning of the message
+                if (botCommandEntity.Offset == 0)
+                {
+                    string commandText = Message.Substring(botCommandEntity.Offset, botCommandEntity.Length);
+                    // Check if the command text itself contains @BotName (e.g., /cmd@MyBot)
+                    if (commandText.Contains($"@{service.BotName}"))
+                    {
+                        logger.LogInformation($"Ignoring command '{commandText}' in GeneralLLMController as it's a direct command to the bot and should be handled by a dedicated command handler. MessageId: {e.Message.MessageId}");
+                        return; // Let other command handlers process it
+                    }
+                }
+            }
+
             if (Message.StartsWith("设置模型 ") && await adminService.IsNormalAdmin(e.Message.From.Id))
             {
                 var (previous, current) = await service.SetModel(Message.Substring(5), e.Message.Chat.Id);
@@ -72,10 +94,17 @@ namespace TelegramSearchBot.Controller.AI.LLM
                 await SendMessageService.SendMessage($"模型设置成功，原模型：{previous}，现模型：{current}", e.Message.Chat.Id, e.Message.MessageId);
                 return;
             }
-            if (Message.Contains(service.BotName)) // service is OpenAIService, BotName is set on it.
+
+            // Trigger LLM if:
+            // 1. Message contains an explicit mention @BotName (and service.BotName is set)
+            // 2. Message is a reply to the bot (Env.BotId must be set)
+            bool isMentionToBot = !string.IsNullOrEmpty(service.BotName) && Message.Contains($"@{service.BotName}");
+            bool isReplyToBot = e.Message.ReplyToMessage != null && e.Message.ReplyToMessage.From != null && e.Message.ReplyToMessage.From.Id == Env.BotId;
+            
+            if (isMentionToBot || isReplyToBot)
             {
                 // TODO: Consider getting BotName in a more generic way if GeneralLLMService is to be truly general
-                // For now, this relies on OpenAIService instance's BotName being set.
+                // For now, this relies on OpenAIService instance's BotName being set for mentions.
 
                 var modelName = await service.GetModel(e.Message.Chat.Id); // Still uses OpenAIService for GetModel
                 var initialContentPlaceholder = $"{modelName}初始化中。。。";
