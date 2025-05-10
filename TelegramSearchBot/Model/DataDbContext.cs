@@ -26,6 +26,10 @@ namespace TelegramSearchBot.Model
 
             modelBuilder.Entity<ShortUrlMapping>()
                 .HasIndex(s => s.OriginalUrl); // Changed from ShortCode, removed IsUnique()
+
+            modelBuilder.Entity<TelegramFileCacheEntry>()
+                .HasIndex(e => e.CacheKey)
+                .IsUnique();
             
             // You can add other configurations here if needed
         }
@@ -38,5 +42,6 @@ namespace TelegramSearchBot.Model
         public DbSet<ChannelWithModel> ChannelsWithModel { get; set; }
         public DbSet<AppConfigurationItem> AppConfigurationItems { get; set; } // Added for BiliCookie and other app configs
         public DbSet<ShortUrlMapping> ShortUrlMappings { get; set; } = null!;
+        public DbSet<TelegramFileCacheEntry> TelegramFileCacheEntries { get; set; } = null!;
     }
 }

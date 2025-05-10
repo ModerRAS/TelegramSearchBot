@@ -1,25 +1,21 @@
 using System;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using StackExchange.Redis;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.Bilibili;
 
 public class TelegramFileCacheService : ITelegramFileCacheService
 {
-    private readonly IConnectionMultiplexer _redis;
+    private readonly DataDbContext _dbContext;
     private readonly ILogger<TelegramFileCacheService> _logger;
-    private const string FileIdCachePrefix = "telegram_file_id:";
 
-    public TelegramFileCacheService(IConnectionMultiplexer redis, ILogger<TelegramFileCacheService> logger)
+    public TelegramFileCacheService(DataDbContext dbContext, ILogger<TelegramFileCacheService> logger)
     {
-        _redis = redis;
+        _dbContext = dbContext;
         _logger = logger;
-    }
-
-    private string GetRedisKey(string cacheKey)
-    {
-        return $"{FileIdCachePrefix}{cacheKey}";
     }
 
     public async Task<string> GetCachedFileIdAsync(string cacheKey)
@@ -28,19 +24,27 @@ public class TelegramFileCacheService : ITelegramFileCacheService
 
         try
         {
-            var db = _redis.GetDatabase();
-            var redisValue = await db.StringGetAsync(GetRedisKey(cacheKey));
-            if (redisValue.HasValue)
+            var cacheEntry = await _dbContext.TelegramFileCacheEntries
+                .FirstOrDefaultAsync(e => e.CacheKey == cacheKey);
+
+            if (cacheEntry != null)
             {
+                if (cacheEntry.ExpiryDate.HasValue && cacheEntry.ExpiryDate.Value < DateTime.UtcNow)
+                {
+                    _logger.LogInformation("Cache entry for key: {CacheKey} has expired. Removing.", cacheKey);
+                    _dbContext.TelegramFileCacheEntries.Remove(cacheEntry);
+                    await _dbContext.SaveChangesAsync();
+                    return null;
+                }
                 _logger.LogDebug("Cache hit for file_id with key: {CacheKey}", cacheKey);
-                return redisValue.ToString();
+                return cacheEntry.FileId;
             }
             _logger.LogDebug("Cache miss for file_id with key: {CacheKey}", cacheKey);
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting cached file_id from Redis for key: {CacheKey}", cacheKey);
+            _logger.LogError(ex, "Error getting cached file_id from database for key: {CacheKey}", cacheKey);
             return null;
         }
     }
@@ -55,13 +59,34 @@ public class TelegramFileCacheService : ITelegramFileCacheService
 
         try
         {
-            var db = _redis.GetDatabase();
-            await db.StringSetAsync(GetRedisKey(cacheKey), fileId, expiry);
-            _logger.LogInformation("Cached file_id for key: {CacheKey} with expiry: {Expiry}", cacheKey, expiry?.ToString() ?? "None");
+            var existingEntry = await _dbContext.TelegramFileCacheEntries
+                .FirstOrDefaultAsync(e => e.CacheKey == cacheKey);
+
+            DateTime? expiryDate = expiry.HasValue ? DateTime.UtcNow.Add(expiry.Value) : null;
+
+            if (existingEntry != null)
+            {
+                existingEntry.FileId = fileId;
+                existingEntry.ExpiryDate = expiryDate;
+                _dbContext.TelegramFileCacheEntries.Update(existingEntry);
+                _logger.LogInformation("Updated cached file_id for key: {CacheKey} with expiry: {ExpiryDate}", cacheKey, expiryDate?.ToString() ?? "None");
+            }
+            else
+            {
+                var newEntry = new TelegramFileCacheEntry
+                {
+                    CacheKey = cacheKey,
+                    FileId = fileId,
+                    ExpiryDate = expiryDate
+                };
+                await _dbContext.TelegramFileCacheEntries.AddAsync(newEntry);
+                _logger.LogInformation("Cached file_id for key: {CacheKey} with expiry: {ExpiryDate}", cacheKey, expiryDate?.ToString() ?? "None");
+            }
+            await _dbContext.SaveChangesAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error caching file_id to Redis for key: {CacheKey}", cacheKey);
+            _logger.LogError(ex, "Error caching file_id to database for key: {CacheKey}", cacheKey);
         }
     }
 
@@ -71,17 +96,21 @@ public class TelegramFileCacheService : ITelegramFileCacheService
 
         try
         {
-            var db = _redis.GetDatabase();
-            var result = await db.KeyDeleteAsync(GetRedisKey(cacheKey));
-            if(result)
+            var cacheEntry = await _dbContext.TelegramFileCacheEntries
+                .FirstOrDefaultAsync(e => e.CacheKey == cacheKey);
+
+            if (cacheEntry != null)
             {
+                _dbContext.TelegramFileCacheEntries.Remove(cacheEntry);
+                await _dbContext.SaveChangesAsync();
                 _logger.LogInformation("Deleted cached file_id for key: {CacheKey}", cacheKey);
+                return true;
             }
-            return result;
+            return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting cached file_id from Redis for key: {CacheKey}", cacheKey);
+            _logger.LogError(ex, "Error deleting cached file_id from database for key: {CacheKey}", cacheKey);
             return false;
         }
     }
