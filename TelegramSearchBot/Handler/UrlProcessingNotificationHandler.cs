@@ -71,15 +71,20 @@ namespace TelegramSearchBot.Handler
                         .Select(g => g.First())
                         .ToList();
 
-                    // Find which of these OriginalUrls are already in the database
-                    var existingOriginalUrlsInDb = await _dbContext.ShortUrlMappings
-                        .Where(dbMapping => distinctNewMappingsFromMessage.Select(m => m.OriginalUrl).Contains(dbMapping.OriginalUrl))
+                    // Find OriginalUrls from the current message that ALREADY have a VALID (non-empty) ExpandedUrl in the database
+                    var originalUrlsWithValidExistingMapping = await _dbContext.ShortUrlMappings
+                        .Where(dbMapping => distinctNewMappingsFromMessage.Select(m => m.OriginalUrl).Contains(dbMapping.OriginalUrl) &&
+                                            !string.IsNullOrWhiteSpace(dbMapping.ExpandedUrl))
                         .Select(dbMapping => dbMapping.OriginalUrl)
+                        .Distinct()
                         .ToListAsync(cancellationToken);
 
-                    // Filter out mappings that already exist in the database
+                    // Save new mappings if:
+                    // 1. The new mapping itself has a valid (non-empty) ExpandedUrl.
+                    // 2. The OriginalUrl does not already have a valid (non-empty) mapping in the database.
                     var finalMappingsToSave = distinctNewMappingsFromMessage
-                        .Where(m => !existingOriginalUrlsInDb.Contains(m.OriginalUrl))
+                        .Where(m => !string.IsNullOrWhiteSpace(m.ExpandedUrl) && 
+                                     !originalUrlsWithValidExistingMapping.Contains(m.OriginalUrl))
                         .ToList();
                     
                     if (finalMappingsToSave.Any())
@@ -121,28 +126,41 @@ namespace TelegramSearchBot.Handler
                                                                 .Distinct()
                                                                 .ToList();
 
-                        // Query DB for stored mappings of these specific URLs
-                        var storedMappingsDict = await _dbContext.ShortUrlMappings
+                        // Query all potential DB mappings for the distinct URLs found in the command text.
+                        var allPotentialMappingsFromDb = await _dbContext.ShortUrlMappings
                             .Where(m => distinctOriginalUrlsInCommandText.Contains(m.OriginalUrl))
-                            .ToDictionaryAsync(m => m.OriginalUrl, m => m.ExpandedUrl, cancellationToken);
+                            .ToListAsync(cancellationToken);
+
+                        // Build a dictionary, prioritizing non-empty ExpandedUrl for each OriginalUrl.
+                        var storedMappingsDict = new Dictionary<string, string>();
+                        foreach (var group in allPotentialMappingsFromDb.GroupBy(m => m.OriginalUrl))
+                        {
+                            var bestMapping = group.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.ExpandedUrl));
+                            if (bestMapping != null)
+                            {
+                                // Only add to dictionary if a valid ExpandedUrl is found.
+                                storedMappingsDict[group.Key] = bestMapping.ExpandedUrl;
+                            }
+                        }
 
                         foreach (var liveResult in liveCommandProcessingResults)
                         {
                             if (string.IsNullOrWhiteSpace(liveResult.OriginalUrl)) continue;
 
-                            if (storedMappingsDict.TryGetValue(liveResult.OriginalUrl, out var expandedUrlFromDb))
+                            // Try to get a valid, non-empty expanded URL from our carefully constructed dictionary
+                            if (storedMappingsDict.TryGetValue(liveResult.OriginalUrl, out var expandedUrlFromDb)) 
                             {
-                                // Prefer DB result
-                                if (liveResult.OriginalUrl != expandedUrlFromDb) // Check if it's an actual expansion
+                                // expandedUrlFromDb is guaranteed to be non-null/whitespace here because of how storedMappingsDict was built.
+                                if (liveResult.OriginalUrl != expandedUrlFromDb) 
                                 {
                                    replyMessages.Add($"{liveResult.OriginalUrl}\n-> {expandedUrlFromDb} (来自数据库)");
                                 }
-                                else // Stored as "no change" or was already long
+                                else 
                                 {
                                    replyMessages.Add($"{liveResult.OriginalUrl} (无变化, 来自数据库)");
                                 }
                             }
-                            // If not in DB, use the live processing result from this command's execution
+                            // If not in DB (or all DB entries for it were invalid), use the live processing result
                             else if (!string.IsNullOrWhiteSpace(liveResult.ProcessedUrl)) 
                             {
                                 if (liveResult.OriginalUrl != liveResult.ProcessedUrl)
