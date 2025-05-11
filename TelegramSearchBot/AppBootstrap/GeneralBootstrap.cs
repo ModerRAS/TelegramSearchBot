@@ -27,6 +27,7 @@ using TelegramSearchBot.Service.Common; // FeatureToggleService
 using Tsavorite.core;
 using Orleans; // IClusterClient, IGrainFactory
 using Orleans.Streams; // For GetStreamProvider
+using Orleans.Serialization; // For UseSystemTextJson and other serialization helpers
 using Microsoft.Extensions.DependencyInjection; // GetService
 
 namespace TelegramSearchBot.AppBootstrap
@@ -39,10 +40,9 @@ namespace TelegramSearchBot.AppBootstrap
                 .UseOrleans(siloBuilder =>
                 {
                     siloBuilder.UseLocalhostClustering();
-                    // Configure application parts to find Grains and Interfaces in the current assembly
-                    // siloBuilder.ConfigureApplicationParts(parts => // Temporarily commented out
-                    //     parts.AddApplicationPart(typeof(IOcrGrain).Assembly).WithReferences()); // Temporarily commented out
-                    // siloBuilder.UseSystemTextJson(); // Use System.Text.Json for serialization // Temporarily commented out
+                    // ApplicationParts are typically discovered automatically in Orleans 7+ for grains in the entry assembly and referenced projects.
+                    // Explicit configuration via ConfigureApplicationParts is often no longer needed for simple cases.
+                    // Removed siloBuilder.UseSystemTextJson(); to use default Orleans serializer
 
                     // Optional: Add default in-memory grain storage for development
                     // siloBuilder.AddMemoryGrainStorageAsDefault(); 
@@ -214,22 +214,20 @@ namespace TelegramSearchBot.AppBootstrap
 
                                 if (streamName != null)
                                 {
-                                    // Temporarily commented out due to compilation issues with GetStreamProvider
-                                    // var streamProvider = clusterClient.GetStreamProvider("DefaultSMSProvider"); 
-                                    // var actualStream = streamProvider.GetStream<StreamMessage<Message>>(streamName, streamNamespace);
+                                    var streamProvider = clusterClient.GetStreamProvider("DefaultSMSProvider"); 
+                                    var actualStream = streamProvider.GetStream<StreamMessage<Message>>(streamName, streamNamespace);
                                     
-                                    // streamMessage = new StreamMessage<Message>(
-                                    //     payload: message,
-                                    //     originalMessageId: message.MessageId,
-                                    //     chatId: message.Chat.Id,
-                                    //     userId: message.From?.Id ?? 0, // User might be null for channel posts
-                                    //     source: $"TelegramUpdate_{message.Type}"
-                                    // );
-                                    // await actualStream.OnNextAsync(streamMessage);
-                                    // Log.Information("Message {OriginalMessageId} from chat {ChatId} published to Orleans stream {StreamNamespace}:{StreamName}", 
-                                    //     streamMessage.OriginalMessageId, streamMessage.ChatId, streamNamespace, streamName);
-                                    Log.Warning("Orleans stream publishing for MessageType {MessageType} is temporarily disabled due to compilation issues.", message.Type);
-                                    // orleansPathTaken = true; // Keep this commented if we want to ensure old pipeline runs
+                                    streamMessage = new StreamMessage<Message>(
+                                        payload: message,
+                                        originalMessageId: message.MessageId,
+                                        chatId: message.Chat.Id,
+                                        userId: message.From?.Id ?? 0, // User might be null for channel posts
+                                        source: $"TelegramUpdate_{message.Type}"
+                                    );
+                                    await actualStream.OnNextAsync(streamMessage);
+                                    Log.Information("Message {OriginalMessageId} from chat {ChatId} published to Orleans stream {StreamNamespace}:{StreamName}", 
+                                        streamMessage.OriginalMessageId, streamMessage.ChatId, streamNamespace, streamName);
+                                    orleansPathTaken = true;
                                 }
                             }
                         }
@@ -237,24 +235,22 @@ namespace TelegramSearchBot.AppBootstrap
                         {
                             if (FeatureToggleService.IsOrleansPipelineActiveForCallbackQuery())
                             {
-                                // Temporarily commented out due to compilation issues with GetStreamProvider
-                                // var callbackQuery = update.CallbackQuery;
-                                // var streamProvider = clusterClient.GetStreamProvider("DefaultSMSProvider");
-                                // var stream = streamProvider.GetStream<StreamMessage<CallbackQuery>>(
-                                //     OrleansStreamConstants.RawCallbackQueryMessagesStreamName,
-                                //     OrleansStreamConstants.RawMessagesStreamNamespace);
+                                var callbackQuery = update.CallbackQuery;
+                                var streamProvider = clusterClient.GetStreamProvider("DefaultSMSProvider");
+                                var stream = streamProvider.GetStream<StreamMessage<CallbackQuery>>(
+                                    OrleansStreamConstants.RawCallbackQueryMessagesStreamName,
+                                    OrleansStreamConstants.RawMessagesStreamNamespace);
 
-                                // var streamMessage = new StreamMessage<CallbackQuery>(
-                                //     payload: callbackQuery,
-                                //     originalMessageId: callbackQuery.Message?.MessageId ?? 0,
-                                //     chatId: callbackQuery.Message?.Chat.Id ?? 0,
-                                //     userId: callbackQuery.From.Id,
-                                //     source: "TelegramUpdate_CallbackQuery"
-                                // );
-                                // await stream.OnNextAsync(streamMessage);
-                                // Log.Information("CallbackQuery {CallbackQueryId} from user {UserId} published to Orleans stream", callbackQuery.Id, streamMessage.UserId);
-                                Log.Warning("Orleans stream publishing for CallbackQuery is temporarily disabled due to compilation issues.");
-                                // orleansPathTaken = true; // Keep this commented if we want to ensure old pipeline runs
+                                var streamMessage = new StreamMessage<CallbackQuery>(
+                                    payload: callbackQuery,
+                                    originalMessageId: callbackQuery.Message?.MessageId ?? 0,
+                                    chatId: callbackQuery.Message?.Chat.Id ?? 0,
+                                    userId: callbackQuery.From.Id,
+                                    source: "TelegramUpdate_CallbackQuery"
+                                );
+                                await stream.OnNextAsync(streamMessage);
+                                Log.Information("CallbackQuery {CallbackQueryId} from user {UserId} published to Orleans stream", callbackQuery.Id, streamMessage.UserId);
+                                orleansPathTaken = true;
                             }
                         }
 
