@@ -352,3 +352,5 @@ MigrationBackup/
 tessdata/
 /TelegramSearchBot/Properties/launchSettings.json
 /TelegramSearchBot.Agent.PaddleOCR/Properties/launchSettings.json
+
+example/
