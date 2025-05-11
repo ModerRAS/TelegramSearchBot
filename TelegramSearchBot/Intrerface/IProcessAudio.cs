@@ -12,7 +12,9 @@ using TelegramSearchBot.Exceptions;
 using File = System.IO.File;
 
 namespace TelegramSearchBot.Intrerface {
+    [Obsolete("Use IAudioProcessingService and AudioProcessingService instead.")]
     public interface IProcessAudio {
+        [Obsolete("Use IAudioProcessingService.IsAudio instead.")]
         public static bool IsAudio(string Name) {
             if (string.IsNullOrEmpty(Name)) {
                 return false;
@@ -32,6 +34,7 @@ namespace TelegramSearchBot.Intrerface {
                 return false;
             }
         }
+        [Obsolete("Use IAudioProcessingService.ConvertToWavAsync instead.")]
         public async static Task<byte[]> ConvertToWav(string path) {
             using var outputStream = new MemoryStream();
             await FFMpegArguments
@@ -50,6 +53,7 @@ namespace TelegramSearchBot.Intrerface {
             return outputStream.ToArray();
         }
 
+        [Obsolete("Use IAudioProcessingService.ConvertToWavAsync instead.")]
         public async static Task<byte[]> ConvertToWav(byte[] source) {
             using var inputStream = new MemoryStream();
             using var outputStream = new MemoryStream();
@@ -70,6 +74,7 @@ namespace TelegramSearchBot.Intrerface {
             // Write the image to the memorystream
             return outputStream.ToArray();
         }
+        [Obsolete("Use IAudioProcessingService.GetAudioPath instead.")]
         public static string GetAudioPath(Update e) {
             try {
                 var DirPath = Path.Combine(Env.WorkDir, "Audios", $"{e.Message.Chat.Id}");
@@ -83,11 +88,13 @@ namespace TelegramSearchBot.Intrerface {
                 throw new CannotGetAudioException();
             }
         }
+        [Obsolete("Use IAudioProcessingService.GetAudioAsync instead.")]
         public static async Task<byte[]> GetAudio(Update e) {
             var FilePath = GetAudioPath(e);
             return await File.ReadAllBytesAsync(FilePath);
 
         }
+        [Obsolete("Use IAudioProcessingService.DownloadAudioAsync instead.")]
         public static async Task<(string, byte[])> DownloadAudio(ITelegramBotClient botClient, Update e) {
             string FileId = string.Empty;
             string FileName = string.Empty;

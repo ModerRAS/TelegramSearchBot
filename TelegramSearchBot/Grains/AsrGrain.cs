@@ -8,11 +8,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Interfaces; // For IAsrGrain, ITelegramMessageSenderGrain
+using TelegramSearchBot.Interfaces; // For IAsrGrain, ITelegramMessageSenderGrain, IAudioProcessingService
 using TelegramSearchBot.Manager;  // For WhisperManager
 using TelegramSearchBot.Model;    // For StreamMessage, OrleansStreamConstants
-using TelegramSearchBot.Intrerface; // For IProcessAudio (ध्यान दें: "Intrerface" वर्तनी)
-// For now, assuming static methods on IProcessAudio can be called.
+// Removed: using TelegramSearchBot.Intrerface; 
 
 namespace TelegramSearchBot.Grains
 {
@@ -20,16 +19,18 @@ namespace TelegramSearchBot.Grains
     {
         private readonly ITelegramBotClient _botClient;
         private readonly WhisperManager _whisperManager;
+        private readonly IAudioProcessingService _audioProcessingService;
         private readonly ILogger _logger;
         private readonly IGrainFactory _grainFactory;
 
         private IAsyncStream<StreamMessage<Message>> _rawAudioStream;
         private IAsyncStream<StreamMessage<string>> _textContentStream;
 
-        public AsrGrain(ITelegramBotClient botClient, WhisperManager whisperManager, IGrainFactory grainFactory)
+        public AsrGrain(ITelegramBotClient botClient, WhisperManager whisperManager, IAudioProcessingService audioProcessingService, IGrainFactory grainFactory)
         {
             _botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
             _whisperManager = whisperManager ?? throw new ArgumentNullException(nameof(whisperManager));
+            _audioProcessingService = audioProcessingService ?? throw new ArgumentNullException(nameof(audioProcessingService));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
             _logger = Log.ForContext<AsrGrain>();
         }
@@ -73,7 +74,7 @@ namespace TelegramSearchBot.Grains
 
             try
             {
-                var fileInfo = await _botClient.GetFile(fileId);
+                var fileInfo = await _botClient.GetFileAsync(fileId); // Ensure GetFileAsync is used
                 if (fileInfo.FilePath == null)
                 {
                     _logger.Error("Unable to get file path for FileId {FileId} from Telegram for ASR.", fileId);
@@ -91,8 +92,8 @@ namespace TelegramSearchBot.Grains
                 }
                 _logger.Information("Audio downloaded to {TempFilePath} for ASR.", tempFilePath);
 
-                // Convert to WAV
-                byte[] wavBytes = await IProcessAudio.ConvertToWav(tempFilePath); // Using static method from IProcessAudio
+                // Convert to WAV using the injected service
+                byte[] wavBytes = await _audioProcessingService.ConvertToWavAsync(tempFilePath);
                 
                 using (var memoryStream = new MemoryStream(wavBytes))
                 {
