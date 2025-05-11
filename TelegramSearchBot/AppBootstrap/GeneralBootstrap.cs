@@ -62,6 +62,7 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
+                    service.AddSingleton<QRManager>(); // Register QRManager
                     service.AddHttpClient("BiliApiClient"); // Named HttpClient for BiliApiService
                     service.AddHttpClient(); // Default HttpClient if still needed elsewhere
                     service.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<GeneralBootstrap>());
