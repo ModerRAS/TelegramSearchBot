@@ -41,8 +41,9 @@ namespace TelegramSearchBot.Grains
                 await _botClient.SendTextMessageAsync(
                     chatId: message.ChatId,
                     text: message.Text,
-                    replyParameters: replyParams
-                    // Consider adding ParseMode, disableWebPagePreview, ReplyMarkup etc. 
+                    replyParameters: replyParams,
+                    replyMarkup: message.ReplyMarkup // Added ReplyMarkup
+                    // Consider adding ParseMode, disableWebPagePreview etc. 
                     // from message object if they are added to TelegramMessageToSend
                 );
                 _logger.Information("Message successfully sent to ChatId {ChatId}", message.ChatId);

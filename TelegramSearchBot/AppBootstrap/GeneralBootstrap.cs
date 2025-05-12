@@ -87,6 +87,9 @@ namespace TelegramSearchBot.AppBootstrap
 
                     // Register AudioProcessingService
                     service.AddTransient<IAudioProcessingService, Service.Media.AudioProcessingService>();
+
+                    // Manually register SearchService and its interface (from TelegramSearchBot.Intrerface)
+                    service.AddTransient<TelegramSearchBot.Intrerface.ISearchService, TelegramSearchBot.Service.Search.SearchService>();
                 });
         public static void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");

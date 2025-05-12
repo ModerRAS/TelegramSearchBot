@@ -1,5 +1,6 @@
 using Orleans;
 using System.Threading.Tasks;
+using Telegram.Bot.Types.ReplyMarkups; // Added for IReplyMarkup
 
 namespace TelegramSearchBot.Interfaces
 {
@@ -9,7 +10,8 @@ namespace TelegramSearchBot.Interfaces
         public long ChatId { get; set; }
         public string Text { get; set; }
         public int? ReplyToMessageId { get; set; }
-        // Add other properties like ParseMode, InlineKeyboardMarkup etc. as needed
+        public IReplyMarkup ReplyMarkup { get; set; } // Added for Inline Keyboards etc.
+        // Add other properties like ParseMode etc. as needed
     }
 
     /// <summary>
