@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent; // Added for ConcurrentDictionary
+using TelegramSearchBot.Model; // Added for ToolContext
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
@@ -347,7 +348,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        public static async Task<object> ExecuteRegisteredToolAsync(string toolName, Dictionary<string, string> stringArguments)
+        public static async Task<object> ExecuteRegisteredToolAsync(string toolName, Dictionary<string, string> stringArguments, ToolContext toolContext = null)
         {
             if (!ToolRegistry.TryGetValue(toolName, out var toolInfo))
             {
@@ -362,6 +363,12 @@ namespace TelegramSearchBot.Service.AI.LLM
             for (int i = 0; i < methodParams.Length; i++)
             {
                 var paramInfo = methodParams[i];
+                if (paramInfo.ParameterType == typeof(ToolContext))
+                {
+                    convertedArgs[i] = toolContext;
+                    continue;
+                }
+                
                 if (stringArguments.TryGetValue(paramInfo.Name, out var stringValue))
                 {
                     convertedArgs[i] = ConvertArgumentValue(stringValue, paramInfo.ParameterType, paramInfo.Name);

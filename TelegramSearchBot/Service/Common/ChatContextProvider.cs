@@ -3,6 +3,7 @@ using System; // For InvalidOperationException
 
 namespace TelegramSearchBot.Service.Common
 {
+    [Obsolete("ChatContextProvider is deprecated. Use ToolContext instead for passing ChatId to tools.")]
     public static class ChatContextProvider
     {
         private static readonly AsyncLocal<long?> _currentChatId = new AsyncLocal<long?>();

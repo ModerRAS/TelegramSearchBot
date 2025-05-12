@@ -121,7 +121,6 @@ namespace TelegramSearchBot.Service.AI.LLM
 
             var chat = new OllamaSharp.Chat(ollama, systemPrompt);
 
-            ChatContextProvider.SetCurrentChatId(ChatId); 
             try
             {
                 string nextMessageToSend = message.Content; 
@@ -167,7 +166,8 @@ namespace TelegramSearchBot.Service.AI.LLM
                         bool isError = false;
                         try
                         {
-                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments);
+                            var toolContext = new ToolContext { ChatId = ChatId };
+                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
                             toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject); 
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         }
@@ -200,7 +200,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
             finally
             {
-                ChatContextProvider.Clear(); 
+                // No cleanup needed for ToolContext
             }
         }
 
