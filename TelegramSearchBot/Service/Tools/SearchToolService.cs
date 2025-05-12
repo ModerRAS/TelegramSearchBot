@@ -2,7 +2,6 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model; // For DataDbContext
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM; // For McpTool attributes
-using TelegramSearchBot.Service.Common; // For ChatContextProvider
 using System.Collections.Generic;
 using System.Linq;
 using System;
@@ -51,31 +50,27 @@ namespace TelegramSearchBot.Service.Tools
         public long? ReplyToMessageId { get; set; } // Made nullable
     }
 
-
     public class SearchToolService : IService
     {
         public string ServiceName => "SearchToolService";
 
         private readonly LuceneManager _luceneManager;
-        private readonly DataDbContext _dbContext; // Added DbContext dependency
-        // Optional: Inject ILogger<SearchToolService> if you need logging within this service
-        // private readonly ILogger<SearchToolService> _logger; 
+        private readonly DataDbContext _dbContext;
 
-        public SearchToolService(LuceneManager luceneManager, DataDbContext dbContext /*, ILogger<SearchToolService> logger */)
+        public SearchToolService(LuceneManager luceneManager, DataDbContext dbContext)
         {
             _luceneManager = luceneManager;
-            _dbContext = dbContext; // Store injected DbContext
-            // _logger = logger;
+            _dbContext = dbContext;
         }
 
-        // --- Existing Lucene Search Tool ---
         [McpTool("Searches indexed messages within the current chat using keywords. Supports pagination.")]
         public SearchToolResult SearchMessagesInCurrentChat(
             [McpParameter("The text query (keywords) to search for messages.")] string query,
+            ToolContext toolContext,
             [McpParameter("The page number for pagination (e.g., 1, 2, 3...). Defaults to 1 if not specified.", IsRequired = false)] int page = 1,
             [McpParameter("The number of search results per page (e.g., 5, 10). Defaults to 5, with a maximum of 20.", IsRequired = false)] int pageSize = 5)
         {
-            long chatId = ChatContextProvider.GetCurrentChatId(); 
+            long chatId = toolContext.ChatId;
 
             if (pageSize > 20) pageSize = 20; 
             if (pageSize <= 0) pageSize = 5;
@@ -107,9 +102,9 @@ namespace TelegramSearchBot.Service.Tools
             return new SearchToolResult { Query = query, TotalFound = searchResult.totalHits, CurrentPage = page, PageSize = pageSize, Results = resultItems, Note = searchResult.totalHits == 0 ? "No messages found matching your query." : null };
         }
 
-        // --- New History Query Tool ---
         [McpTool("Queries the message history database for the current chat with various filters (text, sender, date). Supports pagination.")]
         public async Task<HistoryQueryResult> QueryMessageHistory(
+            ToolContext toolContext,
             [McpParameter("Optional text to search within message content.", IsRequired = false)] string queryText = null,
             [McpParameter("Optional Telegram User ID of the sender.", IsRequired = false)] long? senderUserId = null,
             [McpParameter("Optional hint for sender's first or last name (case-insensitive search).", IsRequired = false)] string senderNameHint = null,
@@ -118,7 +113,7 @@ namespace TelegramSearchBot.Service.Tools
             [McpParameter("The page number for pagination (e.g., 1, 2, 3...). Defaults to 1.", IsRequired = false)] int page = 1,
             [McpParameter("The number of results per page (e.g., 10, 25). Defaults to 10, max 50.", IsRequired = false)] int pageSize = 10)
         {
-            long chatId = ChatContextProvider.GetCurrentChatId();
+            long chatId = toolContext.ChatId;
 
             if (pageSize > 50) pageSize = 50;
             if (pageSize <= 0) pageSize = 10;
@@ -136,7 +131,6 @@ namespace TelegramSearchBot.Service.Tools
                 startDateTime = parsedStart.ToUniversalTime();
             } else if (!string.IsNullOrWhiteSpace(startDate)) {
                  note = "Invalid start date format. Please use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.";
-                 // Optionally return early or just ignore the filter
             }
 
              if (!string.IsNullOrWhiteSpace(endDate) && DateTime.TryParse(endDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsedEnd))
@@ -144,16 +138,13 @@ namespace TelegramSearchBot.Service.Tools
                 endDateTime = parsedEnd.ToUniversalTime();
             } else if (!string.IsNullOrWhiteSpace(endDate)) {
                  note = (note ?? "") + " Invalid end date format. Please use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.";
-                 // Optionally return early or just ignore the filter
             }
-
 
             try
             {
                 var query = _dbContext.Messages.AsNoTracking()
                                      .Where(m => m.GroupId == chatId);
 
-                // Apply filters
                 if (!string.IsNullOrWhiteSpace(queryText))
                 {
                     query = query.Where(m => m.Content != null && m.Content.Contains(queryText));
@@ -165,15 +156,12 @@ namespace TelegramSearchBot.Service.Tools
                 }
                 else if (!string.IsNullOrWhiteSpace(senderNameHint))
                 {
-                    // Find user IDs matching the name hint using client-side evaluation for case-insensitive contains
                     var lowerHint = senderNameHint.ToLowerInvariant();
                     
-                    // Fetch minimal data needed for filtering
                     var potentialUsers = await _dbContext.UserData
                         .Select(u => new { u.Id, u.FirstName, u.LastName }) 
-                        .ToListAsync(); // Evaluate on client to allow ToLowerInvariant/Contains
+                        .ToListAsync();
 
-                    // Filter in memory
                     var matchingUserIds = potentialUsers
                         .Where(u => (u.FirstName != null && u.FirstName.ToLowerInvariant().Contains(lowerHint)) || 
                                     (u.LastName != null && u.LastName.ToLowerInvariant().Contains(lowerHint)))
@@ -187,7 +175,6 @@ namespace TelegramSearchBot.Service.Tools
                     }
                     else
                     {
-                        // No users found matching hint, so no messages can match
                         query = query.Where(m => false); 
                     }
                 }
@@ -202,34 +189,30 @@ namespace TelegramSearchBot.Service.Tools
                     query = query.Where(m => m.DateTime < endDateTime.Value);
                 }
 
-                // Get total count before pagination
                 int totalHits = await query.CountAsync();
 
-                // Apply ordering and pagination (without Include)
                 var messages = await query.OrderByDescending(m => m.DateTime)
                                         .Skip(skip)
                                         .Take(take)
                                         .ToListAsync();
 
-                // Get sender info separately
                 var senderIds = messages.Select(m => m.FromUserId).Distinct().ToList();
                 var senders = new Dictionary<long, UserData>(); 
-                if (senderIds.Any()) // Only query if there are sender IDs
+                if (senderIds.Any())
                 {
                      senders = await _dbContext.UserData
                                          .Where(u => senderIds.Contains(u.Id))
                                          .ToDictionaryAsync(u => u.Id); 
                 }
 
-                // Map to DTO, using the fetched sender info
                 var resultItems = messages.Select(msg => new HistoryMessageItem
                 {
                     MessageId = msg.MessageId,
-                    Content = msg.Content, // Return full content for history query
+                    Content = msg.Content,
                     SenderUserId = msg.FromUserId,
-                    SenderName = senders.TryGetValue(msg.FromUserId, out var user) ? $"{user.FirstName} {user.LastName}".Trim() : $"User({msg.FromUserId})", // Lookup sender name
+                    SenderName = senders.TryGetValue(msg.FromUserId, out var user) ? $"{user.FirstName} {user.LastName}".Trim() : $"User({msg.FromUserId})",
                     DateTime = msg.DateTime,
-                    ReplyToMessageId = msg.ReplyToMessageId == 0 ? (long?)null : msg.ReplyToMessageId // Handle 0 as null
+                    ReplyToMessageId = msg.ReplyToMessageId == 0 ? (long?)null : msg.ReplyToMessageId
                 }).ToList();
 
                 return new HistoryQueryResult
@@ -243,7 +226,6 @@ namespace TelegramSearchBot.Service.Tools
             }
             catch (Exception ex)
             {
-                // _logger?.LogError(ex, "Error querying message history for chat {ChatId}", chatId);
                 return new HistoryQueryResult
                 {
                     TotalFound = 0,

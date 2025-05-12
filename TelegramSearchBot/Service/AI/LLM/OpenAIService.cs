@@ -167,7 +167,6 @@ namespace TelegramSearchBot.Service.AI.LLM
              var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(channel.Gateway) };
              var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
 
-            ChatContextProvider.SetCurrentChatId(ChatId); 
             try
             {
                 int maxToolCycles = 5;
@@ -222,7 +221,8 @@ namespace TelegramSearchBot.Service.AI.LLM
                         bool isError = false;
                         try
                         {
-                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments);
+                            var toolContext = new ToolContext { ChatId = ChatId };
+                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
                             toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject); // Use McpToolHelper
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         }
@@ -258,7 +258,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
             finally
             {
-                ChatContextProvider.Clear(); 
+                // No cleanup needed for ToolContext
             }
         }
 
