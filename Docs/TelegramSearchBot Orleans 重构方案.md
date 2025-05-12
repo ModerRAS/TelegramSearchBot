@@ -114,10 +114,28 @@ __Phase 1: 核心 Grain 实现 (可并行分配给不同开发者/小组)__
 
   - __接口__: `ICallbackQueryHandlerGrain`
   - __消费 Stream__: `RawCallbackQueryMessages`
-  - __职责__: 处理来自 Telegram Inline Keyboard 的回调查询。
-  - __输出__: 通过 `ITelegramMessageSenderGrain` 更新消息、发送新消息或通知。
+  - __职责__: 处理来自 Telegram Inline Keyboard 的回调查询。它会解析回调数据，识别目标 Grain (例如 `SearchQueryGrain` 的特定实例) 和操作，然后调用该 Grain 的相应方法。
+  - __输出__: 通过 `ITelegramMessageSenderGrain` 更新消息、发送新消息或通知（通常由被调用的目标 Grain 负责，此 Handler 主要做路由）。
 
-- __(其他 Grains)__: 根据项目具体功能，继续添加和分配其他 Grain 的实现任务 (e.g., `SearchQueryGrain`, `ShortUrlResolutionGrain`)。
+- __Task 1.10: `SearchQueryGrain` 实现__
+  - __接口__: `ISearchQueryGrain` (需在 Task 0.1 中定义)
+  - __激活方式__: 通常由 `CommandParsingGrain` 在解析到搜索命令 (如 "搜索 <关键词>") 后，根据用户ID/聊天ID和搜索关键词组合激活或获取一个 `SearchQueryGrain` 实例。
+  - __职责__:
+    1.  接收搜索请求（包含查询关键词、初始分页参数等）。
+    2.  调用 `ISearchService` (封装了 `LuceneManager` 的逻辑) 执行搜索。
+    3.  **状态管理**: 在 Grain 内部持久化当前搜索会话的状态，包括原始查询、当前页码、每页数量、总结果数等。这将替代 `SearchNextPageController` 中使用的 LiteDB 缓存。
+    4.  格式化搜索结果，并生成包含分页按钮（如“上一页”、“下一页”、“跳转页码”、“关闭搜索”）的 Telegram Inline Keyboard。按钮的 CallbackData 需要包含足够的信息以路由回此 Grain 的特定实例及相应的操作 (e.g., `searchgrain:<grainId>:next_page`, `searchgrain:<grainId>:page:3`, `searchgrain:<grainId>:cancel`)。
+    5.  通过 `ITelegramMessageSenderGrain` 发送包含结果和分页按钮的消息。
+    6.  实现处理分页回调的方法 (e.g., `HandleNextPageAsync()`, `HandlePreviousPageAsync()`, `HandleGoToPageAsync(int pageNumber)`, `HandleCancelSearchAsync()`)。这些方法会:
+        *   由 `CallbackQueryHandlerGrain` 根据解析的 CallbackData 调用。
+        *   更新 Grain 内部的搜索状态（如页码）。
+        *   重新调用 `ISearchService` 获取新页面的数据。
+        *   通过 `ITelegramMessageSenderGrain` 编辑原消息或发送新消息以展示新一页的结果和更新后的分页按钮。
+        *   处理旧消息的删除（例如，编辑消息以移除旧按钮，或删除旧消息再发送新消息）。
+  - __依赖__: `ISearchService`, `ITelegramMessageSenderGrain`.
+  - __替换逻辑**: `SearchController.cs` (用于发起搜索) 和 `SearchNextPageController.cs` (用于处理分页回调和状态管理)。
+
+- __(其他 Grains)__: 根据项目具体功能，继续添加和分配其他 Grain 的实现任务 (e.g., `ShortUrlResolutionGrain`)。
 
 ---
 
