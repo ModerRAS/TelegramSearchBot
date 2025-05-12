@@ -2,27 +2,49 @@ using Orleans;
 using Orleans.Streams;
 using Serilog;
 using System;
-using System.Collections.Generic; // For List<T>
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Telegram.Bot;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Interfaces;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Model;    // For StreamMessage, OrleansStreamConstants
 using TelegramSearchBot.Service.AI.LLM; // For GeneralLLMService
+using TelegramSearchBot.Service.BotAPI; // For SendMessageService
+using TelegramSearchBot.Service.Storage; // For MessageService
 
 namespace TelegramSearchBot.Grains
 {
-    public class LlmProcessingGrain : Grain, ILlmProcessingGrain, IAsyncObserver<StreamMessage<string>>
+    public class LlmProcessingGrain : Grain, ILlmProcessingGrain, IAsyncObserver<StreamMessage<Message>>
     {
-        private readonly GeneralLLMService _llmService;
+        private readonly GeneralLLMService _generalLlmService;
+        private readonly SendMessageService _sendMessageService;
+        private readonly MessageService _messageService;
+        private readonly ITelegramBotClient _botClient;
         private readonly ILogger _logger;
-        private readonly IGrainFactory _grainFactory;
+        private readonly IGrainFactory _grainFactory; // To get ITelegramMessageSenderGrain for simple error messages
 
-        private IAsyncStream<StreamMessage<string>> _textContentStreamSubscription;
-        private const string LlmCommandPrefix = "/ask "; // Example command prefix
+        private IAsyncStream<StreamMessage<Message>> _llmTriggerStreamSubscription;
+        
+        // These would ideally come from a configuration service or be initialized at startup
+        private long _botId;
+        private string _botUsername;
 
-        public LlmProcessingGrain(GeneralLLMService llmService, IGrainFactory grainFactory)
+
+        public LlmProcessingGrain(
+            GeneralLLMService generalLlmService,
+            SendMessageService sendMessageService, // Assuming this can be injected
+            MessageService messageService,         // Assuming this can be injected
+            ITelegramBotClient botClient,
+            IGrainFactory grainFactory)
         {
-            _llmService = llmService ?? throw new ArgumentNullException(nameof(llmService));
+            _generalLlmService = generalLlmService ?? throw new ArgumentNullException(nameof(generalLlmService));
+            _sendMessageService = sendMessageService ?? throw new ArgumentNullException(nameof(sendMessageService));
+            _messageService = messageService ?? throw new ArgumentNullException(nameof(messageService));
+            _botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
             _logger = Log.ForContext<LlmProcessingGrain>();
         }
@@ -31,99 +53,147 @@ namespace TelegramSearchBot.Grains
         {
             _logger.Information("LlmProcessingGrain {GrainId} activated.", this.GetGrainId());
 
+            try
+            {
+                var me = await _botClient.GetMeAsync(cancellationToken);
+                _botId = me.Id;
+                _botUsername = me.Username;
+                _logger.Information("LlmProcessingGrain: Bot ID {BotId}, Username {BotUsername} fetched.", _botId, _botUsername);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "LlmProcessingGrain: Failed to get bot info on activation.");
+                // Depending on requirements, might prevent subscription or allow graceful degradation
+            }
+            
             var streamProvider = this.GetStreamProvider("DefaultSMSProvider");
 
-            _textContentStreamSubscription = streamProvider.GetStream<StreamMessage<string>>(
-                OrleansStreamConstants.TextContentToProcessStreamName,
-                OrleansStreamConstants.TextContentStreamNamespace);
-            await _textContentStreamSubscription.SubscribeAsync(this);
+            // Subscribe to the new stream for LLM triggers
+            // Assuming OrleansStreamConstants.LlmInteractionTriggerStreamName and OrleansStreamConstants.LlmStreamNamespace are defined
+            _llmTriggerStreamSubscription = streamProvider.GetStream<StreamMessage<Message>>(
+                OrleansStreamConstants.LlmInteractionTriggerStreamName, // Placeholder name
+                OrleansStreamConstants.LlmStreamNamespace);             // Placeholder name
+            
+            await _llmTriggerStreamSubscription.SubscribeAsync(this);
 
             await base.OnActivateAsync(cancellationToken);
         }
 
-        public async Task OnNextAsync(StreamMessage<string> streamMessage, StreamSequenceToken token = null)
+        public async Task OnNextAsync(StreamMessage<Message> streamMessage, StreamSequenceToken token = null)
         {
-            var textContent = streamMessage.Payload;
-            if (string.IsNullOrWhiteSpace(textContent))
+            var originalMessage = streamMessage.Payload;
+            if (originalMessage == null) return;
+
+            if (_botId == 0 || string.IsNullOrEmpty(_botUsername))
             {
-                // _logger.Verbose("LlmProcessingGrain received empty or null text content. OriginalMessageId: {OriginalMessageId}", streamMessage.OriginalMessageId);
-                return; // Ignore empty content
+                _logger.Warning("LlmProcessingGrain: Bot ID or Username not initialized. Cannot process LLM trigger for MessageId: {MessageId}", originalMessage.MessageId);
+                // Attempt to re-fetch bot info, or fail gracefully
+                try {
+                    var me = await _botClient.GetMeAsync();
+                    _botId = me.Id;
+                    _botUsername = me.Username;
+                    if (_botId == 0 || string.IsNullOrEmpty(_botUsername)) throw new Exception("Still couldn't get bot info.");
+                } catch (Exception ex) {
+                    _logger.Error(ex, "LlmProcessingGrain: Critical - failed to get bot info during message processing.");
+                    return;
+                }
             }
 
-            // Check for trigger condition (e.g., command prefix)
-            if (!textContent.StartsWith(LlmCommandPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                // _logger.Verbose("LlmProcessingGrain: Text content from OriginalMessageId {OriginalMessageId} did not match LLM trigger.", streamMessage.OriginalMessageId);
-                return; // Not an LLM command
-            }
-
-            string prompt = textContent.Substring(LlmCommandPrefix.Length).Trim();
+            string prompt = originalMessage.Text ?? originalMessage.Caption;
             if (string.IsNullOrWhiteSpace(prompt))
             {
-                _logger.Information("LlmProcessingGrain: Empty prompt after removing prefix from OriginalMessageId {OriginalMessageId}", streamMessage.OriginalMessageId);
-                // Optionally send a "Please provide a prompt" message
+                _logger.Information("LlmProcessingGrain: Empty text/caption for LLM processing. MessageId: {MessageId}", originalMessage.MessageId);
                 return;
             }
 
-            _logger.Information("LlmProcessingGrain received LLM prompt: \"{Prompt}\" from OriginalMessageId: {OriginalMessageId}", prompt, streamMessage.OriginalMessageId);
+            // Clean prompt if it's a mention
+            if (originalMessage.Entities != null && originalMessage.Entities.Any(e => e.Type == MessageEntityType.Mention))
+            {
+                if (prompt.Contains($"@{_botUsername}"))
+                {
+                    prompt = prompt.Replace($"@{_botUsername}", "").Trim();
+                }
+            }
+            
+            // If after cleaning, prompt is empty (e.g., message was just "@BotName"), ignore or send help.
+            if (string.IsNullOrWhiteSpace(prompt))
+            {
+                _logger.Information("LlmProcessingGrain: Prompt became empty after cleaning mention. MessageId: {MessageId}", originalMessage.MessageId);
+                // Optionally, send a "how can I help?" message
+                return;
+            }
 
-            var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
+            _logger.Information("LlmProcessingGrain received LLM prompt: \"{Prompt}\" from OriginalMessageId: {OriginalMessageId}, ChatId: {ChatId}", 
+                prompt, originalMessage.MessageId, originalMessage.Chat.Id);
+
+            var senderGrainOnError = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
 
             try
             {
-                // Construct a Model.Data.Message object for GeneralLLMService
-                var llmInputMessage = new TelegramSearchBot.Model.Data.Message
+                var llmInputMessage = new TelegramSearchBot.Model.Data.Message // This is our DB model
                 {
-                    // Assuming Model.Data.Message has these properties.
-                    // We might need to fetch the full original Telegram.Bot.Types.Message 
-                    // from a storage service using streamMessage.OriginalMessageId if more fields are needed.
-                // For now, using available info.
-                MessageId = streamMessage.OriginalMessageId,
-                GroupId = streamMessage.ChatId, // Changed ChatId to GroupId
-                FromUserId = streamMessage.UserId, // Changed FromId to FromUserId
-                DateTime = streamMessage.Timestamp, // Changed Date to DateTime
-                Content = prompt, // Changed Text to Content
-                // Other fields like Type, MediaGroupId etc., would be null or default if not directly available
-                // from the StreamMessage<string> which only carries processed text.
-            };
+                    Content = prompt,
+                    DateTime = originalMessage.Date.ToUniversalTime(), // Ensure UTC DateTime
+                    FromUserId = originalMessage.From.Id,
+                    GroupId = originalMessage.Chat.Id,
+                    MessageId = originalMessage.MessageId, 
+                    ReplyToMessageId = originalMessage.ReplyToMessage?.MessageId ?? 0,
+                    Id = -1, // DB will assign
+                };
+                
+                // Store the user's prompt message
+                await _messageService.ExecuteAsync(new MessageOption
+                {
+                    Chat = originalMessage.Chat,
+                    ChatId = llmInputMessage.GroupId,
+                    Content = llmInputMessage.Content,
+                    DateTime = llmInputMessage.DateTime,
+                    MessageId = llmInputMessage.MessageId,
+                    User = originalMessage.From,
+                    ReplyTo = llmInputMessage.ReplyToMessageId,
+                    UserId = llmInputMessage.FromUserId,
+                });
 
-            var responseParts = new List<string>();
-            // Pass the CancellationToken from OnActivateAsync or a new one if appropriate
-            await foreach (var part in _llmService.ExecAsync(llmInputMessage, streamMessage.ChatId, CancellationToken.None).WithCancellation(CancellationToken.None))
-            {
-                responseParts.Add(part);
-            }
-            string llmResponse = string.Join("", responseParts);
+                var initialContentPlaceholder = "思考中..."; // Temporarily using a generic placeholder
 
-            if (!string.IsNullOrWhiteSpace(llmResponse))
+                IAsyncEnumerable<string> fullMessageStream = _generalLlmService.ExecAsync(llmInputMessage, originalMessage.Chat.Id, CancellationToken.None);
+
+                List<TelegramSearchBot.Model.Data.Message> sentBotMessages = await _sendMessageService.SendFullMessageStream(
+                    fullMessageStream,
+                    originalMessage.Chat.Id,
+                    originalMessage.MessageId, 
+                    initialContentPlaceholder,
+                    CancellationToken.None
+                );
+
+                // Store the bot's responses
+                var botUser = await _botClient.GetMeAsync(); // Get bot's User object for MessageOption
+                foreach (var botMsg in sentBotMessages)
                 {
-                    await senderGrain.SendMessageAsync(new TelegramMessageToSend
+                    // botMsg is already Model.Data.Message, correctly populated by SendFullMessageStream
+                    await _messageService.ExecuteAsync(new MessageOption
                     {
-                        ChatId = streamMessage.ChatId,
-                        Text = llmResponse,
-                        ReplyToMessageId = (int)streamMessage.OriginalMessageId
-                    });
-                    _logger.Information("LLM response sent for OriginalMessageId: {OriginalMessageId}", streamMessage.OriginalMessageId);
-                }
-                else
-                {
-                    _logger.Warning("LLM returned empty or null response for prompt: \"{Prompt}\", OriginalMessageId: {OriginalMessageId}", prompt, streamMessage.OriginalMessageId);
-                    await senderGrain.SendMessageAsync(new TelegramMessageToSend
-                    {
-                        ChatId = streamMessage.ChatId,
-                        Text = "抱歉，我无法处理您的请求或模型没有返回内容。",
-                        ReplyToMessageId = (int)streamMessage.OriginalMessageId
+                        ChatId = botMsg.GroupId,
+                        Content = botMsg.Content,
+                        DateTime = botMsg.DateTime,
+                        MessageId = botMsg.MessageId,
+                        User = botUser, // Use the bot's User object
+                        ReplyTo = botMsg.ReplyToMessageId,
+                        UserId = botMsg.FromUserId, // This is bot's ID
+                        Chat = originalMessage.Chat // Use original chat context for consistency if needed
                     });
                 }
+                _logger.Information("LLM response stream processed and stored for OriginalMessageId: {OriginalMessageId}", originalMessage.MessageId);
+
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error during LLM processing for prompt: \"{Prompt}\", OriginalMessageId: {OriginalMessageId}", prompt, streamMessage.OriginalMessageId);
-                await senderGrain.SendMessageAsync(new TelegramMessageToSend
+                _logger.Error(ex, "Error during LLM processing for prompt: \"{Prompt}\", OriginalMessageId: {OriginalMessageId}", prompt, originalMessage.MessageId);
+                await senderGrainOnError.SendMessageAsync(new TelegramMessageToSend
                 {
-                    ChatId = streamMessage.ChatId,
-                    Text = $"调用AI模型时出错: {ex.Message}",
-                    ReplyToMessageId = (int)streamMessage.OriginalMessageId
+                    ChatId = originalMessage.Chat.Id,
+                    Text = $"与AI助手交流时出错: {ex.Message}",
+                    ReplyToMessageId = originalMessage.MessageId
                 });
             }
         }
@@ -143,9 +213,9 @@ namespace TelegramSearchBot.Grains
         public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
             _logger.Information("LlmProcessingGrain {GrainId} deactivating. Reason: {Reason}", this.GetGrainId(), reason);
-            if (_textContentStreamSubscription != null)
+            if (_llmTriggerStreamSubscription != null)
             {
-                var subscriptions = await _textContentStreamSubscription.GetAllSubscriptionHandles();
+                var subscriptions = await _llmTriggerStreamSubscription.GetAllSubscriptionHandles();
                 foreach (var sub in subscriptions)
                 {
                     await sub.UnsubscribeAsync();

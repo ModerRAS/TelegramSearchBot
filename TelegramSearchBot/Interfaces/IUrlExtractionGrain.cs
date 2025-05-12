@@ -1,25 +1,27 @@
 using Orleans;
 using System.Threading.Tasks;
+using System.Collections.Generic; // For List
+using TelegramSearchBot.Service.Common; // For UrlProcessResult
 
 namespace TelegramSearchBot.Interfaces
 {
     /// <summary>
     /// Grain interface for extracting URLs from text content.
+    /// It primarily consumes from TextContentToProcess stream for automatic background processing and storage.
+    /// It also provides a method for explicit URL resolution on demand.
     /// </summary>
-    public interface IUrlExtractionGrain : IGrainWithGuidKey
+    public interface IUrlExtractionGrain : IGrainWithGuidKey // Using GuidKey as per existing definition
     {
-        // This grain consumes text content and extracts URLs.
-        // It might also perform initial processing like expanding short URLs or fetching titles.
-        // If it needs to be explicitly called with text:
-        // Task ProcessTextAsync(string text, MessageContext context); 
-        // However, the plan indicates it consumes from TextContentToProcess stream.
-    }
+        /// <summary>
+        /// Explicitly resolves URLs in the given text and returns a formatted string for display.
+        /// This method is intended to be called by CommandParsingGrain for the /resolveurls command.
+        /// </summary>
+        /// <param name="textToParse">The text containing URLs to resolve.</param>
+        /// <returns>A string formatted for user reply, detailing original and resolved URLs.</returns>
+        Task<string> GetFormattedResolvedUrlsAsync(string textToParse);
 
-    // Placeholder for message context if needed for methods, can be expanded later.
-    // public class MessageContext
-    // {
-    //     public long ChatId { get; set; }
-    //     public int MessageId { get; set; }
-    //     public long UserId { get; set; }
-    // }
+        // The grain will also implicitly subscribe to a stream (e.g., TextContentToProcessStreamName)
+        // to perform automatic background URL resolution and storage, without direct reply.
+        // No explicit method is needed in the interface for stream consumption if using IAsyncObserver.
+    }
 }

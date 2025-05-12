@@ -11,6 +11,8 @@ using Telegram.Bot.Types;
 using TelegramSearchBot.Interfaces;
 using TelegramSearchBot.Manager; // For QRManager
 using TelegramSearchBot.Model;   // For StreamMessage, OrleansStreamConstants
+using System.Net.Http; // Added for HttpClient
+using Microsoft.Extensions.Logging; // Added for ILogger
 
 namespace TelegramSearchBot.Grains
 {
@@ -18,23 +20,30 @@ namespace TelegramSearchBot.Grains
     {
         private readonly ITelegramBotClient _botClient;
         private readonly QRManager _qrManager;
-        private readonly ILogger _logger;
+        private readonly Microsoft.Extensions.Logging.ILogger<QrCodeScanGrain> _logger; // Changed type
         private readonly IGrainFactory _grainFactory;
+        private readonly IHttpClientFactory _httpClientFactory; // Added
 
         private IAsyncStream<StreamMessage<Message>> _rawImageStream;
         private IAsyncStream<StreamMessage<string>> _textContentStream;
 
-        public QrCodeScanGrain(ITelegramBotClient botClient, QRManager qrManager, IGrainFactory grainFactory)
+        public QrCodeScanGrain(
+            ITelegramBotClient botClient, 
+            QRManager qrManager, 
+            IGrainFactory grainFactory,
+            IHttpClientFactory httpClientFactory, // Added
+            Microsoft.Extensions.Logging.ILogger<QrCodeScanGrain> logger) // Added
         {
             _botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
             _qrManager = qrManager ?? throw new ArgumentNullException(nameof(qrManager));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
-            _logger = Log.ForContext<QrCodeScanGrain>();
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory)); // Added
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger)); // Changed
         }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            _logger.Information("QrCodeScanGrain {GrainId} activated.", this.GetGrainId());
+            _logger.LogInformation("QrCodeScanGrain {GrainId} activated.", this.GetGrainId()); // Changed to LogInformation
 
             var streamProvider = this.GetStreamProvider("DefaultSMSProvider"); // Assuming "DefaultSMSProvider"
 
@@ -55,11 +64,11 @@ namespace TelegramSearchBot.Grains
             var originalMessage = streamMessage.Payload;
             if (originalMessage?.Photo == null || !originalMessage.Photo.Any())
             {
-                _logger.Warning("QrCodeScanGrain received message without photo data. MessageId: {MessageId}", originalMessage?.MessageId);
+                _logger.LogWarning("QrCodeScanGrain received message without photo data. MessageId: {MessageId}", originalMessage?.MessageId); // Changed to LogWarning
                 return;
             }
 
-            _logger.Information("QrCodeScanGrain received image message. ChatId: {ChatId}, MessageId: {MessageId}",
+            _logger.LogInformation("QrCodeScanGrain received image message. ChatId: {ChatId}, MessageId: {MessageId}", // Changed to LogInformation
                 originalMessage.Chat.Id, originalMessage.MessageId);
 
             var photoSize = originalMessage.Photo.OrderByDescending(p => p.FileSize).First();
@@ -68,40 +77,47 @@ namespace TelegramSearchBot.Grains
 
             try
             {
-                var fileInfo = await _botClient.GetFile(photoSize.FileId); // Use GetFile
+                var fileInfo = await _botClient.GetFileAsync(photoSize.FileId, CancellationToken.None); // Use Async version and CancellationToken.None
                 if (fileInfo.FilePath == null)
                 {
-                    _logger.Error("Unable to get file path for FileId {FileId} from Telegram for QR scan.", photoSize.FileId);
+                    _logger.LogError("Unable to get file path for FileId {FileId} from Telegram for QR scan.", photoSize.FileId); // Changed to LogError
                     throw new Exception($"Telegram API did not return a file path for FileId {photoSize.FileId} (QR scan).");
                 }
                 tempFilePath = Path.Combine(Path.GetTempPath(), fileInfo.FileUniqueId + Path.GetExtension(fileInfo.FilePath));
                 
-                using (var fileStream = new FileStream(tempFilePath, FileMode.Create))
+                await using (var fileStream = new FileStream(tempFilePath, FileMode.Create))
                 {
-                    await _botClient.DownloadFile(fileInfo.FilePath, fileStream); // Use DownloadFile
+                    // Use HttpClient to download, similar to OcrGrain
+                    var httpClient = _httpClientFactory.CreateClient();
+                    var fileUrl = $"https://api.telegram.org/file/bot{TelegramSearchBot.Env.BotToken}/{fileInfo.FilePath}";
+                    _logger.LogInformation("Attempting to download image for QR scan from URL: {FileUrl}", fileUrl); // Changed to LogInformation
+                    using var response = await httpClient.GetAsync(fileUrl, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
+                    response.EnsureSuccessStatusCode();
+                    await using var contentStream = await response.Content.ReadAsStreamAsync(CancellationToken.None);
+                    await contentStream.CopyToAsync(fileStream, CancellationToken.None);
                 }
-                _logger.Information("Photo downloaded to {TempFilePath} for QR scan.", tempFilePath);
+                _logger.LogInformation("Photo downloaded to {TempFilePath} for QR scan.", tempFilePath); // Changed to LogInformation
 
                 // Perform QR Scan using QRManager.ExecuteAsync(filePath)
                 qrResultText = await _qrManager.ExecuteAsync(tempFilePath); 
                 
                 if (!string.IsNullOrWhiteSpace(qrResultText))
                 {
-                    _logger.Information("QR scan successful for MessageId {MessageId}. Text found: {FoundText}", originalMessage.MessageId, qrResultText);
+                    _logger.LogInformation("QR scan successful for MessageId {MessageId}. Text found: {FoundText}", originalMessage.MessageId, qrResultText); // Changed to LogInformation
                 }
                 else
                 {
-                    _logger.Information("QR scan for MessageId {MessageId} found no text or an issue occurred.", originalMessage.MessageId);
+                    _logger.LogInformation("QR scan for MessageId {MessageId} found no text or an issue occurred.", originalMessage.MessageId); // Changed to LogInformation
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error during QR scan processing for MessageId {MessageId}", originalMessage.MessageId);
+                _logger.LogError(ex, "Error during QR scan processing for MessageId {MessageId}", originalMessage.MessageId); // Changed to LogError
                 var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
                 await senderGrain.SendMessageAsync(new TelegramMessageToSend
                 {
                     ChatId = originalMessage.Chat.Id,
-                    Text = $"二维码扫描处理图片时出错: {ex.Message}",
+                    Text = "二维码扫描处理图片时发生内部错误，请稍后再试。", // Generic error message
                     ReplyToMessageId = originalMessage.MessageId
                 });
                 return;
@@ -110,39 +126,50 @@ namespace TelegramSearchBot.Grains
             {
                 if (tempFilePath != null && System.IO.File.Exists(tempFilePath))
                 {
-                    try { System.IO.File.Delete(tempFilePath); } catch (Exception ex) { _logger.Warning(ex, "Failed to delete temp QR file: {TempFilePath}", tempFilePath); }
+                    try { System.IO.File.Delete(tempFilePath); } catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp QR file: {TempFilePath}", tempFilePath); } // Changed to LogWarning
                 }
             }
 
             if (!string.IsNullOrWhiteSpace(qrResultText))
             {
+                // 1. Reply directly to the user with the QR content (as per user guide)
+                var directReplySender = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
+                await directReplySender.SendMessageAsync(new TelegramMessageToSend
+                {
+                    ChatId = originalMessage.Chat.Id,
+                    Text = $"识别到二维码内容：\n{qrResultText}",
+                    ReplyToMessageId = originalMessage.MessageId
+                });
+                _logger.LogInformation("QR scan result for MessageId {MessageId} sent directly to user.", originalMessage.MessageId); // Changed to LogInformation
+
+                // 2. Publish QR content to the text processing stream for further internal processing (e.g., URL extraction)
                 var textContentMessage = new StreamMessage<string>(
-                    payload: qrResultText,
-                    originalMessageId: originalMessage.MessageId,
+                    payload: qrResultText, // Publish the raw QR text
+                    originalMessageId: originalMessage.MessageId, // Keep original message context
                     chatId: originalMessage.Chat.Id,
                     userId: originalMessage.From?.Id ?? 0,
-                    source: "QrCodeScanGrainResult"
+                    source: "QrCodeScanGrainResult" 
                 );
                 await _textContentStream.OnNextAsync(textContentMessage);
-                _logger.Information("QR scan result for MessageId {MessageId} published to TextContentToProcess stream.", originalMessage.MessageId);
+                _logger.LogInformation("QR scan result for MessageId {MessageId} published to TextContentToProcess stream.", originalMessage.MessageId); // Changed to LogInformation
             }
         }
 
         public Task OnCompletedAsync()
         {
-            _logger.Information("QrCodeScanGrain {GrainId} completed stream processing.", this.GetGrainId());
+            _logger.LogInformation("QrCodeScanGrain {GrainId} completed stream processing.", this.GetGrainId()); // Changed to LogInformation
             return Task.CompletedTask;
         }
 
         public Task OnErrorAsync(Exception ex)
         {
-            _logger.Error(ex, "QrCodeScanGrain {GrainId} encountered an error on stream.", this.GetGrainId());
+            _logger.LogError(ex, "QrCodeScanGrain {GrainId} encountered an error on stream.", this.GetGrainId()); // Changed to LogError
             return Task.CompletedTask;
         }
 
         public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
-            _logger.Information("QrCodeScanGrain {GrainId} deactivating. Reason: {Reason}", this.GetGrainId(), reason);
+            _logger.LogInformation("QrCodeScanGrain {GrainId} deactivating. Reason: {Reason}", this.GetGrainId(), reason); // Changed to LogInformation
             if (_rawImageStream != null)
             {
                 var subscriptions = await _rawImageStream.GetAllSubscriptionHandles();

@@ -94,32 +94,45 @@ namespace TelegramSearchBot.Grains
                         stateChanged = true;
                     }
                     break;
-                case "cancel_search":
-                    // Edit message to remove keyboard or show "Search cancelled"
-                    var sender = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
+                case "delete_result": // Action name updated from cancel_search
+                    var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
+                    string feedbackText = "搜索结果已删除。";
                     if (_state.State.SearchResultMessageId != 0)
                     {
-                        // TODO: Implement EditMessageReplyMarkupAsync or similar in ITelegramMessageSenderGrain
-                        // For now, just send a new message or edit text.
-                        // Example: await sender.EditMessageReplyMarkupAsync(_state.State.InitiatingChatId, _state.State.SearchResultMessageId, null);
-                        await sender.SendMessageAsync(new TelegramMessageToSend { 
-                            ChatId = _state.State.InitiatingChatId, 
-                            Text = "搜索已取消。",
-                            // Consider editing the original search result message to remove keyboard
-                            // ReplyToMessageId = _state.State.SearchResultMessageId 
-                        });
-                         _logger.Information("Grain {GrainId}: Search cancelled. SearchResultMessageId: {MessageId} might need its keyboard removed.", 
-                            this.GetPrimaryKeyString(), _state.State.SearchResultMessageId);
+                        try
+                        {
+                            await senderGrain.DeleteMessageAsync(_state.State.InitiatingChatId, _state.State.SearchResultMessageId);
+                            _logger.Information("Grain {GrainId}: Deleted search result message {MessageId} in chat {ChatId}.",
+                                this.GetPrimaryKeyString(), _state.State.SearchResultMessageId, _state.State.InitiatingChatId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error(ex, "Grain {GrainId}: Failed to delete search result message {MessageId} in chat {ChatId}.",
+                                this.GetPrimaryKeyString(), _state.State.SearchResultMessageId, _state.State.InitiatingChatId);
+                            feedbackText = "删除搜索结果失败，但本次搜索会话已结束。";
+                        }
                     }
                     else
                     {
-                         await sender.SendMessageAsync(new TelegramMessageToSend { 
-                            ChatId = _state.State.InitiatingChatId, 
-                            Text = "搜索已取消。"
-                        });
+                        _logger.Warning("Grain {GrainId}: delete_result action called, but SearchResultMessageId was 0. No message to delete.", this.GetPrimaryKeyString());
+                        feedbackText = "没有可删除的搜索结果消息，搜索会话已结束。";
                     }
-                    await _state.ClearStateAsync(); // Clear state on cancel
-                    // Optionally deactivate grain: DeactivateOnIdle();
+                    
+                    // Send a confirmation to the user via a new message, as the original callback query message might be deleted or its keyboard gone.
+                    // Or, use AnswerCallbackQueryAsync if appropriate (but that's for the button click itself, not a new message).
+                    // For simplicity, sending a new message.
+                    // await senderGrain.SendMessageAsync(new TelegramMessageToSend {
+                    //     ChatId = _state.State.InitiatingChatId,
+                    //     Text = feedbackText 
+                    //     // ReplyToMessageId = _state.State.InitiatingMessageId // Replying to original command might be best here
+                    // });
+
+                    // It's often better to just answer the callback query for "delete" actions to avoid clutter.
+                    // The message is deleted, further text feedback might be redundant unless an error occurred.
+                    // For now, we'll rely on the message disappearing as feedback.
+
+                    await _state.ClearStateAsync(); // Clear state
+                    DeactivateOnIdle(); // Deactivate the grain as the session is over.
                     return; // Exit early
                 default:
                     _logger.Warning("Grain {GrainId}: Unknown paging action '{Action}'", this.GetPrimaryKeyString(), action);
@@ -227,14 +240,24 @@ namespace TelegramSearchBot.Grains
             // await sender.EditMessageTextAsync(_state.State.InitiatingChatId, _state.State.SearchResultMessageId, currentResponseText, keyboard);
             // }
             // For now, always send new:
-            await sender.SendMessageAsync(new TelegramMessageToSend
+            var sentMessageId = await sender.SendMessageAsync(new TelegramMessageToSend
             {
                 ChatId = _state.State.InitiatingChatId,
                 Text = currentResponseText,
                 // ReplyToMessageId = _state.State.InitiatingMessageId, // Replying to original command might be noisy for paginated results
-                ReplyMarkup = keyboard 
+                ReplyMarkup = keyboard
+                // ParseMode can be null for plain text, or set if Markdown/HTML is used in currentResponseText
             });
 
+            if (sentMessageId.HasValue)
+            {
+                _state.State.SearchResultMessageId = sentMessageId.Value;
+            }
+            else
+            {
+                _logger.Warning("Grain {GrainId}: SendMessageAsync did not return a messageId for search results. Delete functionality might be affected.", grainId);
+                _state.State.SearchResultMessageId = 0; // Ensure it's reset if sending failed to return ID
+            }
 
             await _state.WriteStateAsync();
         }
@@ -259,16 +282,26 @@ namespace TelegramSearchBot.Grains
 
             if (_state.State.CurrentPage < totalPages)
             {
-                buttonsRow.Add(InlineKeyboardButton.WithCallbackData("下一页 ➡️", $"searchgrain:{grainId}:next_page"));
+                buttonsRow.Add(InlineKeyboardButton.WithCallbackData("下一页", $"searchgrain:{grainId}:next_page")); // Text updated
             }
             
+            var keyboardRows = new List<List<InlineKeyboardButton>>();
             if (buttonsRow.Any()) {
-                // Add cancel button to a new row for better layout if other buttons exist
-                var keyboardRows = new List<List<InlineKeyboardButton>> { buttonsRow };
-                keyboardRows.Add(new List<InlineKeyboardButton> { InlineKeyboardButton.WithCallbackData("❌ 关闭搜索", $"searchgrain:{grainId}:cancel_search") });
-                return new InlineKeyboardMarkup(keyboardRows);
+                keyboardRows.Add(buttonsRow);
             }
-            return null; 
+
+            // Add "Delete this result" button, always present if there are results to show a keyboard for.
+            // This button will delete the current search result message and end the session.
+            // Display this button if there are any results (TotalResults > 0) or if it's the first page of a potentially empty search (TotalResults == -1 but we are about to show something)
+            // A simpler check: if we are building a keyboard with other buttons (prev/next/page), it implies there are results.
+            // Or, more directly, if _state.State.SearchResultMessageId is set (meaning a result message was sent).
+            // For now, let's show it if TotalResults indicates there could be a message.
+            if (_state.State.TotalResults != 0) // Show if not explicitly zero results. -1 means first search, >0 means results exist.
+            {
+                 keyboardRows.Add(new List<InlineKeyboardButton> { InlineKeyboardButton.WithCallbackData("删除此结果", $"searchgrain:{grainId}:delete_result") }); // Text and action updated
+            }
+            
+            return keyboardRows.Any() ? new InlineKeyboardMarkup(keyboardRows) : null;
         }
     }
 }

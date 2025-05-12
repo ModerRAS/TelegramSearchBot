@@ -6,176 +6,223 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading; // Added for CancellationToken
+using System.Threading;
 using System.Threading.Tasks;
-using TelegramSearchBot.Interfaces;    // For IBilibiliLinkProcessingGrain, ITelegramMessageSenderGrain
-using TelegramSearchBot.Service.Bilibili; // For IBiliApiService
-using TelegramSearchBot.Model;       // For StreamMessage, OrleansStreamConstants
-using TelegramSearchBot.Model.Bilibili; // For BiliVideoInfo, BiliOpusInfo
+using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Interfaces;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Bilibili;
+using TelegramSearchBot.Service.Bilibili;
+using TelegramSearchBot.Service.Common; // For IAppConfigurationService (potential future use for max size)
 
 namespace TelegramSearchBot.Grains
 {
     public class BilibiliLinkProcessingGrain : Grain, IBilibiliLinkProcessingGrain, IAsyncObserver<StreamMessage<string>>
     {
         private readonly IBiliApiService _biliApiService;
-        private readonly IGrainFactory _grainFactory;
         private readonly ILogger _logger;
-        private IAsyncStream<StreamMessage<string>> _textContentStream;
+        private readonly IGrainFactory _grainFactory;
+        // private readonly IAppConfigurationService _appConfigService; // For future use: video download size limit
 
-        // Regex for Bilibili video links (covers BV, av, and b23.tv shortlinks)
-        // b23.tv links would ideally be expanded before this grain, or this grain needs an expander.
-        // For now, this regex tries to capture them for the service to handle.
-        private static readonly Regex BiliVideoRegex = new Regex(
-            @"https?://(?:www\.bilibili\.com/video/(BV[1-9A-HJ-NP-Za-km-z]+(?:/\?p=\d+)?|av\d+(?:/\?p=\d+)?)|b23\.tv/([a-zA-Z0-9]+))", 
+        private IAsyncStream<StreamMessage<string>> _textContentStreamSubscription;
+
+        // Regex similar to BiliMessageController for broad matching
+        private static readonly Regex BiliUrlRegex = new(
+            @"(?:https?://)?(?:www\.bilibili\.com/(?:video/(?:av\d+|BV\w{10})/?(?:[?&p=\d+])?|bangumi/play/(?:ep\d+|ss\d+)/?|festival/\w+\?bvid=BV\w{10})|t\.bilibili\.com/\d+|space\.bilibili\.com/\d+/dynamic/\d+)|b23\.tv/\w+|acg\.tv/\w+",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // Regex for Bilibili dynamic/opus links
-        private static readonly Regex BiliOpusRegex = new Regex(
-            @"https?://t\.bilibili\.com/(\d+)", 
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        
-        // Regex for Bilibili article links
-        private static readonly Regex BiliArticleRegex = new Regex(
-            @"https?://(?:www\.bilibili\.com/read/cv(\d+)|bilibili\.com/read/mobile/(\d+))",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-
-        public BilibiliLinkProcessingGrain(IBiliApiService biliApiService, IGrainFactory grainFactory, ILogger logger)
+        public BilibiliLinkProcessingGrain(
+            IBiliApiService biliApiService,
+            IGrainFactory grainFactory)
+            // IAppConfigurationService appConfigService) // Future
         {
             _biliApiService = biliApiService ?? throw new ArgumentNullException(nameof(biliApiService));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
-            _logger = logger?.ForContext<BilibiliLinkProcessingGrain>() ?? Log.ForContext<BilibiliLinkProcessingGrain>();
+            // _appConfigService = appConfigService; // Future
+            _logger = Log.ForContext<BilibiliLinkProcessingGrain>();
         }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            _logger.Information("BilibiliLinkProcessingGrain {GrainId} activated.", this.GetPrimaryKeyString());
-
+            _logger.Information("BilibiliLinkProcessingGrain {GrainId} activated.", this.GetGrainId());
             var streamProvider = this.GetStreamProvider("DefaultSMSProvider");
-            _textContentStream = streamProvider.GetStream<StreamMessage<string>>(
+            _textContentStreamSubscription = streamProvider.GetStream<StreamMessage<string>>(
                 OrleansStreamConstants.TextContentToProcessStreamName,
                 OrleansStreamConstants.TextContentStreamNamespace);
-            
-            await _textContentStream.SubscribeAsync(this);
+            await _textContentStreamSubscription.SubscribeAsync(this);
             await base.OnActivateAsync(cancellationToken);
         }
 
         public async Task OnNextAsync(StreamMessage<string> streamMessage, StreamSequenceToken token = null)
         {
             var textContent = streamMessage.Payload;
-            if (string.IsNullOrWhiteSpace(textContent))
-            {
-                return; // Ignore empty content
-            }
+            if (string.IsNullOrWhiteSpace(textContent)) return;
 
-            _logger.Debug("BilibiliLinkProcessingGrain {GrainId} received text content from OriginalMessageId: {OriginalMessageId} for Bili link processing.", 
-                this.GetPrimaryKeyString(), streamMessage.OriginalMessageId);
+            var matches = BiliUrlRegex.Matches(textContent);
+            if (!matches.Any()) return;
+
+            _logger.Information("BilibiliLinkProcessingGrain {GrainId}: Found {MatchCount} Bili URLs in text from OriginalMessageId: {OriginalMessageId}",
+                this.GetGrainId(), matches.Count, streamMessage.OriginalMessageId);
 
             var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
-            var processedUrls = new HashSet<string>(); 
 
-            // Process Video Links
-            foreach (Match match in BiliVideoRegex.Matches(textContent))
+            foreach (Match match in matches.Cast<Match>())
             {
-                string url = match.Value;
-                if (processedUrls.Contains(url)) continue;
-                processedUrls.Add(url);
-
-                _logger.Information("BilibiliLinkProcessingGrain: Found video URL {VideoUrl} in message {OriginalMessageId}", url, streamMessage.OriginalMessageId);
+                var url = match.Value;
                 try
                 {
-                    BiliVideoInfo videoInfo = await _biliApiService.GetVideoInfoAsync(url);
-                    if (videoInfo != null && !string.IsNullOrEmpty(videoInfo.Title)) // Ensure info is meaningful
+                    // IBiliApiService should handle disambiguation (video vs opus vs shortlink)
+                    var videoInfo = await _biliApiService.GetVideoInfoAsync(url);
+                    if (videoInfo != null)
                     {
-                        var responseText = new StringBuilder();
-                        responseText.AppendLine($"📺 **B站视频信息**");
-                        if (!string.IsNullOrEmpty(videoInfo.Title)) responseText.AppendLine($"**标题:** {videoInfo.Title}");
-                        if (!string.IsNullOrEmpty(videoInfo.OwnerName)) responseText.AppendLine($"**UP主:** {videoInfo.OwnerName}");
-                        // PlayCount, DanmakuCount, LikeCount are not directly in BiliVideoInfo, remove for now or find alternative.
-                        // responseText.AppendLine($"**播放:** {videoInfo.PlayCount} | **弹幕:** {videoInfo.DanmakuCount} | **点赞:** {videoInfo.LikeCount}");
-                        if (!string.IsNullOrEmpty(videoInfo.Description))
-                            responseText.AppendLine($"**简介:** {videoInfo.Description.Substring(0, Math.Min(videoInfo.Description.Length, 100))}...");
-                        responseText.AppendLine($"**链接:** {videoInfo.OriginalUrl ?? url}");
-                        
-                        await senderGrain.SendMessageAsync(new TelegramMessageToSend
-                        {
-                            ChatId = streamMessage.ChatId,
-                            Text = responseText.ToString(),
-                            ReplyToMessageId = (int)streamMessage.OriginalMessageId 
-                        });
+                        await HandleVideoInfoAsync(streamMessage, videoInfo, senderGrain);
+                        continue; // Processed as video
                     }
+
+                    var opusInfo = await _biliApiService.GetOpusInfoAsync(url);
+                    if (opusInfo != null)
+                    {
+                        await HandleOpusInfoAsync(streamMessage, opusInfo, senderGrain);
+                        continue; // Processed as opus
+                    }
+
+                    _logger.Warning("BilibiliLinkProcessingGrain {GrainId}: Could not parse Bili URL {Url} as video or opus. OriginalMessageId: {OriginalMessageId}",
+                        this.GetGrainId(), url, streamMessage.OriginalMessageId);
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, "BilibiliLinkProcessingGrain: Error fetching video info for {VideoUrl}", url);
+                    _logger.Error(ex, "BilibiliLinkProcessingGrain {GrainId}: Error processing Bili URL {Url}. OriginalMessageId: {OriginalMessageId}",
+                        this.GetGrainId(), url, streamMessage.OriginalMessageId);
                 }
-            }
-
-            // Process Opus/Dynamic Links
-            foreach (Match match in BiliOpusRegex.Matches(textContent))
-            {
-                string url = match.Value;
-                if (processedUrls.Contains(url)) continue;
-                processedUrls.Add(url);
-
-                _logger.Information("BilibiliLinkProcessingGrain: Found opus URL {OpusUrl} in message {OriginalMessageId}", url, streamMessage.OriginalMessageId);
-                try
-                {
-                    BiliOpusInfo opusInfo = await _biliApiService.GetOpusInfoAsync(url);
-                    if (opusInfo != null && !string.IsNullOrEmpty(opusInfo.ContentText)) // Ensure info is meaningful
-                    {
-                        var responseText = new StringBuilder();
-                        responseText.AppendLine($"动态详情:");
-                        if (!string.IsNullOrEmpty(opusInfo.UserName)) responseText.AppendLine($"**UP主:** {opusInfo.UserName}");
-                        responseText.AppendLine(opusInfo.ContentText.Substring(0, Math.Min(opusInfo.ContentText.Length, 200)) + "...");
-                        responseText.AppendLine($"**链接:** {opusInfo.OriginalUrl ?? url}");
-
-                        await senderGrain.SendMessageAsync(new TelegramMessageToSend
-                        {
-                            ChatId = streamMessage.ChatId,
-                            Text = responseText.ToString(),
-                            ReplyToMessageId = (int)streamMessage.OriginalMessageId
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "BilibiliLinkProcessingGrain: Error fetching opus info for {OpusUrl}", url);
-                }
-            }
-            
-            // Process Article Links (cv) - Assuming IBiliApiService might have a GetArticleInfoAsync or similar in future
-            // For now, we'll just acknowledge them if detected, or this part can be expanded if service supports it.
-            foreach (Match match in BiliArticleRegex.Matches(textContent))
-            {
-                string url = match.Value;
-                if (processedUrls.Contains(url)) continue;
-                processedUrls.Add(url);
-                _logger.Information("BilibiliLinkProcessingGrain: Found article URL {ArticleUrl} in message {OriginalMessageId}. (No specific processing yet)", url, streamMessage.OriginalMessageId);
-                // Example:
-                // BiliArticleInfo articleInfo = await _biliApiService.GetArticleInfoAsync(url); // If method exists
-                // if (articleInfo != null) { ... format and send ... }
             }
         }
+        
+        private static string EscapeMarkdownV2(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            // Simplified escape, consider a more robust library or method if complex markdown is generated.
+            char[] markdownV2EscapeChars = { '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
+            var sb = new StringBuilder(text.Length);
+            foreach (char c in text)
+            {
+                if (markdownV2EscapeChars.Contains(c)) sb.Append('\\');
+                sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        private async Task HandleVideoInfoAsync(StreamMessage<string> originalStreamMsg, BiliVideoInfo videoInfo, ITelegramMessageSenderGrain senderGrain)
+        {
+            _logger.Information("BilibiliLinkProcessingGrain: Handling video info: {VideoTitle} for OriginalMessageId: {OriginalMessageId}", 
+                videoInfo.Title, originalStreamMsg.OriginalMessageId);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"*{EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*");
+            sb.AppendLine($"UP: {EscapeMarkdownV2(videoInfo.OwnerName)}");
+            if (!string.IsNullOrWhiteSpace(videoInfo.TName))
+                sb.AppendLine($"分类: {EscapeMarkdownV2(videoInfo.TName)}");
+            if (videoInfo.Duration > 0)
+                sb.AppendLine($"时长: {TimeSpan.FromSeconds(videoInfo.Duration):g}");
+            if (!string.IsNullOrWhiteSpace(videoInfo.Description))
+                sb.AppendLine($"简介: {EscapeMarkdownV2(videoInfo.Description.Substring(0, Math.Min(videoInfo.Description.Length, 150)) + (videoInfo.Description.Length > 150 ? "..." : ""))}");
+            sb.AppendLine(EscapeMarkdownV2(videoInfo.OriginalUrl));
+            
+            string textSummary = sb.ToString();
+            if (textSummary.Length > 4096) textSummary = textSummary.Substring(0, 4093) + "...";
+
+            // Phase 1: Send text summary. Media sending is a future enhancement.
+            // TODO: Implement video sending logic similar to BiliMessageController,
+            // including download, size check (from _appConfigService), caching, and thumbnail.
+            // For now, always send text.
+
+            await senderGrain.SendMessageAsync(new TelegramMessageToSend
+            {
+                ChatId = originalStreamMsg.ChatId,
+                Text = textSummary,
+                ParseMode = ParseMode.MarkdownV2,
+                ReplyToMessageId = (int)originalStreamMsg.OriginalMessageId,
+                DisableWebPagePreview = true 
+            });
+        }
+
+        private async Task HandleOpusInfoAsync(StreamMessage<string> originalStreamMsg, BiliOpusInfo opusInfo, ITelegramMessageSenderGrain senderGrain)
+        {
+            _logger.Information("BilibiliLinkProcessingGrain: Handling opus info by: {UserName} for OriginalMessageId: {OriginalMessageId}", 
+                opusInfo.UserName, originalStreamMsg.OriginalMessageId);
+
+            var sb = new StringBuilder();
+            if (opusInfo.OriginalResource != null && !string.IsNullOrWhiteSpace(opusInfo.OriginalResource.Title))
+            {
+                sb.AppendLine($"*{EscapeMarkdownV2(opusInfo.OriginalResource.Title)}*");
+                if(!string.IsNullOrWhiteSpace(opusInfo.OriginalResource.Url))
+                    sb.AppendLine(EscapeMarkdownV2(opusInfo.OriginalResource.Url));
+                sb.AppendLine(); // Add a blank line
+            }
+            
+            string contentText = opusInfo.FormattedContentMarkdown ?? opusInfo.ContentText ?? "";
+            if (contentText.Length > 1000) contentText = contentText.Substring(0, 997) + "..."; // Limit content length in summary
+            sb.AppendLine(EscapeMarkdownV2(contentText));
+            sb.AppendLine($"\n---\n动态作者: {EscapeMarkdownV2(opusInfo.UserName)}");
+            sb.AppendLine($"[原始动态链接](https://t.bilibili.com/{opusInfo.DynamicId})");
+
+            string textSummary = sb.ToString();
+            if (textSummary.Length > 4096) textSummary = textSummary.Substring(0, 4093) + "...";
+
+            // Phase 1: Send text summary. Media sending (image group) is a future enhancement.
+            // TODO: Implement image group sending logic similar to BiliMessageController,
+            // including download, caching, and media group construction.
+            // For now, always send text.
+
+            // Attempt to send the first image if available (simple version for Phase 1)
+            if (opusInfo.ImageUrls != null && opusInfo.ImageUrls.Any())
+            {
+                try
+                {
+                    // This is a simplified attempt. Full media group handling is complex.
+                    // ITelegramMessageSenderGrain would need SendPhotoAsync.
+                    // For now, we'll just include the first image URL in the text if SendPhoto isn't available.
+                    // If SendPhotoAsync was available:
+                    // await senderGrain.SendPhotoAsync(originalStreamMsg.ChatId, opusInfo.ImageUrls.First(), textSummary, ParseMode.MarkdownV2, replyToMessageId: (int)originalStreamMsg.OriginalMessageId);
+                    // return; 
+                    
+                    // As SendPhotoAsync is not on ITelegramMessageSenderGrain, append to text or send separate text.
+                    textSummary += $"\n首张图片: {opusInfo.ImageUrls.First()}";
+                    if (textSummary.Length > 4096) textSummary = textSummary.Substring(0, 4093) + "...";
+
+                } catch (Exception ex) {
+                    _logger.Warning(ex, "BilibiliLinkProcessingGrain: Failed to prepare/send first opus image for OriginalMessageId: {OriginalMessageId}", originalStreamMsg.OriginalMessageId);
+                }
+            }
+
+            await senderGrain.SendMessageAsync(new TelegramMessageToSend
+            {
+                ChatId = originalStreamMsg.ChatId,
+                Text = textSummary,
+                ParseMode = ParseMode.MarkdownV2,
+                ReplyToMessageId = (int)originalStreamMsg.OriginalMessageId,
+                DisableWebPagePreview = false // Allow preview for the dynamic link
+            });
+        }
+
 
         public Task OnCompletedAsync()
         {
-            _logger.Information("BilibiliLinkProcessingGrain {GrainId} completed stream processing.", this.GetPrimaryKeyString());
+            _logger.Information("BilibiliLinkProcessingGrain {GrainId} completed stream processing.", this.GetGrainId());
             return Task.CompletedTask;
         }
 
         public Task OnErrorAsync(Exception ex)
         {
-            _logger.Error(ex, "BilibiliLinkProcessingGrain {GrainId} encountered an error on stream.", this.GetPrimaryKeyString());
+            _logger.Error(ex, "BilibiliLinkProcessingGrain {GrainId} encountered an error on stream.", this.GetGrainId());
             return Task.CompletedTask;
         }
 
         public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
-            _logger.Information("BilibiliLinkProcessingGrain {GrainId} deactivating. Reason: {Reason}", this.GetPrimaryKeyString(), reason);
-            if (_textContentStream != null)
+            _logger.Information("BilibiliLinkProcessingGrain {GrainId} deactivating. Reason: {Reason}", this.GetGrainId(), reason);
+            if (_textContentStreamSubscription != null)
             {
-                var subscriptions = await _textContentStream.GetAllSubscriptionHandles();
+                var subscriptions = await _textContentStreamSubscription.GetAllSubscriptionHandles();
                 foreach (var sub in subscriptions)
                 {
                     await sub.UnsubscribeAsync();

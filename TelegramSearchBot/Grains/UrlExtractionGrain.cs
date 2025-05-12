@@ -4,118 +4,144 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore; // Added for FirstOrDefaultAsync
 using TelegramSearchBot.Interfaces;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Service.Common; // For UrlProcessingService
+using TelegramSearchBot.Model;    // For StreamMessage, OrleansStreamConstants, DataDbContext
+using TelegramSearchBot.Model.Data; // Added for ShortUrlMapping
+using TelegramSearchBot.Service.Common; // For UrlProcessingService, UrlProcessResult
 
 namespace TelegramSearchBot.Grains
 {
     public class UrlExtractionGrain : Grain, IUrlExtractionGrain, IAsyncObserver<StreamMessage<string>>
     {
         private readonly UrlProcessingService _urlProcessingService;
+        private readonly DataDbContext _dbContext; // For storing ShortUrlMapping
         private readonly ILogger _logger;
-        private readonly IGrainFactory _grainFactory; // To get ITelegramMessageSenderGrain
-
         private IAsyncStream<StreamMessage<string>> _textContentStreamSubscription;
-        // private IAsyncStream<StreamMessage<ProcessedUrlInfo>> _processedUrlStream; // Optional: For further processing
 
-        public UrlExtractionGrain(UrlProcessingService urlProcessingService, IGrainFactory grainFactory)
+        public UrlExtractionGrain(
+            UrlProcessingService urlProcessingService,
+            DataDbContext dbContext, // Inject DbContext
+            ILogger logger) // Logger can be injected directly
         {
             _urlProcessingService = urlProcessingService ?? throw new ArgumentNullException(nameof(urlProcessingService));
-            _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
-            _logger = Log.ForContext<UrlExtractionGrain>();
+            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+            _logger = logger?.ForContext<UrlExtractionGrain>() ?? Log.ForContext<UrlExtractionGrain>();
         }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
             _logger.Information("UrlExtractionGrain {GrainId} activated.", this.GetGrainId());
-
             var streamProvider = this.GetStreamProvider("DefaultSMSProvider");
-
             _textContentStreamSubscription = streamProvider.GetStream<StreamMessage<string>>(
                 OrleansStreamConstants.TextContentToProcessStreamName,
                 OrleansStreamConstants.TextContentStreamNamespace);
             await _textContentStreamSubscription.SubscribeAsync(this);
-
-            // Example: If we were to publish processed URLs to another stream
-            // _processedUrlStream = streamProvider.GetStream<StreamMessage<ProcessedUrlInfo>>(
-            //     "ProcessedUrlsStreamName", // Define in OrleansStreamConstants
-            //     "ProcessedContent");      // Define in OrleansStreamConstants
-
             await base.OnActivateAsync(cancellationToken);
         }
 
+        // Handles automatic background URL processing from the stream
         public async Task OnNextAsync(StreamMessage<string> streamMessage, StreamSequenceToken token = null)
         {
             var textContent = streamMessage.Payload;
             if (string.IsNullOrWhiteSpace(textContent))
             {
-                _logger.Warning("UrlExtractionGrain received empty or null text content. OriginalMessageId: {OriginalMessageId}", streamMessage.OriginalMessageId);
                 return;
             }
 
-            _logger.Information("UrlExtractionGrain received text content from OriginalMessageId: {OriginalMessageId}", streamMessage.OriginalMessageId);
+            _logger.Debug("UrlExtractionGrain {GrainId}: Received text for background URL processing. OriginalMessageId: {OriginalMessageId}", 
+                this.GetGrainId(), streamMessage.OriginalMessageId);
 
             try
             {
-                // Use UrlProcessingService to extract URLs and potentially get titles.
-                // The exact methods depend on UrlProcessingService's API.
-                // Let's assume it has a method like: GetProcessedUrlsAsync(string text) -> List<ProcessedUrlInfo>
-                // where ProcessedUrlInfo contains OriginalUrl, ExpandedUrl, Title.
-
-                var processedUrlResults = await _urlProcessingService.ProcessUrlsInTextAsync(textContent);
-
-                if (processedUrlResults == null || !processedUrlResults.Any())
+                List<UrlProcessResult> results = await _urlProcessingService.ProcessUrlsInTextAsync(textContent);
+                if (results.Any())
                 {
-                    _logger.Information("No URLs found or processed in text from OriginalMessageId: {OriginalMessageId}", streamMessage.OriginalMessageId);
-                    return;
-                }
-
-                var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
-                var reportMessages = new List<string>();
-
-                foreach (var result in processedUrlResults)
-                {
-                    _logger.Information("Original URL: {OriginalUrl}, Processed URL: {ProcessedUrl} from OriginalMessageId: {OriginalMessageId}", 
-                        result.OriginalUrl, result.ProcessedUrl ?? "N/A", streamMessage.OriginalMessageId);
-                    
-                    string messageEntry = $"原始链接: {result.OriginalUrl}";
-                    if (!string.IsNullOrEmpty(result.ProcessedUrl) && result.ProcessedUrl != result.OriginalUrl)
+                    foreach (var result in results)
                     {
-                        messageEntry += $"\n处理后: {result.ProcessedUrl}";
+                        if (!string.IsNullOrWhiteSpace(result.ProcessedUrl) && result.OriginalUrl != result.ProcessedUrl)
+                        {
+                            // Check if mapping already exists to avoid duplicates or decide on update strategy
+                            var existingMapping = await _dbContext.ShortUrlMappings
+                                .FirstOrDefaultAsync(m => m.OriginalUrl == result.OriginalUrl, cancellationToken: CancellationToken.None);
+
+                            if (existingMapping == null)
+                            {
+                                var newMapping = new ShortUrlMapping
+                                {
+                                    OriginalUrl = result.OriginalUrl, // Corrected property name
+                                    ExpandedUrl = result.ProcessedUrl, // Corrected property name
+                                    CreationDate = DateTime.UtcNow    // Corrected property name
+                                };
+                                _dbContext.ShortUrlMappings.Add(newMapping);
+                                _logger.Information("UrlExtractionGrain {GrainId}: Storing new URL mapping: {OriginalUrl} -> {ProcessedUrl}",
+                                    this.GetGrainId(), result.OriginalUrl, result.ProcessedUrl);
+                            }
+                            else if (existingMapping.ExpandedUrl != result.ProcessedUrl) // Corrected property name
+                            {
+                                // Optionally update if the long URL changed, or log
+                                _logger.Information("UrlExtractionGrain {GrainId}: Existing mapping for {OriginalUrl} found. Current: {ExistingLongUrl}, New: {ProcessedUrl}. Not updating for now.",
+                                    this.GetGrainId(), result.OriginalUrl, existingMapping.ExpandedUrl, result.ProcessedUrl); // Corrected property name
+                            }
+                        }
                     }
-                    // Title fetching is not currently part of UrlProcessingService.
-                    // messageEntry += "\n标题: (获取功能暂未实现)"; 
-                    reportMessages.Add(messageEntry);
-                }
-                
-                if (reportMessages.Any())
-                {
-                    string combinedMessage = "文本中提取到的链接：\n\n" + string.Join("\n\n---\n\n", reportMessages);
-                    await senderGrain.SendMessageAsync(new TelegramMessageToSend
-                    {
-                        ChatId = streamMessage.ChatId,
-                        Text = combinedMessage,
-                        ReplyToMessageId = (int)streamMessage.OriginalMessageId // Ensure OriginalMessageId is int if API expects int
-                    });
+                    await _dbContext.SaveChangesAsync(CancellationToken.None);
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error during URL extraction for OriginalMessageId: {OriginalMessageId}", streamMessage.OriginalMessageId);
-                var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
-                await senderGrain.SendMessageAsync(new TelegramMessageToSend
-                {
-                    ChatId = streamMessage.ChatId,
-                    Text = $"处理文本中的链接时出错: {ex.Message}",
-                    ReplyToMessageId = (int)streamMessage.OriginalMessageId
-                });
+                _logger.Error(ex, "UrlExtractionGrain {GrainId}: Error during background URL processing for OriginalMessageId: {OriginalMessageId}",
+                    this.GetGrainId(), streamMessage.OriginalMessageId);
             }
         }
 
+        // Handles explicit /resolveurls command
+        public async Task<string> GetFormattedResolvedUrlsAsync(string textToParse)
+        {
+            _logger.Information("UrlExtractionGrain {GrainId}: GetFormattedResolvedUrlsAsync called with text: \"{TextToParse}\"", 
+                this.GetGrainId(), textToParse);
+
+            if (string.IsNullOrWhiteSpace(textToParse))
+            {
+                return "请提供包含URL的文本。";
+            }
+
+            try
+            {
+                List<UrlProcessResult> results = await _urlProcessingService.ProcessUrlsInTextAsync(textToParse);
+                if (!results.Any())
+                {
+                    return "未在提供的文本中找到URL。";
+                }
+
+                var sb = new StringBuilder("URL 解析结果:\n");
+                foreach (var result in results)
+                {
+                    if (!string.IsNullOrWhiteSpace(result.ProcessedUrl) && result.OriginalUrl != result.ProcessedUrl)
+                    {
+                        sb.AppendLine($"- 原始: {result.OriginalUrl}\n  最终: {result.ProcessedUrl}");
+                    }
+                    else if (!string.IsNullOrWhiteSpace(result.ProcessedUrl) && result.OriginalUrl == result.ProcessedUrl)
+                    {
+                        sb.AppendLine($"- 链接: {result.OriginalUrl} (无变化或已是最终链接，已清理追踪参数)");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"- 原始: {result.OriginalUrl} (解析失败或无法访问)");
+                    }
+                }
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "UrlExtractionGrain {GrainId}: Error in GetFormattedResolvedUrlsAsync for text: \"{TextToParse}\"", 
+                    this.GetGrainId(), textToParse);
+                return "解析URL时发生内部错误。";
+            }
+        }
 
         public Task OnCompletedAsync()
         {
@@ -143,20 +169,4 @@ namespace TelegramSearchBot.Grains
             await base.OnDeactivateAsync(reason, cancellationToken);
         }
     }
-
-    // Placeholder for a more structured URL info object if needed for another stream
-    // [GenerateSerializer]
-    // public class ProcessedUrlInfo
-    // {
-    //     [Id(0)]
-    //     public string OriginalUrl { get; set; }
-    //     [Id(1)]
-    //     public string ExpandedUrl { get; set; }
-    //     [Id(2)]
-    //     public string Title { get; set; }
-    //     [Id(3)]
-    //     public long OriginalMessageId { get; set; } // To correlate back if needed
-    //     [Id(4)]
-    //     public long ChatId { get; set; }
-    // }
 }

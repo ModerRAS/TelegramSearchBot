@@ -15,6 +15,12 @@ public class AppConfigurationService : IAppConfigurationService
     // Configuration Keys
     public const string BiliCookieKey = "BiliCookie";
     public const string BiliMaxDownloadSizeMBKey = "BiliMaxDownloadSizeMB"; // Added for configurable download size limit
+    public const string GlobalDefaultLlmModelKey = "GlobalDefaultLlmModel"; // Added for global default LLM model
+    private const string ChatLlmModelPrefix = "ChatConfig_LlmModel_"; // Prefix for chat-specific LLM model
+
+    public static string GetChatLlmModelKey(long chatId) => $"{ChatLlmModelPrefix}{chatId}"; // Note: This key is for AppConfigurationItems, but user wants GroupSettings for chat-specific LLM.
+                                                                                        // This method might be unused if GroupSettings is the sole source for chat-specific LLM.
+                                                                                        // However, GlobalDefaultLlmModelKey is still valid for AppConfigurationItems.
 
     public AppConfigurationService(IServiceScopeFactory scopeFactory, ILogger<AppConfigurationService> logger)
     {

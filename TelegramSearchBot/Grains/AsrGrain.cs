@@ -8,10 +8,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Interfaces; // For IAsrGrain, ITelegramMessageSenderGrain, IAudioProcessingService
-using TelegramSearchBot.Manager;  // For WhisperManager
-using TelegramSearchBot.Model;    // For StreamMessage, OrleansStreamConstants
-// Removed: using TelegramSearchBot.Intrerface; 
+using TelegramSearchBot.Interfaces; 
+using TelegramSearchBot.Manager;  
+using TelegramSearchBot.Model;    
+using System.Net.Http; // Added for HttpClient
+using Microsoft.Extensions.Logging; // Added for ILogger
 
 namespace TelegramSearchBot.Grains
 {
@@ -20,24 +21,32 @@ namespace TelegramSearchBot.Grains
         private readonly ITelegramBotClient _botClient;
         private readonly WhisperManager _whisperManager;
         private readonly IAudioProcessingService _audioProcessingService;
-        private readonly ILogger _logger;
+        private readonly Microsoft.Extensions.Logging.ILogger<AsrGrain> _logger; // Changed type
         private readonly IGrainFactory _grainFactory;
+        private readonly IHttpClientFactory _httpClientFactory; // Added
 
         private IAsyncStream<StreamMessage<Message>> _rawAudioStream;
         private IAsyncStream<StreamMessage<string>> _textContentStream;
 
-        public AsrGrain(ITelegramBotClient botClient, WhisperManager whisperManager, IAudioProcessingService audioProcessingService, IGrainFactory grainFactory)
+        public AsrGrain(
+            ITelegramBotClient botClient, 
+            WhisperManager whisperManager, 
+            IAudioProcessingService audioProcessingService, 
+            IGrainFactory grainFactory,
+            IHttpClientFactory httpClientFactory, // Added
+            Microsoft.Extensions.Logging.ILogger<AsrGrain> logger) // Added
         {
             _botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
             _whisperManager = whisperManager ?? throw new ArgumentNullException(nameof(whisperManager));
             _audioProcessingService = audioProcessingService ?? throw new ArgumentNullException(nameof(audioProcessingService));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
-            _logger = Log.ForContext<AsrGrain>();
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory)); // Added
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger)); // Changed
         }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
         {
-            _logger.Information("AsrGrain {GrainId} activated.", this.GetGrainId());
+            _logger.LogInformation("AsrGrain {GrainId} activated.", this.GetGrainId()); // Changed to LogInformation
 
             var streamProvider = this.GetStreamProvider("DefaultSMSProvider"); 
 
@@ -58,11 +67,11 @@ namespace TelegramSearchBot.Grains
             var originalMessage = streamMessage.Payload;
             if (originalMessage?.Audio == null && originalMessage?.Voice == null)
             {
-                _logger.Warning("AsrGrain received message without audio/voice data. MessageId: {MessageId}", originalMessage?.MessageId);
+                _logger.LogWarning("AsrGrain received message without audio/voice data. MessageId: {MessageId}", originalMessage?.MessageId); // Changed to LogWarning
                 return;
             }
 
-            _logger.Information("AsrGrain received audio/voice message. ChatId: {ChatId}, MessageId: {MessageId}",
+            _logger.LogInformation("AsrGrain received audio/voice message. ChatId: {ChatId}, MessageId: {MessageId}", // Changed to LogInformation
                 originalMessage.Chat.Id, originalMessage.MessageId);
 
             string fileId = originalMessage.Audio?.FileId ?? originalMessage.Voice?.FileId;
@@ -74,23 +83,29 @@ namespace TelegramSearchBot.Grains
 
             try
             {
-                var fileInfo = await _botClient.GetFileAsync(fileId); // Ensure GetFileAsync is used
+                var fileInfo = await _botClient.GetFileAsync(fileId, CancellationToken.None); // Use CancellationToken.None
                 if (fileInfo.FilePath == null)
                 {
-                    _logger.Error("Unable to get file path for FileId {FileId} from Telegram for ASR.", fileId);
+                    _logger.LogError("Unable to get file path for FileId {FileId} from Telegram for ASR.", fileId); // Changed to LogError
                     throw new Exception($"Telegram API did not return a file path for FileId {fileId} (ASR).");
                 }
                 
-                // Ensure a unique name for the initially downloaded file
                 string originalExtension = Path.GetExtension(fileInfo.FilePath);
-                if (string.IsNullOrEmpty(originalExtension) && originalMessage.Voice != null) originalExtension = ".ogg"; // Voice often doesn't have extension in FilePath
+                if (string.IsNullOrEmpty(originalExtension) && originalMessage.Voice != null) originalExtension = ".ogg"; 
                 tempFilePath = Path.Combine(Path.GetTempPath(), fileInfo.FileUniqueId + originalExtension);
 
-                using (var fileStream = new FileStream(tempFilePath, FileMode.Create))
+                await using (var fileStream = new FileStream(tempFilePath, FileMode.Create))
                 {
-                    await _botClient.DownloadFile(fileInfo.FilePath, fileStream);
+                    // Use HttpClient to download, similar to OcrGrain
+                    var httpClient = _httpClientFactory.CreateClient();
+                    var fileUrl = $"https://api.telegram.org/file/bot{TelegramSearchBot.Env.BotToken}/{fileInfo.FilePath}";
+                    _logger.LogInformation("Attempting to download audio file from URL: {FileUrl}", fileUrl); // Changed to LogInformation
+                    using var response = await httpClient.GetAsync(fileUrl, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
+                    response.EnsureSuccessStatusCode();
+                    await using var contentStream = await response.Content.ReadAsStreamAsync(CancellationToken.None);
+                    await contentStream.CopyToAsync(fileStream, CancellationToken.None);
                 }
-                _logger.Information("Audio downloaded to {TempFilePath} for ASR.", tempFilePath);
+                _logger.LogInformation("Audio downloaded to {TempFilePath} for ASR.", tempFilePath); // Changed to LogInformation
 
                 // Convert to WAV using the injected service
                 byte[] wavBytes = await _audioProcessingService.ConvertToWavAsync(tempFilePath);
@@ -103,21 +118,21 @@ namespace TelegramSearchBot.Grains
                 
                 if (!string.IsNullOrWhiteSpace(asrResultText))
                 {
-                    _logger.Information("ASR successful for MessageId {MessageId}. Text found.", originalMessage.MessageId);
+                    _logger.LogInformation("ASR successful for MessageId {MessageId}. Text found.", originalMessage.MessageId); // Changed to LogInformation
                 }
                 else
                 {
-                    _logger.Information("ASR for MessageId {MessageId} found no text or an issue occurred.", originalMessage.MessageId);
+                    _logger.LogInformation("ASR for MessageId {MessageId} found no text or an issue occurred.", originalMessage.MessageId); // Changed to LogInformation
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error during ASR processing for MessageId {MessageId}", originalMessage.MessageId);
+                _logger.LogError(ex, "Error during ASR processing for MessageId {MessageId}", originalMessage.MessageId); // Changed to LogError
                 var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
                 await senderGrain.SendMessageAsync(new TelegramMessageToSend
                 {
                     ChatId = originalMessage.Chat.Id,
-                    Text = $"语音转文字处理时出错: {ex.Message}",
+                    Text = "语音转文字处理时发生内部错误，请稍后再试。", // Generic error message
                     ReplyToMessageId = originalMessage.MessageId
                 });
                 return;
@@ -126,7 +141,7 @@ namespace TelegramSearchBot.Grains
             {
                 if (tempFilePath != null && System.IO.File.Exists(tempFilePath))
                 {
-                    try { System.IO.File.Delete(tempFilePath); } catch (Exception ex) { _logger.Warning(ex, "Failed to delete temp ASR file: {TempFilePath}", tempFilePath); }
+                    try { System.IO.File.Delete(tempFilePath); } catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp ASR file: {TempFilePath}", tempFilePath); } // Changed to LogWarning
                 }
                 // If ConvertToWav created another temp file, delete it too.
                 // For now, assuming ConvertToWav(string path) returns bytes directly or uses the same temp path.
@@ -134,6 +149,57 @@ namespace TelegramSearchBot.Grains
 
             if (!string.IsNullOrWhiteSpace(asrResultText))
             {
+                // 1. Reply directly to the user (as per user guide)
+                var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
+                const int telegramMessageLengthLimit = 4000; // A bit less than actual 4096 to be safe
+
+                    if (asrResultText.Length > telegramMessageLengthLimit)
+                    {
+                        _logger.LogInformation("ASR text for MessageId {MessageId} is too long ({Length}), sending as SRT file.", originalMessage.MessageId, asrResultText.Length); // Changed to LogInformation
+                        try
+                        {
+                            // Create SRT content (simple version: assumes entire text is one segment)
+                        // More sophisticated SRT would involve timing, but WhisperManager might provide that.
+                        // For now, a simple single-segment SRT.
+                        var srtFileName = $"{originalMessage.MessageId}.srt";
+                        var srtContent = $"1\n00:00:00,000 --> 00:01:00,000\n{asrResultText}\n"; // Example: 1 minute duration
+                        var srtBytes = System.Text.Encoding.UTF8.GetBytes(srtContent);
+                        using (var srtStream = new MemoryStream(srtBytes))
+                        {
+                            // ITelegramMessageSenderGrain doesn't have SendDocument. Use _botClient directly.
+                            await _botClient.SendDocumentAsync(
+                                chatId: originalMessage.Chat.Id,
+                                document: new InputFileStream(srtStream, srtFileName),
+                                caption: $"语音转文字结果 (SRT格式)",
+                                replyParameters: new ReplyParameters { MessageId = originalMessage.MessageId }
+                            );
+                        }
+                        _logger.LogInformation("ASR result for MessageId {MessageId} sent as SRT file.", originalMessage.MessageId); // Changed to LogInformation
+                    }
+                    catch (Exception docEx)
+                    {
+                        _logger.LogError(docEx, "Error sending ASR result as SRT file for MessageId {MessageId}. Falling back to text (if possible) or error message.", originalMessage.MessageId); // Changed to LogError
+                        // Fallback or send error message if document sending fails
+                        await senderGrain.SendMessageAsync(new TelegramMessageToSend
+                        {
+                            ChatId = originalMessage.Chat.Id,
+                            Text = "抱歉，发送SRT文件时出错。识别的文本可能过长。",
+                            ReplyToMessageId = originalMessage.MessageId
+                        });
+                    }
+                }
+                else
+                {
+                    await senderGrain.SendMessageAsync(new TelegramMessageToSend
+                    {
+                        ChatId = originalMessage.Chat.Id,
+                        Text = asrResultText,
+                        ReplyToMessageId = originalMessage.MessageId
+                    });
+                    _logger.LogInformation("ASR result for MessageId {MessageId} sent directly to user.", originalMessage.MessageId); // Changed to LogInformation
+                }
+
+                // 2. Publish ASR text to the text processing stream for further internal processing
                 var textContentMessage = new StreamMessage<string>(
                     payload: asrResultText,
                     originalMessageId: originalMessage.MessageId,
@@ -142,25 +208,25 @@ namespace TelegramSearchBot.Grains
                     source: "AsrGrainResult"
                 );
                 await _textContentStream.OnNextAsync(textContentMessage);
-                _logger.Information("ASR result for MessageId {MessageId} published to TextContentToProcess stream.", originalMessage.MessageId);
+                _logger.LogInformation("ASR result for MessageId {MessageId} published to TextContentToProcess stream.", originalMessage.MessageId); // Changed to LogInformation
             }
         }
 
         public Task OnCompletedAsync()
         {
-            _logger.Information("AsrGrain {GrainId} completed stream processing.", this.GetGrainId());
+            _logger.LogInformation("AsrGrain {GrainId} completed stream processing.", this.GetGrainId()); // Changed to LogInformation
             return Task.CompletedTask;
         }
 
         public Task OnErrorAsync(Exception ex)
         {
-            _logger.Error(ex, "AsrGrain {GrainId} encountered an error on stream.", this.GetGrainId());
+            _logger.LogError(ex, "AsrGrain {GrainId} encountered an error on stream.", this.GetGrainId()); // Changed to LogError
             return Task.CompletedTask;
         }
 
         public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
         {
-            _logger.Information("AsrGrain {GrainId} deactivating. Reason: {Reason}", this.GetGrainId(), reason);
+            _logger.LogInformation("AsrGrain {GrainId} deactivating. Reason: {Reason}", this.GetGrainId(), reason); // Changed to LogInformation
             if (_rawAudioStream != null)
             {
                 var subscriptions = await _rawAudioStream.GetAllSubscriptionHandles();

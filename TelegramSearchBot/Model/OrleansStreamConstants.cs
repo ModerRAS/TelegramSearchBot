@@ -33,5 +33,9 @@ namespace TelegramSearchBot.Model
         public const string RawCommandMessagesStreamName = "RawCommandMessages";
         public const string RawCallbackQueryMessagesStreamName = "RawCallbackQueryMessages";
         public const string TextContentToProcessStreamName = "TextContentToProcess";
+
+        // LLM Interaction Stream
+        public const string LlmStreamNamespace = "LlmInteraction"; 
+        public const string LlmInteractionTriggerStreamName = "LlmInteractionTrigger";
     }
 }

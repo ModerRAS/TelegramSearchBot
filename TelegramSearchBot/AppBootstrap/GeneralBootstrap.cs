@@ -82,8 +82,9 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddTransient<TelegramSearchBot.Service.Bilibili.IDownloadService, TelegramSearchBot.Service.Bilibili.DownloadService>();
                     // Manually register TelegramFileCacheService and its interface
                     service.AddTransient<TelegramSearchBot.Service.Bilibili.ITelegramFileCacheService, TelegramSearchBot.Service.Bilibili.TelegramFileCacheService>();
-                    // Manually register AppConfigurationService and its interface
-                    service.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
+                    // Manually register AppConfigurationService and its interface as Singleton
+                    service.AddSingleton<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>(); // Corrected namespace
+                    service.AddSingleton<IGroupSettingsService, GroupSettingsService>(); // Added GroupSettingsService registration
 
                     // Register AudioProcessingService
                     service.AddTransient<IAudioProcessingService, Service.Media.AudioProcessingService>();

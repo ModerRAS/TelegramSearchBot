@@ -4,7 +4,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
-using TelegramSearchBot.Intrerface;
+// Remove 'using TelegramSearchBot.Intrerface;' if IAppConfigurationService is not there.
+// Add 'using TelegramSearchBot.Service.Common;' if IAppConfigurationService is there. It's already added.
+using TelegramSearchBot.Intrerface; // For IService
+using TelegramSearchBot.Service.Common; // For AppConfigurationService class constants and IAppConfigurationService
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.AI;
@@ -18,6 +21,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly OpenAIService _openAIService;
         private readonly OllamaService _ollamaService;
         private readonly ILogger<GeneralLLMService> _logger;
+        private readonly TelegramSearchBot.Service.Common.IAppConfigurationService _appConfigurationService; // Fully qualified for clarity
         
         public string ServiceName => "GeneralLLMService";
         
@@ -26,12 +30,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
             DataDbContext dbContext,
             ILogger<GeneralLLMService> logger,
             OllamaService ollamaService,
-            OpenAIService openAIService
-            ) 
+            OpenAIService openAIService,
+            TelegramSearchBot.Service.Common.IAppConfigurationService appConfigurationService) // Fully qualified for clarity
         {
             this.connectionMultiplexer = connectionMultiplexer;
             _dbContext = dbContext;
             _logger = logger;
+            _appConfigurationService = appConfigurationService; 
             
             // Initialize services with default values
             _openAIService = openAIService;
@@ -40,14 +45,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, 
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            // 1. 获取模型名称
-            var modelName = await (from s in _dbContext.GroupSettings
+            // 1. 获取聊天特定模型名称
+            string modelName = await (from s in _dbContext.GroupSettings
                                  where s.GroupId == ChatId
-                                 select s.LLMModelName).FirstOrDefaultAsync();
+                                 select s.LLMModelName).FirstOrDefaultAsync(cancellationToken);
             
             if (string.IsNullOrEmpty(modelName)) {
-                _logger.LogWarning("请指定模型名称");
-                yield break;
+                _logger.LogInformation("No chat-specific LLM model set for ChatId {ChatId}. Attempting to use global default.", ChatId);
+                // Accessing the const string via the class name directly
+                modelName = await _appConfigurationService.GetConfigurationValueAsync(TelegramSearchBot.Service.Common.AppConfigurationService.GlobalDefaultLlmModelKey);
+                if (string.IsNullOrEmpty(modelName))
+                {
+                    _logger.LogWarning("Global default LLM model is not configured. Cannot proceed for ChatId {ChatId}.", ChatId);
+                    yield break;
+                }
+                _logger.LogInformation("Using global default LLM model {ModelName} for ChatId {ChatId}.", modelName, ChatId);
+            } else {
+                 _logger.LogInformation("Using chat-specific LLM model {ModelName} for ChatId {ChatId}.", modelName, ChatId);
             }
 
             // 2. 查询ChannelWithModel获取关联的LLMChannel
