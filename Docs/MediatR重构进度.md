@@ -8,13 +8,12 @@
 - [x] Download/DownloadVideoRequestHandler 已实现，原DownloadVideoController功能已迁移到MediatR Handler，实现Bot视频消息保存。
 - [x] AI/ASR/AutoAsrRequestHandler 已实现，原AutoASRController功能已迁移到MediatR Handler，实现Bot音视频自动ASR转写。
 - [x] AI/LLM/GeneralLlmRequestHandler 已实现，原GeneralLLMController功能已迁移到MediatR Handler，实现Bot LLM 对话。
+- [x] Bilibili/BiliMessageHandler 已实现，原BiliMessageController功能已迁移到MediatR Handler
+- [x] Bilibili/BiliVideoHandler 已实现，视频处理逻辑完整迁移
+- [x] Bilibili/BiliOpusHandler 已实现，动态处理逻辑完整迁移
 
 ## 进行中
 
-- [x] Bilibili
-  - [x] 视频处理 (BiliVideoHandler)
-  - [x] 动态处理 (BiliOpusHandler) 
-  - [x] 消息处理 (BiliMessageHandler)
 - [ ] Download（其余子模块）
 - [ ] Manage
 - [ ] Search
