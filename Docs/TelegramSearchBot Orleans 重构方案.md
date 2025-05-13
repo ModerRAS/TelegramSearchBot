@@ -124,7 +124,7 @@ __Phase 1: 核心 Grain 实现 (可并行分配给不同开发者/小组)__
     1.  接收搜索请求（包含查询关键词、初始分页参数等）。
     2.  调用 `ISearchService` (封装了 `LuceneManager` 的逻辑) 执行搜索。
     3.  **状态管理**: 在 Grain 内部持久化当前搜索会话的状态，包括原始查询、当前页码、每页数量、总结果数等。这将替代 `SearchNextPageController` 中使用的 LiteDB 缓存。
-    4.  格式化搜索结果，并生成包含分页按钮（如“上一页”、“下一页”、“跳转页码”、“关闭搜索”）的 Telegram Inline Keyboard。按钮的 CallbackData 需要包含足够的信息以路由回此 Grain 的特定实例及相应的操作 (e.g., `searchgrain:<grainId>:next_page`, `searchgrain:<grainId>:page:3`, `searchgrain:<grainId>:cancel`)。
+    4.  格式化搜索结果，并生成包含分页按钮（如"上一页"、"下一页"、"跳转页码"、"关闭搜索"）的 Telegram Inline Keyboard。按钮的 CallbackData 需要包含足够的信息以路由回此 Grain 的特定实例及相应的操作 (e.g., `searchgrain:<grainId>:next_page`, `searchgrain:<grainId>:page:3`, `searchgrain:<grainId>:cancel`)。
     5.  通过 `ITelegramMessageSenderGrain` 发送包含结果和分页按钮的消息。
     6.  实现处理分页回调的方法 (e.g., `HandleNextPageAsync()`, `HandlePreviousPageAsync()`, `HandleGoToPageAsync(int pageNumber)`, `HandleCancelSearchAsync()`)。这些方法会:
         *   由 `CallbackQueryHandlerGrain` 根据解析的 CallbackData 调用。
@@ -207,3 +207,483 @@ __给开发者的建议：__
 - 优先保证接口的稳定性。如果接口需要变更，及时通知所有依赖方。
 - 充分利用 Orleans 提供的日志和调试工具。
 - 编写可测试的代码。
+
+__补充章节：技术实现细节__
+
+## 一、多进程架构迁移策略
+
+### 1. 现状分析
+目前系统使用 AppBootstrap 机制启动独立进程来处理可能存在内存泄漏的服务（OCR、ASR等）。主进程通过进程间通信分发任务，接收结果后独立进程退出，以此规避内存泄漏。
+
+### 2. Orleans迁移方案
+
+#### 方案A：完全迁移到Orleans Grain（推荐）
+
+```csharp
+// 示例：OCR Grain的生命周期管理
+public class OcrGrain : Grain, IOcrGrain
+{
+    private PaddleOCR _ocrEngine;
+    private DateTime _lastUsed;
+    
+    public override async Task OnActivateAsync(CancellationToken ct)
+    {
+        _ocrEngine = new PaddleOCR();
+        _lastUsed = DateTime.UtcNow;
+        RegisterTimer(CheckIdleTimeout, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    }
+
+    private async Task CheckIdleTimeout(object state)
+    {
+        if (DateTime.UtcNow - _lastUsed > TimeSpan.FromMinutes(10))
+        {
+            await DeactivateOnIdle();
+        }
+    }
+    
+    public async Task<string> ProcessImageAsync(byte[] imageData)
+    {
+        _lastUsed = DateTime.UtcNow;
+        return await _ocrEngine.ProcessAsync(imageData);
+    }
+}
+```
+
+#### 方案B：Orleans管理的多进程架构
+
+```csharp
+public class ProcessManagerGrain : Grain, IProcessManagerGrain
+{
+    private Process _currentProcess;
+    private IDisposable _healthCheckTimer;
+
+    public override async Task OnActivateAsync(CancellationToken ct)
+    {
+        _healthCheckTimer = RegisterTimer(
+            CheckProcessHealth,
+            null,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(30));
+    }
+
+    private async Task CheckProcessHealth(object state)
+    {
+        if (_currentProcess?.HasExited ?? false)
+        {
+            await RestartProcessAsync();
+        }
+    }
+}
+```
+
+## 二、状态机迁移策略
+
+### 1. 基于Grain的状态机实现
+
+```csharp
+// 状态机基础接口
+public interface IStateMachineGrain : IGrainWithStringKey
+{
+    Task<StateResponse> TransitAsync(StateInput input);
+    Task<CurrentState> GetCurrentStateAsync();
+    Task ResetAsync();
+}
+
+// LLM配置编辑状态机示例
+public class LlmConfigStateMachineGrain : Grain<LlmConfigState>, IStateMachineGrain
+{
+    private readonly Dictionary<string, Func<StateInput, Task<StateResponse>>> _stateHandlers;
+    
+    public LlmConfigStateMachineGrain()
+    {
+        _stateHandlers = new Dictionary<string, Func<StateInput, Task<StateResponse>>>
+        {
+            ["Initial"] = HandleInitialState,
+            ["AwaitingChannelName"] = HandleChannelNameInput,
+            ["AwaitingEndpoint"] = HandleEndpointInput,
+            // ... 其他状态处理器
+        };
+    }
+}
+```
+
+## 三、搜索功能优化
+
+### 1. 分布式搜索架构
+
+```csharp
+public interface ISearchCoordinatorGrain : IGrainWithStringKey
+{
+    Task<SearchResults> SearchAsync(SearchQuery query);
+    Task<SearchResults> GetNextPageAsync(string searchId, int page);
+}
+
+public class SearchCoordinatorGrain : Grain<SearchCoordinatorState>, ISearchCoordinatorGrain
+{
+    private readonly List<ISearchIndexGrain> _indexShards;
+    private readonly ISearchResultCache _cache;
+
+    public async Task<SearchResults> SearchAsync(SearchQuery query)
+    {
+        // 1. 检查缓存
+        var cachedResult = await _cache.GetAsync(query.GetCacheKey());
+        if (cachedResult != null) return cachedResult;
+
+        // 2. 并行查询所有分片
+        var tasks = _indexShards.Select(shard => shard.SearchAsync(query));
+        var results = await Task.WhenAll(tasks);
+
+        // 3. 合并结果
+        var mergedResults = MergeResults(results);
+        
+        // 4. 缓存结果
+        await _cache.SetAsync(query.GetCacheKey(), mergedResults);
+        
+        return mergedResults;
+    }
+}
+```
+
+## 四、消息处理流水线
+
+### 1. 消息分类与路由
+
+```csharp
+public interface IMessageClassifierGrain : IGrainWithGuidKey
+{
+    Task ClassifyAndRouteAsync(Message message);
+}
+
+public class MessageClassifierGrain : Grain, IMessageClassifierGrain
+{
+    private readonly IStreamProvider _streamProvider;
+
+    public async Task ClassifyAndRouteAsync(Message message)
+    {
+        var streamMessage = new StreamMessage<Message>
+        {
+            Content = message,
+            Metadata = new MessageMetadata
+            {
+                MessageId = message.Id,
+                ChatId = message.ChatId,
+                Timestamp = DateTime.UtcNow
+            }
+        };
+
+        var stream = GetAppropriateStream(message);
+        await stream.OnNextAsync(streamMessage);
+    }
+}
+```
+
+### 2. 错误处理与重试
+
+```csharp
+public class RetryableGrain : Grain
+{
+    protected async Task ExecuteWithRetryAsync(Func<Task> action, int maxRetries = 3)
+    {
+        var retryCount = 0;
+        while (true)
+        {
+            try
+            {
+                await action();
+                return;
+            }
+            catch (Exception ex) when (retryCount < maxRetries)
+            {
+                retryCount++;
+                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retryCount)));
+            }
+        }
+    }
+}
+```
+
+## 五、数据迁移策略
+
+### 1. LiteDB到Orleans存储的迁移
+
+```csharp
+public interface IDataMigrationGrain : IGrainWithGuidKey
+{
+    Task StartMigrationAsync();
+    Task<MigrationStatus> GetStatusAsync();
+}
+
+public class DataMigrationGrain : Grain<MigrationState>, IDataMigrationGrain
+{
+    public async Task StartMigrationAsync()
+    {
+        // 1. 创建快照
+        await CreateSnapshot();
+
+        // 2. 增量同步
+        var lastSyncPoint = await GetLastSyncPoint();
+        await SyncIncrementalChanges(lastSyncPoint);
+
+        // 3. 验证
+        await ValidateMigration();
+    }
+}
+```
+
+## 六、监控和可观测性
+
+### 1. 自定义指标收集
+
+```csharp
+public class MonitoredGrain : Grain
+{
+    private readonly ITelemetryClient _telemetry;
+
+    protected async Task TrackOperation(string operation, Func<Task> action)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            await action();
+            _telemetry.TrackMetric($"Grain.{operation}.Duration", stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.TrackException(ex);
+            throw;
+        }
+    }
+}
+```
+
+### 2. 健康检查
+
+```csharp
+public interface IHealthCheckGrain : IGrainWithGuidKey
+{
+    Task<HealthStatus> CheckHealthAsync();
+}
+
+public class HealthCheckGrain : Grain, IHealthCheckGrain
+{
+    public async Task<HealthStatus> CheckHealthAsync()
+    {
+        var checks = new[]
+        {
+            CheckSiloHealth(),
+            CheckStorageHealth(),
+            CheckStreamProviderHealth()
+        };
+
+        var results = await Task.WhenAll(checks);
+        return AggregateResults(results);
+    }
+}
+```
+
+## 七、权限管理
+
+### 1. 基于Grain的权限系统
+
+```csharp
+public interface IAuthorizationGrain : IGrainWithStringKey
+{
+    Task<bool> CheckPermissionAsync(string userId, string permission);
+    Task GrantPermissionAsync(string userId, string permission);
+    Task RevokePermissionAsync(string userId, string permission);
+}
+
+public class AuthorizationGrain : Grain<AuthorizationState>, IAuthorizationGrain
+{
+    private readonly IPermissionCache _cache;
+
+    public async Task<bool> CheckPermissionAsync(string userId, string permission)
+    {
+        // 1. 检查缓存
+        if (await _cache.TryGetPermissionAsync(userId, permission, out var hasPermission))
+        {
+            return hasPermission;
+        }
+
+        // 2. 检查持久化状态
+        hasPermission = State.Permissions.Contains((userId, permission));
+        
+        // 3. 更新缓存
+        await _cache.SetPermissionAsync(userId, permission, hasPermission);
+        
+        return hasPermission;
+    }
+}
+```
+
+## 八、部署策略
+
+### 1. 容器化配置
+
+```dockerfile
+# Silo Host Dockerfile
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["TelegramSearchBot.Silo/TelegramSearchBot.Silo.csproj", "TelegramSearchBot.Silo/"]
+RUN dotnet restore "TelegramSearchBot.Silo/TelegramSearchBot.Silo.csproj"
+COPY . .
+WORKDIR "/src/TelegramSearchBot.Silo"
+RUN dotnet build "TelegramSearchBot.Silo.csproj" -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "TelegramSearchBot.Silo.csproj" -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "TelegramSearchBot.Silo.dll"]
+```
+
+### 2. Kubernetes配置
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram-searchbot-silo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: telegram-searchbot-silo
+  template:
+    metadata:
+      labels:
+        app: telegram-searchbot-silo
+    spec:
+      containers:
+      - name: silo
+        image: telegram-searchbot-silo:latest
+        env:
+        - name: ORLEANS_SILO_PORT
+          value: "11111"
+        - name: ORLEANS_GATEWAY_PORT
+          value: "30000"
+```
+
+## 九、测试策略
+
+### 1. Grain单元测试
+
+```csharp
+public class SearchQueryGrainTests
+{
+    private TestCluster _cluster;
+    private ISearchQueryGrain _grain;
+
+    [SetUp]
+    public async Task Setup()
+    {
+        _cluster = new TestClusterBuilder()
+            .AddSiloBuilderConfigurator<TestSiloConfigurator>()
+            .Build();
+        await _cluster.DeployAsync();
+        _grain = _cluster.GrainFactory.GetGrain<ISearchQueryGrain>("test");
+    }
+
+    [Test]
+    public async Task Search_WithValidQuery_ReturnsResults()
+    {
+        // Arrange
+        var query = new SearchQuery { Keyword = "test" };
+
+        // Act
+        var result = await _grain.SearchAsync(query);
+
+        // Assert
+        Assert.That(result.Items, Is.Not.Empty);
+    }
+}
+```
+
+### 2. 集成测试
+
+```csharp
+public class MessageProcessingTests
+{
+    private IClusterClient _client;
+    private IStreamProvider _streamProvider;
+
+    [SetUp]
+    public async Task Setup()
+    {
+        var builder = new ClientBuilder()
+            .UseLocalhostClustering()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IStreamProvider, TestStreamProvider>();
+            });
+
+        _client = builder.Build();
+        await _client.Connect();
+    }
+
+    [Test]
+    public async Task ProcessMessage_CompleteFlow_SuccessfullyProcessed()
+    {
+        // Arrange
+        var message = new Message { /* ... */ };
+        var stream = _streamProvider.GetStream<Message>("test-stream");
+
+        // Act
+        await stream.OnNextAsync(message);
+
+        // Assert
+        // Verify message was processed through the entire pipeline
+    }
+}
+```
+
+## 十、性能优化建议
+
+1. Grain激活优化
+   - 使用粘性激活
+   - 实现智能预热
+   - 合理设置空闲超时
+
+2. 流处理优化
+   - 使用批处理
+   - 实现背压机制
+   - 合理分片
+
+3. 状态持久化优化
+   - 使用写入缓冲
+   - 实现增量存储
+   - 选择合适的存储提供程序
+
+## 十一、迁移顺序建议
+
+1. 第一阶段（基础设施）：
+   - 搭建Orleans集群
+   - 实现消息入口适配器
+   - 部署监控系统
+
+2. 第二阶段（核心功能）：
+   - 迁移搜索功能
+   - 迁移消息存储
+   - 迁移权限系统
+
+3. 第三阶段（AI服务）：
+   - 迁移OCR服务
+   - 迁移ASR服务
+   - 迁移LLM服务
+
+4. 第四阶段（辅助功能）：
+   - 迁移URL处理
+   - 迁移B站集成
+   - 迁移文件下载
+
+5. 第五阶段（优化完善）：
+   - 性能优化
+   - 监控完善
+   - 文档更新
+
+每个阶段都应该包含完整的测试覆盖，并且在迁移过程中保持系统的可用性。建议采用灰度发布策略，逐步将流量迁移到新系统。
