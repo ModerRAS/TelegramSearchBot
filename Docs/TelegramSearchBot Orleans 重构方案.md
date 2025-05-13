@@ -135,7 +135,22 @@ __Phase 1: 核心 Grain 实现 (可并行分配给不同开发者/小组)__
   - __依赖__: `ISearchService`, `ITelegramMessageSenderGrain`.
   - __替换逻辑**: `SearchController.cs` (用于发起搜索) 和 `SearchNextPageController.cs` (用于处理分页回调和状态管理)。
 
-- __(其他 Grains)__: 根据项目具体功能，继续添加和分配其他 Grain 的实现任务 (e.g., `ShortUrlResolutionGrain`)。
+- __Task 1.11: `FileDownloadGrain` 实现__
+  - __接口__: `IFileDownloadGrain`
+  - __消费 Stream__: `MediaDownloadRequests`
+  - __职责__:（原有下载控制器逻辑迁移）
+
+- __Task 1.12: `MessageStorageGrain` 实现__
+  - __接口__: `IMessageStorageGrain`
+  - __持久化__: 替换LiteDB存储方案
+
+- __Task 1.13: `AuthGrain` 实现__
+  - __接口__: `IAuthGrain`
+  - __职责__:（整合权限校验逻辑）
+
+- __Task 1.14: `ShortUrlGrain` 实现__
+  - __接口__: `IShortUrlGrain`
+  - __持久化__:（处理短链接数据库迁移）
 
 ---
 
