@@ -7,10 +7,10 @@
 - [x] Download/DownloadAudioRequestHandler 已实现，原DownloadAudioController功能已迁移到MediatR Handler，实现Bot音频消息保存。
 - [x] Download/DownloadVideoRequestHandler 已实现，原DownloadVideoController功能已迁移到MediatR Handler，实现Bot视频消息保存。
 - [x] AI/ASR/AutoAsrRequestHandler 已实现，原AutoASRController功能已迁移到MediatR Handler，实现Bot音视频自动ASR转写。
+- [x] AI/LLM/GeneralLlmRequestHandler 已实现，原GeneralLLMController功能已迁移到MediatR Handler，实现Bot LLM 对话。
 
 ## 进行中
 
-- [ ] AI/LLM
 - [ ] Bilibili
 - [ ] Download（其余子模块）
 - [ ] Manage
