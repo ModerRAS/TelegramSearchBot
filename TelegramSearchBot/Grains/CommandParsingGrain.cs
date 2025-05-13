@@ -86,17 +86,23 @@ namespace TelegramSearchBot.Grains
                 switch (command)
                 {
                     case "/start":
-                        responseText = "欢迎使用机器人！这是一个 /start 命令的响应。";
+                        responseText = "欢迎使用TelegramSearchBot！输入 /help 查看所有可用指令。";
                         commandProcessedByThisGrain = true;
                         break;
                     case "/help":
-                        // Update help text based on Bot_Commands_User_Guide.md
-                        responseText = "通用指令:\n" +
-                                       "  `搜索 <关键词>` - 搜索内容\n" +
-                                       "  `/resolveurls <文本或回复消息>` - 解析链接\n" +
-                                       "管理员指令 (部分):\n" +
-                                       "  `设置模型 <模型名称>`\n" +
-                                       "  (更多指令请参考完整用户指南)";
+                        responseText = "【通用用户指令】\n" +
+                            "搜索 <关键词> - 搜索内容\n" +
+                            "/resolveurls <文本或回复消息> - 解析短链\n" +
+                            "\n【管理员指令】\n" +
+                            "设置模型 <模型名称>\n" +
+                            "设置管理群/取消管理群\n" +
+                            "/setbilicookie <Cookie字符串>\n" +
+                            "/getbilicookie\n" +
+                            "/setbilimaxsize <MB数>\n" +
+                            "/getbilimaxsize\n" +
+                            "新建渠道/编辑渠道/添加模型/移除模型/查看模型\n" +
+                            "重建索引/导入数据/迁移数据\n" +
+                            "\n详细说明请见用户指南。";
                         commandProcessedByThisGrain = true;
                         break;
                     case "搜索": // Handles "搜索 <关键词>"
@@ -253,24 +259,126 @@ namespace TelegramSearchBot.Grains
                         }
                         commandProcessedByThisGrain = true;
                         break;
-                    // TODO: Add cases for other admin commands etc. based on Bot_Commands_User_Guide.md
-                    
+                    case "设置管理群":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以设置管理群。";
+                            commandProcessedByThisGrain = true;
+                        }
+                        else
+                        {
+                            // TODO: 设置管理群逻辑
+                            responseText = "[TODO] 设置管理群逻辑未实现";
+                            commandProcessedByThisGrain = true;
+                        }
+                        break;
+                    case "取消管理群":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以取消管理群。";
+                            commandProcessedByThisGrain = true;
+                        }
+                        else
+                        {
+                            // TODO: 取消管理群逻辑
+                            responseText = "[TODO] 取消管理群逻辑未实现";
+                            commandProcessedByThisGrain = true;
+                        }
+                        break;
+                    case "/setbilicookie":
+                    case "设置B站Cookie":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以设置B站Cookie。";
+                        }
+                        else
+                        {
+                            // TODO: 设置B站Cookie逻辑
+                            responseText = "[TODO] 设置B站Cookie逻辑未实现";
+                        }
+                        commandProcessedByThisGrain = true;
+                        break;
+                    case "/getbilicookie":
+                    case "获取B站Cookie":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以获取B站Cookie。";
+                        }
+                        else
+                        {
+                            // TODO: 获取B站Cookie逻辑
+                            responseText = "[TODO] 获取B站Cookie逻辑未实现";
+                        }
+                        commandProcessedByThisGrain = true;
+                        break;
+                    case "/setbilimaxsize":
+                    case "设置B站最大下载大小":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以设置B站最大下载大小。";
+                        }
+                        else
+                        {
+                            // TODO: 设置B站最大下载大小逻辑
+                            responseText = "[TODO] 设置B站最大下载大小逻辑未实现";
+                        }
+                        commandProcessedByThisGrain = true;
+                        break;
+                    case "/getbilimaxsize":
+                    case "获取B站最大下载大小":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以获取B站最大下载大小。";
+                        }
+                        else
+                        {
+                            // TODO: 获取B站最大下载大小逻辑
+                            responseText = "[TODO] 获取B站最大下载大小逻辑未实现";
+                        }
+                        commandProcessedByThisGrain = true;
+                        break;
+                    case "新建渠道":
+                    case "编辑渠道":
+                    case "添加模型":
+                    case "移除模型":
+                    case "查看模型":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以管理LLM渠道。";
+                        }
+                        else
+                        {
+                            // TODO: LLM渠道管理状态机逻辑
+                            responseText = "[TODO] LLM渠道管理逻辑未实现";
+                        }
+                        commandProcessedByThisGrain = true;
+                        break;
+                    case "重建索引":
+                    case "导入数据":
+                    case "迁移数据":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以执行此操作。";
+                        }
+                        else
+                        {
+                            // TODO: 数据管理逻辑
+                            responseText = "[TODO] 数据管理逻辑未实现";
+                        }
+                        commandProcessedByThisGrain = true;
+                        break;
                     default:
-                        if (command.StartsWith("/")) // Only consider slash commands as unknown if not "搜索"
+                        if (command.StartsWith("/"))
                         {
                             responseText = $"未知的命令: {command}\n输入 /help 查看可用命令。";
                             commandProcessedByThisGrain = true;
                         }
                         else if (string.IsNullOrEmpty(command) && !string.IsNullOrWhiteSpace(commandText))
                         {
-                            // Not a "搜索 " command and not a "/" command, likely just text not meant for command parsing.
-                            // This grain subscribes to RawCommandMessagesStreamName, which should ideally only get commands.
-                            // However, if the upstream dispatcher sends all text starting with "/" OR "搜索 ", this is fine.
-                            // If it's unexpected, log it.
-                             _logger.Debug("CommandParsingGrain received text not matching known command patterns: {FullText}", commandText);
-                            return; // Ignore if not a recognized command structure
+                            _logger.Debug("CommandParsingGrain received text not matching known command patterns: {FullText}", commandText);
+                            return;
                         } else if (string.IsNullOrEmpty(command)) {
-                            return; // Empty command text after trim
+                            return;
                         }
                         break;
                 }

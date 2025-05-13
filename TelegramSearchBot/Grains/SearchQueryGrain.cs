@@ -219,46 +219,43 @@ namespace TelegramSearchBot.Grains
             var keyboard = BuildInlineKeyboard(grainId);
             string currentResponseText = responseTextBuilder.ToString();
 
-            // For ITelegramMessageSenderGrain, we need methods to edit message text and reply markup.
-            // Since they are not defined yet, we will send a new message.
-            // This means _state.State.SearchResultMessageId will not be used for editing.
-            // This is a known limitation to be addressed by enhancing ITelegramMessageSenderGrain.
-            
-            _logger.Information("Grain {GrainId}: Sending new search result message because edit functionality is not yet fully supported in ITelegramMessageSenderGrain or SearchResultMessageId is not tracked.", grainId);
-            
-            // We need to get the message ID of the sent message to enable editing for pagination.
-            // This requires ITelegramMessageSenderGrain.SendMessageAsync to return the sent Message or its ID.
-            // For now, this is a placeholder for that functionality.
-            // If SendMessageAsync is void or doesn't return the ID, pagination by editing won't work.
-            // We will assume for now that we always send a new message for pagination until ITelegramMessageSenderGrain is enhanced.
-            
-            // To make pagination work by editing, we'd need something like:
-            // if (_state.State.SearchResultMessageId == 0) {
-            // var sentMessage = await sender.SendMessageAndGetIdAsync(...); // Hypothetical method
-            // _state.State.SearchResultMessageId = sentMessage.MessageId;
-            // } else {
-            // await sender.EditMessageTextAsync(_state.State.InitiatingChatId, _state.State.SearchResultMessageId, currentResponseText, keyboard);
-            // }
-            // For now, always send new:
-            var sentMessageId = await sender.SendMessageAsync(new TelegramMessageToSend
+            // 优先编辑原消息（只有首次或编辑失败时才发新消息）
+            if (_state.State.SearchResultMessageId != 0)
             {
-                ChatId = _state.State.InitiatingChatId,
-                Text = currentResponseText,
-                // ReplyToMessageId = _state.State.InitiatingMessageId, // Replying to original command might be noisy for paginated results
-                ReplyMarkup = keyboard
-                // ParseMode can be null for plain text, or set if Markdown/HTML is used in currentResponseText
-            });
-
-            if (sentMessageId.HasValue)
-            {
-                _state.State.SearchResultMessageId = sentMessageId.Value;
+                var editSuccess = await sender.EditMessageTextAsync(
+                    _state.State.InitiatingChatId,
+                    _state.State.SearchResultMessageId,
+                    currentResponseText,
+                    keyboard
+                );
+                if (!editSuccess)
+                {
+                    // 编辑失败则发新消息
+                    var sentMessageId = await sender.SendMessageAsync(new TelegramMessageToSend
+                    {
+                        ChatId = _state.State.InitiatingChatId,
+                        Text = currentResponseText,
+                        ReplyMarkup = keyboard
+                    });
+                    if (sentMessageId.HasValue)
+                        _state.State.SearchResultMessageId = sentMessageId.Value;
+                    else
+                        _state.State.SearchResultMessageId = 0;
+                }
             }
             else
             {
-                _logger.Warning("Grain {GrainId}: SendMessageAsync did not return a messageId for search results. Delete functionality might be affected.", grainId);
-                _state.State.SearchResultMessageId = 0; // Ensure it's reset if sending failed to return ID
+                var sentMessageId = await sender.SendMessageAsync(new TelegramMessageToSend
+                {
+                    ChatId = _state.State.InitiatingChatId,
+                    Text = currentResponseText,
+                    ReplyMarkup = keyboard
+                });
+                if (sentMessageId.HasValue)
+                    _state.State.SearchResultMessageId = sentMessageId.Value;
+                else
+                    _state.State.SearchResultMessageId = 0;
             }
-
             await _state.WriteStateAsync();
         }
 

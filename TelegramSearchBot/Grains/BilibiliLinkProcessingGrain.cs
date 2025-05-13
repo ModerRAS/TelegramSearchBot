@@ -71,22 +71,32 @@ namespace TelegramSearchBot.Grains
                 var url = match.Value;
                 try
                 {
-                    // IBiliApiService should handle disambiguation (video vs opus vs shortlink)
+                    // 视频
                     var videoInfo = await _biliApiService.GetVideoInfoAsync(url);
                     if (videoInfo != null)
                     {
                         await HandleVideoInfoAsync(streamMessage, videoInfo, senderGrain);
-                        continue; // Processed as video
+                        // TODO: 下载逻辑，判断文件大小，调用下载服务，发送视频（需配置管理）
+                        // long maxSize = await _appConfigService.GetConfigurationValueAsync(...);
+                        // if (videoInfo.Size < maxSize) { ...下载并通过senderGrain.SendVideoAsync... }
+                        continue;
                     }
-
+                    // 动态
                     var opusInfo = await _biliApiService.GetOpusInfoAsync(url);
                     if (opusInfo != null)
                     {
                         await HandleOpusInfoAsync(streamMessage, opusInfo, senderGrain);
-                        continue; // Processed as opus
+                        continue;
                     }
-
-                    _logger.Warning("BilibiliLinkProcessingGrain {GrainId}: Could not parse Bili URL {Url} as video or opus. OriginalMessageId: {OriginalMessageId}",
+                    // 文章(cv)
+                    if (url.Contains("/read/cv") || url.Contains("/cv"))
+                    {
+                        // TODO: 调用IBiliApiService.GetArticleInfoAsync(url)，格式化并通过senderGrain.SendMessageAsync回复
+                        // var articleInfo = await _biliApiService.GetArticleInfoAsync(url);
+                        // if (articleInfo != null) { ...格式化并回复... }
+                        continue;
+                    }
+                    _logger.Warning("BilibiliLinkProcessingGrain {GrainId}: Could not parse Bili URL {Url} as video, opus, or article. OriginalMessageId: {OriginalMessageId}",
                         this.GetGrainId(), url, streamMessage.OriginalMessageId);
                 }
                 catch (Exception ex)

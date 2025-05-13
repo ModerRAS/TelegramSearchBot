@@ -99,5 +99,105 @@ namespace TelegramSearchBot.Grains
                 // Optionally rethrow or handle specific Telegram API exceptions (e.g., message not found, not enough rights)
             }
         }
+
+        public async Task<bool> EditMessageTextAsync(long chatId, int messageId, string newText, IReplyMarkup replyMarkup = null)
+        {
+            try
+            {
+                await _botClient.EditMessageTextAsync(
+                    chatId: chatId,
+                    messageId: messageId,
+                    text: newText,
+                    replyMarkup: replyMarkup
+                );
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error editing message text for ChatId {ChatId}, MessageId {MessageId}", chatId, messageId);
+                return false;
+            }
+        }
+
+        public async Task<bool> EditMessageReplyMarkupAsync(long chatId, int messageId, IReplyMarkup replyMarkup)
+        {
+            try
+            {
+                await _botClient.EditMessageReplyMarkupAsync(
+                    chatId: chatId,
+                    messageId: messageId,
+                    replyMarkup: replyMarkup
+                );
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error editing message reply markup for ChatId {ChatId}, MessageId {MessageId}", chatId, messageId);
+                return false;
+            }
+        }
+
+        public async Task<int?> SendPhotoAsync(long chatId, byte[] photoBytes, string caption = null, int? replyToMessageId = null, IReplyMarkup replyMarkup = null)
+        {
+            try
+            {
+                using var stream = new System.IO.MemoryStream(photoBytes);
+                var sent = await _botClient.SendPhotoAsync(
+                    chatId: chatId,
+                    photo: Telegram.Bot.Types.InputFiles.InputFile.FromStream(stream),
+                    caption: caption,
+                    replyToMessageId: replyToMessageId,
+                    replyMarkup: replyMarkup
+                );
+                return sent.MessageId;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error sending photo to ChatId {ChatId}", chatId);
+                return null;
+            }
+        }
+
+        public async Task<int?> SendDocumentAsync(long chatId, byte[] fileBytes, string fileName, string caption = null, int? replyToMessageId = null, IReplyMarkup replyMarkup = null)
+        {
+            try
+            {
+                using var stream = new System.IO.MemoryStream(fileBytes);
+                var sent = await _botClient.SendDocumentAsync(
+                    chatId: chatId,
+                    document: Telegram.Bot.Types.InputFiles.InputFile.FromStream(stream, fileName),
+                    caption: caption,
+                    replyToMessageId: replyToMessageId,
+                    replyMarkup: replyMarkup
+                );
+                return sent.MessageId;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error sending document to ChatId {ChatId}", chatId);
+                return null;
+            }
+        }
+
+        public async Task<int?> SendVideoAsync(long chatId, byte[] videoBytes, string caption = null, int? replyToMessageId = null, IReplyMarkup replyMarkup = null)
+        {
+            try
+            {
+                using var stream = new System.IO.MemoryStream(videoBytes);
+                var sent = await _botClient.SendVideoAsync(
+                    chatId: chatId,
+                    video: Telegram.Bot.Types.InputFiles.InputFile.FromStream(stream),
+                    caption: caption,
+                    replyToMessageId: replyToMessageId,
+                    replyMarkup: replyMarkup
+                );
+                return sent.MessageId;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error sending video to ChatId {ChatId}", chatId);
+                return null;
+            }
+        }
     }
 }
