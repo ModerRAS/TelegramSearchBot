@@ -29,6 +29,20 @@ using Orleans; // IClusterClient, IGrainFactory
 using Orleans.Streams; // For GetStreamProvider
 using Orleans.Serialization; // For UseSystemTextJson and other serialization helpers
 using Microsoft.Extensions.DependencyInjection; // GetService
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using System.Net.Http;
+using System.Reflection;
+using System.Text.Json;
+using TelegramSearchBot.Exceptions;
+using TelegramSearchBot.Grains;
+using TelegramSearchBot.Handler;
+using TelegramSearchBot.Service.Abstract;
+using TelegramSearchBot.Service.Manage;
+using TelegramSearchBot.Service.Media;
+using TelegramSearchBot.Service.Storage; // For MediaStorageService
+using TelegramSearchBot.Service.Tools;
 
 namespace TelegramSearchBot.AppBootstrap
 {
@@ -97,6 +111,13 @@ namespace TelegramSearchBot.AppBootstrap
 
                     // Manually register SearchService and its interface (from TelegramSearchBot.Intrerface)
                     service.AddTransient<TelegramSearchBot.Intrerface.ISearchService, TelegramSearchBot.Service.Search.SearchService>();
+
+                    // Orleans Grains 和 Services 注册
+                    service.AddSingleton<OrleansStreamListener>();
+                    service.AddSingleton<LuceneManager>();
+                    
+                    // 媒体存储服务
+                    service.AddSingleton<IMediaStorageService, MediaStorageService>();
                 });
         public static void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
@@ -139,6 +160,13 @@ namespace TelegramSearchBot.AppBootstrap
             }
             Thread.Sleep(5000);
 
+            // 初始化Orleans流监听器
+            var orleansStreamListener = service.GetService<OrleansStreamListener>();
+            if (orleansStreamListener != null)
+            {
+                orleansStreamListener.Initialize();
+                Log.Information("Orleans流监听器初始化完成");
+            }
 
             bot.StartReceiving(
                 HandleUpdateAsync(service),

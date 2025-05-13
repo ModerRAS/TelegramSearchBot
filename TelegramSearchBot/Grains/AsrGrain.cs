@@ -24,6 +24,7 @@ namespace TelegramSearchBot.Grains
         private readonly Microsoft.Extensions.Logging.ILogger<AsrGrain> _logger; // Changed type
         private readonly IGrainFactory _grainFactory;
         private readonly IHttpClientFactory _httpClientFactory; // Added
+        private readonly IMediaStorageService _mediaStorageService; // 添加媒体存储服务
 
         private IAsyncStream<StreamMessage<Message>> _rawAudioStream;
         private IAsyncStream<StreamMessage<string>> _textContentStream;
@@ -33,15 +34,17 @@ namespace TelegramSearchBot.Grains
             WhisperManager whisperManager, 
             IAudioProcessingService audioProcessingService, 
             IGrainFactory grainFactory,
-            IHttpClientFactory httpClientFactory, // Added
-            Microsoft.Extensions.Logging.ILogger<AsrGrain> logger) // Added
+            IHttpClientFactory httpClientFactory,
+            IMediaStorageService mediaStorageService, // 添加媒体存储服务
+            Microsoft.Extensions.Logging.ILogger<AsrGrain> logger)
         {
             _botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
             _whisperManager = whisperManager ?? throw new ArgumentNullException(nameof(whisperManager));
             _audioProcessingService = audioProcessingService ?? throw new ArgumentNullException(nameof(audioProcessingService));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
-            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory)); // Added
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger)); // Changed
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+            _mediaStorageService = mediaStorageService ?? throw new ArgumentNullException(nameof(mediaStorageService)); // 初始化媒体存储服务
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -116,6 +119,25 @@ namespace TelegramSearchBot.Grains
                 if (!string.IsNullOrWhiteSpace(asrResultText))
                 {
                     _logger.LogInformation("ASR successful for MessageId {MessageId}. Text found.", originalMessage.MessageId);
+                    
+                    // 保存原始音频文件到媒体存储，以便其他服务可以使用
+                    try
+                    {
+                        byte[] originalFileData = System.IO.File.ReadAllBytes(tempFilePath);
+                        string audioFileName = $"{originalMessage.MessageId}{originalExtension}";
+                        await _mediaStorageService.SaveAudioAsync(
+                            originalMessage.Chat.Id,
+                            originalMessage.MessageId,
+                            audioFileName,
+                            originalFileData);
+                        _logger.LogInformation("Original audio/video saved to media storage for future use. ChatId: {ChatId}, MessageId: {MessageId}",
+                            originalMessage.Chat.Id, originalMessage.MessageId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to save original audio/video to media storage. ChatId: {ChatId}, MessageId: {MessageId}",
+                            originalMessage.Chat.Id, originalMessage.MessageId);
+                    }
                 }
                 else
                 {
