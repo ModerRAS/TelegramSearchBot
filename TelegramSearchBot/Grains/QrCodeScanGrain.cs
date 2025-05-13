@@ -74,29 +74,34 @@ namespace TelegramSearchBot.Grains
             var photoSize = originalMessage.Photo.OrderByDescending(p => p.FileSize).First();
             string qrResultText = null;
             string tempFilePath = null;
+            string photoDir = Path.Combine(Env.WorkDir, "Photos", originalMessage.Chat.Id.ToString());
 
             try
             {
+                // 确保Photo目录存在
+                if (!Directory.Exists(photoDir))
+                {
+                    Directory.CreateDirectory(photoDir);
+                    _logger.LogInformation("已创建图片目录: {PhotoDir}", photoDir);
+                }
                 var fileInfo = await _botClient.GetFile(photoSize.FileId, CancellationToken.None);
                 if (fileInfo.FilePath == null)
                 {
-                    _logger.LogError("Unable to get file path for FileId {FileId} from Telegram for QR scan.", photoSize.FileId); // Changed to LogError
+                    _logger.LogError("Unable to get file path for FileId {FileId} from Telegram for QR scan.", photoSize.FileId);
                     throw new Exception($"Telegram API did not return a file path for FileId {photoSize.FileId} (QR scan).");
                 }
-                tempFilePath = Path.Combine(Path.GetTempPath(), fileInfo.FileUniqueId + Path.GetExtension(fileInfo.FilePath));
-                
+                tempFilePath = Path.Combine(photoDir, fileInfo.FileUniqueId + Path.GetExtension(fileInfo.FilePath));
                 await using (var fileStream = new FileStream(tempFilePath, FileMode.Create))
                 {
-                    // Use HttpClient to download, similar to OcrGrain
                     var httpClient = _httpClientFactory.CreateClient();
                     var fileUrl = $"https://api.telegram.org/file/bot{TelegramSearchBot.Env.BotToken}/{fileInfo.FilePath}";
-                    _logger.LogInformation("Attempting to download image for QR scan from URL: {FileUrl}", fileUrl); // Changed to LogInformation
+                    _logger.LogInformation("Attempting to download image for QR scan from URL: {FileUrl}", fileUrl);
                     using var response = await httpClient.GetAsync(fileUrl, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
                     response.EnsureSuccessStatusCode();
                     await using var contentStream = await response.Content.ReadAsStreamAsync(CancellationToken.None);
                     await contentStream.CopyToAsync(fileStream, CancellationToken.None);
                 }
-                _logger.LogInformation("Photo downloaded to {TempFilePath} for QR scan.", tempFilePath); // Changed to LogInformation
+                _logger.LogInformation("Photo downloaded to {TempFilePath} for QR scan.", tempFilePath);
 
                 // Perform QR Scan using QRManager.ExecuteAsync(filePath)
                 qrResultText = await _qrManager.ExecuteAsync(tempFilePath); 
@@ -112,12 +117,12 @@ namespace TelegramSearchBot.Grains
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during QR scan processing for MessageId {MessageId}", originalMessage.MessageId); // Changed to LogError
+                _logger.LogError(ex, "Error during QR scan processing for MessageId {MessageId}", originalMessage.MessageId);
                 var senderGrain = _grainFactory.GetGrain<ITelegramMessageSenderGrain>(0);
                 await senderGrain.SendMessageAsync(new TelegramMessageToSend
                 {
                     ChatId = originalMessage.Chat.Id,
-                    Text = "二维码扫描处理图片时发生内部错误，请稍后再试。", // Generic error message
+                    Text = "二维码图片下载或处理失败，请稍后重试，或联系管理员检查Photo目录权限。",
                     ReplyToMessageId = originalMessage.MessageId
                 });
                 return;
