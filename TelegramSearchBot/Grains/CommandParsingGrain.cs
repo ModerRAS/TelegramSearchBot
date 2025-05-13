@@ -236,29 +236,33 @@ namespace TelegramSearchBot.Grains
                         commandProcessedByThisGrain = true;
                         break;
                     case "/setbilimaxsize":
-                        if (string.IsNullOrWhiteSpace(args))
+                        if (Env.AdminId != originalMessage.From.Id)
                         {
-                            responseText = "请提供大小值 (MB)。用法: /setbilimaxsize <MB数>";
+                            responseText = "只有全局管理员可以设置B站最大下载大小。";
                         }
                         else
                         {
-                            bool isGlobalAdmin = Env.AdminId == originalMessage.From.Id; // Simple global admin check for this command
-                            if (!isGlobalAdmin)
-                            {
-                                responseText = "抱歉，只有全局管理员才能设置此项。";
-                            }
-                            else if (int.TryParse(args.Trim(), out int sizeInMB) && sizeInMB > 0)
-                            {
-                                await _appConfigurationService.SetConfigurationValueAsync(TelegramSearchBot.Service.Common.AppConfigurationService.BiliMaxDownloadSizeMBKey, sizeInMB.ToString());
-                                responseText = $"Bilibili视频最大下载大小已成功设置为 {sizeInMB}MB。";
-                            }
-                            else
-                            {
-                                responseText = "无效的大小值。请输入一个正整数 (MB)。";
-                            }
+                            // TODO: 设置B站最大下载大小逻辑
+                            responseText = "[TODO] 设置B站最大下载大小逻辑未实现";
                         }
                         commandProcessedByThisGrain = true;
                         break;
+                    case "设置B站最大下载大小":
+                        goto case "/setbilimaxsize";
+                    case "/getbilimaxsize":
+                        if (Env.AdminId != originalMessage.From.Id)
+                        {
+                            responseText = "只有全局管理员可以获取B站最大下载大小。";
+                        }
+                        else
+                        {
+                            // TODO: 获取B站最大下载大小逻辑
+                            responseText = "[TODO] 获取B站最大下载大小逻辑未实现";
+                        }
+                        commandProcessedByThisGrain = true;
+                        break;
+                    case "获取B站最大下载大小":
+                        goto case "/getbilimaxsize";
                     case "设置管理群":
                         if (Env.AdminId != originalMessage.From.Id)
                         {
@@ -308,32 +312,6 @@ namespace TelegramSearchBot.Grains
                         {
                             // TODO: 获取B站Cookie逻辑
                             responseText = "[TODO] 获取B站Cookie逻辑未实现";
-                        }
-                        commandProcessedByThisGrain = true;
-                        break;
-                    case "/setbilimaxsize":
-                    case "设置B站最大下载大小":
-                        if (Env.AdminId != originalMessage.From.Id)
-                        {
-                            responseText = "只有全局管理员可以设置B站最大下载大小。";
-                        }
-                        else
-                        {
-                            // TODO: 设置B站最大下载大小逻辑
-                            responseText = "[TODO] 设置B站最大下载大小逻辑未实现";
-                        }
-                        commandProcessedByThisGrain = true;
-                        break;
-                    case "/getbilimaxsize":
-                    case "获取B站最大下载大小":
-                        if (Env.AdminId != originalMessage.From.Id)
-                        {
-                            responseText = "只有全局管理员可以获取B站最大下载大小。";
-                        }
-                        else
-                        {
-                            // TODO: 获取B站最大下载大小逻辑
-                            responseText = "[TODO] 获取B站最大下载大小逻辑未实现";
                         }
                         commandProcessedByThisGrain = true;
                         break;

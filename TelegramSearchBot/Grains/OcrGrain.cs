@@ -82,7 +82,7 @@ namespace TelegramSearchBot.Grains
 
             try
             {
-                var fileInfo = await _botClient.GetFileAsync(photoSize.FileId, CancellationToken.None); // Use CancellationToken.None
+                var fileInfo = await _botClient.GetFile(photoSize.FileId);
                 if (fileInfo.FilePath == null)
                 {
                     _logger.LogError("Unable to get file path for FileId {FileId} from Telegram.", photoSize.FileId);

@@ -294,4 +294,10 @@ public class BiliApiService : IBiliApiService
              _logger.LogWarning("Failed to get any playable streams (neither DASH nor DURL) for {VideoTitle}", videoInfo.Title);
         }
     }
+
+    public Task<BiliArticleInfo> GetArticleInfoAsync(string articleUrl)
+    {
+        // TODO: 实现B站专栏信息获取逻辑
+        throw new NotImplementedException();
+    }
 }

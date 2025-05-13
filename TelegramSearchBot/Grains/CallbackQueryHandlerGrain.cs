@@ -106,11 +106,11 @@ namespace TelegramSearchBot.Grains
         {
             try
             {
-                await _botClient.AnswerCallbackQueryAsync(callbackQueryId, text: text);
+                await _botClient.AnswerCallbackQuery(callbackQueryId, text: text);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error sending AnswerCallbackQueryAsync for CallbackQueryId: {CallbackQueryId}", callbackQueryId);
+                _logger.Error(ex, "Error sending AnswerCallbackQuery for CallbackQueryId: {CallbackQueryId}", callbackQueryId);
             }
         }
 

@@ -55,7 +55,7 @@ namespace TelegramSearchBot.Grains
 
             try
             {
-                var me = await _botClient.GetMeAsync(cancellationToken);
+                var me = await _botClient.GetMe(cancellationToken);
                 _botId = me.Id;
                 _botUsername = me.Username;
                 _logger.Information("LlmProcessingGrain: Bot ID {BotId}, Username {BotUsername} fetched.", _botId, _botUsername);
@@ -89,7 +89,7 @@ namespace TelegramSearchBot.Grains
                 _logger.Warning("LlmProcessingGrain: Bot ID or Username not initialized. Cannot process LLM trigger for MessageId: {MessageId}", originalMessage.MessageId);
                 // Attempt to re-fetch bot info, or fail gracefully
                 try {
-                    var me = await _botClient.GetMeAsync();
+                    var me = await _botClient.GetMe();
                     _botId = me.Id;
                     _botUsername = me.Username;
                     if (_botId == 0 || string.IsNullOrEmpty(_botUsername)) throw new Exception("Still couldn't get bot info.");
@@ -167,7 +167,7 @@ namespace TelegramSearchBot.Grains
                 );
 
                 // Store the bot's responses
-                var botUser = await _botClient.GetMeAsync(); // Get bot's User object for MessageOption
+                var botUser = await _botClient.GetMe(); // Get bot's User object for MessageOption
                 foreach (var botMsg in sentBotMessages)
                 {
                     // botMsg is already Model.Data.Message, correctly populated by SendFullMessageStream

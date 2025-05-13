@@ -22,7 +22,7 @@ namespace TelegramSearchBot.Grains
         private readonly IBiliApiService _biliApiService;
         private readonly ILogger _logger;
         private readonly IGrainFactory _grainFactory;
-        // private readonly IAppConfigurationService _appConfigService; // For future use: video download size limit
+        private readonly IAppConfigurationService _appConfigService;
 
         private IAsyncStream<StreamMessage<string>> _textContentStreamSubscription;
 
@@ -33,12 +33,12 @@ namespace TelegramSearchBot.Grains
 
         public BilibiliLinkProcessingGrain(
             IBiliApiService biliApiService,
-            IGrainFactory grainFactory)
-            // IAppConfigurationService appConfigService) // Future
+            IGrainFactory grainFactory,
+            IAppConfigurationService appConfigService)
         {
             _biliApiService = biliApiService ?? throw new ArgumentNullException(nameof(biliApiService));
             _grainFactory = grainFactory ?? throw new ArgumentNullException(nameof(grainFactory));
-            // _appConfigService = appConfigService; // Future
+            _appConfigService = appConfigService ?? throw new ArgumentNullException(nameof(appConfigService));
             _logger = Log.ForContext<BilibiliLinkProcessingGrain>();
         }
 
@@ -76,9 +76,35 @@ namespace TelegramSearchBot.Grains
                     if (videoInfo != null)
                     {
                         await HandleVideoInfoAsync(streamMessage, videoInfo, senderGrain);
-                        // TODO: 下载逻辑，判断文件大小，调用下载服务，发送视频（需配置管理）
-                        // long maxSize = await _appConfigService.GetConfigurationValueAsync(...);
-                        // if (videoInfo.Size < maxSize) { ...下载并通过senderGrain.SendVideoAsync... }
+                        // 文章(cv)
+                        if (url.Contains("/read/cv") || url.Contains("/cv"))
+                        {
+                            // 调用IBiliApiService.GetArticleInfoAsync(url)，格式化并通过senderGrain.SendMessageAsync回复
+                            var articleInfo = await _biliApiService.GetArticleInfoAsync(url);
+                            if (articleInfo != null)
+                            {
+                                var articleText = $"【B站专栏】{articleInfo.Title}\n作者: {articleInfo.Author}\n{articleInfo.Summary}\n原文链接: {articleInfo.Url}";
+                                await senderGrain.SendMessageAsync(new TelegramMessageToSend
+                                {
+                                    ChatId = streamMessage.ChatId,
+                                    Text = articleText,
+                                    ReplyToMessageId = (int)streamMessage.OriginalMessageId
+                                });
+                            }
+                            continue;
+                        }
+                        // 视频下载逻辑
+                        if (videoInfo != null)
+                        {
+                            // 读取最大下载大小配置
+                            var maxSizeStr = await _appConfigService.GetConfigurationValueAsync("BiliMaxDownloadSizeMB");
+                            long maxSizeMB = 48;
+                            if (!string.IsNullOrWhiteSpace(maxSizeStr) && long.TryParse(maxSizeStr, out var parsed))
+                                maxSizeMB = parsed;
+                            // TODO: 获取视频实际大小 videoInfo.Size
+                            // if (videoInfo.Size <= maxSizeMB * 1024 * 1024) { 调用下载服务并通过senderGrain.SendVideoAsync发送 }
+                            // else { 回复"文件过大无法下载" }
+                        }
                         continue;
                     }
                     // 动态
@@ -86,14 +112,6 @@ namespace TelegramSearchBot.Grains
                     if (opusInfo != null)
                     {
                         await HandleOpusInfoAsync(streamMessage, opusInfo, senderGrain);
-                        continue;
-                    }
-                    // 文章(cv)
-                    if (url.Contains("/read/cv") || url.Contains("/cv"))
-                    {
-                        // TODO: 调用IBiliApiService.GetArticleInfoAsync(url)，格式化并通过senderGrain.SendMessageAsync回复
-                        // var articleInfo = await _biliApiService.GetArticleInfoAsync(url);
-                        // if (articleInfo != null) { ...格式化并回复... }
                         continue;
                     }
                     _logger.Warning("BilibiliLinkProcessingGrain {GrainId}: Could not parse Bili URL {Url} as video, opus, or article. OriginalMessageId: {OriginalMessageId}",

@@ -6,6 +6,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types; // For ReplyParameters
 using Telegram.Bot.Types.Enums; // For ParseMode if needed later
 using TelegramSearchBot.Interfaces;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TelegramSearchBot.Grains
 {
@@ -46,7 +47,7 @@ namespace TelegramSearchBot.Grains
                 if (message.ParseMode.HasValue)
                 {
                     // Call with ParseMode specified
-                    sentMessage = await _botClient.SendTextMessageAsync(
+                    sentMessage = await _botClient.SendMessage(
                         chatId: message.ChatId,
                         text: message.Text,
                         parseMode: message.ParseMode.Value, // Pass the non-nullable value
@@ -59,7 +60,7 @@ namespace TelegramSearchBot.Grains
                 else
                 {
                     // Call without ParseMode specified (rely on default behavior of the library for parseMode)
-                    sentMessage = await _botClient.SendTextMessageAsync(
+                    sentMessage = await _botClient.SendMessage(
                         chatId: message.ChatId,
                         text: message.Text,
                         // parseMode parameter is omitted
@@ -90,7 +91,7 @@ namespace TelegramSearchBot.Grains
             try
             {
                 _logger.Information("Attempting to delete message {MessageId} from ChatId {ChatId}", messageId, chatId);
-                await _botClient.DeleteMessageAsync(chatId, messageId);
+                await _botClient.DeleteMessage(chatId, messageId);
                 _logger.Information("Message {MessageId} successfully deleted from ChatId {ChatId}", messageId, chatId);
             }
             catch (Exception ex)
@@ -100,11 +101,11 @@ namespace TelegramSearchBot.Grains
             }
         }
 
-        public async Task<bool> EditMessageTextAsync(long chatId, int messageId, string newText, IReplyMarkup replyMarkup = null)
+        public async Task<bool> EditMessageTextAsync(long chatId, int messageId, string newText, InlineKeyboardMarkup? replyMarkup = null)
         {
             try
             {
-                await _botClient.EditMessageTextAsync(
+                await _botClient.EditMessageText(
                     chatId: chatId,
                     messageId: messageId,
                     text: newText,
@@ -119,11 +120,11 @@ namespace TelegramSearchBot.Grains
             }
         }
 
-        public async Task<bool> EditMessageReplyMarkupAsync(long chatId, int messageId, IReplyMarkup replyMarkup)
+        public async Task<bool> EditMessageReplyMarkupAsync(long chatId, int messageId, InlineKeyboardMarkup? replyMarkup)
         {
             try
             {
-                await _botClient.EditMessageReplyMarkupAsync(
+                await _botClient.EditMessageReplyMarkup(
                     chatId: chatId,
                     messageId: messageId,
                     replyMarkup: replyMarkup
@@ -142,11 +143,10 @@ namespace TelegramSearchBot.Grains
             try
             {
                 using var stream = new System.IO.MemoryStream(photoBytes);
-                var sent = await _botClient.SendPhotoAsync(
+                var sent = await _botClient.SendPhoto(
                     chatId: chatId,
-                    photo: Telegram.Bot.Types.InputFiles.InputFile.FromStream(stream),
+                    photo: Telegram.Bot.Types.InputFile.FromStream(stream),
                     caption: caption,
-                    replyToMessageId: replyToMessageId,
                     replyMarkup: replyMarkup
                 );
                 return sent.MessageId;
@@ -163,11 +163,10 @@ namespace TelegramSearchBot.Grains
             try
             {
                 using var stream = new System.IO.MemoryStream(fileBytes);
-                var sent = await _botClient.SendDocumentAsync(
+                var sent = await _botClient.SendDocument(
                     chatId: chatId,
-                    document: Telegram.Bot.Types.InputFiles.InputFile.FromStream(stream, fileName),
+                    document: Telegram.Bot.Types.InputFile.FromStream(stream, fileName),
                     caption: caption,
-                    replyToMessageId: replyToMessageId,
                     replyMarkup: replyMarkup
                 );
                 return sent.MessageId;
@@ -184,11 +183,10 @@ namespace TelegramSearchBot.Grains
             try
             {
                 using var stream = new System.IO.MemoryStream(videoBytes);
-                var sent = await _botClient.SendVideoAsync(
+                var sent = await _botClient.SendVideo(
                     chatId: chatId,
-                    video: Telegram.Bot.Types.InputFiles.InputFile.FromStream(stream),
+                    video: Telegram.Bot.Types.InputFile.FromStream(stream),
                     caption: caption,
-                    replyToMessageId: replyToMessageId,
                     replyMarkup: replyMarkup
                 );
                 return sent.MessageId;

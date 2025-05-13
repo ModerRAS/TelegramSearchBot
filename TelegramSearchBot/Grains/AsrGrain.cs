@@ -85,20 +85,20 @@ namespace TelegramSearchBot.Grains
 
             try
             {
-                var fileInfo = await _botClient.GetFileAsync(fileId, CancellationToken.None);
-                if (fileInfo.FilePath == null)
+                var telegramFile = await _botClient.GetFile(fileId);
+                if (telegramFile.FilePath == null)
                 {
                     _logger.LogError("Unable to get file path for FileId {FileId} from Telegram for ASR.", fileId);
                     throw new Exception($"Telegram API did not return a file path for FileId {fileId} (ASR).");
                 }
-                string originalExtension = Path.GetExtension(fileInfo.FilePath);
+                string originalExtension = Path.GetExtension(telegramFile.FilePath);
                 if (string.IsNullOrEmpty(originalExtension) && originalMessage.Voice != null) originalExtension = ".ogg";
-                tempFilePath = Path.Combine(Path.GetTempPath(), fileInfo.FileUniqueId + originalExtension);
+                tempFilePath = Path.Combine(Path.GetTempPath(), telegramFile.FileUniqueId + originalExtension);
 
                 await using (var fileStream = new FileStream(tempFilePath, FileMode.Create))
                 {
                     var httpClient = _httpClientFactory.CreateClient();
-                    var fileUrl = $"https://api.telegram.org/file/bot{TelegramSearchBot.Env.BotToken}/{fileInfo.FilePath}";
+                    var fileUrl = $"https://api.telegram.org/file/bot{TelegramSearchBot.Env.BotToken}/{telegramFile.FilePath}";
                     _logger.LogInformation("Attempting to download media file from URL: {FileUrl}", fileUrl);
                     using var response = await httpClient.GetAsync(fileUrl, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
                     response.EnsureSuccessStatusCode();

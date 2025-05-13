@@ -77,7 +77,7 @@ namespace TelegramSearchBot.Grains
 
             try
             {
-                var fileInfo = await _botClient.GetFileAsync(photoSize.FileId, CancellationToken.None); // Use Async version and CancellationToken.None
+                var fileInfo = await _botClient.GetFile(photoSize.FileId, CancellationToken.None);
                 if (fileInfo.FilePath == null)
                 {
                     _logger.LogError("Unable to get file path for FileId {FileId} from Telegram for QR scan.", photoSize.FileId); // Changed to LogError

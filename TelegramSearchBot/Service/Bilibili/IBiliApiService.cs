@@ -18,4 +18,11 @@ public interface IBiliApiService
     /// <param name="opusUrl">The URL of the Bilibili opus.</param>
     /// <returns>A BiliOpusInfo object containing opus details, or null if an error occurs.</returns>
     Task<BiliOpusInfo> GetOpusInfoAsync(string opusUrl);
+
+    /// <summary>
+    /// 获取B站专栏（文章）信息。
+    /// </summary>
+    /// <param name="articleUrl">专栏URL</param>
+    /// <returns>BiliArticleInfo对象，获取失败返回null</returns>
+    Task<BiliArticleInfo> GetArticleInfoAsync(string articleUrl);
 }

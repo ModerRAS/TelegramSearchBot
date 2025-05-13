@@ -43,7 +43,7 @@ namespace TelegramSearchBot.Interfaces
         /// <param name="messageId">要编辑的消息ID</param>
         /// <param name="newText">新文本</param>
         /// <param name="replyMarkup">可选的新内联键盘</param>
-        Task<bool> EditMessageTextAsync(long chatId, int messageId, string newText, IReplyMarkup replyMarkup = null);
+        Task<bool> EditMessageTextAsync(long chatId, int messageId, string newText, Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null);
 
         /// <summary>
         /// 编辑指定消息的ReplyMarkup（仅更新按钮，不改动文本）。
@@ -51,7 +51,7 @@ namespace TelegramSearchBot.Interfaces
         /// <param name="chatId">聊天ID</param>
         /// <param name="messageId">要编辑的消息ID</param>
         /// <param name="replyMarkup">新内联键盘</param>
-        Task<bool> EditMessageReplyMarkupAsync(long chatId, int messageId, IReplyMarkup replyMarkup);
+        Task<bool> EditMessageReplyMarkupAsync(long chatId, int messageId, Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup);
 
         /// <summary>
         /// 发送图片。
