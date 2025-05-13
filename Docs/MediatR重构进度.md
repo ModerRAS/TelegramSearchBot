@@ -11,10 +11,13 @@
 
 ## 进行中
 
-- [ ] Bilibili
+- [x] Bilibili
+  - [x] 视频处理 (BiliVideoHandler)
+  - [x] 动态处理 (BiliOpusHandler) 
+  - [x] 消息处理 (BiliMessageHandler)
 - [ ] Download（其余子模块）
 - [ ] Manage
 - [ ] Search
 - [ ] Storage
 
-> 每完成一个模块的Handler重构，持续更新本进度文档。 
+> 每完成一个模块的Handler重构，持续更新本进度文档。
