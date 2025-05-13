@@ -44,6 +44,12 @@ namespace TelegramSearchBot.AppBootstrap
                     // Explicit configuration via ConfigureApplicationParts is often no longer needed for simple cases.
                     // Removed siloBuilder.UseSystemTextJson(); to use default Orleans serializer
 
+                    // 添加内存流提供者
+                    siloBuilder.AddMemoryStreams("DefaultSMSProvider");
+                    
+                    // 添加流订阅存储
+                    siloBuilder.AddMemoryGrainStorage("PubSubStore");
+                    
                     // Optional: Add default in-memory grain storage for development
                     // siloBuilder.AddMemoryGrainStorageAsDefault(); 
                     // siloBuilder.AddMemoryGrainStorage("PubSubStore"); // For Orleans Pub/Sub if needed by streams
