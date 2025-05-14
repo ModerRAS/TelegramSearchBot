@@ -33,7 +33,10 @@ graph TD
 - 单一职责原则：
   - 各控制器专注于特定功能
   - 服务层分离业务逻辑
-  - 工具类提取：将通用功能提取到Helper类
+  - Helper类职责划分：
+    - BiliHelper：Bilibili特定功能（URL解析、内容解析）
+    - MessageFormatHelper：通用消息格式化（Markdown转换、文本处理）
+    - 消除重复代码，保持单一职责
 - 观察者模式：
   - 消息处理流水线
 - 策略模式：

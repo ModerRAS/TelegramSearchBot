@@ -12,9 +12,12 @@
 - 移除了不必要的InputFiles命名空间引用
 - 从BiliApiService提取工具方法到BiliHelper类：
   - 正则表达式常量
-  - Markdown转义方法
   - 短链接解析方法
   - 动态内容解析方法
+- 重构Helper类：
+  - 移除了BiliHelper中的EscapeMarkdownV2重复方法
+  - 统一使用MessageFormatHelper中的实现
+  - 更新了所有相关调用点
 
 ## 下一步计划
 - 优化ProcessOpusInfoAsync方法的错误处理
