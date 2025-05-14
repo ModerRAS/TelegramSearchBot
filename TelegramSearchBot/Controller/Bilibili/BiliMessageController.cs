@@ -24,11 +24,10 @@ namespace TelegramSearchBot.Controller.Bilibili
 
         private readonly ITelegramBotClient _botClient;
         private readonly IBiliApiService _biliApiService;
-        private readonly IDownloadService _downloadService;
-        private readonly ITelegramFileCacheService _fileCacheService;
+        private readonly BiliVideoProcessingService _videoProcessingService;
+        private readonly BiliOpusProcessingService _opusProcessingService;
         private readonly SendMessage _sendMessage;
         private readonly ILogger<BiliMessageController> _logger;
-        private readonly IAppConfigurationService _appConfigurationService; // Added
 
         private static readonly Regex BiliUrlRegex = BiliHelper.BiliUrlParseRegex;
         private static readonly Regex BiliVideoUrlPattern = BiliHelper.BiliUrlParseRegex;
@@ -37,19 +36,17 @@ namespace TelegramSearchBot.Controller.Bilibili
         public BiliMessageController(
             ITelegramBotClient botClient,
             IBiliApiService biliApiService,
-            IDownloadService downloadService,
-            ITelegramFileCacheService fileCacheService,
+            BiliVideoProcessingService videoProcessingService,
+            BiliOpusProcessingService opusProcessingService,
             SendMessage sendMessage,
-            ILogger<BiliMessageController> logger,
-            IAppConfigurationService appConfigurationService) // Added
+            ILogger<BiliMessageController> logger)
         {
             _botClient = botClient;
             _biliApiService = biliApiService;
-            _downloadService = downloadService;
-            _fileCacheService = fileCacheService;
+            _videoProcessingService = videoProcessingService;
+            _opusProcessingService = opusProcessingService;
             _sendMessage = sendMessage;
             _logger = logger;
-            _appConfigurationService = appConfigurationService; // Added
         }
 
         public async Task ExecuteAsync(PipelineContext p)
@@ -131,176 +128,12 @@ namespace TelegramSearchBot.Controller.Bilibili
             _logger.LogInformation("Handling video info: {VideoTitle} for chat {ChatId}", videoInfo.Title, message.Chat.Id);
             bool isGroup = message.Chat.Type != ChatType.Private;
 
-            string baseCaption = $"*{MessageFormatHelper.EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*\n" +
-                                 $"UP: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.OwnerName)}\n" +
-                                 $"分类: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.TName ?? "N/A")}\n" +
-                                 $"{MessageFormatHelper.EscapeMarkdownV2(videoInfo.OriginalUrl)}";
-
-            string videoCaption = baseCaption.Length > 1024 ? baseCaption.Substring(0, 1021) + "..." : baseCaption;
-
-            InputFile videoInputFile = null;
-            string videoFileToCacheKey = null;
-            string downloadedVideoPath = null;
-            string downloadedThumbnailPath = null;
+            var result = await _videoProcessingService.ProcessVideoAsync(videoInfo);
             bool videoSent = false;
-            Stream videoFileStream = null;
-            MemoryStream thumbnailMemoryStream = null;
-
-            long defaultMaxFileSizeMB = 48; // Default to 48MB for better compatibility, user can configure higher via DB
-            long maxFileSizeMB = defaultMaxFileSizeMB;
 
             try
             {
-                string configuredMaxSizeMB = await _appConfigurationService.GetConfigurationValueAsync(Service.Common.AppConfigurationService.BiliMaxDownloadSizeMBKey);
-                if (!string.IsNullOrWhiteSpace(configuredMaxSizeMB) && long.TryParse(configuredMaxSizeMB, out long parsedMB) && parsedMB > 0)
-                {
-                    maxFileSizeMB = parsedMB;
-                    _logger.LogInformation("Using configured BiliMaxDownloadSizeMB: {SizeMB}MB", maxFileSizeMB);
-                }
-                else
-                {
-                    _logger.LogInformation("BiliMaxDownloadSizeMB not configured or invalid, using default: {SizeMB}MB", defaultMaxFileSizeMB);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error reading BiliMaxDownloadSizeMB configuration, using default {SizeMB}MB.", defaultMaxFileSizeMB);
-            }
-
-            long maxFileSize = maxFileSizeMB * 1024 * 1024;
-            _logger.LogInformation("Effective maxFileSize for Bilibili downloads: {MaxFileSizeBytes} bytes ({MaxFileSizeMB_Effective} MB)", maxFileSize, maxFileSizeMB);
-
-            try
-            {
-                string sourceUrl = null;
-                bool useDash = false;
-
-                _logger.LogInformation("DASH stream check for '{VideoTitle}': HasDashStreams={HasDash}, HasVideoStream={HasVideo}, HasAudioStream={HasAudio}, EstimatedSize={EstimatedSize}, MaxSize={MaxSize}",
-                    videoInfo.Title, videoInfo.DashStreams != null, videoInfo.DashStreams?.VideoStream != null, videoInfo.DashStreams?.AudioStream != null, videoInfo.DashStreams?.EstimatedTotalSizeBytes ?? -1, maxFileSize);
-
-                if (videoInfo.DashStreams?.VideoStream != null && videoInfo.DashStreams?.AudioStream != null && videoInfo.DashStreams.EstimatedTotalSizeBytes < maxFileSize)
-                {
-                    _logger.LogInformation("DASH stream check for '{VideoTitle}': Conditions met. useDash will be true.", videoInfo.Title);
-                    useDash = true;
-                    videoFileToCacheKey = $"{videoInfo.OriginalUrl}_dash_{videoInfo.DashStreams.VideoStream.QualityDescription}";
-                }
-                else
-                {
-                    if (videoInfo.DashStreams != null)
-                    {
-                        _logger.LogInformation("DASH stream check for '{VideoTitle}' failed or skipped. VideoStreamNull={VSN}, AudioStreamNull={ASN}, SizeExceeded={SE}.",
-                           videoInfo.Title,
-                           videoInfo.DashStreams.VideoStream == null,
-                           videoInfo.DashStreams.AudioStream == null,
-                           videoInfo.DashStreams.EstimatedTotalSizeBytes >= maxFileSize);
-                    }
-                    else
-                    {
-                        _logger.LogInformation("DASH stream check for '{VideoTitle}': videoInfo.DashStreams is NULL.", videoInfo.Title);
-                    }
-
-                    _logger.LogInformation("Attempting to use DURL streams as fallback for '{VideoTitle}'. HasPlayUrls={HasUrls}", videoInfo.Title, videoInfo.PlayUrls.Any());
-                    if (videoInfo.PlayUrls.Any())
-                    {
-                        var bestPlayUrl = videoInfo.PlayUrls
-                            .Where(p => p.SizeBytes < maxFileSize)
-                            .OrderByDescending(p => p.QualityNumeric)
-                            .FirstOrDefault();
-
-                        if (bestPlayUrl == null && videoInfo.PlayUrls.Any(p => p.SizeBytes < maxFileSize))
-                        {
-                            bestPlayUrl = videoInfo.PlayUrls.Where(p => p.SizeBytes < maxFileSize).FirstOrDefault();
-                        }
-
-                        if (bestPlayUrl != null)
-                        {
-                            _logger.LogInformation("DURL check for '{VideoTitle}': Found bestPlayUrl with size {BestPlayUrlSize} bytes, QN {BestPlayUrlQN}.", videoInfo.Title, bestPlayUrl.SizeBytes, bestPlayUrl.QualityNumeric);
-                            sourceUrl = bestPlayUrl.Url;
-                            videoFileToCacheKey = $"{videoInfo.OriginalUrl}_durl_{bestPlayUrl.QualityNumeric}";
-                        }
-                        else
-                        {
-                            _logger.LogInformation("DURL check for '{VideoTitle}': No suitable bestPlayUrl found (all >= MaxFileSize ({MaxFileSize} bytes) or list empty).", videoInfo.Title, maxFileSize);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogInformation("DURL check for '{VideoTitle}': videoInfo.PlayUrls is EMPTY.", videoInfo.Title);
-                    }
-                }
-
-                _logger.LogInformation("Pre-cache check for '{VideoTitle}'. videoFileToCacheKey: '{Key}'. useDash: {UseDashFlag}. sourceUrl: '{SourceUrlVal}'",
-                    videoInfo.Title, videoFileToCacheKey, useDash, sourceUrl);
-
-                if (!string.IsNullOrWhiteSpace(videoFileToCacheKey))
-                {
-                    string cachedFileId = await _fileCacheService.GetCachedFileIdAsync(videoFileToCacheKey);
-                    if (!string.IsNullOrWhiteSpace(cachedFileId))
-                    {
-                        videoInputFile = InputFile.FromFileId(cachedFileId);
-                        _logger.LogInformation("Using cached file_id: {FileId} for key: {CacheKey}", cachedFileId, videoFileToCacheKey);
-                    }
-                }
-
-                _logger.LogInformation("Final download decision for '{VideoTitle}': videoInputFile is null: {IsVideoInputNull}. sourceUrl is valid: {IsSourceUrlValid}. useDash: {UseDashVal}",
-                    videoInfo.Title, videoInputFile == null, !string.IsNullOrWhiteSpace(sourceUrl), useDash);
-
-                if (videoInputFile == null && (!string.IsNullOrWhiteSpace(sourceUrl) || useDash))
-                {
-                    if (useDash)
-                    {
-                        _logger.LogInformation("Attempting DASH download for {VideoTitle}. VideoURL: {VUrl}, AudioURL: {AUrl}",
-                           videoInfo.Title, videoInfo.DashStreams.VideoStream.Url, videoInfo.DashStreams.AudioStream.Url);
-                        downloadedVideoPath = await _downloadService.DownloadAndMergeDashStreamsAsync(
-                            videoInfo.DashStreams.VideoStream.Url,
-                            videoInfo.DashStreams.AudioStream.Url,
-                            videoInfo.OriginalUrl,
-                            $"{videoInfo.Bvid ?? videoInfo.Aid}_p{videoInfo.Page}.mp4");
-                    }
-                    else
-                    {
-                        _logger.LogInformation("Attempting DURL download for {VideoTitle}. DURL: {DUrlToDownload}", videoInfo.Title, sourceUrl);
-                        downloadedVideoPath = await _downloadService.DownloadFileAsync(
-                            sourceUrl,
-                            videoInfo.OriginalUrl,
-                            $"{videoInfo.Bvid ?? videoInfo.Aid}_p{videoInfo.Page}_{videoFileToCacheKey?.Split('_').LastOrDefault() ?? "durl"}.mp4");
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(downloadedVideoPath))
-                    {
-                        _logger.LogInformation("Successfully downloaded video to path: {Path} for {VideoTitle}", downloadedVideoPath, videoInfo.Title);
-                        videoFileStream = new FileStream(downloadedVideoPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                        videoInputFile = InputFile.FromStream(videoFileStream, Path.GetFileName(downloadedVideoPath));
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Download (DASH or DURL) resulted in null/empty path for video: {VideoTitle}. sourceUrl: '{SourceUrlForLog}', useDash: {UseDashForLog}",
-                          videoInfo.Title, sourceUrl, useDash);
-                    }
-                }
-                else
-                {
-                    if (videoInputFile != null) _logger.LogInformation("Skipping download for {VideoTitle}: videoInputFile already exists (likely from cache).", videoInfo.Title);
-                    else _logger.LogInformation("Skipping download for {VideoTitle}: No valid sourceUrl and useDash is false.", videoInfo.Title);
-                }
-
-                InputFile thumbnailInputFile = null; // Moved declaration here
-                if (videoInputFile != null && videoFileStream != null && !string.IsNullOrWhiteSpace(videoInfo.CoverUrl))
-                {
-                    downloadedThumbnailPath = await _downloadService.DownloadFileAsync(videoInfo.CoverUrl, videoInfo.OriginalUrl, "thumb.jpg");
-                    if (!string.IsNullOrWhiteSpace(downloadedThumbnailPath))
-                    {
-                        thumbnailMemoryStream = new MemoryStream();
-                        await using (var ts = new FileStream(downloadedThumbnailPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                        {
-                            await ts.CopyToAsync(thumbnailMemoryStream);
-                        }
-                        thumbnailMemoryStream.Position = 0;
-                        thumbnailInputFile = InputFile.FromStream(thumbnailMemoryStream, "thumb.jpg");
-                    }
-                }
-
-                if (videoInputFile != null)
+                if (result.VideoInputFile != null)
                 {
                     var sendTcs = new TaskCompletionSource<bool>();
                     await _sendMessage.AddTask(async () =>
@@ -308,18 +141,25 @@ namespace TelegramSearchBot.Controller.Bilibili
                         try
                         {
                             Message sentMessage = await _botClient.SendVideo(
-                                chatId: message.Chat.Id, video: videoInputFile, caption: videoCaption, parseMode: ParseMode.MarkdownV2,
+                                chatId: message.Chat.Id, 
+                                video: result.VideoInputFile, 
+                                caption: result.Caption, 
+                                parseMode: ParseMode.MarkdownV2,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                                 duration: videoInfo.Duration > 0 ? videoInfo.Duration : null,
                                 width: videoInfo.DimensionWidth > 0 ? videoInfo.DimensionWidth : null,
                                 height: videoInfo.DimensionHeight > 0 ? videoInfo.DimensionHeight : null,
-                                supportsStreaming: true, thumbnail: thumbnailInputFile
+                                supportsStreaming: true, 
+                                thumbnail: result.ThumbnailInputFile
                             );
                             videoSent = true;
                             _logger.LogInformation("Video send task completed for {VideoTitle}", videoInfo.Title);
-                            if (sentMessage?.Video != null && !string.IsNullOrWhiteSpace(videoFileToCacheKey) && videoFileStream != null)
+                            
+                            if (sentMessage?.Video != null && !string.IsNullOrWhiteSpace(result.VideoFileToCacheKey) && result.VideoFileStream != null)
                             {
-                                await _fileCacheService.CacheFileIdAsync(videoFileToCacheKey, sentMessage.Video.FileId);
+                                await _videoProcessingService.CacheFileIdAsync(
+                                    result.VideoFileToCacheKey,
+                                    sentMessage.Video.FileId);
                             }
                             sendTcs.TrySetResult(true);
                         }
@@ -330,8 +170,8 @@ namespace TelegramSearchBot.Controller.Bilibili
                         }
                         finally
                         {
-                            if (videoFileStream != null) await videoFileStream.DisposeAsync();
-                            if (thumbnailMemoryStream != null) await thumbnailMemoryStream.DisposeAsync();
+                            if (result.VideoFileStream != null) await result.VideoFileStream.DisposeAsync();
+                            if (result.ThumbnailMemoryStream != null) await result.ThumbnailMemoryStream.DisposeAsync();
                         }
                     }, isGroup);
                     videoSent = await sendTcs.Task;
@@ -344,109 +184,28 @@ namespace TelegramSearchBot.Controller.Bilibili
             }
             finally
             {
-                if (!string.IsNullOrWhiteSpace(downloadedVideoPath) && System.IO.File.Exists(downloadedVideoPath))
+                foreach (var tempFile in result.TempFiles)
                 {
-                    try { System.IO.File.Delete(downloadedVideoPath); } catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp video: {Path}", downloadedVideoPath); }
-                }
-                if (!string.IsNullOrWhiteSpace(downloadedThumbnailPath) && System.IO.File.Exists(downloadedThumbnailPath))
-                {
-                    try { System.IO.File.Delete(downloadedThumbnailPath); } catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp thumb: {Path}", downloadedThumbnailPath); }
+                    if (!string.IsNullOrWhiteSpace(tempFile) && System.IO.File.Exists(tempFile))
+                    {
+                        try { System.IO.File.Delete(tempFile); } 
+                        catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp file: {Path}", tempFile); }
+                    }
                 }
             }
 
             if (!videoSent)
             {
                 _logger.LogWarning("Failed to send video for {VideoTitle}, sending text info instead.", videoInfo.Title);
-                string fallbackCaption = $"*{MessageFormatHelper.EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*\n" +
-                                         $"UP: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.OwnerName)}\n" +
-                                         $"分类: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.TName ?? "N/A")}\n" +
-                                         (videoInfo.Duration > 0 ? $"时长: {TimeSpan.FromSeconds(videoInfo.Duration):g}\n" : "") +
-                                         (!string.IsNullOrWhiteSpace(videoInfo.Description) ? $"简介: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.Description.Substring(0, Math.Min(videoInfo.Description.Length, 100)) + (videoInfo.Description.Length > 100 ? "..." : ""))}\n" : "") +
-                                         $"{MessageFormatHelper.EscapeMarkdownV2(videoInfo.OriginalUrl)}";
-                if (fallbackCaption.Length > 4096) fallbackCaption = fallbackCaption.Substring(0, 4093) + "...";
-
                 await _sendMessage.AddTask(async () =>
                 {
-                    await _botClient.SendMessage(message.Chat.Id, fallbackCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId });
+                    await _botClient.SendMessage(
+                        message.Chat.Id, 
+                        result.FallbackCaption, 
+                        parseMode: ParseMode.MarkdownV2, 
+                        replyParameters: new ReplyParameters { MessageId = message.MessageId });
                 }, isGroup);
             }
-        }
-
-        private async Task<OpusProcessingResult> ProcessOpusInfoAsync(BiliOpusInfo opusInfo)
-        {
-            string textContent = opusInfo.FormattedContentMarkdown ?? opusInfo.ContentText ?? "";
-            if (opusInfo.OriginalResource != null) textContent = $"*{MessageFormatHelper.EscapeMarkdownV2(opusInfo.OriginalResource.Title ?? "分享内容")}*\n{MessageFormatHelper.EscapeMarkdownV2(opusInfo.OriginalResource.Url)}\n\n{textContent}";
-            string mainCaption = $"{textContent}\n\n---\n动态作者: {MessageFormatHelper.EscapeMarkdownV2(opusInfo.UserName)}\n[原始动态链接](https://t.bilibili.com/{opusInfo.DynamicId})";
-            if (mainCaption.Length > 4096) mainCaption = mainCaption.Substring(0, 4093) + "...";
-
-            var result = new OpusProcessingResult { MainCaption = mainCaption };
-            List<string> downloadedImagePaths = new List<string>();
-            try
-            {
-                if (opusInfo.ImageUrls != null && opusInfo.ImageUrls.Any())
-                {
-                    result.MediaGroup = new List<IAlbumInputMedia>();
-                    result.CurrentBatchImageUrls = new List<string>();
-                    result.CurrentBatchMemoryStreams = new List<MemoryStream>();
-                    bool firstImageInBatch = true;
-
-                    foreach (var imageUrl in opusInfo.ImageUrls.Take(10))
-                    {
-                        string imageCacheKey = $"image_{imageUrl}";
-                        InputFile imageInputFile; MemoryStream ms = null;
-                        string cachedFileId = await _fileCacheService.GetCachedFileIdAsync(imageCacheKey);
-                        if (!string.IsNullOrWhiteSpace(cachedFileId))
-                        {
-                            imageInputFile = InputFile.FromFileId(cachedFileId);
-                        }
-                        else
-                        {
-                            string downloadedImagePath = await _downloadService.DownloadFileAsync(imageUrl, $"https://t.bilibili.com/{opusInfo.DynamicId}", $"opus_img_{Guid.NewGuid()}.jpg");
-                            if (string.IsNullOrWhiteSpace(downloadedImagePath)) { _logger.LogWarning("Failed to download image: {ImageUrl}", imageUrl); continue; }
-                            downloadedImagePaths.Add(downloadedImagePath);
-                            ms = new MemoryStream();
-                            await using (var fs = new FileStream(downloadedImagePath, FileMode.Open, FileAccess.Read, FileShare.Read)) { await fs.CopyToAsync(ms); }
-                            ms.Position = 0;
-                            imageInputFile = InputFile.FromStream(ms, Path.GetFileName(downloadedImagePath));
-                            result.CurrentBatchMemoryStreams.Add(ms);
-                        }
-                        string itemCaption = null;
-                        if (firstImageInBatch)
-                        {
-                            itemCaption = mainCaption.Length > 1024 ? mainCaption.Substring(0, 1021) + "..." : mainCaption;
-                            firstImageInBatch = false;
-                        }
-                        result.MediaGroup.Add(new InputMediaPhoto(imageInputFile) { Caption = itemCaption, ParseMode = ParseMode.MarkdownV2 });
-                        result.CurrentBatchImageUrls.Add(imageUrl);
-                    }
-                    result.HasImages = result.MediaGroup.Any();
-                    result.FirstImageHasCaption = !firstImageInBatch;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing opus info for dynamic ID: {DynamicId}. ImageUrlsCount: {ImageCount}, FirstImageUrl: {FirstImageUrl}",
-                    opusInfo.DynamicId, opusInfo.ImageUrls?.Count ?? 0, opusInfo.ImageUrls?.FirstOrDefault());
-                
-                result.ErrorMessage = opusInfo.ImageUrls?.Any() == true 
-                    ? $"处理动态图片时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}"
-                    : $"处理动态内容时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}";
-                
-                // Preserve any successfully processed images
-                if (result.MediaGroup?.Any() == true)
-                {
-                    result.HasImages = true;
-                    result.ErrorMessage += "\n\n(部分图片已成功处理)";
-                }
-            }
-            finally
-            {
-                foreach (var path in downloadedImagePaths)
-                {
-                    if (System.IO.File.Exists(path)) { try { System.IO.File.Delete(path); } catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp opus image: {Path}", path); } }
-                }
-            }
-            return result;
         }
 
         private async Task HandleOpusInfoAsync(Message message, BiliOpusInfo opusInfo)
@@ -454,7 +213,7 @@ namespace TelegramSearchBot.Controller.Bilibili
             _logger.LogInformation("Handling opus info by: {UserName} for chat {ChatId}", opusInfo.UserName, message.Chat.Id);
             bool isGroup = message.Chat.Type != ChatType.Private;
 
-            var result = await ProcessOpusInfoAsync(opusInfo);
+            var result = await _opusProcessingService.ProcessOpusAsync(opusInfo);
             
             if (!string.IsNullOrEmpty(result.ErrorMessage))
             {
@@ -500,8 +259,8 @@ namespace TelegramSearchBot.Controller.Bilibili
                     {
                         if (sentMessages[i].Photo != null && i < result.CurrentBatchImageUrls.Count)
                         {
-                            await _fileCacheService.CacheFileIdAsync(
-                                $"image_{result.CurrentBatchImageUrls[i]}", 
+                            await _opusProcessingService.CacheFileIdAsync(
+                                $"image_{result.CurrentBatchImageUrls[i]}",
                                 sentMessages[i].Photo.Last().FileId);
                         }
                     }
