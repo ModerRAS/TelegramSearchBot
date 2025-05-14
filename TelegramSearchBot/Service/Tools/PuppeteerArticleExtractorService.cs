@@ -27,9 +27,21 @@ namespace TelegramSearchBot.Service.Tools
             var page = await browser.NewPageAsync();
             await page.GoToAsync(url);
             
-            // 提取文章主要内容
+            // 智能提取文章主要内容
             var content = await page.EvaluateFunctionAsync<string>(@"() => {
-                // 这里可以添加更复杂的选择器逻辑来提取文章内容
+                // 优先尝试获取article标签内容
+                const article = document.querySelector('article');
+                if (article) return article.innerText;
+                
+                // 其次尝试获取main标签内容
+                const main = document.querySelector('main');
+                if (main) return main.innerText;
+                
+                // 尝试常见文章内容容器
+                const content = document.querySelector('.article-content, .post-content, .entry-content');
+                if (content) return content.innerText;
+                
+                // 最后回退到body内容
                 return document.body.innerText;
             }");
 
