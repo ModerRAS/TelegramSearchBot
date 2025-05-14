@@ -37,6 +37,32 @@ namespace TelegramSearchBot.Service.BotAPI
         #endregion
 
         #region Standard Send Methods
+        public async Task SendVideoAsync(InputFile video, string caption, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2)
+        {
+            await Send.AddTask(async () =>
+            {
+                await botClient.SendVideoAsync(
+                    chatId: chatId,
+                    video: video,
+                    caption: caption,
+                    parseMode: parseMode,
+                    replyParameters: new ReplyParameters() { MessageId = replyTo }
+                );
+            }, chatId < 0);
+        }
+
+        public async Task SendMediaGroupAsync(IEnumerable<IAlbumInputMedia> mediaGroup, long chatId, int replyTo)
+        {
+            await Send.AddTask(async () =>
+            {
+                await botClient.SendMediaGroupAsync(
+                    chatId: chatId,
+                    media: mediaGroup,
+                    replyParameters: new ReplyParameters() { MessageId = replyTo }
+                );
+            }, chatId < 0);
+        }
+
         public async Task SendDocument(InputFile inputFile, long ChatId, int replyTo)
         {
             await Send.AddTask(async () =>
