@@ -5,14 +5,17 @@
   - 成功将HandleOpusInfoAsync拆分为两个独立方法
   - 实现动态获取逻辑与消息处理逻辑解耦
   - 新增OpusProcessingResult内部类封装处理结果
+  - 优化ProcessOpusInfoAsync的错误处理机制
+  - 为OpusProcessingResult添加接口IOpusProcessingResult
+  - 将Bilibili URL正则表达式迁移到BiliHelper类
 - BiliApiService重构：
   - 提取工具方法到BiliHelper类
   - 包括正则表达式、Markdown转义、短链接解析和动态解析方法
   - 保持服务类专注于核心业务逻辑
 
 ## 待开发功能
-- 优化ProcessOpusInfoAsync的错误处理机制
-- 评估OpusProcessingResult提升为公共类的必要性
+- 监控优化后的错误处理机制效果
+- 评估是否需要进一步重构BiliMessageController的其他部分
 
 ## 当前状态
 - Bilibili动态处理模块：
