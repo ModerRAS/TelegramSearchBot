@@ -312,7 +312,7 @@ namespace TelegramSearchBot.Controller.Bilibili
                      var sendTcs = new TaskCompletionSource<bool>();
                      await _sendMessage.AddTask(async () => {
                         try {
-                            Message sentMessage = await _botClient.SendVideoAsync(
+                            Message sentMessage = await _botClient.SendVideo(
                                 chatId: message.Chat.Id, video: videoInputFile, caption: videoCaption, parseMode: ParseMode.MarkdownV2,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId }, 
                                 duration: videoInfo.Duration > 0 ? videoInfo.Duration : null,
@@ -367,7 +367,7 @@ namespace TelegramSearchBot.Controller.Bilibili
                 if (fallbackCaption.Length > 4096) fallbackCaption = fallbackCaption.Substring(0, 4093) + "...";
                 
                 await _sendMessage.AddTask(async () => {
-                     await _botClient.SendTextMessageAsync(message.Chat.Id, fallbackCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId } );
+                     await _botClient.SendMessage(message.Chat.Id, fallbackCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId } );
                 }, isGroup);
             }
         }
@@ -418,7 +418,7 @@ namespace TelegramSearchBot.Controller.Bilibili
                         var tcs = new TaskCompletionSource<Message[]>();
                         await _sendMessage.AddTask(async () => {
                             try {
-                                 var sentMediaMessages = await _botClient.SendMediaGroupAsync(message.Chat.Id, mediaGroup, replyParameters: new ReplyParameters { MessageId = message.MessageId });
+                                 var sentMediaMessages = await _botClient.SendMediaGroup(message.Chat.Id, mediaGroup, replyParameters: new ReplyParameters { MessageId = message.MessageId });
                                 _logger.LogInformation("Sent opus images for dynamic ID: {DynamicId}", opusInfo.DynamicId);
                                 tcs.TrySetResult(sentMediaMessages); 
                             } catch (Exception ex) { _logger.LogError(ex, "Error sending media group for dynamic ID: {DynamicId}", opusInfo.DynamicId); tcs.TrySetException(ex); } 
@@ -434,13 +434,13 @@ namespace TelegramSearchBot.Controller.Bilibili
                             }
                         } else { _logger.LogWarning("Media group send task failed/timed out for dynamic ID: {DynamicId}", opusInfo.DynamicId); foreach (var stream in currentBatchMemoryStreams) await stream.DisposeAsync(); }
                         if (!firstImageInBatch && (mediaGroup.First() as InputMediaPhoto)?.Caption == null && mainCaption.Length > 1024) {
-                             await _sendMessage.AddTask(async () => { await _botClient.SendTextMessageAsync(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup);
+                             await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup);
                         }
-                    } else { await _sendMessage.AddTask(async () => { await _botClient.SendTextMessageAsync(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup); }
-                } else { await _sendMessage.AddTask(async () => { await _botClient.SendTextMessageAsync(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup); }
+                    } else { await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup); }
+                } else { await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup); }
             } catch (Exception ex) {
                 _logger.LogError(ex, "Outer error handling opus info for dynamic ID: {DynamicId}", opusInfo.DynamicId);
-                await _sendMessage.AddTask(async () => { await _botClient.SendTextMessageAsync(message.Chat.Id, $"处理动态时出错: {EscapeMarkdownV2(ex.Message)}", parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup);
+                await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, $"处理动态时出错: {EscapeMarkdownV2(ex.Message)}", parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup);
             } finally {
                 foreach (var path in downloadedImagePaths) {
                     if (System.IO.File.Exists(path)) { try { System.IO.File.Delete(path); } catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp opus image: {Path}", path); } }
