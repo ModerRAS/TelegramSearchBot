@@ -1,31 +1,67 @@
 # 系统架构模式
 
 ## 核心架构
-- 基于Telegram.Bot的异步消息处理架构
-- 模块化控制器设计
+```mermaid
+graph TD
+    A[Telegram Bot API] --> B[消息接收]
+    B --> C{消息类型}
+    C -->|文本| D[消息存储服务]
+    C -->|图片| E[OCR处理进程]
+    C -->|音视频| F[ASR处理进程]
+    D --> G[Lucene索引]
+    E --> G
+    F --> G
+    G --> H[搜索服务]
+    H --> I[结果返回]
+    
+    subgraph 多进程架构
+        E -.->|进程间通信| M[AppBootstrap]
+        F -.->|进程间通信| M
+        M --> N[独立进程管理]
+    end
+```
+
+- 基于事件的异步处理架构
+- 模块化设计，核心功能分离为独立服务
+- 多进程架构解决内存泄漏问题：
+  - OCR/ASR等高内存消耗操作在独立进程执行
+  - 通过AppBootstrap协调进程启动和通信
+  - 主进程通过IPC与工作进程交互
+- 插件式架构支持功能扩展
 
 ## 设计模式
 - 单一职责原则：
-  - 应用于BiliMessageController重构
-  - ProcessOpusInfoAsync专注Bilibili动态获取
-  - HandleOpusInfoAsync专注Telegram消息处理
+  - 各控制器专注于特定功能
+  - 服务层分离业务逻辑
+- 观察者模式：
+  - 消息处理流水线
 - 策略模式：
-  - 通过OpusProcessingResult封装不同处理结果
+  - 可插拔的OCR/ASR处理器
+  - 多LLM提供商支持
 
 ## 关键实现路径
-- Bilibili动态处理流程：
-  1. ProcessOpusInfoAsync获取并处理动态信息
-  2. 返回OpusProcessingResult封装结果
-  3. HandleOpusInfoAsync根据结果生成Telegram消息
+1. 消息接收流程：
+   - Telegram消息 → 消息解析 → 类型判断 → 对应处理器
+
+2. 搜索流程：
+   - 用户查询 → Lucene搜索 → 结果排序 → 格式化返回
+
+3. AI处理流程：
+   - 媒体消息 → OCR/ASR处理 → 文本存储 → 可选LLM处理
 
 ## 组件关系
-- ProcessOpusInfoAsync与HandleOpusInfoAsync协作：
-  - 前者为后者提供预处理结果
-  - 后者依赖前者但不了解其实现细节
-- OpusProcessingResult作为数据桥梁
+- 核心组件：
+  - 消息接收器：处理原始Telegram消息
+  - 存储服务：LiteDB持久化
+  - 搜索服务：Lucene全文检索
+  - AI服务：OCR/ASR/LLM处理
+- 数据流：
+  - 消息 → 存储 → 索引 → 搜索
+  - 媒体 → AI处理 → 文本 → 存储
 
-## 数据流
-- Bilibili动态数据流：
-  1. 原始动态数据 → ProcessOpusInfoAsync
-  2. 处理结果 → OpusProcessingResult
-  3. 格式化结果 → HandleOpusInfoAsync → Telegram消息
+## 模块划分
+- 控制器层：消息入口点
+- 服务层：核心业务逻辑
+- 管理器层：第三方集成
+- 数据层：存储和检索
+- AI层：智能处理
