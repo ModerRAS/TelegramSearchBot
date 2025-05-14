@@ -13,7 +13,7 @@ using TelegramSearchBot.Service.Common;
 
 namespace TelegramSearchBot.Service.Bilibili
 {
-    public class BiliVideoProcessingService
+    public class BiliVideoProcessingService : IService
     {
         private readonly IBiliApiService _biliApiService;
         private readonly IDownloadService _downloadService;
@@ -34,6 +34,8 @@ namespace TelegramSearchBot.Service.Bilibili
             _logger = logger;
             _appConfigurationService = appConfigurationService;
         }
+
+        public string ServiceName => "BiliVideoProcessingService";
 
         public async Task CacheFileIdAsync(string cacheKey, string fileId)
         {
