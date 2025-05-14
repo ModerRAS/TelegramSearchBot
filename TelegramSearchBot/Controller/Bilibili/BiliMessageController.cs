@@ -30,12 +30,9 @@ namespace TelegramSearchBot.Controller.Bilibili
         private readonly ILogger<BiliMessageController> _logger;
         private readonly IAppConfigurationService _appConfigurationService; // Added
 
-        private static readonly Regex BiliUrlRegex = new(
-            @"(?:https?://)?(?:www\.bilibili\.com/(?:video/(?:av\d+|BV\w{10})/?(?:[?&p=\d+])?|bangumi/play/(?:ep\d+|ss\d+)/?|festival/\w+\?bvid=BV\w{10})|t\.bilibili\.com/\d+|space\.bilibili\.com/\d+/dynamic/\d+)|b23\.tv/\w+|acg\.tv/\w+",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly Regex BiliVideoUrlPattern = new(@"(?:https?://)?(?:www\.)?bilibili\.com/(?:video/((?:av\d+|BV\w{10})/?(?:[?&p=\d+])?|bangumi/play/(?:ep\d+|ss\d+)/?)|festival/\w+\?bvid=BV\w{10})|b23\.tv/(\w+)|acg\.tv/(\w+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex BiliOpusUrlPattern = new(@"(?:https?://)?(?:t\.bilibili\.com/|space\.bilibili\.com/\d+/dynamic)/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BiliUrlRegex = BiliHelper.BiliUrlParseRegex;
+        private static readonly Regex BiliVideoUrlPattern = BiliHelper.BiliUrlParseRegex;
+        private static readonly Regex BiliOpusUrlPattern = BiliHelper.BiliOpusUrlRegex;
 
         public BiliMessageController(
             ITelegramBotClient botClient,
@@ -428,8 +425,19 @@ namespace TelegramSearchBot.Controller.Bilibili
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing opus info for dynamic ID: {DynamicId}", opusInfo.DynamicId);
-                result.ErrorMessage = $"处理动态时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}";
+                _logger.LogError(ex, "Error processing opus info for dynamic ID: {DynamicId}. ImageUrlsCount: {ImageCount}, FirstImageUrl: {FirstImageUrl}",
+                    opusInfo.DynamicId, opusInfo.ImageUrls?.Count ?? 0, opusInfo.ImageUrls?.FirstOrDefault());
+                
+                result.ErrorMessage = opusInfo.ImageUrls?.Any() == true 
+                    ? $"处理动态图片时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}"
+                    : $"处理动态内容时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}";
+                
+                // Preserve any successfully processed images
+                if (result.MediaGroup?.Any() == true)
+                {
+                    result.HasImages = true;
+                    result.ErrorMessage += "\n\n(部分图片已成功处理)";
+                }
             }
             finally
             {
@@ -527,7 +535,18 @@ namespace TelegramSearchBot.Controller.Bilibili
                 }, isGroup); 
             }
         }
-        private class OpusProcessingResult
+        private interface IOpusProcessingResult
+        {
+            string MainCaption { get; set; }
+            List<IAlbumInputMedia> MediaGroup { get; set; }
+            List<string> CurrentBatchImageUrls { get; set; }
+            List<MemoryStream> CurrentBatchMemoryStreams { get; set; }
+            bool HasImages { get; set; }
+            bool FirstImageHasCaption { get; set; }
+            string ErrorMessage { get; set; }
+        }
+
+        private class OpusProcessingResult : IOpusProcessingResult
         {
             public string MainCaption { get; set; }
             public List<IAlbumInputMedia> MediaGroup { get; set; }
