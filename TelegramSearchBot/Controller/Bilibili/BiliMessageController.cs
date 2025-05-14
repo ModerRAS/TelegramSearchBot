@@ -375,23 +375,22 @@ namespace TelegramSearchBot.Controller.Bilibili
             }
         }
 
-        private async Task HandleOpusInfoAsync(Message message, BiliOpusInfo opusInfo)
+        private async Task<OpusProcessingResult> ProcessOpusInfoAsync(BiliOpusInfo opusInfo)
         {
-            _logger.LogInformation("Handling opus info by: {UserName} for chat {ChatId}", opusInfo.UserName, message.Chat.Id);
-            bool isGroup = message.Chat.Type != ChatType.Private;
             string textContent = opusInfo.FormattedContentMarkdown ?? opusInfo.ContentText ?? "";
             if (opusInfo.OriginalResource != null) textContent = $"*{MessageFormatHelper.EscapeMarkdownV2(opusInfo.OriginalResource.Title ?? "分享内容")}*\n{MessageFormatHelper.EscapeMarkdownV2(opusInfo.OriginalResource.Url)}\n\n{textContent}";
             string mainCaption = $"{textContent}\n\n---\n动态作者: {MessageFormatHelper.EscapeMarkdownV2(opusInfo.UserName)}\n[原始动态链接](https://t.bilibili.com/{opusInfo.DynamicId})";
             if (mainCaption.Length > 4096) mainCaption = mainCaption.Substring(0, 4093) + "...";
 
+            var result = new OpusProcessingResult { MainCaption = mainCaption };
             List<string> downloadedImagePaths = new List<string>();
             try
             {
                 if (opusInfo.ImageUrls != null && opusInfo.ImageUrls.Any())
                 {
-                    List<IAlbumInputMedia> mediaGroup = new List<IAlbumInputMedia>();
-                    List<string> currentBatchImageUrls = new List<string>();
-                    List<MemoryStream> currentBatchMemoryStreams = new List<MemoryStream>();
+                    result.MediaGroup = new List<IAlbumInputMedia>();
+                    result.CurrentBatchImageUrls = new List<string>();
+                    result.CurrentBatchMemoryStreams = new List<MemoryStream>();
                     bool firstImageInBatch = true;
 
                     foreach (var imageUrl in opusInfo.ImageUrls.Take(10))
@@ -412,7 +411,7 @@ namespace TelegramSearchBot.Controller.Bilibili
                             await using (var fs = new FileStream(downloadedImagePath, FileMode.Open, FileAccess.Read, FileShare.Read)) { await fs.CopyToAsync(ms); }
                             ms.Position = 0;
                             imageInputFile = InputFile.FromStream(ms, Path.GetFileName(downloadedImagePath));
-                            currentBatchMemoryStreams.Add(ms);
+                            result.CurrentBatchMemoryStreams.Add(ms);
                         }
                         string itemCaption = null;
                         if (firstImageInBatch)
@@ -420,50 +419,17 @@ namespace TelegramSearchBot.Controller.Bilibili
                             itemCaption = mainCaption.Length > 1024 ? mainCaption.Substring(0, 1021) + "..." : mainCaption;
                             firstImageInBatch = false;
                         }
-                        mediaGroup.Add(new InputMediaPhoto(imageInputFile) { Caption = itemCaption, ParseMode = ParseMode.MarkdownV2 });
-                        currentBatchImageUrls.Add(imageUrl);
+                        result.MediaGroup.Add(new InputMediaPhoto(imageInputFile) { Caption = itemCaption, ParseMode = ParseMode.MarkdownV2 });
+                        result.CurrentBatchImageUrls.Add(imageUrl);
                     }
-
-                    if (mediaGroup.Any())
-                    {
-                        var tcs = new TaskCompletionSource<Message[]>();
-                        await _sendMessage.AddTask(async () =>
-                        {
-                            try
-                            {
-                                var sentMediaMessages = await _botClient.SendMediaGroup(message.Chat.Id, mediaGroup, replyParameters: new ReplyParameters { MessageId = message.MessageId });
-                                _logger.LogInformation("Sent opus images for dynamic ID: {DynamicId}", opusInfo.DynamicId);
-                                tcs.TrySetResult(sentMediaMessages);
-                            }
-                            catch (Exception ex) { _logger.LogError(ex, "Error sending media group for dynamic ID: {DynamicId}", opusInfo.DynamicId); tcs.TrySetException(ex); }
-                            finally { foreach (var stream in currentBatchMemoryStreams) await stream.DisposeAsync(); }
-                        }, isGroup);
-                        var sendTask = tcs.Task;
-                        if (await Task.WhenAny(sendTask, Task.Delay(TimeSpan.FromMinutes(2))) == sendTask && sendTask.IsCompletedSuccessfully)
-                        {
-                            var sentMessages = sendTask.Result;
-                            for (int i = 0; i < sentMessages.Length; i++)
-                            {
-                                if (sentMessages[i].Photo != null && i < currentBatchImageUrls.Count && downloadedImagePaths.Any(p => p.Contains(Path.GetFileNameWithoutExtension(Path.GetFileName(currentBatchImageUrls[i])))))
-                                {
-                                    await _fileCacheService.CacheFileIdAsync($"image_{currentBatchImageUrls[i]}", sentMessages[i].Photo.Last().FileId);
-                                }
-                            }
-                        }
-                        else { _logger.LogWarning("Media group send task failed/timed out for dynamic ID: {DynamicId}", opusInfo.DynamicId); foreach (var stream in currentBatchMemoryStreams) await stream.DisposeAsync(); }
-                        if (!firstImageInBatch && (mediaGroup.First() as InputMediaPhoto)?.Caption == null && mainCaption.Length > 1024)
-                        {
-                            await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup);
-                        }
-                    }
-                    else { await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup); }
+                    result.HasImages = result.MediaGroup.Any();
+                    result.FirstImageHasCaption = !firstImageInBatch;
                 }
-                else { await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup); }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Outer error handling opus info for dynamic ID: {DynamicId}", opusInfo.DynamicId);
-                await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, $"处理动态时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}", parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup);
+                _logger.LogError(ex, "Error processing opus info for dynamic ID: {DynamicId}", opusInfo.DynamicId);
+                result.ErrorMessage = $"处理动态时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}";
             }
             finally
             {
@@ -472,6 +438,104 @@ namespace TelegramSearchBot.Controller.Bilibili
                     if (System.IO.File.Exists(path)) { try { System.IO.File.Delete(path); } catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp opus image: {Path}", path); } }
                 }
             }
+            return result;
+        }
+
+        private async Task HandleOpusInfoAsync(Message message, BiliOpusInfo opusInfo)
+        {
+            _logger.LogInformation("Handling opus info by: {UserName} for chat {ChatId}", opusInfo.UserName, message.Chat.Id);
+            bool isGroup = message.Chat.Type != ChatType.Private;
+
+            var result = await ProcessOpusInfoAsync(opusInfo);
+            
+            if (!string.IsNullOrEmpty(result.ErrorMessage))
+            {
+                await _sendMessage.AddTask(async () => { 
+                    await _botClient.SendMessage(message.Chat.Id, result.ErrorMessage, 
+                        parseMode: ParseMode.MarkdownV2, 
+                        replyParameters: new ReplyParameters { MessageId = message.MessageId }); 
+                }, isGroup);
+                return;
+            }
+
+            if (result.HasImages)
+            {
+                var tcs = new TaskCompletionSource<Message[]>();
+                await _sendMessage.AddTask(async () =>
+                {
+                    try
+                    {
+                        var sentMediaMessages = await _botClient.SendMediaGroup(
+                            message.Chat.Id, 
+                            result.MediaGroup, 
+                            replyParameters: new ReplyParameters { MessageId = message.MessageId });
+                        _logger.LogInformation("Sent opus images for dynamic ID: {DynamicId}", opusInfo.DynamicId);
+                        tcs.TrySetResult(sentMediaMessages);
+                    }
+                    catch (Exception ex) 
+                    { 
+                        _logger.LogError(ex, "Error sending media group for dynamic ID: {DynamicId}", opusInfo.DynamicId); 
+                        tcs.TrySetException(ex); 
+                    }
+                    finally 
+                    { 
+                        foreach (var stream in result.CurrentBatchMemoryStreams) 
+                            await stream.DisposeAsync(); 
+                    }
+                }, isGroup);
+
+                var sendTask = tcs.Task;
+                if (await Task.WhenAny(sendTask, Task.Delay(TimeSpan.FromMinutes(2))) == sendTask && sendTask.IsCompletedSuccessfully)
+                {
+                    var sentMessages = sendTask.Result;
+                    for (int i = 0; i < sentMessages.Length; i++)
+                    {
+                        if (sentMessages[i].Photo != null && i < result.CurrentBatchImageUrls.Count)
+                        {
+                            await _fileCacheService.CacheFileIdAsync(
+                                $"image_{result.CurrentBatchImageUrls[i]}", 
+                                sentMessages[i].Photo.Last().FileId);
+                        }
+                    }
+                }
+                else 
+                { 
+                    _logger.LogWarning("Media group send task failed/timed out for dynamic ID: {DynamicId}", opusInfo.DynamicId); 
+                    foreach (var stream in result.CurrentBatchMemoryStreams) 
+                        await stream.DisposeAsync(); 
+                }
+
+                if (!result.FirstImageHasCaption && result.MainCaption.Length > 1024)
+                {
+                    await _sendMessage.AddTask(async () => { 
+                        await _botClient.SendMessage(
+                            message.Chat.Id, 
+                            result.MainCaption, 
+                            parseMode: ParseMode.MarkdownV2, 
+                            replyParameters: new ReplyParameters { MessageId = message.MessageId }); 
+                    }, isGroup);
+                }
+            }
+            else 
+            { 
+                await _sendMessage.AddTask(async () => { 
+                    await _botClient.SendMessage(
+                        message.Chat.Id, 
+                        result.MainCaption, 
+                        parseMode: ParseMode.MarkdownV2, 
+                        replyParameters: new ReplyParameters { MessageId = message.MessageId }); 
+                }, isGroup); 
+            }
+        }
+        private class OpusProcessingResult
+        {
+            public string MainCaption { get; set; }
+            public List<IAlbumInputMedia> MediaGroup { get; set; }
+            public List<string> CurrentBatchImageUrls { get; set; }
+            public List<MemoryStream> CurrentBatchMemoryStreams { get; set; }
+            public bool HasImages { get; set; }
+            public bool FirstImageHasCaption { get; set; }
+            public string ErrorMessage { get; set; }
         }
     } // Class close
 } // Namespace close
