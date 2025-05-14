@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using TelegramSearchBot.Manager; // For Env (though BiliCookie will now come from service)
 using TelegramSearchBot.Service.Common; // For IAppConfigurationService
+using TelegramSearchBot.Helper;
 
 namespace TelegramSearchBot.Service.Bilibili;
 
@@ -21,12 +22,6 @@ public class BiliApiService : IBiliApiService
 
     private const string BiliApiBaseUrl = "https://api.bilibili.com";
 
-    private static readonly Regex BiliUrlParseRegex = new(
-        @"bilibili\.com/(?:video/(?:(?<bvid>BV[1-9A-HJ-NP-Za-km-z]{10})|av(?<aid>\d+))/?(?:[?&;]*p=(?<page>\d+))?|bangumi/play/(?:ep(?<epid>\d+)|ss(?<ssid>\d+))/?)|b23\.tv/(?<shortid>\w+)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex BiliOpusUrlRegex = new(@"(?:https?://)?(?:t\.bilibili\.com/|space\.bilibili\.com/\d+/dynamic)/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly char[] MarkdownV2EscapeChars = { '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
-
     public BiliApiService(IHttpClientFactory httpClientFactory, ILogger<BiliApiService> logger, IAppConfigurationService appConfigService)
     {
         _httpClient = httpClientFactory.CreateClient("BiliApiClient");
@@ -34,13 +29,6 @@ public class BiliApiService : IBiliApiService
         _httpClient.DefaultRequestHeaders.Referrer = new Uri("https://www.bilibili.com/");
         _logger = logger;
         _appConfigService = appConfigService;
-    }
-
-    private static string EscapeMarkdownV2(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return string.Empty;
-        foreach (char c in MarkdownV2EscapeChars) text = text.Replace(c.ToString(), "\\" + c);
-        return text;
     }
 
     public async Task<BiliVideoInfo> GetVideoInfoAsync(string videoUrl)
@@ -51,17 +39,18 @@ public class BiliApiService : IBiliApiService
         string aid = null, bvid = null, epid = null, ssid = null;
         int page = 1; string originalUrlToParse = videoUrl;
 
-        if (videoUrl.Contains("b23.tv/")) {
-            originalUrlToParse = await ResolveShortUrlAsync(videoUrl);
+            if (videoUrl.Contains("b23.tv/")) {
+            originalUrlToParse = await BiliHelper.ResolveShortUrlAsync(videoUrl, _logger);
             if (originalUrlToParse == videoUrl) { _logger.LogWarning("Failed to resolve b23.tv short URL: {VideoUrl}", videoUrl); return null; }
             _logger.LogInformation("Resolved b23.tv URL {ShortUrl} to {FullUrl}", videoUrl, originalUrlToParse);
         }
         
-        var match = BiliUrlParseRegex.Match(originalUrlToParse);
+        var match = BiliHelper.BiliUrlParseRegex.Match(originalUrlToParse);
         if (!match.Success) { _logger.LogWarning("URL did not match Bilibili video/bangumi pattern: {ParsedUrl}", originalUrlToParse); return null; }
 
         bvid = match.Groups["bvid"].Value; aid = match.Groups["aid"].Value; epid = match.Groups["epid"].Value; ssid = match.Groups["ssid"].Value;
-        if (match.Groups["page"].Success && int.TryParse(match.Groups["page"].Value, out int pVal)) page = pVal > 0 ? pVal : 1;
+        if (match.Groups["page"].Success && int.TryParse(match.Groups["page"].Value, out int pVal)) 
+            page = pVal > 0 ? pVal : 1;
 
         BiliVideoInfo videoInfo = new BiliVideoInfo { OriginalUrl = videoUrl, Page = page };
 
@@ -115,7 +104,7 @@ public class BiliApiService : IBiliApiService
             }
             
             videoInfo.FormattedContentInfo = $"{videoInfo.TName ?? "N/A"} - {data["dynamic"]?.GetValue<string>() ?? videoInfo.Description ?? "No description"}";
-            videoInfo.MarkdownFormattedLink = $"[{EscapeMarkdownV2(videoInfo.Title ?? "Video")}]({videoInfo.OriginalUrl})";
+            videoInfo.MarkdownFormattedLink = $"[{BiliHelper.EscapeMarkdownV2(videoInfo.Title ?? "Video")}]({videoInfo.OriginalUrl})";
             await GetPlayUrlInfoAsync(videoInfo);
             _logger.LogInformation("Successfully fetched video info (including play URLs) for: {VideoTitle}", videoInfo.Title);
             return videoInfo;
@@ -126,75 +115,17 @@ public class BiliApiService : IBiliApiService
     {
         _logger.LogInformation("Attempting to get opus info for URL: {OpusUrl}", opusUrl);
         if (string.IsNullOrWhiteSpace(opusUrl)) return null;
-        var match = BiliOpusUrlRegex.Match(opusUrl);
+        var match = BiliHelper.BiliOpusUrlRegex.Match(opusUrl);
         if (!match.Success) { _logger.LogWarning("URL did not match Bilibili opus pattern: {OpusUrl}", opusUrl); return null; }
         string dynamicId = match.Groups[1].Value; if (string.IsNullOrWhiteSpace(dynamicId)) return null;
         try {
             JsonNode responseNode = await GetBiliApiJsonAsync($"{BiliApiBaseUrl}/x/polymer/web-dynamic/desktop/v1/detail", new Dictionary<string, string> { { "id", dynamicId } }, true);
             if (responseNode?["code"]?.GetValue<int>() != 0 || responseNode?["data"]?["item"] == null) { _logger.LogWarning("Failed to get opus detail. Response: {Response}", responseNode?.ToString() ?? "null"); return null; }
-            var opusInfo = ParseOpusItem(responseNode["data"]["item"], opusUrl);
+            var opusInfo = BiliHelper.ParseOpusItem(responseNode["data"]["item"], opusUrl, _logger);
             _logger.LogInformation("Successfully fetched opus info for dynamic ID: {DynamicId}", dynamicId); return opusInfo;
         } catch (Exception ex) { _logger.LogError(ex, "Error in GetOpusInfoAsync for URL: {OpusUrl}", opusUrl); return null; }
     }
 
-    private BiliOpusInfo ParseOpusItem(JsonNode itemNode, string originalUrl)
-    {
-        if (itemNode == null) return null;
-        var opusInfo = new BiliOpusInfo { OriginalUrl = originalUrl };
-        string idStr = itemNode["basic"]?["comment_id_str"]?.GetValue<string>() ?? itemNode["id_str"]?.GetValue<string>();
-        if (!long.TryParse(idStr, out long dynId)) { _logger.LogWarning("Could not parse dynamic ID from itemNode."); return null; }
-        opusInfo.DynamicId = dynId;
-        var moduleAuthor = itemNode["modules"]?["module_author"];
-        opusInfo.UserName = moduleAuthor?["name"]?.GetValue<string>(); opusInfo.UserMid = moduleAuthor?["mid"]?.GetValue<long>() ?? 0;
-        opusInfo.Timestamp = moduleAuthor?["pub_ts"]?.GetValue<long>() ?? (moduleAuthor?["ptime"]?.GetValue<long>() ?? 0);
-        var moduleDescNode = itemNode["modules"]?["module_descriptor"]?["desc"] ?? itemNode["modules"]?["module_dynamic"]?["desc"];
-        if (moduleDescNode?["rich_text_nodes"]?.AsArray() is JsonArray richTextNodes) opusInfo.ContentText = string.Join("", richTextNodes.Select(n => n?["text"]?.GetValue<string>() ?? (n?["emoji"]?["text"]?.GetValue<string>() ?? "")));
-        else opusInfo.ContentText = moduleDescNode?["text"]?.GetValue<string>();
-        var major = itemNode["modules"]?["module_dynamic"]?["major"]; if (major != null) ParseOpusMajorContent(major, opusInfo);
-        if (!opusInfo.ImageUrls.Any()) {
-             var addDrawItems = itemNode["modules"]?["module_dynamic"]?["additional"]?["reserve_attach_card"]?["reserve_draw"]?["item"]?["draw_item_list"]?.AsArray();
-             if (addDrawItems != null) opusInfo.ImageUrls.AddRange(addDrawItems.Select(d => d?["src"]?.GetValue<string>()).Where(s => s != null));
-             else { var dynDrawItems = itemNode["modules"]?["module_dynamic"]?["draw"]?["items"]?.AsArray(); if (dynDrawItems != null) opusInfo.ImageUrls.AddRange(dynDrawItems.Select(d => d?["src"]?.GetValue<string>()).Where(s => s != null)); }
-        }
-        opusInfo.FormattedContentMarkdown = opusInfo.ContentText ?? "";
-        if (opusInfo.ForwardedOpus != null) opusInfo.FormattedContentMarkdown += $"\n// @{opusInfo.ForwardedOpus.UserName}: {opusInfo.ForwardedOpus.ContentText ?? ""}";
-        string linkText = opusInfo.OriginalResource?.Title ?? "动态链接"; string linkUrl = opusInfo.OriginalResource?.Url ?? $"https://t.bilibili.com/{opusInfo.DynamicId}";
-        opusInfo.MarkdownFormattedLink = $"[{EscapeMarkdownV2(linkText)}]({linkUrl})";
-        if (opusInfo.OriginalResource != null) opusInfo.MarkdownFormattedLink += $"\n[原始动态](https://t.bilibili.com/{opusInfo.DynamicId})";
-        return opusInfo;
-    }
-
-    private void ParseOpusMajorContent(JsonNode majorNode, BiliOpusInfo currentOpus)
-    {
-        string type = majorNode?["type"]?.GetValue<string>(); if (string.IsNullOrWhiteSpace(type)) return;
-        string typeKey = type.Replace("MAJOR_TYPE_", "").ToLower(); JsonNode contentNode = majorNode[typeKey]; if (contentNode == null) return;
-        switch (type) {
-            case "MAJOR_TYPE_DRAW": var dItems = contentNode["items"]?.AsArray(); if (dItems != null) currentOpus.ImageUrls.AddRange(dItems.Select(d => d?["src"]?.GetValue<string>()).Where(s => s != null)); break;
-            case "MAJOR_TYPE_ARCHIVE": case "MAJOR_TYPE_PGC": case "MAJOR_TYPE_ARTICLE": case "MAJOR_TYPE_MUSIC": case "MAJOR_TYPE_COMMON": case "MAJOR_TYPE_LIVE_RCMD":
-                currentOpus.OriginalResource = new OpusOriginalResourceInfo {
-                    Type = typeKey, Title = contentNode["title"]?.GetValue<string>() ?? contentNode["head_text"]?.GetValue<string>(),
-                    Url = (contentNode["jump_url"]?.GetValue<string>()?.StartsWith("//") == true ? "https:" : "") + contentNode["jump_url"]?.GetValue<string>(),
-                    CoverUrl = contentNode["cover"]?.GetValue<string>() ?? contentNode["covers"]?.AsArray().FirstOrDefault()?.GetValue<string>(),
-                    Aid = contentNode["aid"]?.GetValue<string>(), Bvid = contentNode["bvid"]?.GetValue<string>(),
-                    Description = contentNode["desc"]?.GetValue<string>() ?? contentNode["sub_title"]?.GetValue<string>() ?? contentNode["desc1"]?.GetValue<string>()
-                }; break;
-            case "MAJOR_TYPE_OPUS": if (contentNode != null) currentOpus.ForwardedOpus = ParseOpusItem(contentNode, contentNode["jump_url"]?.GetValue<string>()); break;
-            default: _logger.LogDebug("Unhandled major opus type: {MajorType}", type); break;
-        }
-    }
-
-    private async Task<string> ResolveShortUrlAsync(string shortUrl)
-    {
-        try {
-            string currentUrl = shortUrl.StartsWith("http") ? shortUrl : "https://" + shortUrl;
-            using var handler = new HttpClientHandler { AllowAutoRedirect = false }; using var tempClient = new HttpClient(handler);
-            tempClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1");
-            for (int i = 0; i < 5; i++) {
-                var response = await tempClient.SendAsync(new HttpRequestMessage(HttpMethod.Get, currentUrl), HttpCompletionOption.ResponseHeadersRead);
-                if (response.Headers.Location != null) { currentUrl = response.Headers.Location.AbsoluteUri; if (!currentUrl.Contains("b23.tv/")) return currentUrl; } else return currentUrl;
-            } _logger.LogWarning("Too many redirects resolving short URL: {ShortUrl}", shortUrl);
-        } catch (Exception ex) { _logger.LogError(ex, "Error resolving short URL: {ShortUrl}", shortUrl); } return shortUrl;
-    }
 
     private async Task<JsonNode> GetBiliApiJsonAsync(string apiUrl, Dictionary<string, string> queryParams = null, bool useCookies = false)
     {

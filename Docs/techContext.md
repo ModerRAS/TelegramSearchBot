@@ -10,6 +10,7 @@
   - PaddleOCR：图片OCR处理
   - Whisper：语音识别(ASR)
   - Ollama：大语言模型集成
+  - Helper类：通用工具方法集合(BiliHelper, MessageFormatHelper等)
 - 进程间通信：共享内存/管道通信
 - 消息处理：消息管道式处理
 
@@ -33,5 +34,9 @@
 - 常用开发命令：
   - dotnet build
   - dotnet run
+- Helper类使用：
+  - 静态方法直接调用
+  - 包含Bilibili相关工具方法
+  - 包含消息格式化工具
 - 调试技巧：使用AppData/Local/TelegramSearchBot日志
 - 部署流程：通过ClickOnce部署
