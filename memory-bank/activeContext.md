@@ -30,6 +30,10 @@ var content = await page.EvaluateFunctionAsync<string>("() => document.body.inne
 - 已完成PuppeteerArticleExtractorService实现
 - 已删除旧的PlaywrightArticleExtractorService
 - 浏览器自动下载功能已集成
+- 已优化内容提取逻辑：
+  - 智能识别article/main标签
+  - 支持常见文章内容容器class
+  - 保留body内容作为fallback
 
 # Next Steps
 - 优化内容提取逻辑
