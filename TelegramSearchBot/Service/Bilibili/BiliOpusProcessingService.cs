@@ -13,7 +13,7 @@ using TelegramSearchBot.Service.Common;
 
 namespace TelegramSearchBot.Service.Bilibili
 {
-    public class BiliOpusProcessingService
+    public class BiliOpusProcessingService : IService
     {
         private readonly IBiliApiService _biliApiService;
         private readonly IDownloadService _downloadService;
@@ -31,6 +31,9 @@ namespace TelegramSearchBot.Service.Bilibili
             _fileCacheService = fileCacheService;
             _logger = logger;
         }
+
+        public string ServiceName => "BiliOpusProcessing";
+
 
         public async Task CacheFileIdAsync(string cacheKey, string fileId)
         {
