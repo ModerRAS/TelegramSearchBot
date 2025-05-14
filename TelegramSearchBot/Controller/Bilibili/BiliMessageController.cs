@@ -14,6 +14,7 @@ using System.IO;
 using System.Collections.Generic;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Model; // Added for IAppConfigurationService
+using TelegramSearchBot.Helper;
 
 namespace TelegramSearchBot.Controller.Bilibili
 { // Namespace open
@@ -128,26 +129,15 @@ namespace TelegramSearchBot.Controller.Bilibili
             await HandleOpusInfoAsync(message, opusInfo);
         }
         
-        private static string EscapeMarkdownV2(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return string.Empty;
-            char[] markdownV2EscapeChars = { '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
-            foreach (char c in markdownV2EscapeChars)
-            {
-                text = text.Replace(c.ToString(), "\\" + c);
-            }
-            return text;
-        }
-
         private async Task HandleVideoInfoAsync(Message message, BiliVideoInfo videoInfo)
         {
             _logger.LogInformation("Handling video info: {VideoTitle} for chat {ChatId}", videoInfo.Title, message.Chat.Id);
             bool isGroup = message.Chat.Type != ChatType.Private;
 
-            string baseCaption = $"*{EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*\n" + 
-                                 $"UP: {EscapeMarkdownV2(videoInfo.OwnerName)}\n" +
-                                 $"分类: {EscapeMarkdownV2(videoInfo.TName ?? "N/A")}\n" +
-                                 $"{EscapeMarkdownV2(videoInfo.OriginalUrl)}";
+            string baseCaption = $"*{MessageFormatHelper.EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*\n" + 
+                                 $"UP: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.OwnerName)}\n" +
+                                 $"分类: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.TName ?? "N/A")}\n" +
+                                 $"{MessageFormatHelper.EscapeMarkdownV2(videoInfo.OriginalUrl)}";
             
             string videoCaption = baseCaption.Length > 1024 ? baseCaption.Substring(0, 1021) + "..." : baseCaption;
 
@@ -358,12 +348,12 @@ namespace TelegramSearchBot.Controller.Bilibili
             if (!videoSent)
             {
                 _logger.LogWarning("Failed to send video for {VideoTitle}, sending text info instead.", videoInfo.Title);
-                string fallbackCaption = $"*{EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*\n" + 
-                                         $"UP: {EscapeMarkdownV2(videoInfo.OwnerName)}\n" +
-                                         $"分类: {EscapeMarkdownV2(videoInfo.TName ?? "N/A")}\n" +
+                string fallbackCaption = $"*{MessageFormatHelper.EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*\n" + 
+                                         $"UP: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.OwnerName)}\n" +
+                                         $"分类: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.TName ?? "N/A")}\n" +
                                          (videoInfo.Duration > 0 ? $"时长: {TimeSpan.FromSeconds(videoInfo.Duration):g}\n" : "") +
-                                         (!string.IsNullOrWhiteSpace(videoInfo.Description) ? $"简介: {EscapeMarkdownV2(videoInfo.Description.Substring(0, Math.Min(videoInfo.Description.Length, 100)) + (videoInfo.Description.Length > 100 ? "..." : ""))}\n" : "") +
-                                         $"{EscapeMarkdownV2(videoInfo.OriginalUrl)}";
+                                         (!string.IsNullOrWhiteSpace(videoInfo.Description) ? $"简介: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.Description.Substring(0, Math.Min(videoInfo.Description.Length, 100)) + (videoInfo.Description.Length > 100 ? "..." : ""))}\n" : "") +
+                                         $"{MessageFormatHelper.EscapeMarkdownV2(videoInfo.OriginalUrl)}";
                 if (fallbackCaption.Length > 4096) fallbackCaption = fallbackCaption.Substring(0, 4093) + "...";
                 
                 await _sendMessage.AddTask(async () => {
@@ -377,8 +367,8 @@ namespace TelegramSearchBot.Controller.Bilibili
             _logger.LogInformation("Handling opus info by: {UserName} for chat {ChatId}", opusInfo.UserName, message.Chat.Id);
             bool isGroup = message.Chat.Type != ChatType.Private;
             string textContent = opusInfo.FormattedContentMarkdown ?? opusInfo.ContentText ?? "";
-            if (opusInfo.OriginalResource != null) textContent = $"*{EscapeMarkdownV2(opusInfo.OriginalResource.Title ?? "分享内容")}*\n{EscapeMarkdownV2(opusInfo.OriginalResource.Url)}\n\n{textContent}";
-            string mainCaption = $"{textContent}\n\n---\n动态作者: {EscapeMarkdownV2(opusInfo.UserName)}\n[原始动态链接](https://t.bilibili.com/{opusInfo.DynamicId})";
+            if (opusInfo.OriginalResource != null) textContent = $"*{MessageFormatHelper.EscapeMarkdownV2(opusInfo.OriginalResource.Title ?? "分享内容")}*\n{MessageFormatHelper.EscapeMarkdownV2(opusInfo.OriginalResource.Url)}\n\n{textContent}";
+            string mainCaption = $"{textContent}\n\n---\n动态作者: {MessageFormatHelper.EscapeMarkdownV2(opusInfo.UserName)}\n[原始动态链接](https://t.bilibili.com/{opusInfo.DynamicId})";
             if (mainCaption.Length > 4096) mainCaption = mainCaption.Substring(0, 4093) + "...";
 
             List<string> downloadedImagePaths = new List<string>();
@@ -440,7 +430,7 @@ namespace TelegramSearchBot.Controller.Bilibili
                 } else { await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, mainCaption, parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup); }
             } catch (Exception ex) {
                 _logger.LogError(ex, "Outer error handling opus info for dynamic ID: {DynamicId}", opusInfo.DynamicId);
-                await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, $"处理动态时出错: {EscapeMarkdownV2(ex.Message)}", parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup);
+                await _sendMessage.AddTask(async () => { await _botClient.SendMessage(message.Chat.Id, $"处理动态时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}", parseMode: ParseMode.MarkdownV2, replyParameters: new ReplyParameters { MessageId = message.MessageId }); }, isGroup);
             } finally {
                 foreach (var path in downloadedImagePaths) {
                     if (System.IO.File.Exists(path)) { try { System.IO.File.Delete(path); } catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete temp opus image: {Path}", path); } }

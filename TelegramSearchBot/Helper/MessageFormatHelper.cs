@@ -189,5 +189,16 @@ namespace TelegramSearchBot.Helper
             }
             return chunks;
         }
+
+        public static string EscapeMarkdownV2(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            char[] markdownV2EscapeChars = { '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
+            foreach (char c in markdownV2EscapeChars)
+            {
+                text = text.Replace(c.ToString(), "\\" + c);
+            }
+            return text;
+        }
     }
 }
