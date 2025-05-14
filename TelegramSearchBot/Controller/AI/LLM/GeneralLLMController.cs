@@ -49,8 +49,9 @@ namespace TelegramSearchBot.Controller.AI.LLM
             GeneralLLMService = generalLLMService;
 
         }
-        public async Task ExecuteAsync(Update e)
+        public async Task ExecuteAsync(PipelineContext p)
         {
+            var e = p.Update;
             if (!Env.EnableOpenAI)
             {
                 return;

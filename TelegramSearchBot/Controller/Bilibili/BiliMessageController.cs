@@ -12,7 +12,8 @@ using TelegramSearchBot.Model.Bilibili;
 using TelegramSearchBot.Service.Bilibili;
 using System.IO;
 using System.Collections.Generic;
-using TelegramSearchBot.Service.Common; // Added for IAppConfigurationService
+using TelegramSearchBot.Service.Common;
+using TelegramSearchBot.Model; // Added for IAppConfigurationService
 
 namespace TelegramSearchBot.Controller.Bilibili
 { // Namespace open
@@ -53,8 +54,9 @@ namespace TelegramSearchBot.Controller.Bilibili
             _appConfigurationService = appConfigurationService; // Added
         }
 
-        public async Task ExecuteAsync(Update update)
+        public async Task ExecuteAsync(PipelineContext p)
         {
+            var update = p.Update;
             if (update.Type != UpdateType.Message && update.Type != UpdateType.ChannelPost)
                 return;
 

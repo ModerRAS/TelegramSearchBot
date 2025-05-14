@@ -11,6 +11,7 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Controller.Search
 {
@@ -39,8 +40,8 @@ namespace TelegramSearchBot.Controller.Search
             this.botClient = botClient;
         }
 
-        public async Task ExecuteAsync(Update e)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
+            var e = p.Update;
             //Console.WriteLine(e.CallbackQuery.Message.Text);
             //Console.WriteLine(e.CallbackQuery.Id);
             //Console.WriteLine(e.CallbackQuery.Data);//这才是关键的东西，就是上面在按钮上写的那个sendmessage

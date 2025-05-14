@@ -78,8 +78,8 @@ namespace TelegramSearchBot.Controller.AI.ASR
                 throw new FileNotFoundException();
             }
         }
-        public async Task ExecuteAsync(Update e)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
+            var e = p.Update;
             if (!Env.EnableAutoASR)
             {
                 return;

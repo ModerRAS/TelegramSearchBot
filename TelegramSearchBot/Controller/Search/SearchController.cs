@@ -23,8 +23,8 @@ namespace TelegramSearchBot.Controller.Search
             this.sendService = sendService;
         }
 
-        public async Task ExecuteAsync(Update e)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
+            var e = p.Update;
             if (!string.IsNullOrEmpty(e?.Message?.Text))
             {
                 if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 "))

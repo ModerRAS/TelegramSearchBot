@@ -26,8 +26,8 @@ namespace TelegramSearchBot.Controller.Storage
             _mediator = mediator;
         }
 
-        public async Task ExecuteAsync(Update e)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
+            var e = p.Update;
             // Store the message first
             await StoreMessageAsync(e);
 

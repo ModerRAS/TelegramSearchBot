@@ -43,8 +43,9 @@ namespace TelegramSearchBot.Controller.AI.OCR
 
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
 
-        public async Task ExecuteAsync(Update e)
+        public async Task ExecuteAsync(PipelineContext p)
         {
+            var e = p.Update;
             if (!Env.EnableAutoOCR)
             {
                 return;

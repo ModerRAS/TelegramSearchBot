@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Executor {
     public class ControllerExecutor {
@@ -18,13 +19,13 @@ namespace TelegramSearchBot.Executor {
         public async Task ExecuteControllers(Telegram.Bot.Types.Update e) {
             var executed = new HashSet<Type>();
             var pending = new List<IOnUpdate>(_controllers);
-
+            var PipelineContext = new PipelineContext() { Update = e, PipelineCache = new Dictionary<string, dynamic>() };
             while (pending.Count > 0) {
                 var controller = pending.FirstOrDefault(c => !c.Dependencies.Any(d => !executed.Contains(d)));
 
                 if (controller != null) {
                     try {
-                        await controller.ExecuteAsync(e);
+                        await controller.ExecuteAsync(PipelineContext);
                     } catch (Exception ex) {
                         Log.Error(ex, $"Message Pre Process Error: {e.Message.Chat.FirstName} {e.Message.Chat.LastName} {e.Message.Chat.Title} {e.Message.Chat.Id}/{e.Message.MessageId}");
                     }

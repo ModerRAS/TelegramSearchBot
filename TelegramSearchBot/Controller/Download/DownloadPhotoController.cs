@@ -9,6 +9,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Model;
 using File = System.IO.File;
 
 namespace TelegramSearchBot.Controller.Download
@@ -44,8 +45,9 @@ namespace TelegramSearchBot.Controller.Download
             }
         }
 
-        public async Task ExecuteAsync(Update e)
+        public async Task ExecuteAsync(PipelineContext p)
         {
+            var e = p.Update;
             try
             {
                 var (PhotoName, PhotoByte) = await IProcessPhoto.DownloadPhoto(botClient, e);

@@ -7,6 +7,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Manage;
 
 namespace TelegramSearchBot.Controller.Manage
@@ -25,8 +26,9 @@ namespace TelegramSearchBot.Controller.Manage
             this.service = service;
             this.Send = Send;
         }
-        public async Task ExecuteAsync(Update e)
+        public async Task ExecuteAsync(PipelineContext p)
         {
+            var e = p.Update;
             if (e?.Message?.Chat?.Id < 0)
             {
                 long Id = e.Message.Chat.Id;

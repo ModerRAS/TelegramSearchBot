@@ -47,8 +47,9 @@ namespace TelegramSearchBot.Controller.AI.QR
             _sendMessageService = sendMessageService;
         }
 
-        public async Task ExecuteAsync(Update e)
+        public async Task ExecuteAsync(PipelineContext p)
         {
+            var e = p.Update;
             try
             {
                 var filePath = IProcessPhoto.GetPhotoPath(e);

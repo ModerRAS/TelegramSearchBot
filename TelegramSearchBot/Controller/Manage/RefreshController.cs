@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Telegram.Bot.Args;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Manage;
 
 namespace TelegramSearchBot.Controller.Manage
@@ -19,8 +20,8 @@ namespace TelegramSearchBot.Controller.Manage
 
 
 
-        public async Task ExecuteAsync(Update e)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
+            var e = p.Update;
             if (e?.Message?.Chat?.Id < 0)
             {
                 return;
