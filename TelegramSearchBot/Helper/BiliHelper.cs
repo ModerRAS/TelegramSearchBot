@@ -8,6 +8,7 @@ using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Model.Bilibili;
+using TelegramSearchBot.Helper;
 
 namespace TelegramSearchBot.Helper;
 
@@ -20,15 +21,6 @@ public static class BiliHelper
     public static readonly Regex BiliOpusUrlRegex = new(@"(?:https?://)?(?:t\.bilibili\.com/|space\.bilibili\.com/\d+/dynamic)/(\d+)", 
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
         
-    private static readonly char[] MarkdownV2EscapeChars = { '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
-
-    public static string EscapeMarkdownV2(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return string.Empty;
-        foreach (char c in MarkdownV2EscapeChars) text = text.Replace(c.ToString(), "\\" + c);
-        return text;
-    }
-
     public static async Task<string> ResolveShortUrlAsync(string shortUrl, ILogger logger = null)
     {
         try {
@@ -86,7 +78,7 @@ public static class BiliHelper
             opusInfo.FormattedContentMarkdown += $"\n// @{opusInfo.ForwardedOpus.UserName}: {opusInfo.ForwardedOpus.ContentText ?? ""}";
         string linkText = opusInfo.OriginalResource?.Title ?? "动态链接"; 
         string linkUrl = opusInfo.OriginalResource?.Url ?? $"https://t.bilibili.com/{opusInfo.DynamicId}";
-        opusInfo.MarkdownFormattedLink = $"[{EscapeMarkdownV2(linkText)}]({linkUrl})";
+        opusInfo.MarkdownFormattedLink = $"[{MessageFormatHelper.EscapeMarkdownV2(linkText)}]({linkUrl})";
         if (opusInfo.OriginalResource != null) 
             opusInfo.MarkdownFormattedLink += $"\n[原始动态](https://t.bilibili.com/{opusInfo.DynamicId})";
         return opusInfo;

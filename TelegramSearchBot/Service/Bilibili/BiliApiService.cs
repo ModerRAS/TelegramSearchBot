@@ -104,7 +104,7 @@ public class BiliApiService : IBiliApiService
             }
             
             videoInfo.FormattedContentInfo = $"{videoInfo.TName ?? "N/A"} - {data["dynamic"]?.GetValue<string>() ?? videoInfo.Description ?? "No description"}";
-            videoInfo.MarkdownFormattedLink = $"[{BiliHelper.EscapeMarkdownV2(videoInfo.Title ?? "Video")}]({videoInfo.OriginalUrl})";
+            videoInfo.MarkdownFormattedLink = $"[{MessageFormatHelper.EscapeMarkdownV2(videoInfo.Title ?? "Video")}]({videoInfo.OriginalUrl})";
             await GetPlayUrlInfoAsync(videoInfo);
             _logger.LogInformation("Successfully fetched video info (including play URLs) for: {VideoTitle}", videoInfo.Title);
             return videoInfo;
