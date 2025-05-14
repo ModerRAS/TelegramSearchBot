@@ -5,7 +5,7 @@ using TelegramSearchBot.Attributes; // For McpTool attributes
 using System.Linq;
 using System.Threading.Tasks; // For async operations
 using Microsoft.EntityFrameworkCore; // For EF Core operations
-using TelegramSearchBot.Intrerface; // Added for IService
+using TelegramSearchBot.Interface; // Added for IService
 using System.Collections.Generic; // For List
 using System; // For DateTime
 

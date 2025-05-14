@@ -13,7 +13,7 @@ using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using System.Reflection;
 using Newtonsoft.Json; // Using Newtonsoft
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;

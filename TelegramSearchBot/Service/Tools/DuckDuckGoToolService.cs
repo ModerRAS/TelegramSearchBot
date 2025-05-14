@@ -2,7 +2,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using HtmlAgilityPack;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Attributes;

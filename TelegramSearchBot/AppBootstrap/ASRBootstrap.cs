@@ -12,7 +12,7 @@ using Whisper.net.Ggml;
 using Whisper.net;
 using StackExchange.Redis;
 using Serilog;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class ASRBootstrap : AppBootstrap {

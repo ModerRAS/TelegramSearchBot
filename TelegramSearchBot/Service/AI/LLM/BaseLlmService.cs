@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading; 
 using System.Threading.Tasks;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;

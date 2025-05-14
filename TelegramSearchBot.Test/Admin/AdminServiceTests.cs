@@ -9,7 +9,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Manage;
 using Moq;
-using TelegramSearchBot.Intrerface; // Keep this if other interfaces from here are used
+using TelegramSearchBot.Interface; // Keep this if other interfaces from here are used
 using TelegramSearchBot.Service.Common; // Add this for IAppConfigurationService
 
 namespace TelegramSearchBot.Test.Admin

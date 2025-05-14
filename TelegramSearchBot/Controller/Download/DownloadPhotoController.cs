@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Exceptions;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using File = System.IO.File;
 
 namespace TelegramSearchBot.Controller.Download

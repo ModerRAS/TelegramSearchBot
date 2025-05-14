@@ -1,5 +1,5 @@
 ﻿using System.Linq;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using System.Threading.Tasks;
 using TelegramSearchBot.Manager;
 using System.Collections.Generic;

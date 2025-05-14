@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using System.Reflection;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Service.Common; 
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;

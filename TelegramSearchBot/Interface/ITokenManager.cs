@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace TelegramSearchBot.Intrerface {
+namespace TelegramSearchBot.Interface {
     public interface ITokenManager {
         public List<string> ListToken(string TokenType);
         public bool RemoveToken(string TokenType, string Token);

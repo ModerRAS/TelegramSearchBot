@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Model.Data;
 using System.Threading; // Added for CancellationToken
 
-namespace TelegramSearchBot.Intrerface {
+namespace TelegramSearchBot.Interface {
     public interface ILLMService {
         public IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, LLMChannel channel, 
                                                   [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default);

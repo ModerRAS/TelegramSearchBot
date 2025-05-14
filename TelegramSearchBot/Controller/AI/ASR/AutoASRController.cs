@@ -8,7 +8,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Exceptions;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.ASR;
 using TelegramSearchBot.Service.BotAPI;

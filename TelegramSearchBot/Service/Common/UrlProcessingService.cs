@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web; // For HttpUtility. NuGet: System.Web.HttpUtility if not available by default
 using Microsoft.Extensions.Logging; // Added for ILogger
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Common
 {

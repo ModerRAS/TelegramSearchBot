@@ -11,7 +11,7 @@ using TelegramSearchBot.Exceptions;
 using MediatR; // Added for IMediator
 using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
 using Telegram.Bot.Types.Enums; // For ChatType
-using TelegramSearchBot.Intrerface; // Added for IOnUpdate, IProcessPhoto
+using TelegramSearchBot.Interface; // Added for IOnUpdate, IProcessPhoto
 using TelegramSearchBot.Service.AI.QR; // Added for AutoQRService
 using TelegramSearchBot.Service.Storage; // Added for MessageService
 using TelegramSearchBot.Model; // Added for MessageOption

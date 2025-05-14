@@ -11,7 +11,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Controller;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using ZXing.SkiaSharp;
 
 namespace TelegramSearchBot.Service.AI.QR

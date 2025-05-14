@@ -1,4 +1,4 @@
-﻿using TelegramSearchBot.Intrerface;
+﻿using TelegramSearchBot.Interface;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Model;

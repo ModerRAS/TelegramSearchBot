@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Telegram.Bot;
-using TelegramSearchBot.Intrerface;
+using TelegramSearchBot.Interface;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using LiteDB;
