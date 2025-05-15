@@ -51,31 +51,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             // 2. 查询ChannelWithModel获取关联的LLMChannel
-            var channelWithModel = await _dbContext.ChannelsWithModel
-                .FirstOrDefaultAsync(c => c.ModelName == modelName);
-                
-            if (channelWithModel == null) {
+            var channelsWithModel = await (from s in _dbContext.ChannelsWithModel
+                                   where s.ModelName == modelName
+                                   select s.LLMChannelId).ToListAsync();
+
+
+            if (!channelsWithModel.Any()) {
                 _logger.LogWarning($"找不到模型 {modelName} 的配置");
                 yield break;
             }
 
-            // 3. 获取关联的LLMChannel
-            var llmChannel = await _dbContext.LLMChannels
-                .FirstOrDefaultAsync(c => c.Id == channelWithModel.LLMChannelId);
-                
-            if (llmChannel == null) {
+            // 3. 获取关联的LLMChannel并按优先级排序
+            var llmChannels = await (from s in _dbContext.LLMChannels
+                              where channelsWithModel.Contains(s.Id)
+                              orderby s.Priority descending
+                              select s).ToListAsync();
+            if (!llmChannels.Any()) {
                 _logger.LogWarning($"找不到模型 {modelName} 关联的LLM渠道");
-                yield break;
-            }
-
-            // 4. 获取所有可用的同类型LLMChannel并按优先级排序
-            var availableChannels = await _dbContext.LLMChannels
-                .Where(c => c.Provider == llmChannel.Provider)
-                .OrderByDescending(c => c.Priority)
-                .ToListAsync();
-
-            if (!availableChannels.Any()) {
-                _logger.LogWarning($"没有可用的{llmChannel.Provider}渠道");
                 yield break;
             }
 
@@ -85,7 +77,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var retryDelay = TimeSpan.FromSeconds(5);
 
             for (int retry = 0; retry < maxRetries; retry++) {
-                foreach (var channel in availableChannels) {
+                foreach (var channel in llmChannels) {
                     var redisKey = $"llm:channel:{channel.Id}:semaphore";
                     var currentCount = await redisDb.StringGetAsync(redisKey);
                     int count = currentCount.HasValue ? (int)currentCount : 0;
@@ -127,7 +119,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
             }
 
-            _logger.LogWarning($"所有{llmChannel.Provider}渠道当前都已满载，重试{maxRetries}次后放弃");
+            _logger.LogWarning($"所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃");
         }
     }
 }
