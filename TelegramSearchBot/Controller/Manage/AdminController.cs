@@ -8,6 +8,7 @@ using Telegram.Bot.Types;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Manage;
 
 namespace TelegramSearchBot.Controller.Manage
@@ -16,9 +17,9 @@ namespace TelegramSearchBot.Controller.Manage
     {
         public List<Type> Dependencies => new List<Type>();
         public AdminService AdminService { get; set; }
-        public SendMessage Send { get; set; }
+        public SendMessageService Send { get; set; }
         public ITelegramBotClient botClient { get; set; }
-        public AdminController(ITelegramBotClient botClient, AdminService adminService, SendMessage Send)
+        public AdminController(ITelegramBotClient botClient, AdminService adminService, SendMessageService Send)
         {
             AdminService = adminService;
             this.Send = Send;
@@ -49,14 +50,7 @@ namespace TelegramSearchBot.Controller.Manage
             var (status, message) = await AdminService.ExecuteAsync(e.Message.From.Id, e.Message.Chat.Id, Command);
             if (status)
             {
-                await Send.AddTask(async () =>
-                {
-                    await botClient.SendMessage(
-                    chatId: e.Message.Chat.Id,
-                    text: message,
-                    replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                );
-                }, e.Message.Chat.Id < 0);
+                await Send.SplitAndSendTextMessage(message, e.Message.Chat, e.Message.MessageId);
             }
 
         }

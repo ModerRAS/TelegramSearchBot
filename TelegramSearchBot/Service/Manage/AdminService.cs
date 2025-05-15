@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,12 +18,17 @@ namespace TelegramSearchBot.Service.Manage
         protected readonly DataDbContext DataContext;
         protected readonly ILogger<AdminService> Logger;
         private readonly IAppConfigurationService _appConfigService; // Added
+        protected IConnectionMultiplexer connectionMultiplexer { get; set; }
+        protected IDatabase db { get; set; }
         public string ServiceName => "AdminService";
-        public AdminService(ILogger<AdminService> logger, DataDbContext context, IAppConfigurationService appConfigService) // Added appConfigService
+        public AdminService(ILogger<AdminService> logger, DataDbContext context, 
+            IAppConfigurationService appConfigService, IConnectionMultiplexer connectionMultiplexer) // Added Redis
         {
             Logger = logger;
             DataContext = context;
             _appConfigService = appConfigService; // Store injected service
+            this.connectionMultiplexer = connectionMultiplexer;
+            db = connectionMultiplexer.GetDatabase();
         }
 
         public bool IsGlobalAdmin(long Id)
@@ -41,8 +47,63 @@ namespace TelegramSearchBot.Service.Manage
                           select u).AnyAsync();
         }
 
+        private async Task<List<string>> GetDistinctModelsAsync()
+        {
+            return await DataContext.ChannelsWithModel
+                .Select(x => x.ModelName)
+                .Distinct()
+                .ToListAsync();
+        }
+
+        private async Task<bool> SaveSelectedModelAsync(long groupId, string modelName)
+        {
+            var groupSetting = await DataContext.GroupSettings
+                .FirstOrDefaultAsync(g => g.GroupId == groupId);
+
+            if (groupSetting == null)
+            {
+                groupSetting = new Model.Data.GroupSettings()
+                {
+                    GroupId = groupId,
+                    IsManagerGroup = false
+                };
+                await DataContext.GroupSettings.AddAsync(groupSetting);
+            }
+
+            groupSetting.LLMModelName = modelName;
+            await DataContext.SaveChangesAsync();
+            return true;
+        }
+
         public async Task<(bool, string)> ExecuteAsync(long UserId, long ChatId, string Command)
         {
+            
+            string modelSelectStateKey = $"modelselect:{ChatId}:state";
+            string modelSelectDataKey = $"modelselect:{ChatId}:models";
+
+            if (Command.Equals("选择模型", StringComparison.OrdinalIgnoreCase))
+            {
+                string stateKey = $"modelselect:{ChatId}:state";
+                string dataKey = $"modelselect:{ChatId}:models";
+
+                var models = await GetDistinctModelsAsync();
+                if (models.Count == 0)
+                {
+                    return (true, "当前没有可用的模型");
+                }
+
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要使用的模型：");
+                for (int i = 0; i < models.Count; i++)
+                {
+                    sb.AppendLine($"{i + 1}. {models[i]}");
+                }
+
+                await db.StringSetAsync(modelSelectStateKey, "awaiting_model_selection");
+                await db.StringSetAsync(modelSelectDataKey, string.Join(",", models));
+                return (true, sb.ToString());
+            }
+
             if (Command.StartsWith("设置管理群"))
             {
                 if (IsGlobalAdmin(UserId))
@@ -177,6 +238,31 @@ namespace TelegramSearchBot.Service.Manage
                      return (true, "抱歉，只有全局管理员才能查看此项设置。");
                  }
             }
+
+            var currentState = await db.StringGetAsync(modelSelectStateKey);
+            if (currentState == "awaiting_model_selection")
+            {
+                if (!int.TryParse(Command, out var modelIndex) || modelIndex < 1)
+                {
+                    return (false, "请输入有效的数字");
+                }
+
+                var models = (await db.StringGetAsync(modelSelectDataKey)).ToString().Split(',');
+                if (modelIndex > models.Length)
+                {
+                    return (false, "输入的数字超出范围");
+                }
+
+                var selectedModel = models[modelIndex - 1];
+                await SaveSelectedModelAsync(ChatId, selectedModel);
+
+                // 清理状态
+                await db.KeyDeleteAsync(modelSelectStateKey);
+                await db.KeyDeleteAsync(modelSelectDataKey);
+
+                return (true, $"已成功选择模型: {selectedModel}");
+            }
+
             return (false, string.Empty);
         }
     }

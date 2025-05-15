@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -81,6 +82,40 @@ namespace TelegramSearchBot.Service.BotAPI
                     text: Text
                     );
             }, ChatId < 0);
+        }
+        public Task SplitAndSendTextMessage(string Text, Chat ChatId, int replyTo) => SplitAndSendTextMessage(Text, ChatId.Id, replyTo);
+        public async Task SplitAndSendTextMessage(string Text, long ChatId, int replyTo) {
+            const int maxLength = 4096; // Telegram message length limit
+            if (Text.Length <= maxLength) {
+                await SendMessage(Text, ChatId, replyTo);
+                return;
+            }
+
+            // Split text into chunks preserving words and markdown formatting
+            var chunks = new List<string>();
+            var currentChunk = new StringBuilder();
+            var lines = Text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+
+            foreach (var line in lines) {
+                if (currentChunk.Length + line.Length + 1 > maxLength) {
+                    chunks.Add(currentChunk.ToString());
+                    currentChunk.Clear();
+                }
+                currentChunk.AppendLine(line);
+            }
+
+            if (currentChunk.Length > 0) {
+                chunks.Add(currentChunk.ToString());
+            }
+
+            // Send chunks with page numbers
+            for (int i = 0; i < chunks.Count; i++) {
+                var chunkText = chunks[i];
+                if (chunks.Count > 1) {
+                    chunkText = $"{chunkText}\n\n({i + 1}/{chunks.Count})";
+                }
+                await SendMessage(chunkText, ChatId, replyTo);
+            }
         }
         #endregion
     }
