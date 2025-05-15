@@ -172,7 +172,6 @@ namespace TelegramSearchBot.Helper {
         /// </summary>
         public static async Task<string> GetProxyUrlWithRandomPortAsync(IDatabaseAsync redis, string targetUrl) {
             var result = await AddProxyConfigWithRandomPortAndPathAsync(redis, targetUrl);
-            await Task.Delay(500);
             return result.LocalUrl;
         }
     }

@@ -68,9 +68,6 @@ namespace TelegramSearchBot.AppBootstrap
             
 
             Env.SchedulerPort = Utils.GetRandomAvailablePort();
-            #if DEBUG
-            Env.SchedulerPort = 6379;
-            #endif
             Fork(["Scheduler", $"{Env.SchedulerPort}"]);
 
             Fork(["HttpProxy", $"{Env.SchedulerPort}"]);
