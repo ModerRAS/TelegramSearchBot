@@ -72,11 +72,7 @@ namespace TelegramSearchBot.AppBootstrap
             _logger.LogInformation($"Starting HTTP proxy server on port {listenPort}");
 
             var host = new WebHostBuilder()
-                .UseKestrel(options =>
-                {
-                    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(30);
-                    options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(30);
-                })
+                .UseKestrel()
                 .ConfigureServices(services =>
                 {
                     services.AddHttpClient();
@@ -140,100 +136,13 @@ namespace TelegramSearchBot.AppBootstrap
                             }
 
                             // 转发请求并返回响应
-                            var responseMessage = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead);
+                            var responseMessage = await httpClient.SendAsync(requestMessage);
                             context.Response.StatusCode = (int)responseMessage.StatusCode;
-                            
-                            // 复制所有响应头(包括Transfer-Encoding)
                             foreach (var header in responseMessage.Headers)
                             {
                                 context.Response.Headers[header.Key] = header.Value.ToArray();
                             }
-                            
-                            // 复制内容头
-                            foreach (var header in responseMessage.Content.Headers)
-                            {
-                                context.Response.Headers[header.Key] = header.Value.ToArray();
-                            }
-                            
-                            // 检查是否为SSE或流式响应
-                            bool isStreaming = responseMessage.Content.Headers.ContentType?.MediaType == "text/event-stream" ||
-                                              responseMessage.Headers.TransferEncodingChunked == true ||
-                                              (responseMessage.Content.Headers.ContentLength == null && 
-                                               responseMessage.Content.Headers.ContentType != null);
-                            
-                            if (isStreaming)
-                            {
-                                // 对于SSE，保持连接并流式传输
-                                _logger.LogInformation($"Starting SSE proxy for {targetServer}");
-                                _logger.LogDebug($"Request Headers: {string.Join(", ", context.Request.Headers.Select(h => $"{h.Key}={h.Value}"))}");
-                                
-                                context.Response.Headers["Cache-Control"] = "no-cache";
-                                context.Response.Headers["Connection"] = "keep-alive";
-                                await context.Response.StartAsync();
-                                
-                                try
-                                {
-                                    using var stream = await responseMessage.Content.ReadAsStreamAsync();
-                                    var buffer = new byte[8192];
-                                    int bytesRead;
-                                    long totalBytes = 0;
-                                    
-                                    while (true)
-                                    {
-                                        try
-                                        {
-                                            bytesRead = await stream.ReadAsync(buffer, context.RequestAborted);
-                                            if (bytesRead <= 0) break;
-                                            
-                                            await context.Response.Body.WriteAsync(buffer.AsMemory(0, bytesRead), context.RequestAborted);
-                                            await context.Response.Body.FlushAsync(context.RequestAborted);
-                                            totalBytes += bytesRead;
-                                            _logger.LogDebug($"Transferred {bytesRead} bytes (total: {totalBytes})");
-                                            
-                                            // 记录chunk数据前128字节用于调试
-                                            if (responseMessage.Headers.TransferEncodingChunked == true && bytesRead > 0)
-                                            {
-                                                string chunkHex = BitConverter.ToString(buffer, 0, Math.Min(bytesRead, 128));
-                                                _logger.LogTrace($"Chunk data (first 128 bytes): {chunkHex}");
-                                            }
-                                            
-                                            // 防止CPU占用过高
-                                            await Task.Delay(10, context.RequestAborted);
-                                        }
-                                        catch (HttpIOException hex) when (hex.Message.Contains("chunk extension"))
-                                        {
-                                            _logger.LogError($"Invalid chunk extension detected: {hex.Message}");
-                                            throw;
-                                        }
-                                    }
-                                    _logger.LogInformation($"SSE proxy completed. Total bytes: {totalBytes}");
-                                }
-                                // catch (TaskCanceledException)
-                                // {
-                                //     _logger.LogInformation($"SSE connection closed by client. Target: {targetServer}");
-                                // }
-                                catch (Exception ex)
-                                {
-                                    // 记录响应内容前1000字符用于调试
-                                    string responseContent = "";
-                                    try 
-                                    {
-                                        responseContent = await responseMessage.Content.ReadAsStringAsync();
-                                        responseContent = responseContent.Length > 1000 ? responseContent.Substring(0, 1000) + "..." : responseContent;
-                                    }
-                                    catch {}
-                                    
-                                    _logger.LogError(ex, $"SSE stream error. Target: {targetServer}\n" +
-                                        $"Response Headers: {string.Join(", ", responseMessage.Headers.Select(h => $"{h.Key}={string.Join(",", h.Value)}"))}\n" +
-                                        $"Response Content (first 1000 chars): {responseContent}");
-                                    throw;
-                                }
-                            }
-                            else
-                            {
-                                // 普通响应处理
-                                await responseMessage.Content.CopyToAsync(context.Response.Body);
-                            }
+                            await responseMessage.Content.CopyToAsync(context.Response.Body);
                         }
                         catch (Exception ex)
                         {
