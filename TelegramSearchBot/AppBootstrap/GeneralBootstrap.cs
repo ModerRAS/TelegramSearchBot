@@ -70,6 +70,8 @@ namespace TelegramSearchBot.AppBootstrap
             Env.SchedulerPort = Utils.GetRandomAvailablePort();
             Fork(["Scheduler", $"{Env.SchedulerPort}"]);
 
+            Fork(["HttpProxy", $"{Env.SchedulerPort}"]);
+
             IHost host = CreateHostBuilder(args)
                 //.ConfigureLogging(logging => {
                 //    logging.ClearProviders();

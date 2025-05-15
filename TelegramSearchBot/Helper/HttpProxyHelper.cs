@@ -73,6 +73,26 @@ namespace TelegramSearchBot.Helper {
         }
 
         /// <summary>
+        /// 添加代理配置并自动分配随机端口(保留路径)
+        /// </summary>
+        public static async Task<(int Port, string LocalUrl)> AddProxyConfigWithRandomPortAndPathAsync(IDatabaseAsync redis, string targetUrl) {
+            if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri)) {
+                throw new ArgumentException("Invalid target URL format");
+            }
+
+            // 提取基础URL(不带路径)
+            string baseUrl = $"{uri.Scheme}://{uri.Authority}";
+            
+            // 检查是否已有该基础URL的配置
+            int port = await AddProxyConfigWithRandomPortAsync(redis, baseUrl);
+            
+            // 构建带路径的本地URL
+            string localUrl = $"http://localhost:{port}{uri.PathAndQuery}";
+
+            return (port, localUrl);
+        }
+
+        /// <summary>
         /// 移除HTTP反向代理配置
         /// </summary>
         public static void RemoveProxyConfig(IDatabase redis, int listenPort) {
@@ -124,6 +144,35 @@ namespace TelegramSearchBot.Helper {
             }
             
             return -1;
+        }
+
+        /// <summary>
+        /// 获取目标URL的完整代理URL
+        /// </summary>
+        public static async Task<string> GetProxyUrlAsync(IDatabaseAsync redis, string targetUrl) {
+            if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri)) {
+                throw new ArgumentException("Invalid target URL format");
+            }
+
+            // 提取基础URL(不带路径)
+            string baseUrl = $"{uri.Scheme}://{uri.Authority}";
+            
+            // 获取代理端口
+            int port = await GetProxyConfigByUrlAsync(redis, baseUrl);
+            if (port == -1) {
+                throw new Exception("Proxy config not found for this URL");
+            }
+            
+            // 构建带路径的本地URL
+            return $"http://localhost:{port}{uri.PathAndQuery}";
+        }
+
+        /// <summary>
+        /// 添加代理配置并返回完整代理URL(自动分配随机端口)
+        /// </summary>
+        public static async Task<string> GetProxyUrlWithRandomPortAsync(IDatabaseAsync redis, string targetUrl) {
+            var result = await AddProxyConfigWithRandomPortAndPathAsync(redis, targetUrl);
+            return result.LocalUrl;
         }
     }
 }

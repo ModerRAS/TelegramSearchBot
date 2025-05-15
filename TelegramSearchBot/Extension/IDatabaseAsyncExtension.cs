@@ -33,6 +33,10 @@ namespace TelegramSearchBot.Extension {
         public static async Task<int> GetHttpProxyConfigByUrlAsync(this IDatabaseAsync db, string targetUrl) {
             return await HttpProxyHelper.GetProxyConfigByUrlAsync(db, targetUrl);
         }
+
+        public static async Task<string> GetProxyUrlWithRandomPortAsync(this IDatabaseAsync db, string targetUrl) {
+            return await HttpProxyHelper.GetProxyUrlWithRandomPortAsync(db, targetUrl);
+        }
     }
 
     /// <summary>
