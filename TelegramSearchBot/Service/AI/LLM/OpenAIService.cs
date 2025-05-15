@@ -22,26 +22,20 @@ using CommonChat = OpenAI.Chat;
 namespace TelegramSearchBot.Service.AI.LLM 
 {
     // Standalone implementation, not inheriting from BaseLlmService
-    public class OpenAIService : IService, ILLMService 
+    public class OpenAIService : IService, ILLMService
     {
         public string ServiceName => "OpenAIService";
 
         private readonly ILogger<OpenAIService> _logger;
         public string BotName { get; set; }
         private DataDbContext _dbContext;
-        private readonly IServiceProvider _serviceProvider;
-        private readonly IHttpClientFactory _httpClientFactory;
 
         public OpenAIService(
-            DataDbContext context, 
-            ILogger<OpenAIService> logger, 
-            IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory)
+            DataDbContext context,
+            ILogger<OpenAIService> logger)
         {
             _logger = logger;
             _dbContext = context;
-            _serviceProvider = serviceProvider;
-            _httpClientFactory = httpClientFactory;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
         }
 
