@@ -14,12 +14,10 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Service.Common; 
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using Newtonsoft.Json;
-using StackExchange.Redis;
+using Newtonsoft.Json; 
 using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
-using TelegramSearchBot.Extension;
 // Using alias for the common internal ChatMessage format
-using CommonChat = OpenAI.Chat;
+using CommonChat = OpenAI.Chat; 
 
 namespace TelegramSearchBot.Service.AI.LLM 
 {
@@ -31,17 +29,14 @@ namespace TelegramSearchBot.Service.AI.LLM
         private readonly ILogger<OpenAIService> _logger;
         public string BotName { get; set; }
         private DataDbContext _dbContext;
-        protected IConnectionMultiplexer connectionMultiplexer { get; set; }
 
         public OpenAIService(
             DataDbContext context,
-            ILogger<OpenAIService> logger,
-            IConnectionMultiplexer connectionMultiplexer)
+            ILogger<OpenAIService> logger)
         {
             _logger = logger;
             _dbContext = context;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
-            this.connectionMultiplexer = connectionMultiplexer;
         }
 
         // --- Helper Methods (Defined locally again) ---
@@ -163,9 +158,8 @@ namespace TelegramSearchBot.Service.AI.LLM
             providerHistory = await GetChatHistory(ChatId, providerHistory, message); // Use local GetChatHistory
 
             // --- Client Setup ---
-            var db = connectionMultiplexer.GetDatabase();
-            var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(await db.GetProxyUrlWithRandomPortAsync(channel.Gateway)) };
-            var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
+             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(channel.Gateway) };
+             var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
 
             try
             {
