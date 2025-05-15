@@ -43,7 +43,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
         }
 
-        public async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
+        public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
             if (channel.Provider.Equals(LLMProvider.Ollama)) {
                 return new List<string>();
             }

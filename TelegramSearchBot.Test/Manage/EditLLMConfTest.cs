@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using StackExchange.Redis;
@@ -9,6 +10,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Manage;
+using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.Test.Manage {
     [TestClass]
@@ -16,6 +18,7 @@ namespace TelegramSearchBot.Test.Manage {
         private DataDbContext _context;
         private Mock<IConnectionMultiplexer> _redisMock;
         private Mock<IDatabase> _dbMock;
+        private Mock<OpenAIService> _openAIServiceMock;
         private EditLLMConfService _service;
 
         [TestInitialize]
@@ -48,7 +51,12 @@ namespace TelegramSearchBot.Test.Manage {
                     It.IsAny<CommandFlags>()))
                 .ReturnsAsync(true);
             
-            _service = new EditLLMConfService(_context, _redisMock.Object);
+            var loggerMock = new Mock<ILogger<OpenAIService>>();
+            _openAIServiceMock = new Mock<OpenAIService>(_context, loggerMock.Object);
+            _openAIServiceMock.Setup(o => o.GetAllModels(It.IsAny<LLMChannel>()))
+                .ReturnsAsync(new List<string> { "model1", "model2" });
+            
+            _service = new EditLLMConfService(_context, _redisMock.Object, _openAIServiceMock.Object);
         }
 
         [TestMethod]
