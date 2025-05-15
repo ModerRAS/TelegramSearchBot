@@ -17,7 +17,9 @@ using TelegramSearchBot.Model.Data;
 using Newtonsoft.Json; 
 using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
 // Using alias for the common internal ChatMessage format
-using CommonChat = OpenAI.Chat; 
+using CommonChat = OpenAI.Chat;
+using System.ClientModel.Primitives;
+using System.Net;
 
 namespace TelegramSearchBot.Service.AI.LLM 
 {
@@ -157,8 +159,19 @@ namespace TelegramSearchBot.Service.AI.LLM
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
             providerHistory = await GetChatHistory(ChatId, providerHistory, message); // Use local GetChatHistory
 
+
+            var handler = new HttpClientHandler {
+                Proxy = WebRequest.DefaultWebProxy,
+                UseProxy = true
+            };
+
+            var client = new HttpClient(handler);
+
             // --- Client Setup ---
-             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(channel.Gateway) };
+            var clientOptions = new OpenAIClientOptions { 
+                Endpoint = new Uri(channel.Gateway),
+                Transport = new HttpClientPipelineTransport(client),
+                };
              var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
 
             try
