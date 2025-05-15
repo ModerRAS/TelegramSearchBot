@@ -2,6 +2,7 @@
 using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,18 +10,22 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.Service.Manage {
     public class EditLLMConfService : IService {
         public string ServiceName => "EditLLMConfService";
         protected readonly DataDbContext DataContext;
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
+        protected OpenAIService OpenAIService { get; set; }
         public EditLLMConfService(
             DataDbContext context, 
-            IConnectionMultiplexer connectionMultiplexer
+            IConnectionMultiplexer connectionMultiplexer,
+            OpenAIService openAIService
             ) {
             DataContext = context;
             this.connectionMultiplexer = connectionMultiplexer;
+            OpenAIService = openAIService;
         }
 
         /// <summary>
@@ -44,11 +49,48 @@ namespace TelegramSearchBot.Service.Manage {
                 
                 await DataContext.LLMChannels.AddAsync(channel);
                 await DataContext.SaveChangesAsync();
+                var models = await OpenAIService.GetAllModels(channel);
+                var list = new List<ChannelWithModel>();
+                foreach (var e in models) {
+                    list.Add(new ChannelWithModel() { LLMChannelId = channel.Id, ModelName = e });
+                }
+                await DataContext.ChannelsWithModel.AddRangeAsync(list);
+                await DataContext.SaveChangesAsync();
                 return channel.Id;
             }
             catch {
                 return -1;
             }
+        }
+
+        public async Task<int> RefreshAllChannel() {
+            var count = 0;
+            var channels = from s in DataContext.LLMChannels
+                           select s;
+            foreach (var channel in channels) {
+                var models = await OpenAIService.GetAllModels(channel);
+                var list = new List<ChannelWithModel>();
+
+                foreach (var model in models) {
+                    bool exists = await DataContext.ChannelsWithModel
+                        .AnyAsync(x => x.LLMChannelId == channel.Id && x.ModelName == model);
+
+                    if (!exists) {
+                        list.Add(new ChannelWithModel {
+                            LLMChannelId = channel.Id,
+                            ModelName = model
+                        });
+                    }
+                }
+
+                if (list.Any()) {
+                    await DataContext.ChannelsWithModel.AddRangeAsync(list);
+                    count += list.Count;
+                }
+            }
+
+            await DataContext.SaveChangesAsync();
+            return count;
         }
 
         /// <summary>
@@ -295,6 +337,10 @@ namespace TelegramSearchBot.Service.Manage {
 
             // 获取当前状态
             var currentState = await db.StringGetAsync(stateKey);
+            if (Command.Trim().Equals("刷新所有渠道", StringComparison.OrdinalIgnoreCase)) {
+                var count = await RefreshAllChannel();
+                return (true, $"已添加{count}个模型");
+            }
             
             if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
                 await db.StringSetAsync(stateKey, "awaiting_name");

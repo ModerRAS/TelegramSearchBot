@@ -20,6 +20,8 @@ using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
 using CommonChat = OpenAI.Chat;
 using System.ClientModel.Primitives;
 using System.Net;
+using System.ClientModel;
+using TelegramSearchBot.Model.AI;
 
 namespace TelegramSearchBot.Service.AI.LLM 
 {
@@ -39,6 +41,32 @@ namespace TelegramSearchBot.Service.AI.LLM
             _logger = logger;
             _dbContext = context;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
+        }
+
+        public async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
+            if (channel.Provider.Equals(LLMProvider.Ollama)) {
+                return new List<string>();
+            }
+            var handler = new HttpClientHandler {
+                Proxy = WebRequest.DefaultWebProxy,
+                UseProxy = true
+            };
+
+            using var httpClient = new HttpClient(handler);
+
+            // --- Client Setup ---
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(channel.Gateway),
+                Transport = new HttpClientPipelineTransport(httpClient),
+            };
+
+            var apikey = new ApiKeyCredential(channel.ApiKey);
+
+            OpenAIClient client = new(apikey, clientOptions);
+            var model = client.GetOpenAIModelClient();
+            var models = await model.GetModelsAsync();
+            return from s in models.Value
+                   select s.Id;
         }
 
         // --- Helper Methods (Defined locally again) ---
@@ -165,7 +193,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                 UseProxy = true
             };
 
-            var client = new HttpClient(handler);
+            using var client = new HttpClient(handler);
 
             // --- Client Setup ---
             var clientOptions = new OpenAIClientOptions { 
