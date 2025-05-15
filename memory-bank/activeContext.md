@@ -1,42 +1,19 @@
-# Current Work
-- 已改用PuppeteerSharp实现网页内容提取
-- 使用BrowserFetcher自动下载Chromium
-- 实现方案：
-  - 通过EvaluateFunctionAsync提取文章内容
-  - 自动处理浏览器生命周期
+# Active Context - PuppeteerArticleExtractorService Tests
 
-# Key Technical Concepts
-- 使用BrowserFetcher管理浏览器版本
-- 通过EvaluateFunctionAsync执行JavaScript
-- 保持原有IService接口兼容性
+## Current Status
+- Attempted to write unit tests for PuppeteerArticleExtractorService
+- Initial approach using mocks failed due to:
+  - BrowserFetcher is sealed and cannot be mocked
+  - Service creates browser instance per request (no field to inject mock)
 
-# Implementation Details
-```csharp
-// 浏览器初始化
-using var browserFetcher = new BrowserFetcher();
-await browserFetcher.DownloadAsync();
-var browser = await Puppeteer.LaunchAsync(new LaunchOptions
-{
-    Headless = true
-});
+## Next Steps
+1. Refactor service to support dependency injection for testing
+2. Or switch to integration testing approach
+3. Need to modify test strategy to either:
+   - Extract browser creation to separate service that can be mocked
+   - Use real browser instance in tests (slower but more reliable)
 
-// 内容提取
-var page = await browser.NewPageAsync();
-await page.GoToAsync(url);
-var content = await page.EvaluateFunctionAsync<string>("() => document.body.innerText");
-```
-
-# Implementation Status
-- 已完成PuppeteerArticleExtractorService实现
-- 已删除旧的PlaywrightArticleExtractorService
-- 浏览器自动下载功能已集成
-- 已优化内容提取逻辑：
-  - 智能识别article/main标签
-  - 支持常见文章内容容器class
-  - 保留body内容作为fallback
-
-# Next Steps
-- 优化内容提取逻辑
-- 添加错误处理和重试机制
-- 完善文档说明
-- 添加单元测试
+## Technical Considerations
+- PuppeteerSharp requires Chromium installation
+- Headless mode should be used for CI environments
+- Need to handle browser download/installation in test setup
