@@ -1,5 +1,7 @@
 using StackExchange.Redis;
 using System;
+using System.Threading.Tasks;
+using TelegramSearchBot;
 
 namespace TelegramSearchBot.Helper {
     /// <summary>
@@ -11,38 +13,117 @@ namespace TelegramSearchBot.Helper {
         /// <summary>
         /// 添加或更新HTTP反向代理配置
         /// </summary>
-        /// <param name="redis">Redis数据库连接</param>
-        /// <param name="listenPort">监听端口</param>
-        /// <param name="targetUrl">目标服务器地址</param>
-        /// <example>
-        /// // 添加配置示例
-        /// var redis = ConnectionMultiplexer.Connect("localhost:6379");
-        /// HttpProxyHelper.AddProxyConfig(redis.GetDatabase(), 8080, "http://example.com");
-        /// </example>
         public static void AddProxyConfig(IDatabase redis, int listenPort, string targetUrl) {
-            // 验证目标URL格式
             if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out _)) {
                 throw new ArgumentException("Invalid target URL format");
             }
 
-            // 添加端口到集合
             redis.SetAdd($"{Prefix}Ports", listenPort);
-            
-            // 设置端口到目标的映射
             redis.StringSet($"{Prefix}Config:{listenPort}", targetUrl);
+            redis.Publish($"{Prefix}ConfigChanged", "");
+        }
+
+        /// <summary>
+        /// 异步添加或更新HTTP反向代理配置
+        /// </summary>
+        public static async Task AddProxyConfigAsync(IDatabaseAsync redis, int listenPort, string targetUrl) {
+            if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out _)) {
+                throw new ArgumentException("Invalid target URL format");
+            }
+
+            await redis.SetAddAsync($"{Prefix}Ports", listenPort);
+            await redis.StringSetAsync($"{Prefix}Config:{listenPort}", targetUrl);
+            await redis.PublishAsync($"{Prefix}ConfigChanged", "");
+        }
+
+        /// <summary>
+        /// 添加代理配置并自动分配随机端口
+        /// </summary>
+        public static int AddProxyConfigWithRandomPort(IDatabase redis, string targetUrl) {
+            // 先检查是否已存在该URL的配置
+            int existingPort = GetProxyConfigByUrl(redis, targetUrl);
+            if (existingPort != -1) {
+                return existingPort;
+            }
+
+            int port = Utils.GetRandomAvailablePort();
+            if (port == -1) {
+                throw new Exception("Failed to get available port");
+            }
+            AddProxyConfig(redis, port, targetUrl);
+            return port;
+        }
+
+        /// <summary>
+        /// 异步添加代理配置并自动分配随机端口
+        /// </summary>
+        public static async Task<int> AddProxyConfigWithRandomPortAsync(IDatabaseAsync redis, string targetUrl) {
+            // 先检查是否已存在该URL的配置
+            int existingPort = await GetProxyConfigByUrlAsync(redis, targetUrl);
+            if (existingPort != -1) {
+                return existingPort;
+            }
+
+            int port = Utils.GetRandomAvailablePort();
+            if (port == -1) {
+                throw new Exception("Failed to get available port");
+            }
+            await AddProxyConfigAsync(redis, port, targetUrl);
+            return port;
         }
 
         /// <summary>
         /// 移除HTTP反向代理配置
         /// </summary>
-        /// <param name="redis">Redis数据库连接</param>
-        /// <param name="listenPort">要移除的监听端口</param>
         public static void RemoveProxyConfig(IDatabase redis, int listenPort) {
-            // 从端口集合移除
             redis.SetRemove($"{Prefix}Ports", listenPort);
-            
-            // 删除映射配置
             redis.KeyDelete($"{Prefix}Config:{listenPort}");
+            redis.Publish($"{Prefix}ConfigChanged", "");
+        }
+
+        /// <summary>
+        /// 异步移除HTTP反向代理配置
+        /// </summary>
+        public static async Task RemoveProxyConfigAsync(IDatabaseAsync redis, int listenPort) {
+            await redis.SetRemoveAsync($"{Prefix}Ports", listenPort);
+            await redis.KeyDeleteAsync($"{Prefix}Config:{listenPort}");
+            await redis.PublishAsync($"{Prefix}ConfigChanged", "");
+        }
+
+        /// <summary>
+        /// 通过目标URL获取代理配置
+        /// </summary>
+        public static int GetProxyConfigByUrl(IDatabase redis, string targetUrl) {
+            var ports = redis.SetMembers($"{Prefix}Ports");
+            
+            foreach (var port in ports) {
+                var listenPort = (int)port;
+                var storedUrl = redis.StringGet($"{Prefix}Config:{listenPort}");
+                
+                if (storedUrl == targetUrl) {
+                    return listenPort;
+                }
+            }
+            
+            return -1;
+        }
+
+        /// <summary>
+        /// 异步通过目标URL获取代理配置
+        /// </summary>
+        public static async Task<int> GetProxyConfigByUrlAsync(IDatabaseAsync redis, string targetUrl) {
+            var ports = await redis.SetMembersAsync($"{Prefix}Ports");
+            
+            foreach (var port in ports) {
+                var listenPort = (int)port;
+                var storedUrl = await redis.StringGetAsync($"{Prefix}Config:{listenPort}");
+                
+                if (storedUrl == targetUrl) {
+                    return listenPort;
+                }
+            }
+            
+            return -1;
         }
     }
 }
