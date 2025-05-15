@@ -12,6 +12,12 @@
   - 提取工具方法到BiliHelper类
   - 包括正则表达式、Markdown转义、短链接解析和动态解析方法
   - 保持服务类专注于核心业务逻辑
+- AdminService模型选择功能：
+  - 实现基于Redis的状态机
+  - 从ChannelsWithModel表获取去重模型列表
+  - 支持用户通过数字选择模型
+  - 将选择的模型保存到GroupSettings
+  - Redis键命名空间：modelselect:{ChatId}:*
 
 ## 待开发功能
 - 监控优化后的错误处理机制效果

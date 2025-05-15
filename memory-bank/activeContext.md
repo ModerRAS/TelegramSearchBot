@@ -17,3 +17,12 @@
 - PuppeteerSharp requires Chromium installation
 - Headless mode should be used for CI environments
 - Need to handle browser download/installation in test setup
+
+## AdminService Model Selection Update
+- 已实现模型选择状态机功能
+- 通过Redis存储状态和数据
+- 支持从ChannelsWithModel表获取去重模型列表
+- 支持将选择的模型保存到GroupSettings
+- Redis键命名规则：
+  - modelselect:{ChatId}:state
+  - modelselect:{ChatId}:models
