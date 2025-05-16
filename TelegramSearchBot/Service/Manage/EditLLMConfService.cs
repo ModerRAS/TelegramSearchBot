@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
@@ -417,17 +418,32 @@ namespace TelegramSearchBot.Service.Manage {
                     var name = await db.StringGetAsync(dataKey);
                     await db.StringSetAsync(dataKey, $"{name}|{Command}"); // 追加地址
                     await db.StringSetAsync(stateKey, "awaiting_provider");
-                    return (true, "请选择渠道类型：\n1. OpenAI\n2. Ollama");
+                    
+                        // 动态生成LLMProvider枚举选项(编辑模式)
+                        var editProviderOptions = new StringBuilder();
+                        var editProviderType = typeof(LLMProvider);
+                        var editProviders = Enum.GetValues(editProviderType)
+                            .Cast<LLMProvider>()
+                            .Where(p => p != LLMProvider.None)
+                            .Select((p, i) => $"{i + 1}. {p}");
+                        
+                        editProviderOptions.AppendLine("请选择渠道类型：");
+                        editProviderOptions.AppendJoin("\n", editProviders);
+                        return (true, editProviderOptions.ToString());
                 
                 case "awaiting_provider":
                     var nameAndGateway = (await db.StringGetAsync(dataKey)).ToString().Split('|');
                     LLMProvider provider;
-                    if (Command.Trim() == "1") {
-                        provider = LLMProvider.OpenAI;
-                    } else if (Command.Trim() == "2") {
-                        provider = LLMProvider.Ollama;
+                    var validProviders = Enum.GetValues(typeof(LLMProvider))
+                        .Cast<LLMProvider>()
+                        .Where(p => p != LLMProvider.None)
+                        .ToList();
+                    
+                    if (int.TryParse(Command.Trim(), out int providerIndex) && 
+                        providerIndex > 0 && providerIndex <= validProviders.Count) {
+                        provider = validProviders[providerIndex - 1];
                     } else {
-                        return (false, "无效的类型选择，请输入1或2");
+                        return (false, $"无效的类型选择，请输入1到{validProviders.Count}之间的数字");
                     }
                     await db.StringSetAsync(dataKey, $"{nameAndGateway[0]}|{nameAndGateway[1]}|{provider}");
                     await db.StringSetAsync(stateKey, "awaiting_parallel");
@@ -488,7 +504,18 @@ namespace TelegramSearchBot.Service.Manage {
                     
                     if (Command == "3") {
                         await db.StringSetAsync(stateKey, "editing_input_value");
-                        return (true, "请选择渠道类型：\n1. OpenAI\n2. Ollama");
+                        
+                        // 动态生成LLMProvider枚举选项
+                        var providerOptions = new StringBuilder();
+                        var providerType = typeof(LLMProvider);
+                        var providers = Enum.GetValues(providerType)
+                            .Cast<LLMProvider>()
+                            .Where(p => p != LLMProvider.None)
+                            .Select((p, i) => $"{i + 1}. {p}");
+                        
+                        providerOptions.AppendLine("请选择渠道类型：");
+                        providerOptions.AppendJoin("\n", providers);
+                        return (true, providerOptions.ToString());
                     }
                     else {
                         await db.StringSetAsync(stateKey, "editing_input_value");
