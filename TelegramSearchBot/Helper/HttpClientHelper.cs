@@ -56,11 +56,15 @@ namespace TelegramSearchBot.Helper {
         /// 创建使用系统代理的HttpClientHandler
         /// </summary>
         public static HttpClientHandler CreateProxyHandler() {
-            return new HttpClientHandler {
+            var proxy = GetSystemProxyOrFallback();
+
+            var handler = new HttpClientHandler {
                 UseProxy = true,
-                Proxy = WebRequest.DefaultWebProxy,
+                Proxy = proxy,
+                DefaultProxyCredentials = CredentialCache.DefaultCredentials,
                 AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
             };
+            return handler;
         }
     }
 }

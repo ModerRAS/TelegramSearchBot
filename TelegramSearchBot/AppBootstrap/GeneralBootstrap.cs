@@ -9,6 +9,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,8 +39,8 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
-                    service.AddHttpClient("BiliApiClient"); // Named HttpClient for BiliApiService
-                    service.AddHttpClient(); // Default HttpClient if still needed elsewhere
+                    service.AddHttpClient("BiliApiClient").ConfigurePrimaryHttpMessageHandler(HttpClientHelper.CreateProxyHandler);// Named HttpClient for BiliApiService
+                    service.AddHttpClient(string.Empty).ConfigurePrimaryHttpMessageHandler(HttpClientHelper.CreateProxyHandler); // Default HttpClient if still needed elsewhere
                     service.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<GeneralBootstrap>());
                     // 配置 Redis 连接
                     var redisConnectionString = $"localhost:{Env.SchedulerPort}"; // 自定义端口
