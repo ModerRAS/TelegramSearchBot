@@ -8,6 +8,7 @@ namespace TelegramSearchBot.Model.AI {
     public enum LLMProvider {
         None,
         OpenAI,
-        Ollama
+        Ollama,
+        Gemini
     }
 }

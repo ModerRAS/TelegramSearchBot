@@ -17,6 +17,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly OpenAIService _openAIService;
         private readonly OllamaService _ollamaService;
+        private readonly GeminiService _geminiService;
         private readonly ILogger<GeneralLLMService> _logger;
         
         public string ServiceName => "GeneralLLMService";
@@ -26,7 +27,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             DataDbContext dbContext,
             ILogger<GeneralLLMService> logger,
             OllamaService ollamaService,
-            OpenAIService openAIService
+            OpenAIService openAIService,
+            GeminiService geminiService
             ) 
         {
             this.connectionMultiplexer = connectionMultiplexer;
@@ -36,6 +38,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             // Initialize services with default values
             _openAIService = openAIService;
             _ollamaService = ollamaService;
+            _geminiService = geminiService;
         }
 
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, 
@@ -96,6 +99,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                     break;
                                 case LLMProvider.Ollama:
                                     await foreach (var response in _ollamaService.ExecAsync(message, ChatId, modelName, channel, cancellationToken).WithCancellation(cancellationToken)) {
+                                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+                                        yield return response;
+                                    }
+                                    break;
+                                case LLMProvider.Gemini:
+                                    await foreach (var response in _geminiService.ExecAsync(message, ChatId, modelName, channel, cancellationToken).WithCancellation(cancellationToken)) {
                                         if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                                         yield return response;
                                     }
