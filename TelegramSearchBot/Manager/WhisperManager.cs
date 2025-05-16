@@ -6,6 +6,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using TelegramSearchBot.Helper;
 using Whisper.net;
 using Whisper.net.Ggml;
 
@@ -32,7 +33,7 @@ namespace TelegramSearchBot.Manager {
                 Directory.CreateDirectory(targetModelsDir);
             }
             Console.WriteLine($"Model {modelName} not found. Downloading...");
-            using var client = new HttpClient();
+            using var client = HttpClientHelper.CreateProxyHttpClient();
             var downloader = new WhisperGgmlDownloader(client);
             await using var modelStream = await downloader.GetGgmlModelAsync(modelType);
             await using var fileWriter = File.OpenWrite(Path.Combine(targetModelsDir, modelName));

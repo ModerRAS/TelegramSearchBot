@@ -17,11 +17,11 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Executor;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI; // Added for BotCommandService
-using Tsavorite.core;
 
 namespace TelegramSearchBot.AppBootstrap
 {
@@ -31,7 +31,7 @@ namespace TelegramSearchBot.AppBootstrap
             Host.CreateDefaultBuilder(args)
                 .UseSerilog()
                 .ConfigureServices(service => {
-                    service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl)));
+                    service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl), httpClient: HttpClientHelper.CreateProxyHttpClient()));
                     service.AddSingleton<SendMessage>();
                     service.AddHostedService<BotCommandService>(); // Register as HostedService
                     service.AddSingleton<LuceneManager>();
