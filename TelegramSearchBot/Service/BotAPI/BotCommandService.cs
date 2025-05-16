@@ -47,13 +47,13 @@ namespace TelegramSearchBot.Service.BotAPI
                 {
                     _logger.LogInformation($"Found {discoveredCommands.Count} commands. Setting bot commands...");
                     // Use the stoppingToken from ExecuteAsync
-                    await _botClient.SetMyCommandsAsync(discoveredCommands.DistinctBy(c => c.Command), cancellationToken: stoppingToken);
+                    await _botClient.SetMyCommands(discoveredCommands.DistinctBy(c => c.Command), cancellationToken: stoppingToken);
                     _logger.LogInformation("Bot commands set successfully via reflection.");
                 }
                 else
                 {
                     _logger.LogWarning("No bot commands found via reflection. Clearing existing commands.");
-                    await _botClient.SetMyCommandsAsync(new List<BotCommand>(), cancellationToken: stoppingToken); 
+                    await _botClient.SetMyCommands(new List<BotCommand>(), cancellationToken: stoppingToken); 
                 }
             }
             // It's important to catch OperationCanceledException if the host is shutting down during this operation.

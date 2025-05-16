@@ -64,7 +64,7 @@ namespace TelegramSearchBot.Manager
         {
             Func<Task> action = async () =>
             {
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: chatId,
                     text: text,
                     parseMode: parseMode.HasValue ? parseMode.Value : default, // Use default if null, or omit if API handles null
