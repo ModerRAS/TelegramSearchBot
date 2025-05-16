@@ -10,6 +10,7 @@
   - PaddleOCR：图片OCR处理
   - Whisper：语音识别(ASR)
   - Ollama：大语言模型集成
+  - Stateless：状态机管理库
   - Helper类：通用工具方法集合(BiliHelper, MessageFormatHelper等)
 - 进程间通信：共享内存/管道通信
 - 消息处理：消息管道式处理

@@ -1,19 +1,22 @@
-# Active Context - GeminiService Implementation
+# Active Context - EditLLMConfService State Machine Refactor
 
 ## Current Work
-- Added complete chat history support from database
-- Implemented GetChatHistory method with 1-hour window
-- Modified ExecAsync to use historical messages
-- Updated StartChat to include conversation history
+- Refactored EditLLMConfService state management into EditLLMConfStateMachine
+- Implemented Stateless-based state machine for configuration flows
+- Added dynamic LLMProvider enum value generation using reflection
+- Fixed compilation errors from state machine migration
+- Cleaned up old state management code in EditLLMConfService
 
 ## Key Technical Details
-- History fetched from database with 1-hour window
-- Falls back to last 10 messages if recent history is sparse
-- Messages formatted with timestamp and user info
-- Reply references included in message context
-- User data cached for performance
+- State machine pattern for configuration flows
+- Redis-based state persistence
+- Stateless library integration
+- Dynamic enum value generation using reflection
+- Skip None enum value in provider selection
+- Type-safe enum parsing with validation
+- Clean separation of concerns between service and state machine
 
 ## Next Steps
-- Add session timeout cleanup
-- Implement history persistence
-- Add configuration options for history length
+- Test all state machine transitions
+- Add more LLM providers as needed
+- Monitor state machine performance in production
