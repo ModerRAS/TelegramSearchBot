@@ -8,6 +8,7 @@ using GenerativeAI;
 using GenerativeAI.Types;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
@@ -140,10 +141,61 @@ namespace TelegramSearchBot.Service.AI.LLM
                 _chatSessions[ChatId] = chatSession;
             }
 
-            await foreach (var chunk in chatSession.StreamContentAsync(message.Content)) {
-                fullResponse.Append(chunk.Text);
-                yield return fullResponse.ToString();
+            int maxToolCycles = 5;
+            for (int cycle = 0; cycle < maxToolCycles; cycle++)
+            {
+                if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                var currentMessageBuilder = new StringBuilder();
+                var fullResponseBuilder = new StringBuilder();
+
+                await foreach (var chunk in chatSession.StreamContentAsync(message.Content)) 
+                {
+                    currentMessageBuilder.Append(chunk.Text);
+                    fullResponseBuilder.Append(chunk.Text);
+                    yield return currentMessageBuilder.ToString();
+                }
+
+                string llmResponse = fullResponseBuilder.ToString().Trim();
+                _logger.LogDebug("Gemini raw response (Cycle {Cycle}): {Response}", cycle + 1, llmResponse);
+
+                if (McpToolHelper.TryParseToolCalls(llmResponse, out var toolCalls) && toolCalls.Any())
+                {
+                    var firstToolCall = toolCalls[0];
+                    _logger.LogInformation("Gemini requested tool: {ToolName} with args: {Args}", 
+                        firstToolCall.toolName, 
+                        JsonConvert.SerializeObject(firstToolCall.arguments));
+
+                    string toolResult;
+                    bool isError = false;
+                    try
+                    {
+                        var toolContext = new ToolContext { ChatId = ChatId };
+                        var result = await McpToolHelper.ExecuteRegisteredToolAsync(
+                            firstToolCall.toolName, 
+                            firstToolCall.arguments, 
+                            toolContext);
+                        toolResult = McpToolHelper.ConvertToolResultToString(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        isError = true;
+                        _logger.LogError(ex, "Error executing tool {ToolName}", firstToolCall.toolName);
+                        toolResult = $"Error executing tool {firstToolCall.toolName}: {ex.Message}";
+                    }
+
+                    string feedback = isError 
+                        ? $"[Tool '{firstToolCall.toolName}' execution failed: {toolResult}]" 
+                        : $"[Tool '{firstToolCall.toolName}' result: {toolResult}]";
+                    
+                    message.Content = feedback;
+                    continue;
+                }
+
+                yield break;
             }
+
+            yield return "Maximum tool call cycles reached. Please try again.";
         }
     }
 }
