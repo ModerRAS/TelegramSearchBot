@@ -12,6 +12,7 @@ using Newtonsoft.Json;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using System.Net.Http;
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -21,15 +22,18 @@ namespace TelegramSearchBot.Service.AI.LLM
         private readonly ILogger<GeminiService> _logger;
         private readonly DataDbContext _dbContext;
         private readonly Dictionary<long, ChatSession> _chatSessions = new();
+        private readonly IHttpClientFactory _httpClientFactory;
         public string BotName { get; set; }
 
         public GeminiService(
             DataDbContext context,
-            ILogger<GeminiService> logger)
+            ILogger<GeminiService> logger,
+            IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
             _dbContext = context;
             _logger.LogInformation("GeminiService instance created");
+            _httpClientFactory = httpClientFactory;
         }
 
         private void AddMessageToHistory(List<GenerativeAI.Types.Content> chatHistory, long fromUserId, string content)
@@ -130,7 +134,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                 yield break;
             }
 
-            var googleAI = new GoogleAi(channel.ApiKey);
+            var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
             var fullResponse = new StringBuilder();
 
