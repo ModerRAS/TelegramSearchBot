@@ -22,18 +22,27 @@ namespace TelegramSearchBot.Manager
         }
         public async Task WriteDocumentAsync(Message message) {
             using (var writer = GetIndexWriter(message.GroupId)) {
-
                 try {
                     Document doc = new Document();
+                    // 基础字段
                     doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
+                    doc.Add(new Int64Field("MessageId", message.MessageId, Field.Store.YES));
+                    doc.Add(new StringField("DateTime", message.DateTime.ToString("o"), Field.Store.YES));
+                    doc.Add(new Int64Field("FromUserId", message.FromUserId, Field.Store.YES));
+                    doc.Add(new Int64Field("ReplyToUserId", message.ReplyToUserId, Field.Store.YES));
+                    doc.Add(new Int64Field("ReplyToMessageId", message.ReplyToMessageId, Field.Store.YES));
 
-                    Int64Field MessageIdField = new Int64Field("MessageId", message.MessageId, Field.Store.YES);
-
+                    // 内容字段
                     TextField ContentField = new TextField("Content", message.Content, Field.Store.YES);
                     ContentField.Boost = 1F;
-
-                    doc.Add(MessageIdField);
                     doc.Add(ContentField);
+
+                    // 扩展字段
+                    if (message.MessageExtensions != null) {
+                        foreach (var ext in message.MessageExtensions) {
+                            doc.Add(new TextField($"Ext_{ext.Name}", ext.Value, Field.Store.YES));
+                        }
+                    }
                     writer.AddDocument(doc);
                     writer.Flush(triggerMerge: true, applyAllDeletes: true);
                     writer.Commit();
@@ -65,12 +74,25 @@ namespace TelegramSearchBot.Manager
                             continue;
                         }
                         try {
+                            // 基础字段
                             doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
-                            Int64Field MessageIdField = new Int64Field("MessageId", message.MessageId, Field.Store.YES);
+                            doc.Add(new Int64Field("MessageId", message.MessageId, Field.Store.YES));
+                            doc.Add(new StringField("DateTime", message.DateTime.ToString("o"), Field.Store.YES));
+                            doc.Add(new Int64Field("FromUserId", message.FromUserId, Field.Store.YES));
+                            doc.Add(new Int64Field("ReplyToUserId", message.ReplyToUserId, Field.Store.YES));
+                            doc.Add(new Int64Field("ReplyToMessageId", message.ReplyToMessageId, Field.Store.YES));
+
+                            // 内容字段
                             TextField ContentField = new TextField("Content", message.Content, Field.Store.YES);
                             ContentField.Boost = 1F;
-                            doc.Add(MessageIdField);
                             doc.Add(ContentField);
+
+                            // 扩展字段
+                            if (message.MessageExtensions != null) {
+                                foreach (var ext in message.MessageExtensions) {
+                                    doc.Add(new TextField($"Ext_{ext.Name}", ext.Value, Field.Store.YES));
+                                }
+                            }
                             writer.AddDocument(doc);
                         } catch (ArgumentNullException ex) {
                             await Send.Log(ex.Message);
@@ -117,12 +139,21 @@ namespace TelegramSearchBot.Manager
         }
         public (int, List<Message>) Search(string q, long GroupId, int Skip, int Take) {
             IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
-
             var searcher = new IndexSearcher(reader);
 
             var keyWordQuery = new BooleanQuery();
+            // 搜索内容和扩展字段
             foreach (var item in GetKeyWords(q)) {
-                keyWordQuery.Add(new TermQuery(new Term("Content", item)), Occur.MUST);
+                // 搜索内容字段
+                keyWordQuery.Add(new TermQuery(new Term("Content", item)), Occur.SHOULD);
+                
+                // 搜索所有扩展字段
+                var fields = MultiFields.GetIndexedFields(reader);
+                foreach (var field in fields) {
+                    if (field.StartsWith("Ext_")) {
+                        keyWordQuery.Add(new TermQuery(new Term(field, item)), Occur.SHOULD);
+                    }
+                }
             }
             var top = searcher.Search(keyWordQuery, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
             var total = top.TotalHits;
@@ -133,12 +164,32 @@ namespace TelegramSearchBot.Manager
             foreach (var hit in hits) {
                 if (id++ < Skip) continue;
                 var document = searcher.Doc(hit.Doc);
-                messages.Add(new Message() {
+                var message = new Message() {
                     Id = id,
                     MessageId = long.Parse(document.Get("MessageId")),
                     GroupId = long.Parse(document.Get("GroupId")),
+                    DateTime = DateTime.Parse(document.Get("DateTime")),
+                    FromUserId = long.Parse(document.Get("FromUserId")),
+                    ReplyToUserId = long.Parse(document.Get("ReplyToUserId")),
+                    ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId")),
                     Content = document.Get("Content")
-                });
+                };
+
+                // 获取扩展字段
+                var extensions = new List<MessageExtension>();
+                foreach (var field in document.Fields) {
+                    if (field.Name.StartsWith("Ext_")) {
+                        extensions.Add(new MessageExtension {
+                            Name = field.Name.Substring(4),
+                            Value = field.GetStringValue()
+                        });
+                    }
+                }
+                if (extensions.Any()) {
+                    message.MessageExtensions = extensions;
+                }
+
+                messages.Add(message);
             }
             return (total, messages);
         }
