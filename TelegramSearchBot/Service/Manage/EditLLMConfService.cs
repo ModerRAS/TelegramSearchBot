@@ -332,13 +332,348 @@ namespace TelegramSearchBot.Service.Manage {
             }
         }
         public async Task<(bool, string)> ExecuteAsync(string Command, long ChatId) {
-            var stateMachine = new EditLLMConfStateMachine(
-                DataContext,
-                connectionMultiplexer,
-                OpenAIService,
-                ChatId);
+            var db = connectionMultiplexer.GetDatabase();
+            string stateKey = $"llmconf:{ChatId}:state";
+            string dataKey = $"llmconf:{ChatId}:data";
+
+            // 获取当前状态
+            var currentState = await db.StringGetAsync(stateKey);
+            if (Command.Trim().Equals("刷新所有渠道", StringComparison.OrdinalIgnoreCase)) {
+                var count = await RefreshAllChannel();
+                return (true, $"已添加{count}个模型");
+            }
             
-            return await stateMachine.ProcessCommand(Command);
+            if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
+                await db.StringSetAsync(stateKey, "awaiting_name");
+                return (true, "请输入渠道的名称");
+            }
+            else if (Command.Trim().Equals("编辑渠道", StringComparison.OrdinalIgnoreCase)) {
+                var channels = await GetAllChannels();
+                if (channels.Count == 0) {
+                    return (true, "当前没有可编辑的渠道");
+                }
+                
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要编辑的渠道ID：");
+                foreach (var channel in channels) {
+                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+                }
+                
+                await db.StringSetAsync(stateKey, "editing_select_channel");
+                return (true, sb.ToString());
+            }
+            else if (Command.Trim().Equals("添加模型", StringComparison.OrdinalIgnoreCase)) {
+                var channels = await GetAllChannels();
+                if (channels.Count == 0) {
+                    return (true, "当前没有可添加模型的渠道");
+                }
+                
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要添加模型的渠道ID：");
+                foreach (var channel in channels) {
+                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+                }
+                
+                await db.StringSetAsync(stateKey, "adding_model_select_channel");
+                return (true, sb.ToString());
+            }
+            else if (Command.Trim().Equals("移除模型", StringComparison.OrdinalIgnoreCase)) {
+                var channels = await GetAllChannels();
+                if (channels.Count == 0) {
+                    return (true, "当前没有可移除模型的渠道");
+                }
+                
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要移除模型的渠道ID：");
+                foreach (var channel in channels) {
+                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+                }
+                
+                await db.StringSetAsync(stateKey, "removing_model_select_channel");
+                return (true, sb.ToString());
+            }
+            else if (Command.Trim().Equals("查看模型", StringComparison.OrdinalIgnoreCase)) {
+                var channels = await GetAllChannels();
+                if (channels.Count == 0) {
+                    return (true, "当前没有可查看模型的渠道");
+                }
+                
+                var sb = new StringBuilder();
+                sb.AppendLine("请选择要查看模型的渠道ID：");
+                foreach (var channel in channels) {
+                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+                }
+                
+                await db.StringSetAsync(stateKey, "viewing_model_select_channel");
+                return (true, sb.ToString());
+            }
+
+            switch (currentState.ToString()) {
+                case "awaiting_name":
+                    await db.StringSetAsync(dataKey, Command); // 存储名称
+                    await db.StringSetAsync(stateKey, "awaiting_gateway");
+                    return (true, "请输入渠道地址");
+                
+                case "awaiting_gateway":
+                    var name = await db.StringGetAsync(dataKey);
+                    await db.StringSetAsync(dataKey, $"{name}|{Command}"); // 追加地址
+                    await db.StringSetAsync(stateKey, "awaiting_provider");
+                    
+                        // 动态生成LLMProvider枚举选项(编辑模式)
+                        var editProviderOptions = new StringBuilder();
+                        var editProviderType = typeof(LLMProvider);
+                        var editProviders = Enum.GetValues(editProviderType)
+                            .Cast<LLMProvider>()
+                            .Where(p => p != LLMProvider.None)
+                            .Select((p, i) => $"{i + 1}. {p}");
+                        
+                        editProviderOptions.AppendLine("请选择渠道类型：");
+                        editProviderOptions.AppendJoin("\n", editProviders);
+                        return (true, editProviderOptions.ToString());
+                
+                case "awaiting_provider":
+                    var nameAndGateway = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    LLMProvider provider;
+                    var validProviders = Enum.GetValues(typeof(LLMProvider))
+                        .Cast<LLMProvider>()
+                        .Where(p => p != LLMProvider.None)
+                        .ToList();
+                    
+                    if (int.TryParse(Command.Trim(), out int providerIndex) && 
+                        providerIndex > 0 && providerIndex <= validProviders.Count) {
+                        provider = validProviders[providerIndex - 1];
+                    } else {
+                        return (false, $"无效的类型选择，请输入1到{validProviders.Count}之间的数字");
+                    }
+                    await db.StringSetAsync(dataKey, $"{nameAndGateway[0]}|{nameAndGateway[1]}|{provider}");
+                    await db.StringSetAsync(stateKey, "awaiting_parallel");
+                    return (true, "请输入渠道的最大并行数量(默认1):");
+                
+                case "awaiting_parallel":
+                    int parallel = string.IsNullOrEmpty(Command) ? 1 : int.Parse(Command);
+                    var parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    await db.StringSetAsync(dataKey, $"{parts[0]}|{parts[1]}|{parts[2]}|{parallel}");
+                    await db.StringSetAsync(stateKey, "awaiting_priority");
+                    return (true, "请输入渠道的优先级(默认0):");
+                
+                case "awaiting_priority":
+                    int priority = string.IsNullOrEmpty(Command) ? 0 : int.Parse(Command);
+                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    await db.StringSetAsync(dataKey, $"{parts[0]}|{parts[1]}|{parts[2]}|{parts[3]}|{priority}");
+                    await db.StringSetAsync(stateKey, "awaiting_apikey");
+                    return (true, "请输入渠道的API Key");
+                
+                case "awaiting_apikey":
+                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    var apiKey = Command;
+                    provider = (LLMProvider)Enum.Parse(typeof(LLMProvider), parts[2]);
+                    
+                    // 创建渠道
+                    var result = await AddChannel(
+                        parts[0], 
+                        parts[1], 
+                        apiKey, 
+                        provider,
+                        int.Parse(parts[3]),
+                        int.Parse(parts[4]));
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, result > 0 ? "渠道创建成功" : "渠道创建失败");
+                
+                case "editing_select_channel":
+                    if (!int.TryParse(Command, out var channelId)) {
+                        return (false, "请输入有效的渠道ID");
+                    }
+                    
+                    var channel = await GetChannelById(channelId);
+                    if (channel == null) {
+                        return (false, "找不到指定的渠道");
+                    }
+                    
+                    await db.StringSetAsync(dataKey, channelId.ToString());
+                    await db.StringSetAsync(stateKey, "editing_select_field");
+                    return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key\n5. 最大并行数量 ({channel.Parallel})\n6. 优先级 ({channel.Priority})");
+                
+                case "editing_select_field":
+                    var value = await db.StringGetAsync(dataKey);
+                    var editChannelId = int.Parse(value);
+                    await db.StringSetAsync(dataKey, $"{editChannelId}|{Command}");
+                    
+                    if (Command == "3") {
+                        await db.StringSetAsync(stateKey, "editing_input_value");
+                        
+                        // 动态生成LLMProvider枚举选项
+                        var providerOptions = new StringBuilder();
+                        var providerType = typeof(LLMProvider);
+                        var providers = Enum.GetValues(providerType)
+                            .Cast<LLMProvider>()
+                            .Where(p => p != LLMProvider.None)
+                            .Select((p, i) => $"{i + 1}. {p}");
+                        
+                        providerOptions.AppendLine("请选择渠道类型：");
+                        providerOptions.AppendJoin("\n", providers);
+                        return (true, providerOptions.ToString());
+                    }
+                    else {
+                        await db.StringSetAsync(stateKey, "editing_input_value");
+                        return (true, "请输入新的值：");
+                    }
+                
+                case "adding_model_select_channel":
+                    if (!int.TryParse(Command, out var addModelChannelId)) {
+                        return (false, "请输入有效的渠道ID");
+                    }
+                    
+                    var addModelChannel = await GetChannelById(addModelChannelId);
+                    if (addModelChannel == null) {
+                        return (false, "找不到指定的渠道");
+                    }
+                    
+                    await db.StringSetAsync(dataKey, addModelChannelId.ToString());
+                    await db.StringSetAsync(stateKey, "adding_model_input");
+                    return (true, "请输入要添加的模型名称，多个模型用逗号或分号分隔");
+                
+                case "adding_model_input":
+                    var addChannelId = int.Parse(await db.StringGetAsync(dataKey));
+                    var ModelResult = await AddModelWithChannel(addChannelId, Command);
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, ModelResult ? "模型添加成功" : "模型添加失败");
+                
+                case "removing_model_select_channel":
+                    if (!int.TryParse(Command, out var removeModelChannelId)) {
+                        return (false, "请输入有效的渠道ID");
+                    }
+                    
+                    var removeModelChannel = await GetChannelById(removeModelChannelId);
+                    if (removeModelChannel == null) {
+                        return (false, "找不到指定的渠道");
+                    }
+                    
+                    // 获取该渠道下的所有模型
+                    var models = await DataContext.ChannelsWithModel
+                        .Where(m => m.LLMChannelId == removeModelChannelId)
+                        .Select(m => m.ModelName)
+                        .ToListAsync();
+                    
+                    if (models.Count == 0) {
+                        return (true, "该渠道下没有可移除的模型");
+                    }
+                    
+                    var sb = new StringBuilder();
+                    sb.AppendLine("请选择要移除的模型：");
+                    for (int i = 0; i < models.Count; i++) {
+                        sb.AppendLine($"{i + 1}. {models[i]}");
+                    }
+                    
+                    await db.StringSetAsync(dataKey, $"{removeModelChannelId}|{string.Join(",", models)}");
+                    await db.StringSetAsync(stateKey, "removing_model_select");
+                    return (true, sb.ToString());
+                
+                case "removing_model_select":
+                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    var removeChannelId = int.Parse(parts[0]);
+                    var modelList = parts[1].Split(',');
+                    
+                    if (!int.TryParse(Command, out var modelIndex) || modelIndex < 1 || modelIndex > modelList.Length) {
+                        return (false, "请输入有效的模型序号");
+                    }
+                    
+                    var modelName = modelList[modelIndex - 1];
+                    var removeResult = await RemoveModelFromChannel(removeChannelId, modelName);
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, removeResult ? "模型移除成功" : "模型移除失败");
+                
+                case "viewing_model_select_channel":
+                    if (!int.TryParse(Command, out var viewModelChannelId)) {
+                        return (false, "请输入有效的渠道ID");
+                    }
+                    
+                    var viewModelChannel = await GetChannelById(viewModelChannelId);
+                    if (viewModelChannel == null) {
+                        return (false, "找不到指定的渠道");
+                    }
+                    
+                    // 获取该渠道下的所有模型
+                    var channelModels = await DataContext.ChannelsWithModel
+                        .Where(m => m.LLMChannelId == viewModelChannelId)
+                        .Select(m => m.ModelName)
+                        .ToListAsync();
+                    
+                    var modelSb = new StringBuilder();
+                    modelSb.AppendLine($"渠道 {viewModelChannel.Name} 下的模型列表：");
+                    if (channelModels.Count == 0) {
+                        modelSb.AppendLine("暂无模型");
+                    } else {
+                        foreach (var model in channelModels) {
+                            modelSb.AppendLine($"- {model}");
+                        }
+                    }
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, modelSb.ToString());
+                
+                case "editing_input_value":
+                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    var editId = int.Parse(parts[0]);
+                    var field = parts[1];
+                    
+                    bool updateResult = false;
+                    switch (field) {
+                        case "1":
+                            updateResult = await UpdateChannel(editId, name: Command);
+                            break;
+                        case "2":
+                            updateResult = await UpdateChannel(editId, gateway: Command);
+                            break;
+                        case "3":
+                            if (!Enum.TryParse<LLMProvider>(Command, out var newProvider)) {
+                                return (true, "无效的类型");
+                            }
+                            updateResult = await UpdateChannel(editId, provider: newProvider);
+                            break;
+                        case "4":
+                            updateResult = await UpdateChannel(editId, apiKey: Command);
+                            break;
+                        case "5":
+                            if (!int.TryParse(Command, out var tmp_parallel)) {
+                                return (false, "请输入有效的数字");
+                            }
+                            updateResult = await UpdateChannel(editId, parallel: tmp_parallel);
+                            break;
+                        case "6":
+                            if (!int.TryParse(Command, out var tmp_priority)) {
+                                return (false, "请输入有效的数字");
+                            }
+                            updateResult = await UpdateChannel(editId, priority: tmp_priority);
+                            break;
+                        default:
+                            return (false, "无效的字段选择");
+                    }
+                    
+                    // 清理状态
+                    await db.KeyDeleteAsync(stateKey);
+                    await db.KeyDeleteAsync(dataKey);
+                    
+                    return (true, updateResult ? "更新成功" : "更新失败");
+                
+                default:
+                    // 非预期状态或初始状态
+                    return (false, "");
+            }
         }
     }
 }
