@@ -71,5 +71,12 @@ namespace TelegramSearchBot.Service.Storage {
             _context.MessageExtensions.RemoveRange(extensions);
             await _context.SaveChangesAsync();
         }
+
+        public async Task<long?> GetMessageIdByMessageIdAndGroupId(long messageId, long groupId) {
+            var message = await _context.Messages
+                .FirstOrDefaultAsync(m => m.MessageId == messageId && m.GroupId == groupId);
+            
+            return message?.Id;
+        }
     }
 }

@@ -10,5 +10,6 @@ namespace TelegramSearchBot.Interface {
         Task AddOrUpdateAsync(long messageDataId, string name, string value);
         Task DeleteAsync(int id);
         Task DeleteByMessageDataIdAsync(long messageDataId);
+        Task<long?> GetMessageIdByMessageIdAndGroupId(long messageId, long groupId);
     }
 }

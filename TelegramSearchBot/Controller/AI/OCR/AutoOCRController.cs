@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -57,26 +58,45 @@ namespace TelegramSearchBot.Controller.AI.OCR
             {
                 return;
             }
-
+            string OcrStr = string.Empty;
             try
             {
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
-                var OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
+                OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
                 logger.LogInformation(OcrStr);
                 await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
-
-                if (!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Length == 2 && e.Message.Caption.Equals("打印"))
-                {
-                    await SendMessageService.SendMessage(OcrStr, e.Message.Chat.Id, e.Message.MessageId);
-                }
             }
             catch (Exception ex) when (
                   ex is CannotGetPhotoException ||
                   ex is DirectoryNotFoundException
                   )
             {
-                //logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
+                logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
+            }
+
+            if ((!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Equals("打印")) ||
+                (e.Message.ReplyToMessage != null && e.Message.Text != null && e.Message.Text.Equals("打印"))) {
+                string ocrResult = OcrStr;
+
+                // 如果是回复消息触发打印
+                if (e.Message.ReplyToMessage != null) {
+                    var originalMessageId = await MessageExtensionService.GetMessageIdByMessageIdAndGroupId(
+                        e.Message.ReplyToMessage.MessageId,
+                        e.Message.Chat.Id);
+
+                    if (originalMessageId.HasValue) {
+                        var extensions = await MessageExtensionService.GetByMessageDataIdAsync(originalMessageId.Value);
+                        var ocrExtension = extensions.FirstOrDefault(x => x.Name == "OCR_Result");
+                        if (ocrExtension != null) {
+                            ocrResult = ocrExtension.Value;
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(ocrResult)) {
+                    await SendMessageService.SendMessage(ocrResult, e.Message.Chat.Id, e.Message.MessageId);
+                }
             }
         }
     }
