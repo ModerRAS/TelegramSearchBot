@@ -50,6 +50,9 @@ namespace TelegramSearchBot.Controller.AI.OCR
         public async Task ExecuteAsync(PipelineContext p)
         {
             var e = p.Update;
+            if (p.BotMessageType != BotMessageType.Message) {
+                return;
+            }
             if (!Env.EnableAutoOCR)
             {
                 return;

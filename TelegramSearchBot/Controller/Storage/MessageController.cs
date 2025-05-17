@@ -29,7 +29,15 @@ namespace TelegramSearchBot.Controller.Storage
         public async Task ExecuteAsync(PipelineContext p) {
             var e = p.Update;
             string ToAdd = e?.Message?.Text ?? e?.Message?.Caption ?? string.Empty;
-
+            if (e.CallbackQuery != null) { 
+                p.BotMessageType = BotMessageType.CallbackQuery;
+                return;
+            } else if (e.Message != null) { 
+                p.BotMessageType = BotMessageType.Message;
+            } else {
+                p.BotMessageType = BotMessageType.Unknown;
+                return;
+            }
             p.MessageDataId = await _messageService.ExecuteAsync(new MessageOption {
                 ChatId = e.Message.Chat.Id,
                 MessageId = e.Message.MessageId,

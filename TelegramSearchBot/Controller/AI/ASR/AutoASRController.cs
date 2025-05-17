@@ -84,6 +84,9 @@ namespace TelegramSearchBot.Controller.AI.ASR
         }
         public async Task ExecuteAsync(PipelineContext p) {
             var e = p.Update;
+            if (p.BotMessageType != BotMessageType.Message) {
+                return;
+            }
             if (!Env.EnableAutoASR)
             {
                 return;

@@ -27,7 +27,7 @@ namespace TelegramSearchBot.Executor {
                     try {
                         await controller.ExecuteAsync(PipelineContext);
                     } catch (Exception ex) {
-                        Log.Error(ex, $"Message Pre Process Error: {e.Message.Chat.FirstName} {e.Message.Chat.LastName} {e.Message.Chat.Title} {e.Message.Chat.Id}/{e.Message.MessageId}");
+                        //Log.Error(ex, $"Message Pre Process Error: {e.Message.Chat.FirstName} {e.Message.Chat.LastName} {e.Message.Chat.Title} {e.Message.Chat.Id}/{e.Message.MessageId}");
                     }
                     executed.Add(controller.GetType());
                     pending.Remove(controller);

@@ -144,7 +144,7 @@ namespace TelegramSearchBot.AppBootstrap
                         var exec = new ControllerExecutor(service.GetServices<IOnUpdate>());
                         await exec.ExecuteControllers(update);
                     } catch (Exception ex) {
-                        Log.Error(ex, $"Message ControllerExecutor Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Title} {update.Message.Chat.Id}/{update.Message.MessageId}");
+                        //Log.Error(ex, $"Message ControllerExecutor Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Title} {update.Message.Chat.Id}/{update.Message.MessageId}");
                     }
 
                 });
