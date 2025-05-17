@@ -18,5 +18,7 @@ namespace TelegramSearchBot.Model.Data
         public long ReplyToUserId { get; set; }
         public long ReplyToMessageId { get; set; }
         public string Content { get; set; }
+        
+        public virtual ICollection<MessageExtension> MessageExtensions { get; set; }
     }
 }
