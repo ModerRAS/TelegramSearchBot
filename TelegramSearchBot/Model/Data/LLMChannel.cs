@@ -22,5 +22,7 @@ namespace TelegramSearchBot.Model.Data {
         /// 用来设置优先级，数字越大越优先
         /// </summary>
         public int Priority { get; set; }
+
+        public virtual ICollection<ChannelWithModel> Models { get; set; } 
     }
 }
