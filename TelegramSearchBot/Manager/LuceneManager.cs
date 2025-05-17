@@ -168,12 +168,22 @@ namespace TelegramSearchBot.Manager
                     Id = id,
                     MessageId = long.Parse(document.Get("MessageId")),
                     GroupId = long.Parse(document.Get("GroupId")),
-                    DateTime = DateTime.Parse(document.Get("DateTime")),
-                    FromUserId = long.Parse(document.Get("FromUserId")),
-                    ReplyToUserId = long.Parse(document.Get("ReplyToUserId")),
-                    ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId")),
                     Content = document.Get("Content")
                 };
+
+                // 安全解析可能缺失的字段
+                if (document.Get("DateTime") != null) {
+                    message.DateTime = DateTime.Parse(document.Get("DateTime"));
+                }
+                if (document.Get("FromUserId") != null) {
+                    message.FromUserId = long.Parse(document.Get("FromUserId"));
+                }
+                if (document.Get("ReplyToUserId") != null) {
+                    message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
+                }
+                if (document.Get("ReplyToMessageId") != null) {
+                    message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
+                }
 
                 // 获取扩展字段
                 var extensions = new List<MessageExtension>();
