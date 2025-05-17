@@ -34,7 +34,7 @@ namespace TelegramSearchBot.Service.Manage
                 await Send.Log($"删除了{dir}");
             }
             await Send.Log($"删除完成");
-            var Messages = Env.Database.GetCollection<Message>("Messages").FindAll();
+            var Messages = DataContext.Messages;
             long count = Messages.LongCount();
             await Send.Log($"共{count}条消息，现在开始重建索引");
             lucene.WriteDocuments(Messages.ToList());
@@ -45,10 +45,9 @@ namespace TelegramSearchBot.Service.Manage
         {
             await Send.Log("开始导入数据库内容");
             var importModel = JsonConvert.DeserializeObject<ExportModel>(await File.ReadAllTextAsync("/tmp/export.json"));
-            var users = Env.Database.GetCollection<UserWithGroup>("Users");
-            users.InsertBulk(importModel.Users);
-            var messages = Env.Database.GetCollection<Message>("Messages");
-            messages.InsertBulk(importModel.Messages);
+            await DataContext.UsersWithGroup.AddRangeAsync(importModel.Users);
+            await DataContext.Messages.AddRangeAsync(importModel.Messages);
+            await DataContext.SaveChangesAsync();
             await Send.Log("导入完成");
         }
 
