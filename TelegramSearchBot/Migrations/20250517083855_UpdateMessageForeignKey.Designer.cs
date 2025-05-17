@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TelegramSearchBot.Model;
 
@@ -10,9 +11,11 @@ using TelegramSearchBot.Model;
 namespace TelegramSearchBot.Migrations
 {
     [DbContext(typeof(DataDbContext))]
-    partial class DataDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250517083855_UpdateMessageForeignKey")]
+    partial class UpdateMessageForeignKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -43,8 +46,6 @@ namespace TelegramSearchBot.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("LLMChannelId");
 
                     b.ToTable("ChannelsWithModel");
                 });
@@ -265,17 +266,6 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("UsersWithGroup");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ChannelWithModel", b =>
-                {
-                    b.HasOne("TelegramSearchBot.Model.Data.LLMChannel", "LLMChannel")
-                        .WithMany("Models")
-                        .HasForeignKey("LLMChannelId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("LLMChannel");
-                });
-
             modelBuilder.Entity("TelegramSearchBot.Model.Data.MessageExtension", b =>
                 {
                     b.HasOne("TelegramSearchBot.Model.Data.Message", "Message")
@@ -285,11 +275,6 @@ namespace TelegramSearchBot.Migrations
                         .IsRequired();
 
                     b.Navigation("Message");
-                });
-
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.LLMChannel", b =>
-                {
-                    b.Navigation("Models");
                 });
 
             modelBuilder.Entity("TelegramSearchBot.Model.Data.Message", b =>
