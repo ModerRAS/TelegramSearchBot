@@ -153,12 +153,6 @@ namespace TelegramSearchBot.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FromUserId");
-
-                    b.HasIndex("ReplyToUserId");
-
-                    b.HasIndex("GroupId", "ReplyToMessageId");
-
                     b.ToTable("Messages");
                 });
 
@@ -282,42 +276,6 @@ namespace TelegramSearchBot.Migrations
                     b.Navigation("LLMChannel");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.Message", b =>
-                {
-                    b.HasOne("TelegramSearchBot.Model.Data.UserData", "FromUser")
-                        .WithMany("FromMessages")
-                        .HasForeignKey("FromUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("TelegramSearchBot.Model.Data.GroupData", "Group")
-                        .WithMany("Messages")
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("TelegramSearchBot.Model.Data.UserData", "ReplyToUser")
-                        .WithMany("ReplyToMessages")
-                        .HasForeignKey("ReplyToUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("TelegramSearchBot.Model.Data.Message", "ReplyToMessage")
-                        .WithMany()
-                        .HasForeignKey("GroupId", "ReplyToMessageId")
-                        .HasPrincipalKey("GroupId", "MessageId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("FromUser");
-
-                    b.Navigation("Group");
-
-                    b.Navigation("ReplyToMessage");
-
-                    b.Navigation("ReplyToUser");
-                });
-
             modelBuilder.Entity("TelegramSearchBot.Model.Data.MessageExtension", b =>
                 {
                     b.HasOne("TelegramSearchBot.Model.Data.Message", "Message")
@@ -329,11 +287,6 @@ namespace TelegramSearchBot.Migrations
                     b.Navigation("Message");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.GroupData", b =>
-                {
-                    b.Navigation("Messages");
-                });
-
             modelBuilder.Entity("TelegramSearchBot.Model.Data.LLMChannel", b =>
                 {
                     b.Navigation("Models");
@@ -342,13 +295,6 @@ namespace TelegramSearchBot.Migrations
             modelBuilder.Entity("TelegramSearchBot.Model.Data.Message", b =>
                 {
                     b.Navigation("MessageExtensions");
-                });
-
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.UserData", b =>
-                {
-                    b.Navigation("FromMessages");
-
-                    b.Navigation("ReplyToMessages");
                 });
 #pragma warning restore 612, 618
         }

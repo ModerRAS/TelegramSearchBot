@@ -15,8 +15,5 @@ namespace TelegramSearchBot.Model.Data
         public string Title { get; set; }
         public bool? IsForum { get; set; }
         public bool IsBlacklist { get; set; }
-
-        // 导航属性
-        public virtual ICollection<Message> Messages { get; set; }
     }
 }
