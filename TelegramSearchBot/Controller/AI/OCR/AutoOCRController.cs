@@ -17,7 +17,7 @@ using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Controller.AI.OCR
 {
-    class AutoOCRController : IOnUpdate
+    public class AutoOCRController : IOnUpdate
     {
         private readonly PaddleOCRService paddleOCRService;
         private readonly MessageService messageService;

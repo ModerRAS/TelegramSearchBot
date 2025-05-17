@@ -9,7 +9,7 @@ using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.Controller.Search
 {
-    class SearchController : IOnUpdate
+    public class SearchController : IOnUpdate
     {
         private readonly ISearchService searchService;
         private readonly SendService sendService;

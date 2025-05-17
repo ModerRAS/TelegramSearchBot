@@ -15,7 +15,7 @@ using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Controller.Search
 {
-    class SearchNextPageController : IOnUpdate
+    public class SearchNextPageController : IOnUpdate
     {
         private readonly SendMessage Send;
         private readonly ILiteCollection<CacheData> Cache;

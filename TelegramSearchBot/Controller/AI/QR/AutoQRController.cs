@@ -23,7 +23,7 @@ using TelegramSearchBot.Controller.Storage; // Added for SendMessageService
 
 namespace TelegramSearchBot.Controller.AI.QR
 {
-    class AutoQRController : IOnUpdate, IProcessPhoto
+    public class AutoQRController : IOnUpdate, IProcessPhoto
     {
         private readonly AutoQRService _autoQRService;
         private readonly MessageService _messageService;

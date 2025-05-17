@@ -9,7 +9,7 @@ using TelegramSearchBot.Service.Manage;
 
 namespace TelegramSearchBot.Controller.Manage
 {
-    class RefreshController : IOnUpdate
+    public class RefreshController : IOnUpdate
     {
         private readonly RefreshService refreshService;
         public List<Type> Dependencies => new List<Type>();

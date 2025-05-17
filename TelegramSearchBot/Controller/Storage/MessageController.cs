@@ -12,7 +12,7 @@ using Telegram.Bot.Types.Enums;
 
 namespace TelegramSearchBot.Controller.Storage
 {
-    class MessageController : IOnUpdate
+    public class MessageController : IOnUpdate
     {
         private readonly MessageService _messageService;
         private readonly IMediator _mediator;

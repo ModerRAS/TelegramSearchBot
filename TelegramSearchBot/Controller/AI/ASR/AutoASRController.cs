@@ -17,7 +17,7 @@ using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Controller.AI.ASR
 {
-    class AutoASRController : IOnUpdate
+    public class AutoASRController : IOnUpdate
     {
         private readonly AutoASRService autoASRService;
         private readonly MessageService messageService;

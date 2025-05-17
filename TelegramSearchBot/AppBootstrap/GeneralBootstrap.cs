@@ -120,16 +120,6 @@ namespace TelegramSearchBot.AppBootstrap
             .AddClasses(classes => classes.AssignableTo<IOnUpdate>())
             .AsImplementedInterfaces()
             .WithTransientLifetime()
-
-            .FromAssemblyOf<IPreUpdate>()
-            .AddClasses(classes => classes.AssignableTo<IPreUpdate>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
-
-            .FromAssemblyOf<IOnCallbackQuery>()
-            .AddClasses(classes => classes.AssignableTo<IOnCallbackQuery>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
             );
 
         }
