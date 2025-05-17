@@ -17,5 +17,8 @@ namespace TelegramSearchBot.Model.Data
         public bool? IsPremium { get; set; }
         public bool? IsBot { get; set; }
 
+        // 导航属性
+        public virtual ICollection<Message> FromMessages { get; set; }
+        public virtual ICollection<Message> ReplyToMessages { get; set; }
     }
 }

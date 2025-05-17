@@ -31,7 +31,31 @@ namespace TelegramSearchBot.Model
                 .HasIndex(e => e.CacheKey)
                 .IsUnique();
             
-            // You can add other configurations here if needed
+            // Configure Message foreign keys
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.FromUser)
+                .WithMany(u => u.FromMessages)
+                .HasForeignKey(m => m.FromUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.ReplyToUser)
+                .WithMany(u => u.ReplyToMessages)
+                .HasForeignKey(m => m.ReplyToUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.Group)
+                .WithMany(g => g.Messages)
+                .HasForeignKey(m => m.GroupId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.ReplyToMessage)
+                .WithMany()
+                .HasForeignKey(m => new { m.GroupId, m.ReplyToMessageId })
+                .HasPrincipalKey(m => new { m.GroupId, m.MessageId })
+                .OnDelete(DeleteBehavior.Restrict);
         }
         public DbSet<Message> Messages { get; set; }
         public DbSet<UserWithGroup> UsersWithGroup { get; set; }
