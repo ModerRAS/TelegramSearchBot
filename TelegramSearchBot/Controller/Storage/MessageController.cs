@@ -28,43 +28,9 @@ namespace TelegramSearchBot.Controller.Storage
 
         public async Task ExecuteAsync(PipelineContext p) {
             var e = p.Update;
-            // Store the message first
-            await StoreMessageAsync(e);
+            string ToAdd = e?.Message?.Text ?? e?.Message?.Caption ?? string.Empty;
 
-            string? messageText = e?.Message?.Text ?? e?.Message?.Caption;
-
-            if (string.IsNullOrWhiteSpace(messageText))
-            {
-                return;
-            }
-            
-            if (messageText.Length > 3 && messageText.StartsWith("搜索 "))
-            {
-                return;
-            }
-
-            if (e.Message != null) 
-            {
-                 // Pass the full Message object to the constructor
-                 await _mediator.Publish(new TextMessageReceivedNotification(e.Message));
-            }
-        }
-        
-        private async Task StoreMessageAsync(Update e)
-        {
-            string ToAdd;
-            if (!string.IsNullOrEmpty(e?.Message?.Text))
-            {
-                ToAdd = e.Message.Text;
-            }
-            else if (!string.IsNullOrEmpty(e?.Message?.Caption))
-            {
-                ToAdd = e.Message.Caption;
-            }
-            else return;
-
-            await _messageService.ExecuteAsync(new MessageOption
-            {
+            p.MessageDataId = await _messageService.ExecuteAsync(new MessageOption {
                 ChatId = e.Message.Chat.Id,
                 MessageId = e.Message.MessageId,
                 UserId = e.Message.From.Id,
@@ -74,6 +40,12 @@ namespace TelegramSearchBot.Controller.Storage
                 ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
                 Chat = e.Message.Chat,
             });
+            if (e.Message != null) 
+            {
+                 // Pass the full Message object to the constructor
+                 await _mediator.Publish(new TextMessageReceivedNotification(e.Message));
+            }
         }
+        
     }
 }

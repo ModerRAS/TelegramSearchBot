@@ -9,5 +9,6 @@ namespace TelegramSearchBot.Model {
     public class PipelineContext {
         public Update Update { get; set; }
         public Dictionary<string, dynamic> PipelineCache { get; set; }
+        public long MessageDataId { get; set; }
     }
 }

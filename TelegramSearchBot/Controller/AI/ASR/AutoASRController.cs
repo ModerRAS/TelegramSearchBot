@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Controller.Download;
+using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
@@ -21,20 +22,23 @@ namespace TelegramSearchBot.Controller.AI.ASR
         private readonly AutoASRService autoASRService;
         private readonly MessageService messageService;
         private readonly ILogger<AutoASRController> logger;
+        private readonly MessageExtensionService MessageExtensionService;
 
-        public List<Type> Dependencies => new List<Type>() { typeof(DownloadAudioController), typeof(DownloadVideoController) };
+        public List<Type> Dependencies => new List<Type>() { typeof(DownloadAudioController), typeof(DownloadVideoController), typeof(MessageController) };
         public SendMessageService SendMessageService { get; set; }
         public AutoASRController(
             AutoASRService autoASRService,
             MessageService messageService,
             ILogger<AutoASRController> logger,
-            SendMessageService SendMessageService
+            SendMessageService SendMessageService,
+            MessageExtensionService messageExtensionService
             )
         {
             this.autoASRService = autoASRService;
             this.messageService = messageService;
             this.logger = logger;
             this.SendMessageService = SendMessageService;
+            MessageExtensionService = messageExtensionService;
         }
         public async Task<byte[]> GetFileAsync(Update e)
         {
@@ -92,17 +96,7 @@ namespace TelegramSearchBot.Controller.AI.ASR
                 var path = GetFilePath(e);
                 var AsrStr = await autoASRService.ExecuteAsync(path);
                 logger.LogInformation(AsrStr);
-                await messageService.ExecuteAsync(new MessageOption
-                {
-                    ChatId = e.Message.Chat.Id,
-                    MessageId = e.Message.MessageId,
-                    UserId = e.Message.From.Id,
-                    Chat = e.Message.Chat,
-                    DateTime = e.Message.Date,
-                    User = e.Message.From,
-                    ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
-                    Content = $"{e.Message?.Caption}\n{AsrStr}"
-                });
+                await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "ASR_Result", AsrStr);
                 if (AsrStr.Length > 4095)
                 {
                     await SendMessageService.SendDocument(AsrStr, $"{e.Message.MessageId}.srt", e.Message.Chat.Id, e.Message.MessageId);

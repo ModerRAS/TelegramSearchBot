@@ -43,5 +43,6 @@ namespace TelegramSearchBot.Model
         public DbSet<AppConfigurationItem> AppConfigurationItems { get; set; } // Added for BiliCookie and other app configs
         public DbSet<ShortUrlMapping> ShortUrlMappings { get; set; } = null!;
         public DbSet<TelegramFileCacheEntry> TelegramFileCacheEntries { get; set; } = null!;
+        public DbSet<MessageExtension> MessageExtensions { get; set; } = null!;
     }
 }

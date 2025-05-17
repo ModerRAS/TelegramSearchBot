@@ -18,7 +18,8 @@ using TelegramSearchBot.Model; // Added for MessageOption
 using TelegramSearchBot.Controller.Download; 
 using TelegramSearchBot.Exceptions; 
 using TelegramSearchBot.Manager; 
-using TelegramSearchBot.Service.BotAPI; // Added for SendMessageService
+using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Controller.Storage; // Added for SendMessageService
 
 namespace TelegramSearchBot.Controller.AI.QR
 {
@@ -29,15 +30,17 @@ namespace TelegramSearchBot.Controller.AI.QR
         private readonly ILogger<AutoQRController> _logger;
         private readonly IMediator _mediator;
         private readonly SendMessageService _sendMessageService;
+        private readonly MessageExtensionService MessageExtensionService;
 
-        public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
+        public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController), typeof(MessageController) };
 
         public AutoQRController(
             ILogger<AutoQRController> logger,
             AutoQRService autoQRService,
             MessageService messageService,
             IMediator mediator,
-            SendMessageService sendMessageService
+            SendMessageService sendMessageService,
+            MessageExtensionService messageExtensionService
             )
         {
             _autoQRService = autoQRService;
@@ -45,6 +48,7 @@ namespace TelegramSearchBot.Controller.AI.QR
             _logger = logger;
             _mediator = mediator;
             _sendMessageService = sendMessageService;
+            MessageExtensionService = messageExtensionService;
         }
 
         public async Task ExecuteAsync(PipelineContext p)
@@ -82,19 +86,9 @@ namespace TelegramSearchBot.Controller.AI.QR
                     e.Message.Chat.Type,
                     e.Message // Pass the original photo message as context
                 ));
-                
+
                 // 3. Storing the raw QR content as a message.
-                await _messageService.ExecuteAsync(new MessageOption()
-                {
-                    ChatId = e.Message.Chat.Id,
-                    Chat = e.Message.Chat,
-                    DateTime = e.Message.Date,
-                    User = e.Message.From,
-                    Content = qrStr, // Corrected variable name
-                    MessageId = e.Message.MessageId,
-                    ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
-                    UserId = e.Message.From.Id
-                });
+                await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "QR_Result", qrStr);
             }
             catch (Exception ex) when (
                   ex is CannotGetPhotoException ||

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Controller.Download;
+using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
@@ -24,13 +25,15 @@ namespace TelegramSearchBot.Controller.AI.OCR
         private readonly SendMessage Send;
         private readonly ILogger<AutoOCRController> logger;
         private readonly SendMessageService SendMessageService;
+        private readonly MessageExtensionService MessageExtensionService;
         public AutoOCRController(
             ITelegramBotClient botClient,
             PaddleOCRService paddleOCRService,
             SendMessage Send,
             MessageService messageService,
             ILogger<AutoOCRController> logger,
-            SendMessageService sendMessageService
+            SendMessageService sendMessageService,
+            MessageExtensionService messageExtensionService
             )
         {
             this.paddleOCRService = paddleOCRService;
@@ -39,9 +42,10 @@ namespace TelegramSearchBot.Controller.AI.OCR
             this.Send = Send;
             this.logger = logger;
             SendMessageService = sendMessageService;
+            MessageExtensionService = messageExtensionService;
         }
 
-        public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController) };
+        public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController), typeof(MessageController) };
 
         public async Task ExecuteAsync(PipelineContext p)
         {
@@ -57,17 +61,7 @@ namespace TelegramSearchBot.Controller.AI.OCR
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
                 logger.LogInformation(OcrStr);
-                await messageService.ExecuteAsync(new MessageOption
-                {
-                    ChatId = e.Message.Chat.Id,
-                    Chat = e.Message.Chat,
-                    MessageId = e.Message.MessageId,
-                    UserId = e.Message.From.Id,
-                    DateTime = e.Message.Date,
-                    User = e.Message.From,
-                    ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
-                    Content = $"{e.Message?.Caption}\n{OcrStr}"
-                });
+                await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
 
                 if (!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Length == 2 && e.Message.Caption.Equals("打印"))
                 {

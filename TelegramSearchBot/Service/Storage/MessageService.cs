@@ -30,6 +30,7 @@ namespace TelegramSearchBot.Service.Storage
             Logger = logger;
         }
 
+        [Obsolete]
         public async Task AddToLiteDB(MessageOption messageOption)
         {
             var Users = Env.Database.GetCollection<UserWithGroup>("Users");
@@ -77,7 +78,7 @@ namespace TelegramSearchBot.Service.Storage
             await lucene.WriteDocumentAsync(message);
         }
 
-        public async Task AddToSqlite(MessageOption messageOption)
+        public async Task<long> AddToSqlite(MessageOption messageOption)
         {
 
             var UserIsInGroup = from s in DataContext.UsersWithGroup
@@ -122,49 +123,35 @@ namespace TelegramSearchBot.Service.Storage
                     Type = Enum.GetName(messageOption.Chat.Type),
                 });
             }
+            var message = new Message() {
+                GroupId = messageOption.ChatId,
+                MessageId = messageOption.MessageId,
+                FromUserId = messageOption.UserId,
+                Content = messageOption.Content,
+                DateTime = messageOption.DateTime,
+            };
             if (messageOption.ReplyTo != 0)
             {
-                await DataContext.Messages.AddAsync(new Message()
-                {
-                    GroupId = messageOption.ChatId,
-                    MessageId = messageOption.MessageId,
-                    FromUserId = messageOption.UserId,
-                    Content = messageOption.Content,
-                    ReplyToMessageId = messageOption.ReplyTo,
-                    DateTime = messageOption.DateTime,
-                });
+                message.ReplyToMessageId = messageOption.ReplyTo;
+                await DataContext.Messages.AddAsync(message);
             }
             else
             {
-                await DataContext.Messages.AddAsync(new Message()
-                {
-                    GroupId = messageOption.ChatId,
-                    MessageId = messageOption.MessageId,
-                    FromUserId = messageOption.UserId,
-                    Content = messageOption.Content,
-                    DateTime = messageOption.DateTime,
-                });
+                await DataContext.Messages.AddAsync(message);
             }
             await DataContext.SaveChangesAsync();
+            return message.Id;
+            
         }
 
-        public async Task ExecuteAsync(MessageOption messageOption)
+        public async Task<long> ExecuteAsync(MessageOption messageOption)
         {
             Logger.LogInformation($"UserId: {messageOption.UserId}\nUserName: {messageOption.User.Username} {messageOption.User.FirstName} {messageOption.User.LastName}\nChatId: {messageOption.ChatId}\nChatName: {messageOption.Chat.Username}\nMessage: {messageOption.MessageId} {messageOption.Content}");
             using (await _asyncLock.LockAsync())
             {
-                try
-                {
-                    await AddToSqlite(messageOption);
-                }
-                catch (InvalidOperationException e)
-                {
-                    await Task.Delay(5000);
-                    await AddToSqlite(messageOption);
-
-                }
-                //await AddToLiteDB(messageOption);
+                var messageDataId = await AddToSqlite(messageOption);
                 await AddToLucene(messageOption);
+                return messageDataId;
             }
         }
     }
