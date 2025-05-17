@@ -16,10 +16,12 @@ namespace TelegramSearchBot.Service.Manage
     {
         public new string ServiceName => "RefreshService";
         private readonly ILogger<RefreshService> _logger;
+        private readonly ChatImportService _chatImport;
 
-        public RefreshService(ILogger<RefreshService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context) : base(logger, lucene, Send, context)
+        public RefreshService(ILogger<RefreshService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context, ChatImportService chatImport) : base(logger, lucene, Send, context)
         {
             _logger = logger;
+            _chatImport = chatImport;
         }
 
         private async Task RebuildIndex()
@@ -101,6 +103,10 @@ namespace TelegramSearchBot.Service.Manage
             if (Command.Length == 4 && Command.Equals("迁移数据"))
             {
                 await CopyLiteDbToSqlite();
+            }
+            if (Command.Length == 6 && Command.Equals("导入聊天记录"))
+            {
+                await _chatImport.ExecuteAsync("导入聊天记录");
             }
         }
     }

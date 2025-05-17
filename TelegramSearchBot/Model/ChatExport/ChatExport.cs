@@ -57,5 +57,9 @@ namespace TelegramSearchBot.Model.ChatExport
     {
         public string Type { get; set; }
         public string Text { get; set; }
+        public string Href { get; set; }
+        public string Language { get; set; }
+        [JsonProperty("document_id")]
+        public string DocumentId { get; set; }
     }
 }
