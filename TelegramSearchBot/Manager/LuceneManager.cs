@@ -117,45 +117,83 @@ namespace TelegramSearchBot.Manager
             return writer;
         }
 
-        private List<string> GetKeyWords(string q) {
-            List<string> keyworkds = new List<string>();
-            Analyzer analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
-            using (var ts = analyzer.GetTokenStream(null, q)) {
-                ts.Reset();
-                var ct = ts.GetAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
-
-                while (ts.IncrementToken()) {
-                    StringBuilder keyword = new StringBuilder();
-                    for (int i = 0; i < ct.Length; i++) {
-                        keyword.Append(ct.Buffer[i]);
-                    }
-                    string item = keyword.ToString();
-                    if (!keyworkds.Contains(item)) {
-                        keyworkds.Add(item);
+        private (BooleanQuery, string[]) ParseQuery(string q, IndexReader reader) {
+            var query = new BooleanQuery();
+            var analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
+            
+            // 处理引号包裹的精确匹配
+            var phraseMatches = System.Text.RegularExpressions.Regex.Matches(q, "\"([^\"]+)\"");
+            foreach (System.Text.RegularExpressions.Match match in phraseMatches) {
+                var phraseQuery = new PhraseQuery();
+                using (var ts = analyzer.GetTokenStream(null, match.Groups[1].Value)) {
+                    ts.Reset();
+                    var ct = ts.GetAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
+                    int position = 0;
+                    while (ts.IncrementToken()) {
+                        phraseQuery.Add(new Term("Content", ct.ToString()), position++);
                     }
                 }
+                query.Add(phraseQuery, Occur.MUST);
+                q = q.Replace(match.Value, ""); // 移除已处理的短语
             }
-            return keyworkds;
+
+            // 处理字段指定搜索 field:value
+            var fieldMatches = System.Text.RegularExpressions.Regex.Matches(q, @"(\w+):([^\s]+)");
+            foreach (System.Text.RegularExpressions.Match match in fieldMatches) {
+                var field = match.Groups[1].Value;
+                var value = match.Groups[2].Value;
+                
+                if (field.Equals("content", StringComparison.OrdinalIgnoreCase)) {
+                    field = "Content";
+                }
+                
+                query.Add(new TermQuery(new Term(field, value)), Occur.MUST);
+                q = q.Replace(match.Value, ""); // 移除已处理的字段搜索
+            }
+
+            // 处理排除关键词 -keyword
+            var excludeMatches = System.Text.RegularExpressions.Regex.Matches(q, @"-([^\s]+)");
+            foreach (System.Text.RegularExpressions.Match match in excludeMatches) {
+                var term = new Term("Content", match.Groups[1].Value);
+                query.Add(new TermQuery(term), Occur.MUST_NOT);
+                q = q.Replace(match.Value, ""); // 移除已处理的排除词
+            }
+
+            // 处理剩余的关键词
+            var remainingTerms = q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var term in remainingTerms) {
+                if (string.IsNullOrWhiteSpace(term)) continue;
+                
+                var termQuery = new TermQuery(new Term("Content", term));
+                query.Add(termQuery, Occur.SHOULD);
+            }
+
+            return (query, remainingTerms);
         }
         public (int, List<Message>) Search(string q, long GroupId, int Skip, int Take) {
             IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
             var searcher = new IndexSearcher(reader);
 
-            var keyWordQuery = new BooleanQuery();
-            // 搜索内容和扩展字段
-            foreach (var item in GetKeyWords(q)) {
-                // 搜索内容字段
-                keyWordQuery.Add(new TermQuery(new Term("Content", item)), Occur.SHOULD);
-                
-                // 搜索所有扩展字段
-                var fields = MultiFields.GetIndexedFields(reader);
-                foreach (var field in fields) {
-                    if (field.StartsWith("Ext_")) {
-                        keyWordQuery.Add(new TermQuery(new Term(field, item)), Occur.SHOULD);
+            var (query, searchTerms) = ParseQuery(q, reader);
+            
+            // 添加扩展字段搜索
+            var fields = MultiFields.GetIndexedFields(reader);
+            foreach (var field in fields) {
+                if (field.StartsWith("Ext_")) {
+                    var terms = MultiFields.GetTerms(reader, field);
+                    if (terms != null) {
+                        var extQuery = new BooleanQuery();
+                        foreach (var term in searchTerms) {
+                            if (!string.IsNullOrWhiteSpace(term)) {
+                                extQuery.Add(new TermQuery(new Term(field, term)), Occur.SHOULD);
+                            }
+                        }
+                        query.Add(extQuery, Occur.SHOULD);
                     }
                 }
             }
-            var top = searcher.Search(keyWordQuery, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
+
+            var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
             var total = top.TotalHits;
             var hits = top.ScoreDocs;
 
