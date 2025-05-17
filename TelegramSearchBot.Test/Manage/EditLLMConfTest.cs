@@ -92,7 +92,10 @@ namespace TelegramSearchBot.Test.Manage {
 
             var result3 = await _service.ExecuteAsync("http://test.com", chatId);
             Assert.IsTrue(result3.Item1);
-            Assert.AreEqual("请选择渠道类型：\n1. OpenAI\n2. Ollama", result3.Item2);
+            StringAssert.Contains(result3.Item2, "请选择渠道类型：");
+            StringAssert.Contains(result3.Item2, "1. OpenAI");
+            StringAssert.Contains(result3.Item2, "2. Ollama"); 
+            StringAssert.Contains(result3.Item2, "3. Gemini");
 
             var result4 = await _service.ExecuteAsync("1", chatId);
             Assert.IsTrue(result4.Item1);
@@ -291,7 +294,10 @@ namespace TelegramSearchBot.Test.Manage {
 
             var result3 = await _service.ExecuteAsync("http://test.com", chatId);
             Assert.IsTrue(result3.Item1);
-            Assert.AreEqual("请选择渠道类型：\n1. OpenAI\n2. Ollama", result3.Item2);
+            StringAssert.Contains(result3.Item2, "请选择渠道类型：");
+            StringAssert.Contains(result3.Item2, "1. OpenAI");
+            StringAssert.Contains(result3.Item2, "2. Ollama");
+            StringAssert.Contains(result3.Item2, "3. Gemini");
 
             var result4 = await _service.ExecuteAsync("1", chatId);
             Assert.IsTrue(result4.Item1);
