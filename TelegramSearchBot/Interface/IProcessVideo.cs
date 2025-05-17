@@ -24,7 +24,6 @@ namespace TelegramSearchBot.Interface {
                 Name.ToLower().EndsWith(".m4v") ||
                 Name.ToLower().EndsWith(".avi") ||
                 Name.ToLower().EndsWith(".webm") ||
-                Name.ToLower().EndsWith(".opus") ||
                 Name.ToLower().EndsWith(".3gp") ||
                 Name.ToLower().EndsWith(".mpg")) {
                 return true;
