@@ -64,8 +64,10 @@ namespace TelegramSearchBot.Controller.AI.OCR
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
-                logger.LogInformation(OcrStr);
-                await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
+                if (!string.IsNullOrWhiteSpace(OcrStr)) {
+                    logger.LogInformation(OcrStr);
+                    await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
+                }
             }
             catch (Exception ex) when (
                   ex is CannotGetPhotoException ||
