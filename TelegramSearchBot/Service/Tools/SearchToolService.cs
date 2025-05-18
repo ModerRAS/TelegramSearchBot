@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore; // For EF Core operations
 using TelegramSearchBot.Interface; // Added for IService
 using System.Globalization;
 using TelegramSearchBot.Attributes; // For DateTime parsing
+using TelegramSearchBot.Service.Storage; // For MessageExtensionService
 
 namespace TelegramSearchBot.Service.Tools
 {
@@ -28,6 +29,9 @@ namespace TelegramSearchBot.Service.Tools
     {
         public long MessageId { get; set; }
         public string ContentPreview { get; set; }
+        public List<HistoryMessageItem> ContextBefore { get; set; }
+        public List<HistoryMessageItem> ContextAfter { get; set; }
+        public List<MessageExtension> Extensions { get; set; }
     }
 
     // DTOs for History Query Result
@@ -48,6 +52,7 @@ namespace TelegramSearchBot.Service.Tools
         public string SenderName { get; set; } // Added sender name
         public DateTime DateTime { get; set; }
         public long? ReplyToMessageId { get; set; } // Made nullable
+        public List<MessageExtension> Extensions { get; set; }
     }
 
     public class SearchToolService : IService
@@ -56,15 +61,17 @@ namespace TelegramSearchBot.Service.Tools
 
         private readonly LuceneManager _luceneManager;
         private readonly DataDbContext _dbContext;
+        private readonly MessageExtensionService _messageExtensionService;
 
-        public SearchToolService(LuceneManager luceneManager, DataDbContext dbContext)
+        public SearchToolService(LuceneManager luceneManager, DataDbContext dbContext, MessageExtensionService messageExtensionService)
         {
             _luceneManager = luceneManager;
             _dbContext = dbContext;
+            _messageExtensionService = messageExtensionService;
         }
 
         [McpTool("Searches indexed messages within the current chat using keywords. Supports pagination.")]
-        public SearchToolResult SearchMessagesInCurrentChat(
+        public async Task<SearchToolResult> SearchMessagesInCurrentChatAsync(
             [McpParameter("The text query (keywords) to search for messages.")] string query,
             ToolContext toolContext,
             [McpParameter("The page number for pagination (e.g., 1, 2, 3...). Defaults to 1 if not specified.", IsRequired = false)] int page = 1,
@@ -93,11 +100,73 @@ namespace TelegramSearchBot.Service.Tools
                 return new SearchToolResult { Query = query, TotalFound = 0, CurrentPage = page, PageSize = pageSize, Results = new List<SearchResultItem>(), Note = $"An error occurred during the keyword search: {ex.Message}" };
             }
 
-            var resultItems = searchResult.messages.Select(msg => new SearchResultItem
+            var resultItems = new List<SearchResultItem>();
+            
+            foreach (var msg in searchResult.messages)
             {
-                MessageId = msg.MessageId,
-                ContentPreview = msg.Content?.Length > 200 ? msg.Content.Substring(0, 200) + "..." : msg.Content
-            }).ToList();
+                // Get context messages
+                var messagesBefore = await _dbContext.Messages
+                    .Include(m => m.MessageExtensions)
+                    .Where(m => m.GroupId == chatId && m.DateTime < msg.DateTime)
+                    .OrderByDescending(m => m.DateTime)
+                    .Take(5)
+                    .ToListAsync();
+
+                var messagesAfter = await _dbContext.Messages
+                    .Include(m => m.MessageExtensions)
+                    .Where(m => m.GroupId == chatId && m.DateTime > msg.DateTime)
+                    .OrderBy(m => m.DateTime)
+                    .Take(5)
+                    .ToListAsync();
+
+                // Get sender info for context messages
+                var senderIds = messagesBefore.Concat(messagesAfter)
+                    .Select(m => m.FromUserId)
+                    .Distinct()
+                    .ToList();
+
+                var senders = new Dictionary<long, UserData>();
+                if (senderIds.Any())
+                {
+                    senders = await _dbContext.UserData
+                        .Where(u => senderIds.Contains(u.Id))
+                        .ToDictionaryAsync(u => u.Id);
+                }
+
+                // Map to HistoryMessageItem format
+                var contextBefore = messagesBefore.Select(m => new HistoryMessageItem
+                {
+                    MessageId = m.MessageId,
+                    Content = m.Content,
+                    SenderUserId = m.FromUserId,
+                    SenderName = senders.TryGetValue(m.FromUserId, out var user) 
+                        ? $"{user.FirstName} {user.LastName}".Trim() 
+                        : $"User({m.FromUserId})",
+                    DateTime = m.DateTime,
+                    ReplyToMessageId = m.ReplyToMessageId == 0 ? (long?)null : m.ReplyToMessageId
+                }).ToList();
+
+                var contextAfter = messagesAfter.Select(m => new HistoryMessageItem
+                {
+                    MessageId = m.MessageId,
+                    Content = m.Content,
+                    SenderUserId = m.FromUserId,
+                    SenderName = senders.TryGetValue(m.FromUserId, out var user) 
+                        ? $"{user.FirstName} {user.LastName}".Trim() 
+                        : $"User({m.FromUserId})",
+                    DateTime = m.DateTime,
+                    ReplyToMessageId = m.ReplyToMessageId == 0 ? (long?)null : m.ReplyToMessageId
+                }).ToList();
+
+                resultItems.Add(new SearchResultItem
+                {
+                    MessageId = msg.MessageId,
+                    ContentPreview = msg.Content?.Length > 200 ? msg.Content.Substring(0, 200) + "..." : msg.Content,
+                    ContextBefore = contextBefore,
+                    ContextAfter = contextAfter,
+                    Extensions = msg.MessageExtensions?.ToList() ?? new List<MessageExtension>()
+                });
+            }
 
             return new SearchToolResult { Query = query, TotalFound = searchResult.totalHits, CurrentPage = page, PageSize = pageSize, Results = resultItems, Note = searchResult.totalHits == 0 ? "No messages found matching your query." : null };
         }
@@ -191,7 +260,8 @@ namespace TelegramSearchBot.Service.Tools
 
                 int totalHits = await query.CountAsync();
 
-                var messages = await query.OrderByDescending(m => m.DateTime)
+                var messages = await query.Include(m => m.MessageExtensions)
+                                        .OrderByDescending(m => m.DateTime)
                                         .Skip(skip)
                                         .Take(take)
                                         .ToListAsync();
@@ -205,15 +275,78 @@ namespace TelegramSearchBot.Service.Tools
                                          .ToDictionaryAsync(u => u.Id); 
                 }
 
-                var resultItems = messages.Select(msg => new HistoryMessageItem
+                var resultItems = new List<HistoryMessageItem>();
+                foreach (var msg in messages)
                 {
-                    MessageId = msg.MessageId,
-                    Content = msg.Content,
-                    SenderUserId = msg.FromUserId,
-                    SenderName = senders.TryGetValue(msg.FromUserId, out var user) ? $"{user.FirstName} {user.LastName}".Trim() : $"User({msg.FromUserId})",
-                    DateTime = msg.DateTime,
-                    ReplyToMessageId = msg.ReplyToMessageId == 0 ? (long?)null : msg.ReplyToMessageId
-                }).ToList();
+                    // Get context messages
+                    var messagesBefore = await _dbContext.Messages
+                        .Include(m => m.MessageExtensions)
+                        .Where(m => m.GroupId == chatId && m.DateTime < msg.DateTime)
+                        .OrderByDescending(m => m.DateTime)
+                        .Take(5)
+                        .ToListAsync();
+
+                    var messagesAfter = await _dbContext.Messages
+                        .Include(m => m.MessageExtensions)
+                        .Where(m => m.GroupId == chatId && m.DateTime > msg.DateTime)
+                        .OrderBy(m => m.DateTime)
+                        .Take(5)
+                        .ToListAsync();
+
+                    // Get sender info for context messages
+                    var contextSenderIds = messagesBefore.Concat(messagesAfter)
+                        .Select(m => m.FromUserId)
+                        .Distinct()
+                        .ToList();
+
+                    var contextSenders = new Dictionary<long, UserData>();
+                    if (contextSenderIds.Any())
+                    {
+                        contextSenders = await _dbContext.UserData
+                            .Where(u => contextSenderIds.Contains(u.Id))
+                            .ToDictionaryAsync(u => u.Id);
+                    }
+
+                    // Map to HistoryMessageItem format
+                    var contextBefore = messagesBefore.Select(m => new HistoryMessageItem
+                    {
+                        MessageId = m.MessageId,
+                        Content = m.Content,
+                        SenderUserId = m.FromUserId,
+                        SenderName = contextSenders.TryGetValue(m.FromUserId, out var user) 
+                            ? $"{user.FirstName} {user.LastName}".Trim() 
+                            : $"User({m.FromUserId})",
+                        DateTime = m.DateTime,
+                        ReplyToMessageId = m.ReplyToMessageId == 0 ? (long?)null : m.ReplyToMessageId,
+                        Extensions = m.MessageExtensions?.ToList() ?? new List<MessageExtension>()
+                    }).ToList();
+
+                    var contextAfter = messagesAfter.Select(m => new HistoryMessageItem
+                    {
+                        MessageId = m.MessageId,
+                        Content = m.Content,
+                        SenderUserId = m.FromUserId,
+                        SenderName = contextSenders.TryGetValue(m.FromUserId, out var user) 
+                            ? $"{user.FirstName} {user.LastName}".Trim() 
+                            : $"User({m.FromUserId})",
+                        DateTime = m.DateTime,
+                        ReplyToMessageId = m.ReplyToMessageId == 0 ? (long?)null : m.ReplyToMessageId,
+                        Extensions = m.MessageExtensions?.ToList() ?? new List<MessageExtension>()
+                    }).ToList();
+
+                    resultItems.Add(new HistoryMessageItem
+                    {
+                        MessageId = msg.MessageId,
+                        Content = msg.Content,
+                        SenderUserId = msg.FromUserId,
+                        SenderName = senders.TryGetValue(msg.FromUserId, out var user) 
+                            ? $"{user.FirstName} {user.LastName}".Trim() 
+                            : $"User({msg.FromUserId})",
+                        DateTime = msg.DateTime,
+                        ReplyToMessageId = msg.ReplyToMessageId == 0 ? (long?)null : msg.ReplyToMessageId,
+                        Extensions = msg.MessageExtensions?.ToList() ?? new List<MessageExtension>()
+                    });
+                }
 
                 return new HistoryQueryResult
                 {
