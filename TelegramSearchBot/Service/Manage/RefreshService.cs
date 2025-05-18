@@ -13,6 +13,7 @@ using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.AI.ASR;
 using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.AI.QR;
+using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Manage
@@ -26,16 +27,18 @@ namespace TelegramSearchBot.Service.Manage
         private readonly MessageExtensionService _messageExtensionService;
         private readonly PaddleOCRService _paddleOCRService;
         private readonly AutoQRService _autoQRService;
+        private readonly GeneralLLMService _generalLLMService;
 
-        public RefreshService(ILogger<RefreshService> logger, 
-                            LuceneManager lucene, 
-                            SendMessage Send, 
+        public RefreshService(ILogger<RefreshService> logger,
+                            LuceneManager lucene,
+                            SendMessage Send,
                             DataDbContext context,
-                            ChatImportService chatImport, 
-                            AutoASRService autoASRService, 
+                            ChatImportService chatImport,
+                            AutoASRService autoASRService,
                             MessageExtensionService messageExtensionService,
                             PaddleOCRService paddleOCRService,
-                            AutoQRService autoQRService) : base(logger, lucene, Send, context)
+                            AutoQRService autoQRService,
+                            GeneralLLMService generalLLMService) : base(logger, lucene, Send, context)
         {
             _logger = logger;
             _chatImport = chatImport;
@@ -43,6 +46,7 @@ namespace TelegramSearchBot.Service.Manage
             _messageExtensionService = messageExtensionService;
             _paddleOCRService = paddleOCRService;
             _autoQRService = autoQRService;
+            _generalLLMService = generalLLMService;
         }
 
         private async Task RebuildIndex()
@@ -145,7 +149,7 @@ namespace TelegramSearchBot.Service.Manage
                                 }
                                 catch (Exception ex)
                                 {
-                                    await Send.Log($"处理音频失败: {chatId}/{messageId}, 错误: {ex.Message}");
+                                    await Send.Log($"处理图片QR码失败: {chatId}/{messageId}, 错误: {ex.Message}");
                                 }
                             }
                         }
@@ -154,69 +158,51 @@ namespace TelegramSearchBot.Service.Manage
             }
         }
 
-        private async Task ScanAndProcessImageFiles()
-        {
+        private async Task ScanAndProcessImageFiles() {
             var imageDir = Path.Combine(Env.WorkDir, "Photos");
-            if (!Directory.Exists(imageDir))
-            {
+            if (!Directory.Exists(imageDir)) {
                 await Send.Log($"图片目录不存在: {imageDir}");
                 return;
             }
 
             var chatDirs = Directory.GetDirectories(imageDir);
-            foreach (var chatDir in chatDirs)
-            {
+            foreach (var chatDir in chatDirs) {
                 var chatId = long.Parse(Path.GetFileName(chatDir));
                 var imageFiles = Directory.GetFiles(chatDir);
 
-                foreach (var imageFile in imageFiles)
-                {
+                foreach (var imageFile in imageFiles) {
                     var fileName = Path.GetFileNameWithoutExtension(imageFile);
-                    if (long.TryParse(fileName, out var messageId))
-                    {
+                    if (long.TryParse(fileName, out var messageId)) {
                         var messageDataId = await _messageExtensionService.GetMessageIdByMessageIdAndGroupId(messageId, chatId);
-                        if (messageDataId.HasValue)
-                        {
+                        if (messageDataId.HasValue) {
                             var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
-                            
+
                             // 处理OCR
-                            if (!extensions.Any(x => x.Name == "OCR_Result"))
-                            {
+                            if (!extensions.Any(x => x.Name == "OCR_Result")) {
                                 await Send.Log($"开始处理图片OCR: {chatId}/{messageId}");
-                                try
-                                {
+                                try {
                                     var ocrResult = await _paddleOCRService.ExecuteAsync(new MemoryStream(await File.ReadAllBytesAsync(imageFile)));
                                     await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "OCR_Result", ocrResult);
-                                    if (!string.IsNullOrEmpty(ocrResult))
-                                    {
+                                    if (!string.IsNullOrEmpty(ocrResult)) {
                                         await Send.Log($"成功处理图片OCR: {chatId}/{messageId}");
-                                    }
-                                    else
-                                    {
+                                    } else {
                                         await Send.Log($"图片OCR处理失败或未找到文本: {chatId}/{messageId}");
                                     }
-                                }
-                                catch (Exception ex)
-                                {
+                                } catch (Exception ex) {
                                     await Send.Log($"处理图片OCR失败: {chatId}/{messageId}, 错误: {ex.Message}");
                                 }
                             }
 
                             // 处理QR码
-                            if (!extensions.Any(x => x.Name == "QR_Result"))
-                            {
+                            if (!extensions.Any(x => x.Name == "QR_Result")) {
                                 await Send.Log($"开始处理图片QR码: {chatId}/{messageId}");
-                                try
-                                {
+                                try {
                                     var qrResult = await _autoQRService.ExecuteAsync(imageFile);
-                                    if (!string.IsNullOrEmpty(qrResult))
-                                    {
+                                    if (!string.IsNullOrEmpty(qrResult)) {
                                         await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "QR_Result", qrResult);
                                         await Send.Log($"成功处理图片QR码: {chatId}/{messageId}");
                                     }
-                                }
-                                catch (Exception ex)
-                                {
+                                } catch (Exception ex) {
                                     await Send.Log($"处理图片QR码失败: {chatId}/{messageId}, 错误: {ex.Message}");
                                 }
                             }
@@ -272,34 +258,93 @@ namespace TelegramSearchBot.Service.Manage
 
         public async Task ExecuteAsync(string Command)
         {
-            if (Command.Length == 4 && Command.Equals("重建索引"))
+            if (Command.Equals("重建索引"))
             {
                 await RebuildIndex();
             }
-            if (Command.Length == 4 && Command.Equals("导入数据"))
+            if (Command.Equals("导入数据"))
             {
                 await ImportAll();
             }
-            if (Command.Length == 4 && Command.Equals("迁移数据"))
+            if (Command.Equals("迁移数据"))
             {
                 await CopyLiteDbToSqlite();
             }
-            if (Command.Length == 6 && Command.Equals("导入聊天记录"))
+            if (Command.Equals("导入聊天记录"))
             {
                 await _chatImport.ExecuteAsync("导入聊天记录");
             }
-            if (Command.Length == 6 && Command.Equals("扫描音频文件"))
+            if (Command.Equals("扫描音频文件"))
             {
                 await ScanAndProcessAudioFiles();
             }
-            if (Command.Length == 6 && Command.Equals("扫描图片文件"))
+            if (Command.Equals("扫描图片文件"))
             {
                 await ScanAndProcessImageFiles();
             }
-            if (Command.Length == 6 && Command.Equals("扫描视频文件"))
+            if (Command.Equals("扫描视频文件"))
             {
                 await ScanAndProcessVideoFiles();
             }
+            if (Command.Equals("扫描图片Alt"))
+            {
+                await ScanAndProcessAltImageFiles();
+            }
         }
+
+        private async Task ScanAndProcessAltImageFiles()
+        {
+            var imageDir = Path.Combine(Env.WorkDir, "Photos");
+            if (!Directory.Exists(imageDir))
+            {
+                await Send.Log($"图片目录不存在: {imageDir}");
+                return;
+            }
+
+            var chatDirs = Directory.GetDirectories(imageDir);
+            foreach (var chatDir in chatDirs)
+            {
+                var chatId = long.Parse(Path.GetFileName(chatDir));
+                var imageFiles = Directory.GetFiles(chatDir);
+
+                foreach (var imageFile in imageFiles)
+                {
+                    var fileName = Path.GetFileNameWithoutExtension(imageFile);
+                    if (long.TryParse(fileName, out var messageId))
+                    {
+                        var messageDataId = await _messageExtensionService.GetMessageIdByMessageIdAndGroupId(messageId, chatId);
+                        if (messageDataId.HasValue)
+                        {
+                            var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
+
+                            // 处理Alt信息
+                            if (!extensions.Any(x => x.Name == "Alt_Result"))
+                            {
+                                await Send.Log($"开始处理图片Alt: {chatId}/{messageId}");
+                                try
+                                {
+                                    var imageBytes = await File.ReadAllBytesAsync(imageFile);
+                                    var altResult = await _generalLLMService.AnalyzeImageAsync(imageBytes, chatId);
+                                    await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "Alt_Result", altResult);
+                                    if (!string.IsNullOrEmpty(altResult))
+                                    {
+                                        await Send.Log($"成功处理图片Alt: {chatId}/{messageId}");
+                                    }
+                                    else
+                                    {
+                                        await Send.Log($"图片Alt处理失败或未生成描述: {chatId}/{messageId}");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    await Send.Log($"处理图片Alt失败: {chatId}/{messageId}, 错误: {ex.Message}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     }
 }
