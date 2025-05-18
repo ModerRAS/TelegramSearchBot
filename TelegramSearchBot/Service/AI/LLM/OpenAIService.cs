@@ -22,6 +22,7 @@ using System.ClientModel.Primitives;
 using System.Net;
 using System.ClientModel;
 using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Service.AI.LLM 
 {
@@ -34,12 +35,16 @@ namespace TelegramSearchBot.Service.AI.LLM
         public string BotName { get; set; }
         private DataDbContext _dbContext;
 
+        private readonly MessageExtensionService _messageExtensionService;
+
         public OpenAIService(
             DataDbContext context,
-            ILogger<OpenAIService> logger)
+            ILogger<OpenAIService> logger,
+            MessageExtensionService messageExtensionService)
         {
             _logger = logger;
             _dbContext = context;
+            _messageExtensionService = messageExtensionService;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
         }
 
@@ -152,7 +157,19 @@ namespace TelegramSearchBot.Service.AI.LLM
                     str.Append($"Reply to msg {message.ReplyToMessageId}"); 
                     str.Append('）');
                 }
-                str.Append('：').Append(message.Content).Append("\n"); 
+                str.Append('：').Append(message.Content).Append("\n");
+
+                // Add message extensions if any
+                var extensions = await _messageExtensionService.GetByMessageDataIdAsync(message.Id);
+                if (extensions != null && extensions.Any())
+                {
+                    str.Append("[扩展信息：");
+                    foreach (var ext in extensions)
+                    {
+                        str.Append($"{ext.Name}={ext.Value}; ");
+                    }
+                    str.Append("]\n");
+                }
 
                 previous = message; 
             }
