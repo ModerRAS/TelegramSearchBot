@@ -221,6 +221,8 @@ namespace TelegramSearchBot.Service.AI.LLM
             ollama.SelectedModel = modelName;
             var prompt = "请根据这张图片生成一句准确、简洁的中文alt文本，突出画面中最重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。";
             var chat = new Chat(ollama);
+            chat.Options = new RequestOptions();
+            chat.Options.Temperature = 0.1f;
             if (!await CheckAndPullModelAsync(ollama, modelName))
             {
                 return $"Error: Could not check or pull Ollama model '{modelName}'.";
