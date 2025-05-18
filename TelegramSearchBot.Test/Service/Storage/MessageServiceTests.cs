@@ -51,7 +51,8 @@ namespace TelegramSearchBot.Test.Service.Storage
             // We mock SendMessage itself because its methods (like Log, AddTask) might be complex or have side effects
             // not relevant to MessageService's direct logic.
             // If SendMessage methods were virtual, we could mock them. Here, we provide its dependency.
-            _mockSendMessage = new Mock<SendMessage>(_mockTelegramBotClient.Object); 
+            var mockSendMessageLogger = new Mock<ILogger<SendMessage>>();
+            _mockSendMessage = new Mock<SendMessage>(_mockTelegramBotClient.Object, mockSendMessageLogger.Object);
             
             // LuceneManager constructor requires SendMessage
             // Similar to SendMessage, if LuceneManager's methods were virtual, we could mock them.

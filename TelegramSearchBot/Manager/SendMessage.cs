@@ -1,4 +1,5 @@
-﻿using RateLimiter;
+﻿using Microsoft.Extensions.Logging;
+using RateLimiter;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -17,23 +18,26 @@ namespace TelegramSearchBot.Manager
         private readonly TimeLimiter GroupLimit;
         private readonly TimeLimiter GlobalLimit;
         private readonly ITelegramBotClient botClient;
+        private readonly ILogger<SendMessage> logger;
         //private List<Task> tasks;
-        public SendMessage(ITelegramBotClient botClient)
+        public SendMessage(ITelegramBotClient botClient, ILogger<SendMessage> logger)
         {
             //queue = new ConcurrentQueue<SendModel>();
             GroupLimit = TimeLimiter.GetFromMaxCountByInterval(20, TimeSpan.FromMinutes(1));
             GlobalLimit = TimeLimiter.GetFromMaxCountByInterval(30, TimeSpan.FromSeconds(1));
             tasks = new ConcurrentQueue<Task>();
             this.botClient = botClient;
+            this.logger = logger;
         }
         public async Task Log(string Text)
         {
+            logger.LogInformation(Text);
             await AddTask(async () =>
             {
                 await botClient.SendMessage(
                     chatId: Env.AdminId,
                     disableNotification: true,
-                    parseMode: ParseMode.MarkdownV2,
+                    parseMode: ParseMode.None,
                     text: Text
                     );
             }, false);
