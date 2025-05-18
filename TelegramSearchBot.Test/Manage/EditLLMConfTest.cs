@@ -11,6 +11,7 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Test.Manage {
     [TestClass]
@@ -52,7 +53,8 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync(true);
             
             var loggerMock = new Mock<ILogger<OpenAIService>>();
-            _openAIServiceMock = new Mock<OpenAIService>(_context, loggerMock.Object);
+            var messageExtensionServiceMock = new Mock<MessageExtensionService>(_context);
+            _openAIServiceMock = new Mock<OpenAIService>(_context, loggerMock.Object, messageExtensionServiceMock.Object);
             _openAIServiceMock.Setup(o => o.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "model1", "model2" });
             
