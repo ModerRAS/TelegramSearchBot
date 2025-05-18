@@ -12,12 +12,14 @@ using System.Text.RegularExpressions; // For Regex
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using System.Reflection;
+using System.IO; // For File operations
 using Newtonsoft.Json; // Using Newtonsoft
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
-using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
+using TelegramSearchBot.Service.Tools;
+using SkiaSharp; // Added for DuckDuckGoSearchResult
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -204,6 +206,58 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        // ConvertToolResultToString has been moved to McpToolHelper
+    // ConvertToolResultToString has been moved to McpToolHelper
+
+        public async Task<string> AnalyzeImageAsync(byte[] imageBytes, string modelName, LLMChannel channel)
+        {
+            if (string.IsNullOrWhiteSpace(modelName))
+            {
+                modelName = "gemma3:27b";
+            }
+
+            var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
+            httpClient.BaseAddress = new Uri(channel.Gateway);
+            var ollama = new OllamaApiClient(httpClient, modelName);
+            ollama.SelectedModel = modelName;
+            var prompt = "请根据这张图片生成一句准确、简洁的中文alt文本，突出画面中最重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。";
+            var chat = new Chat(ollama);
+            if (!await CheckAndPullModelAsync(ollama, modelName))
+            {
+                return $"Error: Could not check or pull Ollama model '{modelName}'.";
+            }
+
+            try
+            {
+                // 读取图像并转换为Base64
+                var tg_img = SKBitmap.Decode(imageBytes);
+                var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Jpeg, 99);
+                var tg_img_arr = tg_img_data.ToArray();
+                var base64Image = Convert.ToBase64String(tg_img_arr);
+
+                // 构建请求内容
+                var request = new
+                {
+                    model = modelName,
+                    prompt = "请根据这张图片生成一句准确、简洁的中文alt文本，突出画面中最重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。",
+                    images = new[] { tg_img_arr }
+                };
+
+                // 发送请求并获取响应
+                var responseBuilder = new StringBuilder();
+                await foreach (var response in chat.SendAsync(prompt, new [] {base64Image}))
+                {
+                    if (response != null && !string.IsNullOrEmpty(response))
+                    {
+                        responseBuilder.Append(response);
+                    }
+                }
+                return responseBuilder.ToString();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing image with Ollama");
+                return $"Error analyzing image: {ex.Message}";
+            }
+        }
     }
 }
