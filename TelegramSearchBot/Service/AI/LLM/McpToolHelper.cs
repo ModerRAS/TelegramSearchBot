@@ -167,19 +167,29 @@ namespace TelegramSearchBot.Service.AI.LLM
          return $"你的名字是 {botName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{chatId}。\n\n" + 
                 $"你的核心任务是协助用户。为此，你可以调用外部工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
                 $"{toolsXmlToUse}\n\n" + 
-                $"如果你判断需要使用上述列表中的某个工具，你的回复必须严格遵循以下XML格式，并且不包含任何其他文本（不要在XML前后添加任何说明或聊天内容）：\n" +
-                $"<tool_name>\n" + 
-                    $"  <parameter1_name>value1</parameter1_name>\n" +
-                    $"  <parameter2_name>value2</parameter2_name>\n" +
-                    $"  ...\n" +
-                    $"</tool_name>\n" +
-                    $"或者\n" +
-                    $"<tool name=\"tool_name\">\n" +
-                    $"  <parameters>\n" +
-                    $"    <parameter1_name>value1</parameter1_name>\n" +
-                    $"  </parameters>\n" +
-                    $"</tool>\n" +
-                    $"(请将 'tool_name' 和参数替换为所选工具的实际名称和值。确保XML格式正确无误。)\n\n" +
+                $"当你需要调用工具时，必须严格遵循以下规则：\n\n" +
+                "1. 工具调用必须使用XML格式，且必须是回复的唯一内容\n" +
+                "2. 工具调用格式示例：\n" +
+                "```xml\n" +
+                "<tool_name>\n" +
+                "  <parameter1>value1</parameter1>\n" +
+                "  <parameter2>value2</parameter2>\n" +
+                "</tool_name>\n" +
+                "```\n\n" +
+                "3. 或者使用更结构化的格式：\n" +
+                "```xml\n" +
+                "<tool name=\"tool_name\">\n" +
+                "  <parameters>\n" +
+                "    <parameter1>value1</parameter1>\n" +
+                "    <parameter2>value2</parameter2>\n" +
+                "  </parameters>\n" +
+                "</tool>\n" +
+                "```\n\n" +
+                "4. 关键要求：\n" +
+                "- 确保工具名称和参数名称完全匹配\n" +
+                "- 参数值必须正确格式化（字符串加引号，数字不加）\n" +
+                "- 不要包含任何额外的解释或聊天内容\n" +
+                "- 如果参数值包含特殊字符，确保正确转义\n\n" +
                     "重要提示：如果你调用一个工具（特别是搜索类工具）后没有找到你需要的信息，或者结果不理想，你可以尝试以下操作：\n" +
                     "1. 修改你的查询参数（例如，使用更宽泛或更具体的关键词，尝试不同的搜索选项等），然后再次调用同一个工具。\n" +
                     "2. 如果多次尝试仍不理想，或者你认为其他工具可能更合适，可以尝试调用其他可用工具。\n" +
@@ -218,20 +228,34 @@ namespace TelegramSearchBot.Service.AI.LLM
             return cleaned.Trim();
         }
         
-        public static bool TryParseToolCalls(string xmlString, out List<(string toolName, Dictionary<string, string> arguments)> parsedToolCalls)
+        public static bool TryParseToolCalls(string input, out List<(string toolName, Dictionary<string, string> arguments)> parsedToolCalls)
         {
             parsedToolCalls = new List<(string toolName, Dictionary<string, string> arguments)>();
             
             try
             {
-                // Trim potential markdown code block fences and whitespace
-                xmlString = xmlString.Trim();
+                // 1. 尝试从混合文本中提取XML部分
+                string xmlString = input.Trim();
+                
+                // 处理可能的Markdown代码块
                 if (xmlString.StartsWith("```xml")) xmlString = xmlString.Substring(6).TrimStart();
                 if (xmlString.StartsWith("```")) xmlString = xmlString.Substring(3).TrimStart();
                 if (xmlString.EndsWith("```")) xmlString = xmlString.Substring(0, xmlString.Length - 3).TrimEnd();
-                xmlString = xmlString.Trim();
-
-                if (!xmlString.StartsWith("<") || !xmlString.EndsWith(">")) return false;
+                
+                // 2. 尝试提取第一个完整的XML块
+                int xmlStart = xmlString.IndexOf("<");
+                int xmlEnd = xmlString.LastIndexOf(">");
+                
+                if (xmlStart < 0 || xmlEnd < 0 || xmlEnd <= xmlStart)
+                {
+                    _sLogger?.LogDebug("No valid XML tags found in input");
+                    return false;
+                }
+                
+                xmlString = xmlString.Substring(xmlStart, xmlEnd - xmlStart + 1).Trim();
+                
+                // 3. 记录调试信息
+                _sLogger?.LogDebug($"Extracted XML for parsing: {xmlString}");
 
                 XDocument xDoc = null;
                 try
@@ -343,7 +367,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
             catch (Exception ex)
             {
-                _sLogger?.LogError(ex, $"Error parsing tool call XML: {xmlString}");
+                _sLogger?.LogError(ex, $"Error parsing tool call XML: {input}");
                 return false;
             }
         }
