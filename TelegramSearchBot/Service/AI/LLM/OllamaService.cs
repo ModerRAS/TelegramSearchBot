@@ -208,6 +208,29 @@ namespace TelegramSearchBot.Service.AI.LLM
 
     // ConvertToolResultToString has been moved to McpToolHelper
 
+        public async Task<IEnumerable<string>> GetAllModels(LLMChannel channel)
+        {
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            try 
+            {
+                var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
+                httpClient.BaseAddress = new Uri(channel.Gateway);
+                var ollama = new OllamaApiClient(httpClient);
+                
+                var models = await ollama.ListLocalModelsAsync();
+                return models.Select(m => m.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting Ollama models");
+                return Enumerable.Empty<string>();
+            }
+        }
+
         public async Task<string> AnalyzeImageAsync(byte[] imageBytes, string modelName, LLMChannel channel)
         {
             if (string.IsNullOrWhiteSpace(modelName))

@@ -9,7 +9,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore; // For AnyAsync()
 
 namespace TelegramSearchBot.Service.AI.LLM {
     public class GeneralLLMService : IService
@@ -98,7 +98,39 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         await redisDb.StringIncrementAsync(redisKey);
                         try
                         {
-                            // 5. 根据Provider选择服务
+                            // 5. 检查服务是否可用
+                            bool isHealthy = false;
+                            try 
+                            {
+                                switch (channel.Provider)
+                                {
+                                    case LLMProvider.OpenAI:
+                                        var openaiModels = await _openAIService.GetAllModels(channel);
+                                        isHealthy = openaiModels.Any();
+                                        break;
+                                    case LLMProvider.Ollama:
+                                        var ollamaModels = await _ollamaService.GetAllModels(channel);
+                                        isHealthy = ollamaModels.Any();
+                                        break;
+                                    case LLMProvider.Gemini:
+                                        var geminiModels = await _geminiService.GetAllModels(channel);
+                                        isHealthy = geminiModels.Any();
+                                        break;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, $"LLM渠道 {channel.Id} ({channel.Provider}) 健康检查失败");
+                                continue;
+                            }
+
+                            if (!isHealthy) 
+                            {
+                                _logger.LogWarning($"LLM渠道 {channel.Id} ({channel.Provider}) 不可用，跳过");
+                                continue;
+                            }
+
+                            // 6. 根据Provider选择服务
                             switch (channel.Provider)
                             {
                                 case LLMProvider.OpenAI:
@@ -199,7 +231,34 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         await redisDb.StringIncrementAsync(redisKey);
                         try
                         {
-                            // 5. 根据Provider选择服务
+                            // 5. 检查服务是否可用
+                            bool isHealthy = false;
+                            try 
+                            {
+                                switch (channel.Provider)
+                                {
+                                    case LLMProvider.Ollama:
+                                        var ollamaModels = await _ollamaService.GetAllModels(channel);
+                                        isHealthy = ollamaModels.Any();
+                                        break;
+                                    default:
+                                        _logger.LogWarning($"LLM渠道 {channel.Id} ({channel.Provider}) 不支持图像识别健康检查");
+                                        continue;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, $"LLM渠道 {channel.Id} ({channel.Provider}) 健康检查失败");
+                                continue;
+                            }
+
+                            if (!isHealthy) 
+                            {
+                                _logger.LogWarning($"LLM渠道 {channel.Id} ({channel.Provider}) 不可用，跳过");
+                                continue;
+                            }
+
+                            // 6. 根据Provider选择服务
                             switch (channel.Provider)
                             {
                                 case LLMProvider.Ollama:

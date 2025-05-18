@@ -13,6 +13,7 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using System.Net.Http;
+using TelegramSearchBot.Model.AI;
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -117,6 +118,22 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
 
             return chatHistory;
+        }
+
+        public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
+            if (channel.Provider.Equals(LLMProvider.Ollama)) {
+                return new List<string>();
+            }
+
+            try {
+                var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+                var modelsResponse = await googleAI.ListModelsAsync();
+                return modelsResponse.Models.Select(m => m.Name.Replace("models/", ""));
+            }
+            catch (Exception ex) {
+                _logger.LogError(ex, "Failed to list Gemini models");
+                return new List<string>();
+            }
         }
 
         public async IAsyncEnumerable<string> ExecAsync(
