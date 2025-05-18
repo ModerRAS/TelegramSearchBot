@@ -7,7 +7,8 @@ namespace TelegramSearchBot.Model {
     /// <summary>
     /// ChatId, UserId, MessageId, Content
     /// </summary>
-    public class MessageOption {
+    public class MessageOption
+    {
         public long ChatId { get; set; }
         public long UserId { get; set; }
         public long MessageId { get; set; }
@@ -16,5 +17,6 @@ namespace TelegramSearchBot.Model {
         public DateTime DateTime { get; set; }
         public Telegram.Bot.Types.User User { get; set; }
         public Chat Chat { get; set; }
+        public long MessageDataId { get; set; }
     }
 }

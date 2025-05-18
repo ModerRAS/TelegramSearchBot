@@ -67,15 +67,15 @@ namespace TelegramSearchBot.Service.Storage
         }
         public async Task AddToLucene(MessageOption messageOption)
         {
-            var message = new Message()
+            var message = await DataContext.Messages.FindAsync(messageOption.MessageDataId);
+            if (message != null)
             {
-                GroupId = messageOption.ChatId,
-                MessageId = messageOption.MessageId,
-                Content = messageOption.Content,
-                DateTime = messageOption.DateTime,
-            };
-
-            await lucene.WriteDocumentAsync(message);
+                await lucene.WriteDocumentAsync(message);
+            }
+            else
+            {
+                Logger.LogWarning($"Message not found in database: {messageOption.MessageDataId}");
+            }
         }
 
         public async Task<long> AddToSqlite(MessageOption messageOption)
@@ -149,9 +149,7 @@ namespace TelegramSearchBot.Service.Storage
             Logger.LogInformation($"UserId: {messageOption.UserId}\nUserName: {messageOption.User.Username} {messageOption.User.FirstName} {messageOption.User.LastName}\nChatId: {messageOption.ChatId}\nChatName: {messageOption.Chat.Username}\nMessage: {messageOption.MessageId} {messageOption.Content}");
             using (await _asyncLock.LockAsync())
             {
-                var messageDataId = await AddToSqlite(messageOption);
-                await AddToLucene(messageOption);
-                return messageDataId;
+                return await AddToSqlite(messageOption);
             }
         }
     }
