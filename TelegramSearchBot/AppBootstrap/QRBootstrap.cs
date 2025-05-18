@@ -25,7 +25,12 @@ namespace TelegramSearchBot.AppBootstrap {
                 }
                 var task = db.ListLeftPop("QRTasks").ToString();
                 var photoPath = db.StringGetDelete($"QRPost-{task}").ToString();
-                var response = await qr.ExecuteAsync(photoPath);
+                string response = string.Empty;
+                try {
+                    response = await qr.ExecuteAsync(photoPath);
+                } catch (Exception ex) { 
+                }
+                
                 db.StringSet($"QRResult-{task}", response);
             }
         }
