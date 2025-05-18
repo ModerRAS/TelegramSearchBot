@@ -161,7 +161,7 @@ namespace TelegramSearchBot.Service.Manage
         private async Task ScanAndProcessImageFiles() {
             var imageDir = Path.Combine(Env.WorkDir, "Photos");
             if (!Directory.Exists(imageDir)) {
-                await Send.Log($"图片目录不存在: {imageDir}");
+                _logger.LogInformation($"图片目录不存在: {imageDir}");
                 return;
             }
 
@@ -179,31 +179,31 @@ namespace TelegramSearchBot.Service.Manage
 
                             // 处理OCR
                             if (!extensions.Any(x => x.Name == "OCR_Result")) {
-                                await Send.Log($"开始处理图片OCR: {chatId}/{messageId}");
+                                _logger.LogInformation($"开始处理图片OCR: {chatId}/{messageId}");
                                 try {
                                     var ocrResult = await _paddleOCRService.ExecuteAsync(new MemoryStream(await File.ReadAllBytesAsync(imageFile)));
                                     await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "OCR_Result", ocrResult);
                                     if (!string.IsNullOrEmpty(ocrResult)) {
-                                        await Send.Log($"成功处理图片OCR: {chatId}/{messageId}");
+                                        _logger.LogInformation($"成功处理图片OCR: {chatId}/{messageId}");
                                     } else {
-                                        await Send.Log($"图片OCR处理失败或未找到文本: {chatId}/{messageId}");
+                                        _logger.LogInformation($"图片OCR处理失败或未找到文本: {chatId}/{messageId}");
                                     }
                                 } catch (Exception ex) {
-                                    await Send.Log($"处理图片OCR失败: {chatId}/{messageId}, 错误: {ex.Message}");
+                                    _logger.LogError(ex, $"处理图片OCR失败: {chatId}/{messageId}");
                                 }
                             }
 
                             // 处理QR码
                             if (!extensions.Any(x => x.Name == "QR_Result")) {
-                                await Send.Log($"开始处理图片QR码: {chatId}/{messageId}");
+                                _logger.LogInformation($"开始处理图片QR码: {chatId}/{messageId}");
                                 try {
                                     var qrResult = await _autoQRService.ExecuteAsync(imageFile);
                                     if (!string.IsNullOrEmpty(qrResult)) {
                                         await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "QR_Result", qrResult);
-                                        await Send.Log($"成功处理图片QR码: {chatId}/{messageId}");
+                                        _logger.LogInformation($"成功处理图片QR码: {chatId}/{messageId}");
                                     }
                                 } catch (Exception ex) {
-                                    await Send.Log($"处理图片QR码失败: {chatId}/{messageId}, 错误: {ex.Message}");
+                                    _logger.LogError(ex, $"处理图片QR码失败: {chatId}/{messageId}");
                                 }
                             }
                         }
