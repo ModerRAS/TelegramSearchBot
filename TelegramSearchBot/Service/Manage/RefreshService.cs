@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using System.IO;
@@ -15,6 +16,7 @@ using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.AI.QR;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Interface;
+using StackExchange.Redis;
 
 namespace TelegramSearchBot.Service.Manage
 {
@@ -28,6 +30,7 @@ namespace TelegramSearchBot.Service.Manage
         private readonly PaddleOCRService _paddleOCRService;
         private readonly AutoQRService _autoQRService;
         private readonly GeneralLLMService _generalLLMService;
+        private readonly IConnectionMultiplexer _redis;
 
         public RefreshService(ILogger<RefreshService> logger,
                             LuceneManager lucene,
@@ -38,7 +41,8 @@ namespace TelegramSearchBot.Service.Manage
                             MessageExtensionService messageExtensionService,
                             PaddleOCRService paddleOCRService,
                             AutoQRService autoQRService,
-                            GeneralLLMService generalLLMService) : base(logger, lucene, Send, context)
+                            GeneralLLMService generalLLMService,
+                            IConnectionMultiplexer redis) : base(logger, lucene, Send, context)
         {
             _logger = logger;
             _chatImport = chatImport;
@@ -47,6 +51,7 @@ namespace TelegramSearchBot.Service.Manage
             _paddleOCRService = paddleOCRService;
             _autoQRService = autoQRService;
             _generalLLMService = generalLLMService;
+            _redis = redis;
         }
 
         private async Task RebuildIndex()
@@ -339,54 +344,96 @@ namespace TelegramSearchBot.Service.Manage
             var chatDirs = Directory.GetDirectories(imageDir);
             var allImageFiles = chatDirs.SelectMany(dir => Directory.GetFiles(dir)).ToList();
             long totalFiles = allImageFiles.Count;
-            long processedFiles = 0;
-            long nextPercent = 1;
             long filesPerPercent = totalFiles / 100;
 
+            var db = _redis.GetDatabase();
+            string progressKey = $"altimage:progress:{DateTime.Now:yyyyMMddHHmmss}";
+            await db.StringSetAsync($"{progressKey}:total", totalFiles);
+            await db.StringSetAsync($"{progressKey}:processed", 0);
+            await db.StringSetAsync($"{progressKey}:nextPercent", 1);
+
             await Send.Log($"开始处理图片Alt信息，共{totalFiles}个文件");
+
+            var tasks = new List<Task>();
+            var lastCheckTime = DateTime.MinValue;
+            var checkInterval = TimeSpan.FromSeconds(5);
 
             foreach (var chatDir in chatDirs)
             {
                 var chatId = long.Parse(Path.GetFileName(chatDir));
                 var imageFiles = Directory.GetFiles(chatDir);
 
-                foreach (var imageFile in imageFiles)
+                for (int i = 0; i < imageFiles.Length; i++)
                 {
-                    var fileName = Path.GetFileNameWithoutExtension(imageFile);
-                    if (long.TryParse(fileName, out var messageId))
+                    var imageFile = imageFiles[i];
+                    // 定期检查可用容量
+                    if (DateTime.Now - lastCheckTime > checkInterval)
                     {
-                        var messageDataId = await _messageExtensionService.GetMessageIdByMessageIdAndGroupId(messageId, chatId);
-                        if (messageDataId.HasValue)
+                        var available = await _generalLLMService.GetAvailableCapacityAsync();
+                        if (available <= 0)
                         {
-                            var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
-
-                            // 处理Alt信息
-                            if (!extensions.Any(x => x.Name == "Alt_Result"))
-                            {
-                                try
-                                {
-                                    var imageBytes = await File.ReadAllBytesAsync(imageFile);
-                                    var altResult = await _generalLLMService.AnalyzeImageAsync(imageBytes, chatId);
-                                    await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "Alt_Result", altResult);
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogError(ex, $"处理图片Alt失败: {chatId}/{messageId}");
-                                }
-                            }
+                            await Task.Delay(1000);
+                            continue;
                         }
+                        
+                        // 批量添加任务(最多不超过可用容量)
+                        var batchSize = Math.Min(available, imageFiles.Length - i);
+                        for (int j = 0; j < batchSize; j++)
+                        {
+                            var currentFile = imageFiles[i + j];
+                    tasks.Add(ProcessImageFileAsync(currentFile, chatId, filesPerPercent, totalFiles));
+                        }
+                        i += batchSize - 1; // -1因为循环会自增
+                        lastCheckTime = DateTime.Now;
+                        continue;
                     }
 
-                    processedFiles++;
-                    if (filesPerPercent > 0 && processedFiles >= nextPercent * filesPerPercent)
-                    {
-                        await Send.Log($"图片Alt处理进度: {nextPercent}% ({processedFiles}/{totalFiles})");
-                        nextPercent++;
-                    }
+                    tasks.Add(ProcessImageFileAsync(imageFile, chatId, filesPerPercent, totalFiles));
                 }
             }
+
+            await Task.WhenAll(tasks);
             await Send.Log($"图片Alt处理完成: 100% ({totalFiles}/{totalFiles})");
         }
 
+        private async Task ProcessImageFileAsync(string imageFile, long chatId, 
+            long filesPerPercent, long totalFiles)
+        {
+            var db = _redis.GetDatabase();
+            string progressKey = $"altimage:progress:{DateTime.Now:yyyyMMddHHmmss}";
+            var fileName = Path.GetFileNameWithoutExtension(imageFile);
+            if (long.TryParse(fileName, out var messageId))
+            {
+                var messageDataId = await _messageExtensionService.GetMessageIdByMessageIdAndGroupId(messageId, chatId);
+                if (messageDataId.HasValue)
+                {
+                    var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
+
+                    if (!extensions.Any(x => x.Name == "Alt_Result"))
+                    {
+                        try
+                        {
+                            var imageBytes = await File.ReadAllBytesAsync(imageFile);
+                            var altResult = await _generalLLMService.AnalyzeImageAsync(imageBytes, chatId);
+                            await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "Alt_Result", altResult);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"处理图片Alt失败: {chatId}/{messageId}");
+                        }
+                    }
+                }
+            }
+
+            // 更新进度
+            long processed = (long)await db.StringIncrementAsync($"{progressKey}:processed");
+            long nextPercent = (long)await db.StringGetAsync($"{progressKey}:nextPercent");
+
+            if (filesPerPercent > 0 && processed >= nextPercent * filesPerPercent)
+            {
+                await db.StringSetAsync($"{progressKey}:nextPercent", nextPercent + 1);
+                _ = Send.Log($"图片Alt处理进度: {nextPercent}% ({processed}/{totalFiles})");
+            }
+        }
     }
 }
