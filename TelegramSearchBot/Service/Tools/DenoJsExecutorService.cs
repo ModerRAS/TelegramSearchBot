@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Attributes;
@@ -161,13 +162,14 @@ console.log(content);
 - 其他权限默认禁用
 
 ### 注意事项：
-1. 代码执行有5秒超时限制
+1. 代码执行有超时限制（默认5秒）
 2. 禁止访问敏感系统资源
 3. 临时文件会自动清理
 4. 必须使用Deno兼容的API
 ")]
         public async Task<string> ExecuteJs(
-            [McpParameter("要执行的JavaScript代码，支持ES6+语法，通过console.log输出结果")] string jsCode)
+            [McpParameter("要执行的JavaScript代码，支持ES6+语法，通过console.log输出结果")] string jsCode,
+            [McpParameter("执行超时时间（毫秒），默认5000")] int timeoutMs = 5000)
         {
             var tempDir = Path.Combine(Env.WorkDir, "temp");
             if (!Directory.Exists(tempDir))
@@ -196,7 +198,31 @@ console.log(content);
                 };
 
                 process.Start();
-                await process.WaitForExitAsync();
+                
+                using var cts = new CancellationTokenSource(timeoutMs);
+                try
+                {
+                    await process.WaitForExitAsync(cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    string partialOutput = "";
+                    try 
+                    {
+                        if (!process.HasExited)
+                        {
+                            // Read any available output with timeout before killing
+                            var outputTask = process.StandardOutput.ReadToEndAsync();
+                            if (await Task.WhenAny(outputTask, Task.Delay(500)) == outputTask)
+                            {
+                                partialOutput = await outputTask;
+                            }
+                            process.Kill(true);
+                        }
+                    }
+                    catch {}
+                    throw new TimeoutException($"Deno execution timed out after {timeoutMs}ms. Partial output:\n{partialOutput}");
+                }
 
                 if (process.ExitCode != 0)
                 {
