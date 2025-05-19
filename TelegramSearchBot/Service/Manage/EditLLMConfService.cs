@@ -342,6 +342,14 @@ namespace TelegramSearchBot.Service.Manage {
                 var count = await RefreshAllChannel();
                 return (true, $"已添加{count}个模型");
             }
+            else if (Command.Trim().Equals("设置重试次数", StringComparison.OrdinalIgnoreCase)) {
+                await db.StringSetAsync(stateKey, "setting_max_retry");
+                return (true, "请输入最大重试次数(默认100):");
+            }
+            else if (Command.Trim().Equals("设置图片重试次数", StringComparison.OrdinalIgnoreCase)) {
+                await db.StringSetAsync(stateKey, "setting_max_image_retry");
+                return (true, "请输入图片处理最大重试次数(默认1000):");
+            }
             
             if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
                 await db.StringSetAsync(stateKey, "awaiting_name");
@@ -670,6 +678,48 @@ namespace TelegramSearchBot.Service.Manage {
                     
                     return (true, updateResult ? "更新成功" : "更新失败");
                 
+                case "setting_max_retry":
+                    if (!int.TryParse(Command, out var maxRetry) || maxRetry <= 0) {
+                        return (false, "请输入有效的正整数");
+                    }
+                    
+                    var retryConfig = await DataContext.AppConfigurationItems
+                        .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxRetryCountKey);
+                    
+                    if (retryConfig == null) {
+                        await DataContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
+                            Key = GeneralLLMService.MaxRetryCountKey,
+                            Value = maxRetry.ToString()
+                        });
+                    } else {
+                        retryConfig.Value = maxRetry.ToString();
+                    }
+                    
+                    await DataContext.SaveChangesAsync();
+                    await db.KeyDeleteAsync(stateKey);
+                    return (true, $"最大重试次数已设置为: {maxRetry}");
+
+                case "setting_max_image_retry":
+                    if (!int.TryParse(Command, out var maxImageRetry) || maxImageRetry <= 0) {
+                        return (false, "请输入有效的正整数");
+                    }
+                    
+                    var imageRetryConfig = await DataContext.AppConfigurationItems
+                        .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxImageRetryCountKey);
+                    
+                    if (imageRetryConfig == null) {
+                        await DataContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
+                            Key = GeneralLLMService.MaxImageRetryCountKey,
+                            Value = maxImageRetry.ToString()
+                        });
+                    } else {
+                        imageRetryConfig.Value = maxImageRetry.ToString();
+                    }
+                    
+                    await DataContext.SaveChangesAsync();
+                    await db.KeyDeleteAsync(stateKey);
+                    return (true, $"图片处理最大重试次数已设置为: {maxImageRetry}");
+
                 default:
                     // 非预期状态或初始状态
                     return (false, "");

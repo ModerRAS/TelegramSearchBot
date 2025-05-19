@@ -326,6 +326,77 @@ namespace TelegramSearchBot.Test.Manage {
         }
 
         [TestMethod]
+        public async Task ExecuteAsync_SetMaxRetryCount() {
+            // Arrange
+            long chatId = 123;
+            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)  // Initial state
+                .ReturnsAsync("setting_max_retry");
+
+            // Act & Assert
+            var result1 = await _service.ExecuteAsync("设置重试次数", chatId);
+            Assert.IsTrue(result1.Item1);
+            Assert.AreEqual("请输入最大重试次数(默认100):", result1.Item2);
+
+            var result2 = await _service.ExecuteAsync("50", chatId);
+            Assert.IsTrue(result2.Item1);
+            Assert.AreEqual("最大重试次数已设置为: 50", result2.Item2);
+
+            // Verify database update
+            var config = await _context.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxRetryCountKey);
+            Assert.IsNotNull(config);
+            Assert.AreEqual("50", config.Value);
+        }
+
+        [TestMethod]
+        public async Task ExecuteAsync_SetMaxImageRetryCount() {
+            // Arrange
+            long chatId = 123;
+            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)  // Initial state
+                .ReturnsAsync("setting_max_image_retry");
+
+            // Act & Assert
+            var result1 = await _service.ExecuteAsync("设置图片重试次数", chatId);
+            Assert.IsTrue(result1.Item1);
+            Assert.AreEqual("请输入图片处理最大重试次数(默认1000):", result1.Item2);
+
+            var result2 = await _service.ExecuteAsync("500", chatId);
+            Assert.IsTrue(result2.Item1);
+            Assert.AreEqual("图片处理最大重试次数已设置为: 500", result2.Item2);
+
+            // Verify database update
+            var config = await _context.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxImageRetryCountKey);
+            Assert.IsNotNull(config);
+            Assert.AreEqual("500", config.Value);
+        }
+
+        [TestMethod]
+        public async Task ExecuteAsync_SetMaxRetryCount_InvalidInput() {
+            // Arrange
+            long chatId = 123;
+            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)  // Initial state
+                .ReturnsAsync("setting_max_retry");
+
+            // Act & Assert
+            var result1 = await _service.ExecuteAsync("设置重试次数", chatId);
+            Assert.IsTrue(result1.Item1);
+            Assert.AreEqual("请输入最大重试次数(默认100):", result1.Item2);
+
+            var result2 = await _service.ExecuteAsync("invalid", chatId);
+            Assert.IsFalse(result2.Item1);
+            Assert.AreEqual("请输入有效的正整数", result2.Item2);
+
+            // Verify no database update
+            var config = await _context.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxRetryCountKey);
+            Assert.IsNull(config);
+        }
+
+        [TestMethod]
         public async Task ExecuteAsync_UpdateParallelAndPriority() {
             // Arrange
             long chatId = 123;

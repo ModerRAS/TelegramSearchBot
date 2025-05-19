@@ -23,6 +23,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         public string ServiceName => "GeneralLLMService";
 
+        public const string MaxRetryCountKey = "LLM:MaxRetryCount";
+        public const string MaxImageRetryCountKey = "LLM:MaxImageRetryCount";
+        public const int DefaultMaxRetryCount = 100;
+        public const int DefaultMaxImageRetryCount = 1000;
+
         public GeneralLLMService(
             IConnectionMultiplexer connectionMultiplexer,
             DataDbContext dbContext,
@@ -81,7 +86,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // 4. 使用Redis实现并发控制和优先级调度
             var redisDb = connectionMultiplexer.GetDatabase();
-            var maxRetries = 100;
+            var maxRetries = await GetMaxRetryCountAsync();
             var retryDelay = TimeSpan.FromSeconds(5);
 
             for (int retry = 0; retry < maxRetries; retry++)
@@ -214,7 +219,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // 4. 使用Redis实现并发控制和优先级调度
             var redisDb = connectionMultiplexer.GetDatabase();
-            var maxRetries = 1000;
+            var maxRetries = await GetMaxImageRetryCountAsync();
             var retryDelay = TimeSpan.FromSeconds(5);
 
             for (int retry = 0; retry < maxRetries; retry++)
@@ -280,11 +285,59 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         await Task.Delay(retryDelay);
                     }
                 }
-
-
             }
             _logger.LogWarning($"所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃");
             return $"Error: 所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃";
+        }
+
+        private async Task<int> GetMaxRetryCountAsync()
+        {
+            var config = await _dbContext.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == MaxRetryCountKey);
+            
+            if (config == null || !int.TryParse(config.Value, out var value))
+            {
+                // Set default value if not exists
+                await SetDefaultMaxRetryCountAsync();
+                return DefaultMaxRetryCount;
+            }
+            
+            return value;
+        }
+
+        private async Task<int> GetMaxImageRetryCountAsync()
+        {
+            var config = await _dbContext.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == MaxImageRetryCountKey);
+            
+            if (config == null || !int.TryParse(config.Value, out var value))
+            {
+                // Set default value if not exists
+                await SetDefaultMaxImageRetryCountAsync();
+                return DefaultMaxImageRetryCount;
+            }
+            
+            return value;
+        }
+
+        private async Task SetDefaultMaxRetryCountAsync()
+        {
+            await _dbContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem
+            {
+                Key = MaxRetryCountKey,
+                Value = DefaultMaxRetryCount.ToString()
+            });
+            await _dbContext.SaveChangesAsync();
+        }
+
+        private async Task SetDefaultMaxImageRetryCountAsync()
+        {
+            await _dbContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem
+            {
+                Key = MaxImageRetryCountKey,
+                Value = DefaultMaxImageRetryCount.ToString()
+            });
+            await _dbContext.SaveChangesAsync();
         }
     }
 }
