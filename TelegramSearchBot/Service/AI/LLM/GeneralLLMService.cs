@@ -339,5 +339,59 @@ namespace TelegramSearchBot.Service.AI.LLM {
             });
             await _dbContext.SaveChangesAsync();
         }
+
+        public async Task<int> GetAvailableCapacityAsync(string modelName = "gemma3:27b")
+        {
+            var redisDb = connectionMultiplexer.GetDatabase();
+            var totalKey = $"llm:capacity:{modelName}:total";
+            
+            // 获取或缓存总容量(15秒钟过期)
+            var totalParallel = await redisDb.StringGetAsync(totalKey);
+            if (!totalParallel.HasValue)
+            {
+                var channelsWithModel = await (from s in _dbContext.ChannelsWithModel
+                                           where s.ModelName == modelName
+                                           select s.LLMChannelId).ToListAsync();
+
+                if (!channelsWithModel.Any())
+                {
+                    await redisDb.StringSetAsync(totalKey, 0, TimeSpan.FromSeconds(15));
+                    return 0;
+                }
+
+                var llmChannels = await (from s in _dbContext.LLMChannels
+                                       where channelsWithModel.Contains(s.Id)
+                                       select s).ToListAsync();
+
+                int total = llmChannels.Sum(c => c.Parallel);
+                await redisDb.StringSetAsync(totalKey, total, TimeSpan.FromSeconds(15));
+                totalParallel = total;
+            }
+
+            // 重新查询当前使用量
+            var currentChannelsWithModel = await (from s in _dbContext.ChannelsWithModel
+                                           where s.ModelName == modelName
+                                           select s.LLMChannelId).ToListAsync();
+
+            if (!currentChannelsWithModel.Any())
+            {
+                return 0;
+            }
+
+            var currentLlmChannels = await (from s in _dbContext.LLMChannels
+                                   where currentChannelsWithModel.Contains(s.Id)
+                                   select s).ToListAsync();
+
+            int used = 0;
+            foreach (var channel in currentLlmChannels)
+            {
+                var semaphoreKey = $"llm:channel:{channel.Id}:semaphore";
+                var currentCount = await redisDb.StringGetAsync(semaphoreKey);
+                used += currentCount.HasValue ? (int)currentCount : 0;
+            }
+
+            // 计算并返回可用容量
+            return Math.Max(0, (int)totalParallel - used);
+        }
     }
 }
