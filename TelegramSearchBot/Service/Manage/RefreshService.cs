@@ -124,6 +124,14 @@ namespace TelegramSearchBot.Service.Manage
             }
 
             var chatDirs = Directory.GetDirectories(audioDir);
+            var allAudioFiles = chatDirs.SelectMany(dir => Directory.GetFiles(dir)).ToList();
+            long totalFiles = allAudioFiles.Count;
+            long processedFiles = 0;
+            long nextPercent = 1;
+            long filesPerPercent = totalFiles / 100;
+
+            await Send.Log($"开始处理音频文件，共{totalFiles}个文件");
+
             foreach (var chatDir in chatDirs)
             {
                 var chatId = long.Parse(Path.GetFileName(chatDir));
@@ -140,32 +148,46 @@ namespace TelegramSearchBot.Service.Manage
                             var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
                             if (!extensions.Any(x => x.Name == "ASR_Result"))
                             {
-                                await Send.Log($"开始处理音频: {chatId}/{messageId}");
                                 try
                                 {
                                     var asrResult = await _autoASRService.ExecuteAsync(audioFile);
                                     await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "ASR_Result", asrResult);
-                                    await Send.Log($"成功处理音频: {chatId}/{messageId}");
                                 }
                                 catch (Exception ex)
                                 {
-                                    await Send.Log($"处理图片QR码失败: {chatId}/{messageId}, 错误: {ex.Message}");
+                                    _logger.LogError(ex, $"处理音频失败: {chatId}/{messageId}");
                                 }
                             }
                         }
                     }
+
+                    processedFiles++;
+                    if (filesPerPercent > 0 && processedFiles >= nextPercent * filesPerPercent)
+                    {
+                        await Send.Log($"音频处理进度: {nextPercent}% ({processedFiles}/{totalFiles})");
+                        nextPercent++;
+                    }
                 }
             }
+            await Send.Log($"音频处理完成: 100% ({totalFiles}/{totalFiles})");
         }
 
         private async Task ScanAndProcessImageFiles() {
             var imageDir = Path.Combine(Env.WorkDir, "Photos");
             if (!Directory.Exists(imageDir)) {
-                _logger.LogInformation($"图片目录不存在: {imageDir}");
+                await Send.Log($"图片目录不存在: {imageDir}");
                 return;
             }
 
             var chatDirs = Directory.GetDirectories(imageDir);
+            var allImageFiles = chatDirs.SelectMany(dir => Directory.GetFiles(dir)).ToList();
+            long totalFiles = allImageFiles.Count;
+            long processedFiles = 0;
+            long nextPercent = 1;
+            long filesPerPercent = totalFiles / 100;
+
+            await Send.Log($"开始处理图片文件，共{totalFiles}个文件");
+
             foreach (var chatDir in chatDirs) {
                 var chatId = long.Parse(Path.GetFileName(chatDir));
                 var imageFiles = Directory.GetFiles(chatDir);
@@ -179,15 +201,9 @@ namespace TelegramSearchBot.Service.Manage
 
                             // 处理OCR
                             if (!extensions.Any(x => x.Name == "OCR_Result")) {
-                                _logger.LogInformation($"开始处理图片OCR: {chatId}/{messageId}");
                                 try {
                                     var ocrResult = await _paddleOCRService.ExecuteAsync(new MemoryStream(await File.ReadAllBytesAsync(imageFile)));
                                     await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "OCR_Result", ocrResult);
-                                    if (!string.IsNullOrEmpty(ocrResult)) {
-                                        _logger.LogInformation($"成功处理图片OCR: {chatId}/{messageId}");
-                                    } else {
-                                        _logger.LogInformation($"图片OCR处理失败或未找到文本: {chatId}/{messageId}");
-                                    }
                                 } catch (Exception ex) {
                                     _logger.LogError(ex, $"处理图片OCR失败: {chatId}/{messageId}");
                                 }
@@ -195,12 +211,10 @@ namespace TelegramSearchBot.Service.Manage
 
                             // 处理QR码
                             if (!extensions.Any(x => x.Name == "QR_Result")) {
-                                _logger.LogInformation($"开始处理图片QR码: {chatId}/{messageId}");
                                 try {
                                     var qrResult = await _autoQRService.ExecuteAsync(imageFile);
                                     if (!string.IsNullOrEmpty(qrResult)) {
                                         await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "QR_Result", qrResult);
-                                        _logger.LogInformation($"成功处理图片QR码: {chatId}/{messageId}");
                                     }
                                 } catch (Exception ex) {
                                     _logger.LogError(ex, $"处理图片QR码失败: {chatId}/{messageId}");
@@ -208,8 +222,15 @@ namespace TelegramSearchBot.Service.Manage
                             }
                         }
                     }
+
+                    processedFiles++;
+                    if (filesPerPercent > 0 && processedFiles >= nextPercent * filesPerPercent) {
+                        await Send.Log($"图片处理进度: {nextPercent}% ({processedFiles}/{totalFiles})");
+                        nextPercent++;
+                    }
                 }
             }
+            await Send.Log($"图片处理完成: 100% ({totalFiles}/{totalFiles})");
         }
 
         private async Task ScanAndProcessVideoFiles()
@@ -222,6 +243,14 @@ namespace TelegramSearchBot.Service.Manage
             }
 
             var chatDirs = Directory.GetDirectories(videoDir);
+            var allVideoFiles = chatDirs.SelectMany(dir => Directory.GetFiles(dir)).ToList();
+            long totalFiles = allVideoFiles.Count;
+            long processedFiles = 0;
+            long nextPercent = 1;
+            long filesPerPercent = totalFiles / 100;
+
+            await Send.Log($"开始处理视频文件，共{totalFiles}个文件");
+
             foreach (var chatDir in chatDirs)
             {
                 var chatId = long.Parse(Path.GetFileName(chatDir));
@@ -238,22 +267,28 @@ namespace TelegramSearchBot.Service.Manage
                             var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
                             if (!extensions.Any(x => x.Name == "ASR_Result"))
                             {
-                                await Send.Log($"开始处理视频: {chatId}/{messageId}");
                                 try
                                 {
                                     var asrResult = await _autoASRService.ExecuteAsync(videoFile);
                                     await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "ASR_Result", asrResult);
-                                    await Send.Log($"成功处理视频: {chatId}/{messageId}");
                                 }
                                 catch (Exception ex)
                                 {
-                                    await Send.Log($"处理视频失败: {chatId}/{messageId}, 错误: {ex.Message}");
+                                    _logger.LogError(ex, $"处理视频失败: {chatId}/{messageId}");
                                 }
                             }
                         }
                     }
+
+                    processedFiles++;
+                    if (filesPerPercent > 0 && processedFiles >= nextPercent * filesPerPercent)
+                    {
+                        await Send.Log($"视频处理进度: {nextPercent}% ({processedFiles}/{totalFiles})");
+                        nextPercent++;
+                    }
                 }
             }
+            await Send.Log($"视频处理完成: 100% ({totalFiles}/{totalFiles})");
         }
 
         public async Task ExecuteAsync(string Command)
@@ -302,6 +337,14 @@ namespace TelegramSearchBot.Service.Manage
             }
 
             var chatDirs = Directory.GetDirectories(imageDir);
+            var allImageFiles = chatDirs.SelectMany(dir => Directory.GetFiles(dir)).ToList();
+            long totalFiles = allImageFiles.Count;
+            long processedFiles = 0;
+            long nextPercent = 1;
+            long filesPerPercent = totalFiles / 100;
+
+            await Send.Log($"开始处理图片Alt信息，共{totalFiles}个文件");
+
             foreach (var chatDir in chatDirs)
             {
                 var chatId = long.Parse(Path.GetFileName(chatDir));
@@ -320,30 +363,29 @@ namespace TelegramSearchBot.Service.Manage
                             // 处理Alt信息
                             if (!extensions.Any(x => x.Name == "Alt_Result"))
                             {
-                                await Send.Log($"开始处理图片Alt: {chatId}/{messageId}");
                                 try
                                 {
                                     var imageBytes = await File.ReadAllBytesAsync(imageFile);
                                     var altResult = await _generalLLMService.AnalyzeImageAsync(imageBytes, chatId);
                                     await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "Alt_Result", altResult);
-                                    if (!string.IsNullOrEmpty(altResult))
-                                    {
-                                        await Send.Log($"成功处理图片Alt: {chatId}/{messageId}");
-                                    }
-                                    else
-                                    {
-                                        await Send.Log($"图片Alt处理失败或未生成描述: {chatId}/{messageId}");
-                                    }
                                 }
                                 catch (Exception ex)
                                 {
-                                    await Send.Log($"处理图片Alt失败: {chatId}/{messageId}, 错误: {ex.Message}");
+                                    _logger.LogError(ex, $"处理图片Alt失败: {chatId}/{messageId}");
                                 }
                             }
                         }
                     }
+
+                    processedFiles++;
+                    if (filesPerPercent > 0 && processedFiles >= nextPercent * filesPerPercent)
+                    {
+                        await Send.Log($"图片Alt处理进度: {nextPercent}% ({processedFiles}/{totalFiles})");
+                        nextPercent++;
+                    }
                 }
             }
+            await Send.Log($"图片Alt处理完成: 100% ({totalFiles}/{totalFiles})");
         }
 
     }
