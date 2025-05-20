@@ -259,14 +259,6 @@ namespace TelegramSearchBot.Service.AI.LLM
                 var tg_img_arr = tg_img_data.ToArray();
                 var base64Image = Convert.ToBase64String(tg_img_arr);
 
-                // 构建请求内容
-                var request = new
-                {
-                    model = modelName,
-                    prompt = "请根据这张图片生成一句准确、简洁的中文alt文本，突出画面中最重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。",
-                    images = new[] { tg_img_arr }
-                };
-
                 // 发送请求并获取响应
                 var responseBuilder = new StringBuilder();
                 await foreach (var response in chat.SendAsync(prompt, new [] {base64Image}))
