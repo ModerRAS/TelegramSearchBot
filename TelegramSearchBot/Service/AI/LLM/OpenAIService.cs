@@ -32,7 +32,13 @@ namespace TelegramSearchBot.Service.AI.LLM
         public string ServiceName => "OpenAIService";
 
         private readonly ILogger<OpenAIService> _logger;
-        public string BotName { get; set; }
+        public static string _botName;
+        public string BotName { get {
+                return _botName;
+            } set {
+                _botName = value;
+            }
+        }
         private DataDbContext _dbContext;
 
         private readonly MessageExtensionService _messageExtensionService;
