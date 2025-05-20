@@ -354,12 +354,12 @@ namespace TelegramSearchBot.Service.AI.LLM
                                 if (element.Name.LocalName == "parameter" && element.Attribute("name") != null)
                                 {
                                     string key = element.Attribute("name").Value;
-                                    string value = element.Value;
+                                    string value = element.HasElements ? element.ToString() : element.Value;
                                     if (!string.IsNullOrEmpty(key)) currentArguments[key] = value;
                                 }
                                 else
                                 {
-                                    currentArguments[element.Name.LocalName] = element.Value;
+                                    currentArguments[element.Name.LocalName] = element.HasElements ? element.ToString() : element.Value;
                                 }
                             }
                         }
@@ -381,6 +381,18 @@ namespace TelegramSearchBot.Service.AI.LLM
 
         public static async Task<object> ExecuteRegisteredToolAsync(string toolName, Dictionary<string, string> stringArguments, ToolContext toolContext = null)
         {
+            // Clean CDATA markers if present
+            var cleanedArguments = new Dictionary<string, string>();
+            foreach (var kvp in stringArguments)
+            {
+                var value = kvp.Value;
+                if (value.Contains("<![CDATA["))
+                {
+                    value = value.Replace("<![CDATA[", "").Replace("]]>", "").Trim();
+                }
+                cleanedArguments[kvp.Key] = value;
+            }
+            stringArguments = cleanedArguments;
             if (!ToolRegistry.TryGetValue(toolName, out var toolInfo))
             {
                 throw new ArgumentException($"Tool '{toolName}' not registered.");
