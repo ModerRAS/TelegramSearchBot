@@ -89,5 +89,6 @@ namespace TelegramSearchBot {
         public string OLTPAuth { get; set; }
         public string OLTPAuthUrl { get; set; }
         public string OLTPName { get; set; }
+        public int QdrantPort { get; set; } = 6334;
     }
 }

@@ -23,7 +23,8 @@ using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
-using TelegramSearchBot.Service.BotAPI; // Added for BotCommandService
+using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Service.Vector; // Added for BotCommandService
 
 namespace TelegramSearchBot.AppBootstrap
 {
@@ -60,6 +61,7 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddTransient<TelegramSearchBot.Service.Bilibili.ITelegramFileCacheService, TelegramSearchBot.Service.Bilibili.TelegramFileCacheService>();
                     // Manually register AppConfigurationService and its interface
                     service.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
+                    service.AddHostedService<QdrantProcessManager>();
                 });
         public static void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
