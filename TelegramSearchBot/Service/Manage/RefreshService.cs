@@ -415,6 +415,9 @@ namespace TelegramSearchBot.Service.Manage
                         {
                             var imageBytes = await File.ReadAllBytesAsync(imageFile);
                             var altResult = await _generalLLMService.AnalyzeImageAsync(imageBytes, chatId);
+                            if (altResult.StartsWith("Error")) {
+                                throw new Exception();
+                            }
                             await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "Alt_Result", altResult);
                         }
                         catch (Exception ex)

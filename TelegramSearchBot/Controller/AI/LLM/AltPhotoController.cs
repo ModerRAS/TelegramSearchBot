@@ -59,7 +59,9 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 OcrStr = await generalLLMService.AnalyzeImageAsync(PhotoStream, e.Message.Chat.Id);
                 logger.LogInformation(OcrStr);
-                await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "Alt_Result", OcrStr);
+                if (!OcrStr.StartsWith("Error")) {
+                    await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "Alt_Result", OcrStr);
+                }
             } catch (Exception ex) when (
                     ex is CannotGetPhotoException ||
                     ex is DirectoryNotFoundException
