@@ -10,7 +10,7 @@ using TelegramSearchBot.Service.AI.LLM;
 using OllamaSharp;
 using OllamaSharp.Models;
 
-namespace TelegramSearchBot.Service.AI
+namespace TelegramSearchBot.Service.Vector
 {
     public class VectorGenerationService : IService
     {
@@ -30,11 +30,11 @@ namespace TelegramSearchBot.Service.AI
             _ollamaService = ollamaService;
         }
 
-        public async Task<float[]> GenerateVectorAsync(string text, string modelName = "openai", LLMChannel channel = null)
+        public async Task<float[]> GenerateVectorAsync(string text, string modelName = "ollama", LLMChannel channel = null)
         {
             return modelName switch
             {
-                "openai" => await _openAIService.GenerateEmbeddingsAsync(text, modelName, channel),
+                //"openai" => await _openAIService.GenerateEmbeddingsAsync(text, modelName, channel),
                 "ollama" => await _ollamaService.GenerateEmbeddingsAsync(text, modelName, channel),
                 _ => throw new ArgumentException("Invalid model specified")
             };
@@ -46,6 +46,11 @@ namespace TelegramSearchBot.Service.AI
             foreach (var e in Payload) {
                 points[0].Payload.Add(e.Key, e.Value);
             }
+            await _qdrantClient.UpsertAsync(collectionName, points);
+        }
+        public async Task StoreVectorAsync(string collectionName, float[] vector, long MessageId) {
+            var points = new[] { new PointStruct { Id = Guid.NewGuid(), Vectors = vector } };
+            points[0].Payload.Add("MessageId", MessageId);
             await _qdrantClient.UpsertAsync(collectionName, points);
         }
 
@@ -65,7 +70,7 @@ namespace TelegramSearchBot.Service.AI
                 queryVector,
                 limit: (uint)limit);
 
-            return result.Select(x => x.Id.StringValue);
+            return result.Select(x => x.Id.Num.ToString());
         }
 
         public async Task<bool> IsHealthyAsync()

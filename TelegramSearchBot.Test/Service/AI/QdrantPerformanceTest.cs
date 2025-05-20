@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using TelegramSearchBot.Service.AI.LLM;
-using TelegramSearchBot.Service.AI;
+using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.Test.Service.AI
 {
