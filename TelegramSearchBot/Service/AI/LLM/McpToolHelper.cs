@@ -238,158 +238,335 @@ namespace TelegramSearchBot.Service.AI.LLM
         public static bool TryParseToolCalls(string input, out List<(string toolName, Dictionary<string, string> arguments)> parsedToolCalls)
         {
             parsedToolCalls = new List<(string toolName, Dictionary<string, string> arguments)>();
-            
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                _sLogger?.LogDebug("TryParseToolCalls: Input is null or empty");
+                return false;
+            }
+
             try
             {
-                // 1. 尝试从混合文本中提取XML部分
-                string xmlString = input.Trim();
-                
-                // 处理可能的Markdown代码块
-                if (xmlString.StartsWith("```xml")) xmlString = xmlString.Substring(6).TrimStart();
-                if (xmlString.StartsWith("```")) xmlString = xmlString.Substring(3).TrimStart();
-                if (xmlString.EndsWith("```")) xmlString = xmlString.Substring(0, xmlString.Length - 3).TrimEnd();
-                
-                // 2. 尝试提取第一个完整的XML块
-                int xmlStart = xmlString.IndexOf("<");
-                int xmlEnd = xmlString.LastIndexOf(">");
-                
-                if (xmlStart < 0 || xmlEnd < 0 || xmlEnd <= xmlStart)
-                {
-                    _sLogger?.LogDebug("No valid XML tags found in input");
-                    return false;
-                }
-                
-                xmlString = xmlString.Substring(xmlStart, xmlEnd - xmlStart + 1).Trim();
-                
-                // 3. 记录调试信息
-                _sLogger?.LogDebug($"Extracted XML for parsing: {xmlString}");
+                string processedInput = input.Trim();
+                _sLogger?.LogDebug($"Original input: {processedInput}");
 
-                XDocument xDoc = null;
-                try
+                // Handle Markdown code blocks first
+                if (processedInput.Contains("```xml") || processedInput.Contains("```"))
                 {
-                    xDoc = XDocument.Parse(xmlString, LoadOptions.None);
-                }
-                catch (System.Xml.XmlException ex) when (ex.Message != null && ex.Message.ToLowerInvariant().Contains("multiple root elements"))
-                {
-                    _sLogger?.LogWarning(ex, $"TryParseToolCall: Multiple root elements detected. Wrapping in <tools_wrapper> and retrying. Original: {xmlString}");
-                    try
-                    {
-                        xDoc = XDocument.Parse($"<tools_wrapper>{xmlString}</tools_wrapper>", LoadOptions.None);
-                    }
-                    catch (System.Xml.XmlException ex2)
-                    {
-                        _sLogger?.LogError(ex2, $"TryParseToolCall: Failed to parse even after wrapping with <tools_wrapper>. Original: {xmlString}");
-                        return false;
-                    }
-                }
-                
-                if (xDoc == null || xDoc.Root == null) return false;
+                    var codeBlocks = new List<string>();
+                    var matches = Regex.Matches(processedInput,
+                        @"```(?:xml)?\s*(<tool[\s\S]*?<\/tool>|<[\w]+>[\s\S]*?<\/[\w]+>)\s*```",
+                        RegexOptions.Multiline);
 
-                XElement rootElement = xDoc.Root;
-                if (rootElement == null) return false;
-
-                IEnumerable<XElement> elementsToConsider;
-                if (rootElement.Name.LocalName == "tools_wrapper")
-                {
-                    elementsToConsider = rootElement.Elements();
-                }
-                else
-                {
-                    elementsToConsider = new List<XElement> { rootElement };
-                }
-
-                foreach (var elementToParse in elementsToConsider)
-                {
-                    string currentToolName = null;
-                    Dictionary<string, string> currentArguments = new Dictionary<string, string>();
-                    XElement paramsContainer = null;
-
-                    // Case 1: <tool name="ToolName"><parameters>...</parameters></tool>
-                    // or <tool name="ToolName"><parameter name="...">value</parameter></tool>
-                    if (elementToParse.Name.LocalName == "tool" && elementToParse.Attribute("name") != null)
+                    foreach (Match m in matches)
                     {
-                        var nameAttr = elementToParse.Attribute("name")?.Value;
-                        if (nameAttr != null && ToolRegistry.ContainsKey(nameAttr))
-                        {
-                            currentToolName = nameAttr;
-                            paramsContainer = elementToParse.Element("parameters");
-                            if (paramsContainer == null)
-                            {
-                                // Check for direct <parameter> children if no <parameters> container
-                                var directParams = elementToParse.Elements("parameter");
-                                if (directParams.Any())
-                                {
-                                    paramsContainer = elementToParse;
-                                }
-                                else
-                                {
-                                    _sLogger?.LogWarning("Tool call format <tool name='{ToolName}'> used, but neither <parameters> nor direct <parameter> elements found.", currentToolName);
-                                }
-                            }
-                        }
-                    }
-                    // Case 2: <ToolName><arg>val</arg>...</ToolName>
-                    else if (ToolRegistry.ContainsKey(elementToParse.Name.LocalName))
-                    {
-                        currentToolName = elementToParse.Name.LocalName;
-                        paramsContainer = elementToParse;
-                    }
-                    // Case 3: <tool_name><SpecificToolName>...</SpecificToolName></tool_name> (Less common)
-                    else if (elementToParse.Name.LocalName == "tool_name" && elementToParse.Elements().Count() == 1)
-                    {
-                        var innerElement = elementToParse.Elements().First();
-                        if (ToolRegistry.ContainsKey(innerElement.Name.LocalName))
-                        {
-                            currentToolName = innerElement.Name.LocalName;
-                            paramsContainer = innerElement;
-                        }
+                        var content = m.Groups[1].Value.Trim();
+                        codeBlocks.Add(content);
                     }
 
-                    if (currentToolName != null)
+                    if (codeBlocks.Count > 0)
                     {
-                        if (paramsContainer != null)
-                        {
-                            foreach (var element in paramsContainer.Elements())
-                            {
-                                if (element.Name.LocalName == "parameter" && element.Attribute("name") != null)
-                                {
-                                    string key = element.Attribute("name").Value;
-                                    string value = element.HasElements ? element.ToString() : element.Value;
-                                    if (!string.IsNullOrEmpty(key)) currentArguments[key] = value;
-                                }
-                                else
-                                {
-                                    currentArguments[element.Name.LocalName] = element.HasElements ? element.ToString() : element.Value;
-                                }
-                            }
-                        }
-                        parsedToolCalls.Add((currentToolName, currentArguments));
+                        // Combine all code block content for subsequent parsing
+                        processedInput = string.Join("\n", codeBlocks);
+                    }
+                    else if (processedInput.Contains("<tool"))
+                    {
+                        // If it contains <tool> but no markdown, just trim
+                        processedInput = processedInput.Trim();
                     }
                     else
                     {
-                         _sLogger?.LogWarning($"TryParseToolCalls: Skipped unrecognized element '{elementToParse.Name.LocalName}' during multi-tool parse attempt. Element: {elementToParse}");
+                        _sLogger?.LogWarning("No valid XML content found in code blocks or as raw XML");
+                        return false;
                     }
                 }
-                return parsedToolCalls.Any();
+                // If no markdown, check if it looks like raw XML
+                else if (processedInput.Contains("<") && processedInput.Contains(">"))
+                {
+                    // Keep processedInput as is for raw XML parsing attempt
+                }
+                else
+                {
+                     _sLogger?.LogDebug("TryParseToolCalls: Input does not appear to be XML or markdown code block.");
+                     return false;
+                }
+
+                // --- Improved Parsing Logic ---
+                // First try to parse the input as a whole document
+                try
+                {
+                    XDocument doc = XDocument.Parse(processedInput);
+                    // Check if there's a wrapper element containing tool elements
+                    if (doc.Root.Elements().Any(e =>
+                        e.Name.LocalName.Equals("tool", StringComparison.OrdinalIgnoreCase) ||
+                        ToolRegistry.ContainsKey(e.Name.LocalName)))
+                    {
+                        // Process each tool element inside the wrapper
+                        foreach (var toolElement in doc.Root.Elements())
+                        {
+                            var toolCall = ParseToolElement(toolElement);
+                            if (toolCall.toolName != null)
+                            {
+                                parsedToolCalls.Add(toolCall);
+                            }
+                        }
+                        return parsedToolCalls.Count > 0;
+                    }
+                }
+                catch (System.Xml.XmlException)
+                {
+                    // Fall through to regex parsing if XML parsing fails
+                }
+
+                // Fallback to regex parsing for individual tool blocks
+                var toolBlockMatches = Regex.Matches(processedInput, @"<(tool\b[^>]*|[\w]+)(?:\s[^>]*)?>[\s\S]*?<\/\1>", RegexOptions.IgnoreCase);
+                _sLogger?.LogInformation($"TryParseToolCalls: Found {toolBlockMatches.Count} tool elements in input: {processedInput}");
+                _sLogger?.LogInformation($"TryParseToolCalls: Raw regex matches - Count: {toolBlockMatches.Count}");
+                _sLogger?.LogInformation($"TryParseToolCalls: Using regex pattern: {@"<(tool\b[^>]*|[\w]+)(?:\s[^>]*)?>[\s\S]*?<\/\1>"}");
+                for (int i = 0; i < toolBlockMatches.Count; i++)
+                {
+                    _sLogger?.LogInformation($"Match {i}: {toolBlockMatches[i].Value}");
+                }
+
+                _sLogger?.LogDebug($"TryParseToolCalls: Found {toolBlockMatches.Count} potential tool blocks using regex.");
+
+                if (toolBlockMatches.Count == 0)
+                {
+                    _sLogger?.LogDebug("TryParseToolCalls: No potential tool blocks found after initial processing.");
+                    return false;
+                }
+
+                foreach (Match match in toolBlockMatches)
+                {
+                    string blockXml = match.Value;
+                    _sLogger?.LogDebug($"TryParseToolCalls: Processing block: {blockXml}");
+                    try
+                    {
+                        // Attempt to parse the individual block XML
+                        XDocument blockDoc = XDocument.Parse(blockXml, LoadOptions.PreserveWhitespace);
+                        XElement blockRoot = blockDoc.Root;
+
+                        // Use the existing ParseToolElement logic to extract tool name and arguments
+                        var toolCall = ParseToolElement(blockRoot);
+                        if (toolCall.toolName != null)
+                        {
+                            parsedToolCalls.Add(toolCall);
+                            _sLogger?.LogDebug($"TryParseToolCalls: Successfully parsed tool '{toolCall.toolName}'. Current count: {parsedToolCalls.Count}");
+                        } else {
+                             _sLogger?.LogDebug($"TryParseToolCalls: ParseToolElement returned null toolName for block: {blockXml}");
+                        }
+                    }
+                    catch (System.Xml.XmlException ex)
+                    {
+                        _sLogger?.LogError(ex, $"TryParseToolCalls: Failed to parse individual tool block XML: {blockXml}");
+                        // Continue to the next block
+                    }
+                    catch (Exception ex)
+                    {
+                        _sLogger?.LogError(ex, $"TryParseToolCalls: Unexpected error processing tool block: {blockXml}");
+                        // Continue to the next block
+                    }
+                }
+
+                _sLogger?.LogDebug($"TryParseToolCalls: Final parsedToolCalls count: {parsedToolCalls.Count}");
+                return parsedToolCalls.Count > 0; // Return true if any tools were parsed
             }
             catch (Exception ex)
             {
-                _sLogger?.LogError(ex, $"Error parsing tool call XML: {input}");
+                _sLogger?.LogError(ex, "TryParseToolCalls: Unexpected error parsing tool calls");
                 return false;
+            }
+        }
+
+        private static (string toolName, Dictionary<string, string> arguments) ParseToolElement(XElement element)
+        {
+            string toolName = null;
+            var arguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // 确定工具名称 - 更灵活的匹配逻辑
+            if (element.Name.LocalName.Equals("tool", StringComparison.OrdinalIgnoreCase))
+            {
+                toolName = element.Attribute("name")?.Value;
+                if (string.IsNullOrEmpty(toolName))
+                {
+                    _sLogger?.LogWarning("ParseToolElement: Tool element has no name attribute");
+                    return (null, null);
+                }
+            }
+            else
+            {
+                // 尝试匹配注册的工具名称
+                toolName = ToolRegistry.Keys.FirstOrDefault(k => 
+                    k.Equals(element.Name.LocalName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (toolName == null || !ToolRegistry.ContainsKey(toolName))
+            {
+                _sLogger?.LogWarning($"ParseToolElement: Unregistered tool '{element.Name.LocalName}'");
+                return (null, null);
+            }
+
+            // 处理CDATA内容 - 保留原始CDATA标记
+            foreach (var cdata in element.DescendantNodes().OfType<XCData>())
+            {
+                var parent = cdata.Parent;
+                if (parent != null)
+                {
+                    arguments[parent.Name.LocalName] = cdata.Value;
+                }
+            }
+
+            // 获取参数容器 - 更灵活的查找逻辑
+            XElement paramsContainer = element;
+            if (element.Name.LocalName.Equals("tool", StringComparison.OrdinalIgnoreCase))
+            {
+                paramsContainer = element.Element("parameters") ?? element;
+                
+                // 处理直接子元素作为参数的情况
+                if (paramsContainer == element && !element.Elements().Any(e => 
+                    e.Name.LocalName.Equals("parameters", StringComparison.OrdinalIgnoreCase)))
+                {
+                    // 直接使用所有子元素作为参数
+                }
+            }
+
+            // 提取所有参数
+            foreach (var paramElement in paramsContainer.Elements())
+            {
+                // 跳过parameters元素本身
+                if (paramElement.Name.LocalName.Equals("parameters", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                    
+                try
+                {
+                    ExtractParameter(paramElement, arguments);
+                }
+                catch (Exception ex)
+                {
+                    _sLogger?.LogError(ex, $"Failed to extract parameter from element: {paramElement}");
+                    continue;
+                }
+            }
+
+            if (arguments.Count == 0)
+            {
+                // 尝试从属性中提取参数
+                foreach (var attr in element.Attributes())
+                {
+                    if (!attr.Name.LocalName.Equals("name", StringComparison.OrdinalIgnoreCase))
+                    {
+                        arguments[attr.Name.LocalName] = attr.Value;
+                    }
+                }
+            }
+
+            _sLogger?.LogDebug($"ParseToolElement: Parsed tool '{toolName}' with {arguments.Count} arguments");
+            return (toolName, arguments);
+        }
+
+        private static void ExtractParameter(XElement paramElement, Dictionary<string, string> arguments)
+        {
+            try 
+            {
+                string paramName;
+                string paramValue = string.Empty;
+
+                // 处理带name属性的parameter元素
+                if (paramElement.Name.LocalName.Equals("parameter", StringComparison.OrdinalIgnoreCase))
+                {
+                    paramName = paramElement.Attribute("name")?.Value ?? paramElement.Name.LocalName;
+                }
+                // 处理直接参数元素
+                else
+                {
+                    paramName = paramElement.Name.LocalName;
+                }
+
+                // 处理CDATA内容 - 保留原始CDATA标记
+                if (paramElement.DescendantNodes().OfType<XCData>().Any())
+                {
+                    _sLogger?.LogDebug($"ExtractParameter: Found CDATA in parameter {paramName}");
+                    var cdataNodes = paramElement.DescendantNodes().OfType<XCData>().ToList();
+                    if (cdataNodes.Count == 1)
+                    {
+                        paramValue = cdataNodes[0].Value;
+                        _sLogger?.LogDebug($"ExtractParameter: Single CDATA value length: {paramValue.Length}");
+                    }
+                    else
+                    {
+                        var sb = new StringBuilder();
+                        foreach (var cdata in cdataNodes)
+                        {
+                            sb.Append(cdata.Value);
+                        }
+                        paramValue = sb.ToString();
+                        _sLogger?.LogDebug($"ExtractParameter: Combined {cdataNodes.Count} CDATA values, total length: {paramValue.Length}");
+                    }
+                }
+                // 处理嵌套XML结构
+                else if (paramElement.HasElements)
+                {
+                    var sb = new StringBuilder();
+                    foreach (var child in paramElement.Elements())
+                    {
+                        if (child.HasElements)
+                        {
+                            sb.Append(child.ToString());
+                        }
+                        else if (child.DescendantNodes().OfType<XCData>().Any())
+                        {
+                            sb.Append(child.DescendantNodes().OfType<XCData>().First().Value);
+                        }
+                        else
+                        {
+                            sb.Append(child.Value);
+                        }
+                    }
+                    paramValue = sb.ToString();
+                }
+                // 处理普通文本内容
+                else
+                {
+                    paramValue = paramElement.Value.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(paramName))
+                {
+                    _sLogger?.LogDebug($"ExtractParameter: Extracted parameter '{paramName}' with value: {paramValue}");
+                    arguments[paramName] = paramValue;
+                }
+            }
+            catch (Exception ex)
+            {
+                _sLogger?.LogError(ex, $"Error extracting parameter from element: {paramElement}");
+                throw;
+            }
+        }
+
+
+        private static void ValidateRequiredParameters(string toolName, Dictionary<string, string> arguments)
+        {
+            var methodParams = ToolRegistry[toolName].Method.GetParameters();
+            foreach (var param in methodParams)
+            {
+                if (!arguments.ContainsKey(param.Name) && 
+                    !param.IsOptional && 
+                    !param.HasDefaultValue)
+                {
+                    _sLogger?.LogWarning($"ValidateRequiredParameters: Missing required parameter '{param.Name}' for tool '{toolName}'");
+                }
             }
         }
 
         public static async Task<object> ExecuteRegisteredToolAsync(string toolName, Dictionary<string, string> stringArguments, ToolContext toolContext = null)
         {
-            // Clean CDATA markers if present
+            // Clean CDATA markers if present and trim values
             var cleanedArguments = new Dictionary<string, string>();
             foreach (var kvp in stringArguments)
             {
                 var value = kvp.Value;
-                if (value.Contains("<![CDATA["))
-                {
-                    value = value.Replace("<![CDATA[", "").Replace("]]>", "").Trim();
-                }
+                // Remove CDATA markers if present
+                value = Regex.Replace(value, @"<!\[CDATA\[(.*?)\]\]>", "$1").Trim();
                 cleanedArguments[kvp.Key] = value;
             }
             stringArguments = cleanedArguments;

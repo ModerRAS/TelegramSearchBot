@@ -146,6 +146,29 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         // Tool with conflicting name (should be ignored)
         [McpTool("Another static tool.", Name = "StaticTool")]
         public static void DuplicateStaticTool() { }
+
+        // Dummy tool for TryParseToolCalls_ShouldParseSimpleToolCall
+        [McpTool("A dummy tool for testing parsing.")]
+        public static void TestTool(string param1, int param2) { }
+
+        // Dummy tool for TryParseToolCalls_ShouldParseCDataContent and TryParseToolCalls_ShouldParseComplexMultiToolCommand
+        [McpTool("A dummy memory command tool.")]
+        public static void ProcessMemoryCommandAsync(string command, string arguments, string toolContext) { }
+
+        // Dummy tool for TryParseToolCalls_ShouldParseComplexMultiToolCommand
+        [McpTool("A dummy thought processing tool.")]
+        public static void ProcessThoughtAsync(
+            [McpParameter("The context of the tool call.")] string toolContext,
+            [McpParameter("The input for the thought process.")] string input,
+            [McpParameter("Whether the next thought is needed.")] bool nextThoughtNeeded,
+            [McpParameter("The current thought number.")] int thoughtNumber,
+            [McpParameter("The total number of thoughts.")] int totalThoughts,
+            [McpParameter("The thought number to branch from.", IsRequired = false)] int? branchFromThought = null,
+            [McpParameter("The branch identifier.", IsRequired = false)] string branchId = null,
+            [McpParameter("Whether more thoughts are needed.", IsRequired = false)] bool needsMoreThoughts = false,
+            [McpParameter("Whether this is a revision.", IsRequired = false)] bool isRevision = false,
+            [McpParameter("The thought number this revises.", IsRequired = false)] int? revisesThought = null)
+        { }
     }
 
     // --- Test Class ---
@@ -520,6 +543,46 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
                 () => McpToolHelper.ExecuteRegisteredToolAsync("NonExistentTool", args),
                 "Tool 'NonExistentTool' not registered"
             );
+        }
+
+        [TestMethod]
+        public void TryParseToolCalls_ShouldParseComplexMultiToolCommand()
+        {
+            // Arrange
+            var input = TestToolProvider.TestDecodeCommand;
+
+            // Act
+            bool result = McpToolHelper.TryParseToolCalls(input, out var parsedToolCalls);
+
+            // Assert
+            Assert.IsTrue(result);
+            Assert.AreEqual(4, parsedToolCalls.Count);
+
+            // Verify first tool (ProcessMemoryCommandAsync)
+            var firstTool = parsedToolCalls[0];
+            Assert.AreEqual("ProcessMemoryCommandAsync", firstTool.toolName);
+            Assert.AreEqual("add_observations", firstTool.arguments["command"]);
+            Assert.AreEqual("current_chat", firstTool.arguments["toolContext"]);
+            Assert.IsTrue(firstTool.arguments["arguments"].Contains("\"entityName\": \"多模态推理测试用例_01\""));
+
+            // Verify second tool (ProcessThoughtAsync)
+            var secondTool = parsedToolCalls[1];
+            Assert.AreEqual("ProcessThoughtAsync", secondTool.toolName);
+            Assert.AreEqual("current_chat", secondTool.arguments["toolContext"]);
+            Assert.AreEqual("启动压力测试协议：加载分布式推理负载，注入随机噪声干扰...", secondTool.arguments["input"]);
+            Assert.AreEqual("true", secondTool.arguments["nextThoughtNeeded"]);
+
+            // Verify third tool (ProcessMemoryCommandAsync)
+            var thirdTool = parsedToolCalls[2];
+            Assert.AreEqual("ProcessMemoryCommandAsync", thirdTool.toolName);
+            Assert.AreEqual("create_relations", thirdTool.arguments["command"]);
+            Assert.IsTrue(thirdTool.arguments["arguments"].Contains("\"from\": \"异常记忆回溯测试模块\""));
+
+            // Verify fourth tool (ProcessThoughtAsync)
+            var fourthTool = parsedToolCalls[3];
+            Assert.AreEqual("ProcessThoughtAsync", fourthTool.toolName);
+            Assert.AreEqual("检测到推理延迟波动，启动自适应调节机制：动态调整神经符号权重比例...", fourthTool.arguments["input"]);
+            Assert.AreEqual("true", fourthTool.arguments["isRevision"]);
         }
     }
 }
