@@ -352,7 +352,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             });
             await _dbContext.SaveChangesAsync();
         }
-
+        public async Task<int> GetAltPhotoAvailableCapacityAsync() {
+            var modelName = "gemma3:27b";
+            var config = await _dbContext.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == AltPhotoModelName);
+            if (config != null) {
+                modelName = config.Value;
+            }
+            return await GetAvailableCapacityAsync(modelName);
+        }
         public async Task<int> GetAvailableCapacityAsync(string modelName = "gemma3:27b")
         {
             var redisDb = connectionMultiplexer.GetDatabase();

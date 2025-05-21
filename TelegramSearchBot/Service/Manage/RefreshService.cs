@@ -347,7 +347,7 @@ namespace TelegramSearchBot.Service.Manage
             long filesPerPercent = totalFiles / 100;
 
             var db = _redis.GetDatabase();
-            string progressKey = $"altimage:progress:{DateTime.Now:yyyyMMddHHmmss}";
+            string progressKey = $"altimage:progress";
             await db.StringSetAsync($"{progressKey}:total", totalFiles);
             await db.StringSetAsync($"{progressKey}:processed", 0);
             await db.StringSetAsync($"{progressKey}:nextPercent", 1);
@@ -369,7 +369,7 @@ namespace TelegramSearchBot.Service.Manage
                     // 定期检查可用容量
                     if (DateTime.Now - lastCheckTime > checkInterval)
                     {
-                        var available = await _generalLLMService.GetAvailableCapacityAsync();
+                        var available = await _generalLLMService.GetAltPhotoAvailableCapacityAsync();
                         if (available <= 0)
                         {
                             await Task.Delay(1000);
