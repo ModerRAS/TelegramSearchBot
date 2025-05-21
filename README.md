@@ -48,9 +48,9 @@
 返回该Bot所在的所有群聊中 发送者在的群 的所有符合关键字的选项
 
 ## 工作方式
-读取群聊消息，然后放入LiteDB和Lucene中，然后通过Lucene进行搜索
+读取群聊消息，然后放入SQLite和Lucene中，然后通过Lucene进行搜索
 
 ## 额外功能
-可以使用私有搭建的`Telegram Bot API`配合使用，只需要参考`docker-compose.yml`和`.env.example`配置好所需要的参数即可
+可以使用私有搭建的`Telegram Bot API`配合使用，只需要改好`Config.json`里的`"IsLocalAPI": true`和`"BaseUrl": "http://127.0.0.1:8081"`即可。
 ## License
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FModerRAS%2FTelegramSearchBot.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FModerRAS%2FTelegramSearchBot?ref=badge_large)
+这里曾经是一个FOSSA Status的，但是因为经常报错烦了，遂删之。
