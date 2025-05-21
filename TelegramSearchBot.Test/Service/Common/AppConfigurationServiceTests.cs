@@ -148,9 +148,9 @@ namespace TelegramSearchBot.Test.Service.Common
                 logger => logger.Log(
                     LogLevel.Warning,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Configuration key cannot be null or empty")),
+                    It.Is<It.IsAnyType>((v, t) => v != null && v.ToString()!.Contains("Configuration key cannot be null or empty")),
                     null,
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.AtLeastOnce);
         }
     }

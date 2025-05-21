@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿#pragma warning disable CS8602 // 解引用可能出现空引用
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -16,11 +17,11 @@ using TelegramSearchBot.Service.Storage;
 namespace TelegramSearchBot.Test.Manage {
     [TestClass]
     public class EditLLMConfTest {
-        private DataDbContext _context;
-        private Mock<IConnectionMultiplexer> _redisMock;
-        private Mock<IDatabase> _dbMock;
-        private Mock<OpenAIService> _openAIServiceMock;
-        private EditLLMConfService _service;
+        private DataDbContext _context = null!;
+        private Mock<IConnectionMultiplexer> _redisMock = null!;
+        private Mock<IDatabase> _dbMock = null!;
+        private Mock<OpenAIService> _openAIServiceMock = null!;
+        private EditLLMConfService _service = null!;
 
         [TestInitialize]
         public void Initialize() {

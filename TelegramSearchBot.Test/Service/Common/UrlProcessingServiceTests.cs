@@ -1,3 +1,4 @@
+#pragma warning disable CS8602 // 解引用可能出现空引用
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
@@ -15,10 +16,12 @@ namespace TelegramSearchBot.Test.Service.Common
     [TestClass]
     public class UrlProcessingServiceTests
     {
+        #pragma warning disable CS8618 // 单元测试中字段会在初始化方法中赋值
         private Mock<HttpMessageHandler> _mockHttpMessageHandler;
         private HttpClient _httpClient;
         private Mock<ILogger<UrlProcessingService>> _mockLogger;
         private UrlProcessingService _urlProcessingService;
+        #pragma warning restore CS8618
 
         [TestInitialize]
         public void TestInitialize()

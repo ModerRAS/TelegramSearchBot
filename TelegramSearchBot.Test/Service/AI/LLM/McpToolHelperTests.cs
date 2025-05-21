@@ -1,3 +1,4 @@
+#pragma warning disable CS8602 // 解引用可能出现空引用
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -17,8 +18,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
     {
         public static bool StaticMethodCalled { get; set; } = false;
         public bool InstanceMethodCalled { get; set; } = false;
-        public static string LastStaticArg { get; set; }
-        public string LastInstanceArg { get; set; }
+        public static string? LastStaticArg { get; set; }
+        public string? LastInstanceArg { get; set; }
         public static int LastStaticIntArg { get; set; }
         public bool LastInstanceBoolArg { get; set; }
         public static string TestDecodeCommand = @"
@@ -133,7 +134,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
         
         // Tool with complex parameter (for JSON test)
-         public class ComplexParam { public string Name { get; set; } public int Value { get; set; } }
+         public class ComplexParam { public string? Name { get; set; } public int Value { get; set; } }
          [McpTool("Tool with complex parameter.")]
          public virtual string ComplexParamTool([McpParameter("Complex object.")] ComplexParam data) // Ensure virtual
          {
@@ -175,9 +176,11 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
     [TestClass]
     public class McpToolHelperTests
     {
+        #pragma warning disable CS8618 // 单元测试中字段会在初始化方法中赋值
         private static Mock<ILogger> _mockLogger;
         private static Mock<IServiceProvider> _mockServiceProvider;
         private static Mock<TestToolProvider> _mockToolProviderInstance;
+        #pragma warning restore CS8618
 
         [ClassInitialize]
         public static void ClassInitialize(TestContext context)

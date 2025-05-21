@@ -1,3 +1,4 @@
+#pragma warning disable CS8602 // 解引用可能出现空引用
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -205,9 +206,9 @@ namespace TelegramSearchBot.Test.Service.Storage
                 logger => logger.Log(
                     LogLevel.Information,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains(messageOption.Content)),
+                    It.Is<It.IsAnyType>((v, t) => v != null && v.ToString()!.Contains(messageOption.Content)),
                     null,
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
