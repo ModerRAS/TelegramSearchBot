@@ -208,7 +208,7 @@ namespace TelegramSearchBot.Service.AI.LLM
 
     // ConvertToolResultToString has been moved to McpToolHelper
 
-        public async Task<IEnumerable<string>> GetAllModels(LLMChannel channel)
+        public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel)
         {
             if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway))
             {

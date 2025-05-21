@@ -40,25 +40,46 @@ namespace TelegramSearchBot.Test.Manage {
             
             // Setup Redis operations
             _dbMock.Setup(d => d.StringSetAsync(
-                    It.IsAny<RedisKey>(), 
-                    It.IsAny<RedisValue>(), 
-                    It.IsAny<TimeSpan?>(), 
-                    It.IsAny<When>(), 
+                    It.IsAny<RedisKey>(),
+                    It.IsAny<RedisValue>(),
+                    It.IsAny<TimeSpan?>(),
+                    It.IsAny<When>(),
                     It.IsAny<CommandFlags>()))
                 .ReturnsAsync(true);
             
             _dbMock.Setup(d => d.KeyDeleteAsync(
-                    It.IsAny<RedisKey>(), 
+                    It.IsAny<RedisKey>(),
                     It.IsAny<CommandFlags>()))
                 .ReturnsAsync(true);
             
             var loggerMock = new Mock<ILogger<OpenAIService>>();
             var messageExtensionServiceMock = new Mock<MessageExtensionService>(_context);
-            _openAIServiceMock = new Mock<OpenAIService>(_context, loggerMock.Object, messageExtensionServiceMock.Object);
+            var httpClientFactoryMock = new Mock<IHttpClientFactory>();
+            _openAIServiceMock = new Mock<OpenAIService>(_context, loggerMock.Object, messageExtensionServiceMock.Object, httpClientFactoryMock.Object);
             _openAIServiceMock.Setup(o => o.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "model1", "model2" });
+
+            var ollamaLoggerMock = new Mock<ILogger<OllamaService>>();
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var ollamaServiceMock = new Mock<OllamaService>(
+                _context,
+                ollamaLoggerMock.Object,
+                serviceProviderMock.Object,
+                httpClientFactoryMock.Object);
+            ollamaServiceMock.Setup(o => o.GetAllModels(It.IsAny<LLMChannel>()))
+                .ReturnsAsync(new List<string> { "ollama-model1", "ollama-model2" });
+
+            var geminiLoggerMock = new Mock<ILogger<GeminiService>>();
+            var geminiServiceMock = new Mock<GeminiService>(_context, geminiLoggerMock.Object, httpClientFactoryMock.Object);
+            geminiServiceMock.Setup(g => g.GetAllModels(It.IsAny<LLMChannel>()))
+                .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
             
-            _service = new EditLLMConfService(_context, _redisMock.Object, _openAIServiceMock.Object);
+            _service = new EditLLMConfService(
+                _context,
+                _redisMock.Object,
+                _openAIServiceMock.Object,
+                ollamaServiceMock.Object,
+                geminiServiceMock.Object);
         }
 
         [TestMethod]
