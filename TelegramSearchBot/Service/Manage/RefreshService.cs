@@ -400,7 +400,7 @@ namespace TelegramSearchBot.Service.Manage
             long filesPerPercent, long totalFiles)
         {
             var db = _redis.GetDatabase();
-            string progressKey = $"altimage:progress:{DateTime.Now:yyyyMMddHHmmss}";
+            string progressKey = $"altimage:progress";
             var fileName = Path.GetFileNameWithoutExtension(imageFile);
             if (long.TryParse(fileName, out var messageId))
             {
