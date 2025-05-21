@@ -231,7 +231,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        public async Task<string> AnalyzeImageAsync(byte[] imageBytes, string modelName, LLMChannel channel)
+        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel)
         {
             if (string.IsNullOrWhiteSpace(modelName))
             {
@@ -242,7 +242,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             httpClient.BaseAddress = new Uri(channel.Gateway);
             var ollama = new OllamaApiClient(httpClient, modelName);
             ollama.SelectedModel = modelName;
-            var prompt = "请根据这张图片生成一句准确、简洁的中文alt文本，突出画面中最重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。";
+            var prompt = "请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。";
             var chat = new Chat(ollama);
             chat.Options = new RequestOptions();
             chat.Options.Temperature = 0.1f;
@@ -254,7 +254,8 @@ namespace TelegramSearchBot.Service.AI.LLM
             try
             {
                 // 读取图像并转换为Base64
-                var tg_img = SKBitmap.Decode(imageBytes);
+                using var fileStream = File.OpenRead(photoPath);
+                var tg_img = SKBitmap.Decode(fileStream);
                 var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Jpeg, 99);
                 var tg_img_arr = tg_img_data.ToArray();
                 var base64Image = Convert.ToBase64String(tg_img_arr);

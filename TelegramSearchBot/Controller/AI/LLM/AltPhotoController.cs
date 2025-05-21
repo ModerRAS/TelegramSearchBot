@@ -55,9 +55,9 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             }
             string OcrStr = string.Empty;
             try {
-                var PhotoStream = await IProcessPhoto.GetPhoto(e);
+                var PhotoPath = IProcessPhoto.GetPhotoPath(e);
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
-                OcrStr = await generalLLMService.AnalyzeImageAsync(PhotoStream, e.Message.Chat.Id);
+                OcrStr = await generalLLMService.AnalyzeImageAsync(PhotoPath, e.Message.Chat.Id);
                 logger.LogInformation(OcrStr);
                 if (!OcrStr.StartsWith("Error")) {
                     await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "Alt_Result", OcrStr);

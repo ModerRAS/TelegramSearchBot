@@ -25,6 +25,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         public const string MaxRetryCountKey = "LLM:MaxRetryCount";
         public const string MaxImageRetryCountKey = "LLM:MaxImageRetryCount";
+        public const string AltPhotoModelName = "LLM:AltPhotoModelName";
         public const int DefaultMaxRetryCount = 100;
         public const int DefaultMaxImageRetryCount = 1000;
 
@@ -184,15 +185,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 _logger.LogWarning($"所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃");
                 
             }
-        public async Task<string> AnalyzeImageAsync(byte[] imageBytes, long ChatId, CancellationToken cancellationToken = default)
+        public async Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default)
         {
             // 1. 获取模型名称
-            
+
             var modelName = "gemma3:27b";
-            if (string.IsNullOrEmpty(modelName))
-            {
-                _logger.LogWarning("请指定模型名称");
-                return "Error: 请指定模型名称";
+            var config = await _dbContext.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == AltPhotoModelName);
+            if (config != null) {
+                modelName = config.Value;
             }
 
             // 2. 查询ChannelWithModel获取关联的LLMChannel
@@ -246,6 +247,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                         var ollamaModels = await _ollamaService.GetAllModels(channel);
                                         isHealthy = ollamaModels.Any();
                                         break;
+                                    case LLMProvider.OpenAI:
+                                        var openAIModels = await _openAIService.GetAllModels(channel);
+                                        isHealthy = openAIModels.Any();
+                                        break;
+                                    case LLMProvider.Gemini:
+                                        var geminiModels = await _geminiService.GetAllModels(channel);
+                                        isHealthy = geminiModels.Any();
+                                        break;
                                     default:
                                         _logger.LogWarning($"LLM渠道 {channel.Id} ({channel.Provider}) 不支持图像识别健康检查");
                                         continue;
@@ -267,7 +276,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             switch (channel.Provider)
                             {
                                 case LLMProvider.Ollama:
-                                    return await _ollamaService.AnalyzeImageAsync(imageBytes, modelName, channel);
+                                    return await _ollamaService.AnalyzeImageAsync(PhotoPath, modelName, channel);
+                                case LLMProvider.OpenAI:
+                                    return await _openAIService.AnalyzeImageAsync(PhotoPath, modelName, channel);
+                                case LLMProvider.Gemini:
+                                    return await _geminiService.AnalyzeImageAsync(PhotoPath, modelName, channel);
                                 default:
                                     _logger.LogError($"当前不支持 {channel.Provider} 的图像识别功能");
                                     return $"Error: 当前不支持 {channel.Provider} 的图像识别功能";

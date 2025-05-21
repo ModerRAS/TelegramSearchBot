@@ -18,15 +18,21 @@ namespace TelegramSearchBot.Service.Manage {
         public string ServiceName => "EditLLMConfService";
         protected readonly DataDbContext DataContext;
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
+        protected OllamaService OllamaService { get; set; }
+        protected GeminiService GeminiService { get; set; }
         protected OpenAIService OpenAIService { get; set; }
         public EditLLMConfService(
             DataDbContext context, 
             IConnectionMultiplexer connectionMultiplexer,
-            OpenAIService openAIService
+            OpenAIService openAIService,
+            OllamaService ollamaService,
+            GeminiService geminiService
             ) {
             DataContext = context;
             this.connectionMultiplexer = connectionMultiplexer;
             OpenAIService = openAIService;
+            OllamaService = ollamaService;
+            GeminiService = geminiService;
         }
 
         /// <summary>
@@ -50,7 +56,20 @@ namespace TelegramSearchBot.Service.Manage {
                 
                 await DataContext.LLMChannels.AddAsync(channel);
                 await DataContext.SaveChangesAsync();
-                var models = await OpenAIService.GetAllModels(channel);
+                IEnumerable<string> models;
+                switch (Provider) {
+                    case LLMProvider.OpenAI:
+                        models = await OpenAIService.GetAllModels(channel);
+                        break;
+                    case LLMProvider.Ollama:
+                        models = await OllamaService.GetAllModels(channel);
+                        break;
+                    case LLMProvider.Gemini:
+                        models = await GeminiService.GetAllModels(channel);
+                        break;
+                    default:
+                        return -1;
+                }
                 var list = new List<ChannelWithModel>();
                 foreach (var e in models) {
                     list.Add(new ChannelWithModel() { LLMChannelId = channel.Id, ModelName = e });
@@ -350,6 +369,10 @@ namespace TelegramSearchBot.Service.Manage {
                 await db.StringSetAsync(stateKey, "setting_max_image_retry");
                 return (true, "请输入图片处理最大重试次数(默认1000):");
             }
+            else if (Command.Trim().Equals("设置图片模型", StringComparison.OrdinalIgnoreCase)) {
+                await db.StringSetAsync(stateKey, "setting_alt_photo_model");
+                return (true, "请输入图片分析使用的模型名称:");
+            }
             
             if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
                 await db.StringSetAsync(stateKey, "awaiting_name");
@@ -490,6 +513,27 @@ namespace TelegramSearchBot.Service.Manage {
                     await db.KeyDeleteAsync(dataKey);
                     
                     return (true, result > 0 ? "渠道创建成功" : "渠道创建失败");
+                
+                case "setting_alt_photo_model":
+                    try {
+                        var config = await DataContext.AppConfigurationItems
+                            .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.AltPhotoModelName);
+                        
+                        if (config == null) {
+                            await DataContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
+                                Key = GeneralLLMService.AltPhotoModelName,
+                                Value = Command
+                            });
+                        } else {
+                            config.Value = Command;
+                        }
+                        
+                        await DataContext.SaveChangesAsync();
+                        await db.KeyDeleteAsync(stateKey);
+                        return (true, $"图片分析模型已设置为: {Command}");
+                    } catch {
+                        return (false, "设置图片分析模型失败");
+                    }
                 
                 case "editing_select_channel":
                     if (!int.TryParse(Command, out var channelId)) {

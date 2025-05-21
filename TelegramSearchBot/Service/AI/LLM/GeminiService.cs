@@ -1,19 +1,20 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Text;
-using System.Linq;
 using GenerativeAI;
 using GenerativeAI.Types;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using SkiaSharp;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using System.Net.Http;
 using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -217,6 +218,37 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
 
             yield return "Maximum tool call cycles reached. Please try again.";
+        }
+
+        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel) {
+            if (string.IsNullOrWhiteSpace(modelName)) {
+                modelName = "gpt-4-vision-preview";
+            }
+
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway) || string.IsNullOrWhiteSpace(channel.ApiKey)) {
+                _logger.LogError("{ServiceName}: Channel, Gateway or ApiKey is not configured.", ServiceName);
+                return $"Error: {ServiceName} channel/gateway/apikey is not configured.";
+            }
+
+            var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+            var model = googleAI.CreateGenerativeModel("models/" + modelName);
+            try {
+                var prompt = $"请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。";
+
+                var chat = model.StartChat();
+
+
+                var request = new GenerateContentRequest();
+                request.AddText(prompt);
+                // Attach a local file
+                request.AddInlineFile(photoPath);
+                // Generate the content with attached files
+                var response = await chat.GenerateContentAsync(request);
+                return response.Text;
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Error analyzing image with OpenAI");
+                return $"Error analyzing image: {ex.Message}";
+            }
         }
     }
 }

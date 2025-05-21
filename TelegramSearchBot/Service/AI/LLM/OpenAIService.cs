@@ -1,28 +1,30 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json; 
 using OpenAI;
 using OpenAI.Chat;
+using SkiaSharp; // Added for image processing
 using System;
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http; // Added for IHttpClientFactory
+using System.Reflection;
 using System.Text;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
-using System.Reflection;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Service.Common; 
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
-using Newtonsoft.Json; 
+using TelegramSearchBot.Service.Common; 
+using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
 // Using alias for the common internal ChatMessage format
 using CommonChat = OpenAI.Chat;
-using System.ClientModel.Primitives;
-using System.Net;
-using System.ClientModel;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Service.AI.LLM 
 {
@@ -40,18 +42,21 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
         private DataDbContext _dbContext;
+        private IHttpClientFactory _httpClientFactory;
 
         private readonly MessageExtensionService _messageExtensionService;
 
         public OpenAIService(
             DataDbContext context,
             ILogger<OpenAIService> logger,
-            MessageExtensionService messageExtensionService)
+            MessageExtensionService messageExtensionService,
+            IHttpClientFactory _httpClientFactory)
         {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
+            this._httpClientFactory = _httpClientFactory;
         }
 
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
@@ -374,7 +379,63 @@ namespace TelegramSearchBot.Service.AI.LLM
                                       .Where(s => s.GroupId == ChatId)
                                       .FirstOrDefaultAsync();
             var ModelName = GroupSetting?.LLMModelName;
-            return ModelName; 
+            return ModelName;
+        }
+
+        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel)
+        {
+            if (string.IsNullOrWhiteSpace(modelName))
+            {
+                modelName = "gpt-4-vision-preview";
+            }
+
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway) || string.IsNullOrWhiteSpace(channel.ApiKey))
+            {
+                _logger.LogError("{ServiceName}: Channel, Gateway or ApiKey is not configured.", ServiceName);
+                return $"Error: {ServiceName} channel/gateway/apikey is not configured.";
+            }
+
+            using var httpClient = _httpClientFactory.CreateClient();
+
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(channel.Gateway),
+                Transport = new HttpClientPipelineTransport(httpClient),
+            };
+
+            var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
+
+            try
+            {
+                // 读取图像并转换为Base64
+                using var fileStream = File.OpenRead(photoPath);
+                var tg_img = SKBitmap.Decode(fileStream);
+                var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Png, 99);
+                var tg_img_arr = tg_img_data.ToArray();
+                var base64Image = Convert.ToBase64String(tg_img_arr);
+
+                var prompt = $"请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。";
+
+                var messages = new List<ChatMessage> {
+                    new UserChatMessage(new List<ChatMessageContentPart>() {
+                        ChatMessageContentPart.CreateTextPart(prompt),
+                        ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(tg_img_arr), "image/png"),
+
+                    }),
+                };
+
+                var responseBuilder = new StringBuilder();
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages)) {
+                    foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>()) {
+                        if (updatePart?.Text != null) responseBuilder.Append(updatePart.Text);
+                    }
+                }
+                return responseBuilder.ToString();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing image with OpenAI");
+                return $"Error analyzing image: {ex.Message}";
+            }
         }
     }
 }
