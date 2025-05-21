@@ -9,35 +9,107 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 using OllamaSharp;
 using OllamaSharp.Models;
+using StackExchange.Redis;
+using Microsoft.Extensions.Logging;
 
 namespace TelegramSearchBot.Service.Vector
 {
     public class VectorGenerationService : IService
     {
         private readonly QdrantClient _qdrantClient;
-        private readonly OpenAIService _openAIService;
-        private readonly OllamaService _ollamaService;
+        private readonly ILogger<VectorGenerationService> _logger;
+        private readonly IDatabase _redis;
+        private readonly List<ILLMService> _llmServices;
 
         public string ServiceName => "VectorGenerationService";
 
         public VectorGenerationService(
             QdrantClient qdrantClient,
-            OpenAIService openAIService,
-            OllamaService ollamaService)
+            IEnumerable<ILLMService> llmServices,
+            IConnectionMultiplexer redis,
+            ILogger<VectorGenerationService> logger)
         {
             _qdrantClient = qdrantClient;
-            _openAIService = openAIService;
-            _ollamaService = ollamaService;
+            _llmServices = llmServices.ToList();
+            _redis = redis.GetDatabase();
+            _logger = logger;
         }
 
-        public async Task<float[]> GenerateVectorAsync(string text, string modelName = "ollama", LLMChannel channel = null)
+        public async Task<float[]> GenerateVectorAsync(string text, string modelName = "ollama")
         {
-            return modelName switch
+            var service = await SelectLLMServiceAsync(modelName);
+            return await service.GenerateEmbeddingsAsync(text, modelName, channel);
+        }
+
+        private async Task<ILLMService> SelectLLMServiceAsync(string modelName)
+        {
+            if (channel != null)
             {
-                //"openai" => await _openAIService.GenerateEmbeddingsAsync(text, modelName, channel),
-                "ollama" => await _ollamaService.GenerateEmbeddingsAsync(text, modelName, channel),
-                _ => throw new ArgumentException("Invalid model specified")
-            };
+                // 如果已指定渠道，直接返回对应服务
+                var service = _llmServices.FirstOrDefault(s =>
+                    s.GetType().Name.ToLower().Contains(channel.Provider.ToString().ToLower()));
+                if (service == null)
+                {
+                    throw new ArgumentException($"No available service for provider: {channel.Provider}");
+                }
+                return service;
+            }
+
+            // 获取所有匹配模型名称的服务
+            var availableServices = _llmServices
+                .Where(s => s.GetType().Name.ToLower().Contains(modelName.ToLower()))
+                .ToList();
+
+            if (!availableServices.Any())
+            {
+                throw new ArgumentException($"No available service for model: {modelName}");
+            }
+
+            // Redis并发控制
+            var redisKey = $"vector:channel:{modelName}:semaphore";
+            var currentCount = await _redis.StringGetAsync(redisKey);
+            int count = currentCount.HasValue ? (int)currentCount : 0;
+
+            if (count >= 10) // 默认最大并发数
+            {
+                throw new Exception($"Vector generation service for {modelName} is currently at full capacity");
+            }
+
+            // 获取锁并增加计数
+            await _redis.StringIncrementAsync(redisKey);
+            try
+            {
+                // 健康检查
+                var healthyServices = new List<ILLMService>();
+                foreach (var service in availableServices)
+                {
+                    try
+                    {
+                        if (await service.IsHealthyAsync())
+                        {
+                            healthyServices.Add(service);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, $"Health check failed for service: {service.GetType().Name}");
+                    }
+                }
+
+                if (!healthyServices.Any())
+                {
+                    throw new Exception($"No healthy services available for model: {modelName}");
+                }
+
+                // 简单实现 - 返回第一个健康服务
+                // 后续可添加更复杂的负载均衡策略
+                return healthyServices.First();
+            }
+            finally
+            {
+                // 释放锁
+                await _redis.StringDecrementAsync(redisKey);
+            }
         }
 
         public async Task StoreVectorAsync(string collectionName, ulong id, float[] vector, Dictionary<string, string> Payload)
