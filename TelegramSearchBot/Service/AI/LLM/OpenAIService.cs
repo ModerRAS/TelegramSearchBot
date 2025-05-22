@@ -249,7 +249,9 @@ namespace TelegramSearchBot.Service.AI.LLM
                              if (updatePart?.Text != null) {
                                  currentMessageContentBuilder.Append(updatePart.Text);
                                  llmResponseAccumulatorForToolParsing.Append(updatePart.Text);
-                                 yield return currentMessageContentBuilder.ToString(); // Yield current full message
+                                 if (currentMessageContentBuilder.ToString().Length > 10) {
+                                     yield return currentMessageContentBuilder.ToString(); // Yield current full message
+                                 }
                              }
                         }
                     }
