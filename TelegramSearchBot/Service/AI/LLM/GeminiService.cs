@@ -20,7 +20,6 @@ namespace TelegramSearchBot.Service.AI.LLM
 {
     public class GeminiService : ILLMService, IService
     {
-        private readonly LLMChannel _channel;
         public string ServiceName => "GeminiService";
         private readonly ILogger<GeminiService> _logger;
         private readonly DataDbContext _dbContext;
@@ -146,12 +145,6 @@ namespace TelegramSearchBot.Service.AI.LLM
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
-            if (_channel == null || string.IsNullOrWhiteSpace(_channel.ApiKey))
-            {
-                _logger.LogError("{ServiceName}: Channel or ApiKey is not configured", ServiceName);
-                yield return $"Error: {ServiceName} channel/apikey is not configured";
-                yield break;
-            }
 
             var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
@@ -234,34 +227,14 @@ namespace TelegramSearchBot.Service.AI.LLM
                 var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
                 var embeddings = googleAI.CreateEmbeddingModel("models/embedding-001");
                 var response = await embeddings.EmbedContentAsync(text);
+#pragma warning disable CS8602 // 解引用可能出现空引用。
                 return response.Embedding.Values.Select(v => (float)v).ToArray();
+#pragma warning restore CS8602 // 解引用可能出现空引用。
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to generate embeddings");
                 throw;
-            }
-        }
-
-        public async Task<bool> IsHealthyAsync(LLMChannel channel)
-        {
-            if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey))
-            {
-                return false;
-            }
-
-            try
-            {
-                // 健康检查 - 测试API连通性
-                using var httpClient = _httpClientFactory.CreateClient();
-                var googleAI = new GoogleAi(_channel.ApiKey, client: httpClient);
-                await googleAI.ListModelsAsync();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Gemini health check failed");
-                return false;
             }
         }
 

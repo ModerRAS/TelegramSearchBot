@@ -1,6 +1,9 @@
 #pragma warning disable CS8602 // 解引用可能出现空引用
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using Qdrant.Client;
+using StackExchange.Redis;
 using Moq;
 using Nito.AsyncEx;
 using System;
@@ -9,26 +12,32 @@ using System.Threading.Tasks;
 using LiteDB; // Added for LiteDatabase
 using System.IO; // Added for MemoryStream
 using Telegram.Bot; // Added for ITelegramBotClient
+using MediatR;
+using System.Threading;
+using TelegramSearchBot.Model.Notifications;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Service.Vector;
 using User = Telegram.Bot.Types.User; // Alias for Telegram.Bot.Types.User
 using Chat = Telegram.Bot.Types.Chat; // Alias for Telegram.Bot.Types.Chat
-using Message = TelegramSearchBot.Model.Data.Message; // Alias for our Message model
+using Message = TelegramSearchBot.Model.Data.Message;
 
 namespace TelegramSearchBot.Test.Service.Storage
 {
     [TestClass]
     public class MessageServiceTests
     {
-        private DbContextOptions<DataDbContext> _dbContextOptions;
-        private Mock<ILogger<MessageService>> _mockLogger;
-        private Mock<ITelegramBotClient> _mockTelegramBotClient; // Added
-        private Mock<SendMessage> _mockSendMessage; 
-        private Mock<LuceneManager> _mockLuceneManager;
-        private DataDbContext _context; // Used for assertions
+        private DbContextOptions<DataDbContext>? _dbContextOptions;
+        private Mock<ILogger<MessageService>>? _mockLogger;
+        private Mock<ITelegramBotClient>? _mockTelegramBotClient; // Added
+        private Mock<SendMessage>? _mockSendMessage;
+        private Mock<LuceneManager>? _mockLuceneManager;
+        private Mock<IMediator>? _mockMediator;
+        private DataDbContext? _context; // Used for assertions
 
         // Note: Testing LiteDB part is tricky due to static Env.Database. 
         // These tests will focus on Sqlite and Lucene interactions.
@@ -39,7 +48,7 @@ namespace TelegramSearchBot.Test.Service.Storage
             _dbContextOptions = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
-            
+
             _context = new DataDbContext(_dbContextOptions); // For direct assertions
 
             // Initialize Env.Database with an in-memory LiteDB instance for testing
@@ -47,28 +56,55 @@ namespace TelegramSearchBot.Test.Service.Storage
 
             _mockLogger = new Mock<ILogger<MessageService>>();
             _mockTelegramBotClient = new Mock<ITelegramBotClient>();
-            
+
             // SendMessage constructor requires ITelegramBotClient
             // We mock SendMessage itself because its methods (like Log, AddTask) might be complex or have side effects
             // not relevant to MessageService's direct logic.
             // If SendMessage methods were virtual, we could mock them. Here, we provide its dependency.
             var mockSendMessageLogger = new Mock<ILogger<SendMessage>>();
             _mockSendMessage = new Mock<SendMessage>(_mockTelegramBotClient.Object, mockSendMessageLogger.Object);
-            
+
             // LuceneManager constructor requires SendMessage
             // Similar to SendMessage, if LuceneManager's methods were virtual, we could mock them.
             // Here, we provide its dependency.
             // Note: Since LuceneManager.WriteDocumentAsync is not virtual, we cannot Verify its call on the mock.
             // We are essentially testing with a real (but potentially non-functional if dependencies are shallow mocked) LuceneManager.
             // For true unit testing of MessageService, ILuceneManager would be preferred.
-            _mockLuceneManager = new Mock<LuceneManager>(_mockSendMessage.Object); 
+            _mockLuceneManager = new Mock<LuceneManager>(_mockSendMessage.Object);
+            _mockMediator = new Mock<IMediator>();
+
+            // Create mocks for all LLM services
+            var mockOllamaLogger = new Mock<ILogger<OllamaService>>();
+            var mockOllamaService = new Mock<OllamaService>(
+                _context,
+                mockOllamaLogger.Object,
+                Mock.Of<IServiceProvider>(),
+                Mock.Of<IHttpClientFactory>());
+
+            var mockOpenAILogger = new Mock<ILogger<OpenAIService>>();
+            var messageExtensionService = new MessageExtensionService(_context);
+            var mockOpenAIService = new Mock<OpenAIService>(
+                _context,
+                mockOpenAILogger.Object,
+                messageExtensionService,
+                Mock.Of<IHttpClientFactory>());
+
+            var mockGeminiLogger = new Mock<ILogger<GeminiService>>();
+            var mockGeminiService = new Mock<GeminiService>(
+                _context,
+                mockGeminiLogger.Object,
+                Mock.Of<IHttpClientFactory>());
+
+            // Setup default mediator behavior
+            _mockMediator.Setup(m => m.Publish(It.IsAny<MessageVectorGenerationNotification>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
         }
         
         private MessageService CreateService()
         {
             // Pass a new context for each service instance to ensure isolation if needed,
             // though for these tests, direct context manipulation is also done via _context.
-            return new MessageService(_mockLogger.Object, _mockLuceneManager.Object, _mockSendMessage.Object, new DataDbContext(_dbContextOptions));
+            return new MessageService(_mockLogger.Object, _mockLuceneManager.Object, _mockSendMessage.Object, new DataDbContext(_dbContextOptions), _mockMediator.Object);
         }
 
         private MessageOption CreateSampleMessageOption(long userId, long chatId, int messageId, string content, long replyToMessageId = 0)
@@ -133,7 +169,7 @@ namespace TelegramSearchBot.Test.Service.Storage
             
             // Let's re-create the service to ensure it gets a fresh context instance for the operation,
             // but it will point to the same InMemory database defined by _dbContextOptions.
-            var serviceForSecondCall = new MessageService(_mockLogger.Object, _mockLuceneManager.Object, _mockSendMessage.Object, new DataDbContext(_dbContextOptions));
+            var serviceForSecondCall = new MessageService(_mockLogger.Object, _mockLuceneManager.Object, _mockSendMessage.Object, new DataDbContext(_dbContextOptions), _mockMediator.Object);
             await serviceForSecondCall.AddToSqlite(messageOption2);
 
             Assert.AreEqual(initialUserCount, await _context.UserData.CountAsync(), "UserData count should not change.");
@@ -217,21 +253,22 @@ namespace TelegramSearchBot.Test.Service.Storage
         {
             var messageOption = CreateSampleMessageOption(1L, 100L, 3000, "Retry Test");
 
+#pragma warning disable CS8604 // 引用类型参数可能为 null。
             var mockContext = new Mock<DataDbContext>(_dbContextOptions);
-            var attempts = 0;
+#pragma warning restore CS8604 // 引用类型参数可能为 null。
 
             // Setup AddToSqlite to fail first time, then succeed
             // This requires mocking DataDbContext methods or making AddToSqlite virtual.
             // Given the current structure, this is complex to test without refactoring MessageService.
             // A simpler approach for now: verify the log for retry, or verify multiple calls if AddToSqlite was mockable.
-            
+
             // For this test, we'll assume the retry mechanism involves calling AddToSqlite twice.
             // We can't directly mock AddToSqlite on the same instance.
             // This test highlights a limitation in testing non-virtual instance methods or tightly coupled dependencies.
 
             // Let's verify the logger for the retry scenario if possible, or simplify the test.
             // The current ExecuteAsync catches InvalidOperationException.
-            
+
             // We can't easily mock AddToSqlite to throw an exception only on the first call
             // without refactoring or using a more complex mocking setup (e.g., a proxy or partial mock).
             // So, this specific retry logic test is limited with the current design.

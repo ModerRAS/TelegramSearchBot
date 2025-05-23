@@ -16,6 +16,7 @@ using TelegramSearchBot.Service.AI.QR;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Service.Vector;
+using MediatR;
 
 namespace TelegramSearchBot.Service.Manage
 {
@@ -29,6 +30,7 @@ namespace TelegramSearchBot.Service.Manage
         private readonly PaddleOCRService _paddleOCRService;
         private readonly AutoQRService _autoQRService;
         private readonly GeneralLLMService _generalLLMService;
+        private readonly IMediator _mediator;
 
         public RefreshService(ILogger<RefreshService> logger,
                             LuceneManager lucene,
@@ -40,7 +42,8 @@ namespace TelegramSearchBot.Service.Manage
                             MessageExtensionService messageExtensionService,
                             PaddleOCRService paddleOCRService,
                             AutoQRService autoQRService,
-                            GeneralLLMService generalLLMService) : base(logger, lucene, Send, context, vectorGenerationService)
+                            GeneralLLMService generalLLMService,
+                            IMediator mediator) : base(logger, lucene, Send, context, mediator)
         {
             _logger = logger;
             _chatImport = chatImport;
@@ -49,6 +52,7 @@ namespace TelegramSearchBot.Service.Manage
             _paddleOCRService = paddleOCRService;
             _autoQRService = autoQRService;
             _generalLLMService = generalLLMService;
+            _mediator = mediator;
         }
 
         private async Task RebuildIndex()
