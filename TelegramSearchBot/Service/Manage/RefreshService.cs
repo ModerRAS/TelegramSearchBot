@@ -15,6 +15,7 @@ using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.AI.QR;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.Service.Manage
 {
@@ -33,12 +34,13 @@ namespace TelegramSearchBot.Service.Manage
                             LuceneManager lucene,
                             SendMessage Send,
                             DataDbContext context,
+                            VectorGenerationService vectorGenerationService,
                             ChatImportService chatImport,
                             AutoASRService autoASRService,
                             MessageExtensionService messageExtensionService,
                             PaddleOCRService paddleOCRService,
                             AutoQRService autoQRService,
-                            GeneralLLMService generalLLMService) : base(logger, lucene, Send, context)
+                            GeneralLLMService generalLLMService) : base(logger, lucene, Send, context, vectorGenerationService)
         {
             _logger = logger;
             _chatImport = chatImport;

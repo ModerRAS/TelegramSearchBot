@@ -1,6 +1,7 @@
 ﻿using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.OpenTelemetry;
+using System;
 using System.Collections.Generic;
 using TelegramSearchBot.AppBootstrap;
 
@@ -25,6 +26,7 @@ namespace TelegramSearchBot {
                 options.Protocol = OtlpProtocol.HttpProtobuf;
             })
             .CreateLogger();
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
             if (args.Length == 0) {
                 GeneralBootstrap.Startup(args); // Call synchronous Startup
             } else if (args.Length >= 1) {

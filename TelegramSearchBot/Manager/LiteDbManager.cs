@@ -1,8 +1,12 @@
-﻿using LiteDB;
+﻿using System;
+using LiteDB;
 
 namespace TelegramSearchBot.Manager {
-    public class LiteDbManager {
-        public LiteDbManager() {
+    [Obsolete]
+    public class LiteDbManager
+    {
+        public LiteDbManager()
+        {
             //Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
             //Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
         }

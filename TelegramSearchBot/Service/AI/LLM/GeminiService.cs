@@ -20,6 +20,7 @@ namespace TelegramSearchBot.Service.AI.LLM
 {
     public class GeminiService : ILLMService, IService
     {
+        private readonly LLMChannel _channel;
         public string ServiceName => "GeminiService";
         private readonly ILogger<GeminiService> _logger;
         private readonly DataDbContext _dbContext;
@@ -145,7 +146,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
-            if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey))
+            if (_channel == null || string.IsNullOrWhiteSpace(_channel.ApiKey))
             {
                 _logger.LogError("{ServiceName}: Channel or ApiKey is not configured", ServiceName);
                 yield return $"Error: {ServiceName} channel/apikey is not configured";
@@ -218,6 +219,50 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
 
             yield return "Maximum tool call cycles reached. Please try again.";
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
+        {
+            if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey))
+            {
+                _logger.LogError("{ServiceName}: Channel or ApiKey is not configured", ServiceName);
+                throw new ArgumentException("Channel or ApiKey is not configured");
+            }
+
+            try
+            {
+                var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+                var embeddings = googleAI.CreateEmbeddingModel("models/embedding-001");
+                var response = await embeddings.EmbedContentAsync(text);
+                return response.Embedding.Values.Select(v => (float)v).ToArray();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate embeddings");
+                throw;
+            }
+        }
+
+        public async Task<bool> IsHealthyAsync(LLMChannel channel)
+        {
+            if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey))
+            {
+                return false;
+            }
+
+            try
+            {
+                // 健康检查 - 测试API连通性
+                using var httpClient = _httpClientFactory.CreateClient();
+                var googleAI = new GoogleAi(_channel.ApiKey, client: httpClient);
+                await googleAI.ListModelsAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Gemini health check failed");
+                return false;
+            }
         }
 
         public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel) {

@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using OpenAI.Embeddings;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json; 
 using OpenAI;
@@ -334,14 +335,14 @@ namespace TelegramSearchBot.Service.AI.LLM
 
             List<ChatMessage> checkHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
             // Use local GetChatHistory
-            checkHistory = await GetChatHistory(ChatId, checkHistory, null); 
-            checkHistory.Add(new UserChatMessage($"消息：{InputToken}")); 
+            checkHistory = await GetChatHistory(ChatId, checkHistory, null);
+            checkHistory.Add(new UserChatMessage($"消息：{InputToken}"));
 
-             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(Env.OpenAIBaseURL) }; 
-             var chat = new ChatClient(model: Env.OpenAIModelName, credential: new(Env.OpenAIApiKey), clientOptions); 
+             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(Env.OpenAIBaseURL) };
+             var chat = new ChatClient(model: Env.OpenAIModelName, credential: new(Env.OpenAIApiKey), clientOptions);
 
             var str = new StringBuilder();
-            await foreach (var update in chat.CompleteChatStreamingAsync(checkHistory)) 
+            await foreach (var update in chat.CompleteChatStreamingAsync(checkHistory))
             {
                 foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>())
                 {
@@ -355,6 +356,93 @@ namespace TelegramSearchBot.Service.AI.LLM
             else
             {
                 return false;
+            }
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
+        {
+            var handler = new HttpClientHandler {
+                Proxy = WebRequest.DefaultWebProxy,
+                UseProxy = true
+            };
+
+            using var httpClient = new HttpClient(handler);
+
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(channel.Gateway),
+                Transport = new HttpClientPipelineTransport(httpClient),
+            };
+
+            var apikey = new ApiKeyCredential(channel.ApiKey);
+            OpenAIClient client = new(apikey, clientOptions);
+            
+            try
+            {
+                var embeddingClient = client.GetEmbeddingClient(modelName);
+                var response = await embeddingClient.GenerateEmbeddingsAsync(new[] { text });
+                
+                if (response?.Value != null && response.Value.Any())
+                {
+                    var embedding = response.Value.First();
+                    _logger.LogDebug("Embedding response type: {Type}", embedding.GetType().FullName);
+                    _logger.LogDebug("Embedding response structure: {Response}", JsonConvert.SerializeObject(embedding, Formatting.Indented));
+                    
+                    // Try reflection with all possible property names
+                    var embeddingProp = embedding.GetType().GetProperty("Embedding")
+                                      ?? embedding.GetType().GetProperty("EmbeddingVector")
+                                      ?? embedding.GetType().GetProperty("Vector")
+                                      ?? embedding.GetType().GetProperty("EmbeddingData")
+                                      ?? embedding.GetType().GetProperty("Data");
+                    
+                    if (embeddingProp != null)
+                    {
+                        var embeddingValue = embeddingProp.GetValue(embedding);
+                        if (embeddingValue is float[] floatArray)
+                        {
+                            return floatArray;
+                        }
+                        else if (embeddingValue is IEnumerable<float> floatEnumerable)
+                        {
+                            return floatEnumerable.ToArray();
+                        }
+                        else if (embeddingValue is IReadOnlyList<float> floatList)
+                        {
+                            return floatList.ToArray();
+                        }
+                    }
+                    
+                    // Last resort - try to find any float[] property
+                    var floatArrayProps = embedding.GetType().GetProperties()
+                        .Where(p => p.PropertyType == typeof(float[]) || p.PropertyType == typeof(IEnumerable<float>))
+                        .ToList();
+                    
+                    if (floatArrayProps.Any())
+                    {
+                        foreach (var prop in floatArrayProps)
+                        {
+                            var value = prop.GetValue(embedding);
+                            if (value is float[] floats)
+                            {
+                                return floats;
+                            }
+                            else if (value is IEnumerable<float> floatEnumerable)
+                            {
+                                return floatEnumerable.ToArray();
+                            }
+                        }
+                    }
+                    
+                    _logger.LogError("Failed to extract embedding data. Available properties: {Props}",
+                        string.Join(", ", embedding.GetType().GetProperties().Select(p => $"{p.Name}:{p.PropertyType.Name}")));
+                }
+                
+                _logger.LogError("OpenAI Embeddings API returned null or empty response");
+                throw new Exception("OpenAI Embeddings API returned null or empty response");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calling OpenAI Embeddings API");
+                throw;
             }
         }
 
@@ -437,6 +525,22 @@ namespace TelegramSearchBot.Service.AI.LLM
             {
                 _logger.LogError(ex, "Error analyzing image with OpenAI");
                 return $"Error analyzing image: {ex.Message}";
+            }
+        }
+
+        public async Task<bool> IsHealthyAsync()
+        {
+            try
+            {
+                // 简单健康检查 - 测试API连通性
+                using var httpClient = new HttpClient();
+                var response = await httpClient.GetAsync($"{Env.OpenAIBaseURL}/health");
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "OpenAI health check failed");
+                return false;
             }
         }
     }

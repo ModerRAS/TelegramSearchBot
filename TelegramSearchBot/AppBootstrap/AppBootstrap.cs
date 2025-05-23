@@ -181,6 +181,41 @@ namespace TelegramSearchBot.AppBootstrap {
             }
         }
 
+        public static Process Fork(string exePath, string[] args) {
+            // 将参数数组转换为空格分隔的字符串，并正确处理包含空格的参数
+            string arguments = string.Join(" ", args.Select(arg => $"{arg}"));
+
+            // 启动新的进程（自己）
+            ProcessStartInfo startInfo = new ProcessStartInfo {
+                FileName = exePath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            var newProcess = Process.Start(startInfo);
+            if (newProcess == null) {
+                throw new Exception("启动新进程失败");
+            }
+            childProcessManager.AddProcess(newProcess);
+            Log.Logger.Information($"进程：{exePath} {string.Join(" ", args)}已启动");
+            return newProcess;
+        }
+        public static async Task RateLimitForkAsync(string exePath, string[] args) {
+            using (await _asyncLock.LockAsync()) {
+                if (ForkLock.ContainsKey(exePath)) {
+                    if (DateTime.UtcNow - ForkLock[args[0]] > TimeSpan.FromMinutes(5)) {
+                        Fork(exePath, args);
+                        ForkLock[exePath] = DateTime.UtcNow;
+                    }
+                } else {
+                    Fork(exePath, args);
+                    ForkLock.Add(exePath, DateTime.UtcNow);
+                }
+            }
+        }
+
         // 定义 Bootstrap 类的后缀 (命名约定)
         private const string BootstrapSuffix = "Bootstrap";
         // 定义要调用的静态方法名 (命名约定)

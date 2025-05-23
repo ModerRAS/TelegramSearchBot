@@ -23,10 +23,13 @@ using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
-using TelegramSearchBot.Service.BotAPI; // Added for BotCommandService
+using TelegramSearchBot.Service.BotAPI;
+using Qdrant.Client;
+using Qdrant.Client.Grpc;
+using Grpc.Net.Client;
+using Grpc.Core.Interceptors;
 
-namespace TelegramSearchBot.AppBootstrap
-{
+namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
         private static IServiceProvider service;
         public static IHostBuilder CreateHostBuilder(string[] args) =>
@@ -34,6 +37,23 @@ namespace TelegramSearchBot.AppBootstrap
                 .UseSerilog()
                 .ConfigureServices(service => {
                     service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl), httpClient: HttpClientHelper.CreateProxyHttpClient()));
+                    service.AddSingleton<QdrantClient>(sp => {
+                        var handler = new HttpClientHandler {
+                            UseProxy = false
+                        };
+                        var channel = GrpcChannel.ForAddress($"http://localhost:{Env.QdrantGrpcPort}", new GrpcChannelOptions {
+                            HttpHandler = handler,
+                        });
+                        // 创建 CallInvoker，并添加 API Key 到元数据
+                        var callInvoker = channel.Intercept(metadata =>
+                        {
+                            metadata.Add("api-key", Env.QdrantApiKey); // 替换为您的实际 API Key
+                            return metadata;
+                        });
+                        var grpcClient = new QdrantGrpcClient(callInvoker);
+                        var client = new QdrantClient(grpcClient);
+                        return client;
+                    });
                     service.AddSingleton<SendMessage>();
                     service.AddHostedService<BotCommandService>(); // Register as HostedService
                     service.AddSingleton<LuceneManager>();
@@ -49,6 +69,7 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddDbContext<DataDbContext>(options => {
                         options.UseSqlite($"Data Source={Path.Combine(Env.WorkDir, "Data.sqlite")};Cache=Shared;Mode=ReadWriteCreate;");
                     }, ServiceLifetime.Transient);
+
                     AddController(service);
                     AddService(service);
 
@@ -60,6 +81,7 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddTransient<TelegramSearchBot.Service.Bilibili.ITelegramFileCacheService, TelegramSearchBot.Service.Bilibili.TelegramFileCacheService>();
                     // Manually register AppConfigurationService and its interface
                     service.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
+                    service.AddHostedService<QdrantProcessManager>();
                 });
         public static void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
