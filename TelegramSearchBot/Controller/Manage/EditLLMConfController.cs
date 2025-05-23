@@ -8,15 +8,16 @@ using Telegram.Bot.Types;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Manage;
 
 namespace TelegramSearchBot.Controller.Manage {
     public class EditLLMConfController : IOnUpdate {
         protected readonly AdminService AdminService;
         protected readonly EditLLMConfService EditLLMConfService;
-        public SendMessage Send { get; set; }
+        public SendMessageService Send { get; set; }
         public ITelegramBotClient botClient { get; set; }
-        public EditLLMConfController(ITelegramBotClient botClient, SendMessage Send, AdminService AdminService, EditLLMConfService EditLLMConfService) {
+        public EditLLMConfController(ITelegramBotClient botClient, SendMessageService Send, AdminService AdminService, EditLLMConfService EditLLMConfService) {
             this.AdminService = AdminService;
             this.EditLLMConfService = EditLLMConfService;
             this.botClient = botClient;
@@ -40,14 +41,9 @@ namespace TelegramSearchBot.Controller.Manage {
             } else return;
 
             var (status, message) = await EditLLMConfService.ExecuteAsync(Command, e.Message.Chat.Id);
-            if (status) {
-                await Send.AddTask(async () => {
-                    await botClient.SendMessage(
-                    chatId: e.Message.Chat.Id,
-                    text: message,
-                    replyParameters: new ReplyParameters() { MessageId = e.Message.MessageId }
-                );
-                }, e.Message.Chat.Id < 0);
+            if (status)
+            {
+                await Send.SplitAndSendTextMessage(message, e.Message.Chat, e.Message.MessageId);
             }
         }
     }
