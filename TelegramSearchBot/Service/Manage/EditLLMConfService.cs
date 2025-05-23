@@ -87,23 +87,43 @@ namespace TelegramSearchBot.Service.Manage {
             var count = 0;
             var channels = from s in DataContext.LLMChannels
                            select s;
-            foreach (var channel in channels) {
-                var models = await OpenAIService.GetAllModels(channel);
+            IEnumerable<string> models;
+            foreach (var channel in channels)
+            {
+                switch (channel.Provider)
+                {
+                    case LLMProvider.OpenAI:
+                        models = await OpenAIService.GetAllModels(channel);
+                        break;
+                    case LLMProvider.Ollama:
+                        models = await OllamaService.GetAllModels(channel);
+                        break;
+                    case LLMProvider.Gemini:
+                        models = await GeminiService.GetAllModels(channel);
+                        break;
+                    default:
+                        continue;
+                }
+
                 var list = new List<ChannelWithModel>();
 
-                foreach (var model in models) {
+                foreach (var model in models)
+                {
                     bool exists = await DataContext.ChannelsWithModel
                         .AnyAsync(x => x.LLMChannelId == channel.Id && x.ModelName == model);
 
-                    if (!exists) {
-                        list.Add(new ChannelWithModel {
+                    if (!exists)
+                    {
+                        list.Add(new ChannelWithModel
+                        {
                             LLMChannelId = channel.Id,
                             ModelName = model
                         });
                     }
                 }
 
-                if (list.Any()) {
+                if (list.Any())
+                {
                     await DataContext.ChannelsWithModel.AddRangeAsync(list);
                     count += list.Count;
                 }
