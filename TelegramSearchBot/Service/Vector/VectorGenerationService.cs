@@ -89,8 +89,10 @@ namespace TelegramSearchBot.Service.Vector
 
         public async Task StoreMessageAsync(Message message) {
             var list = new List<string>();
-            foreach (var e in message.MessageExtensions) { 
-                list.Add(e.Value);
+            if (message.MessageExtensions != null) {
+                foreach (var e in message.MessageExtensions) {
+                    list.Add(e.Value);
+                }
             }
             list.Add(message.Content);
             var vectors = await GenerateVectorsAsync(list);

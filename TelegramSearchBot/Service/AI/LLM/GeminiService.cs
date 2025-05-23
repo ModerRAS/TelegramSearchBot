@@ -31,14 +31,12 @@ namespace TelegramSearchBot.Service.AI.LLM
         public GeminiService(
             DataDbContext context,
             ILogger<GeminiService> logger,
-            IHttpClientFactory httpClientFactory,
-            LLMChannel channel)
+            IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
             _dbContext = context;
             _logger.LogInformation("GeminiService instance created");
             _httpClientFactory = httpClientFactory;
-            _channel = channel;
         }
 
         private void AddMessageToHistory(List<GenerativeAI.Types.Content> chatHistory, long fromUserId, string content)

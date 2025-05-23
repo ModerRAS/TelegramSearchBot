@@ -201,6 +201,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
         public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
             yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel);
+            yield break;
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(Model.Data.Message message, long ChatId) {
@@ -231,6 +232,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
         public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
             yield return await service.GenerateEmbeddingsAsync(message, modelName, channel);
+            yield break;
         }
 
         private async Task<int> GetMaxRetryCountAsync()
