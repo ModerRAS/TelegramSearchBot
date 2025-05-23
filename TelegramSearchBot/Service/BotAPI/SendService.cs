@@ -23,9 +23,9 @@ namespace TelegramSearchBot.Service.BotAPI
 
         public SendService(ITelegramBotClient botClient, SendMessage Send)
         {
+            this.Send = Send ?? throw new ArgumentNullException(nameof(Send));
+            this.botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
             Cache = Env.Cache.GetCollection<CacheData>("CacheData");
-            this.Send = Send;
-            this.botClient = botClient;
         }
         public static List<string> ConvertToList(IEnumerable<Message> messages)
         {
@@ -65,10 +65,14 @@ namespace TelegramSearchBot.Service.BotAPI
 #pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
         public async Task<(List<InlineKeyboardButton>, SearchOption)> GenerateKeyboard(SearchOption searchOption)
         {
-            //此处会生成键盘并将searchOption中的Skip向后推移
+            if (searchOption == null)
+                throw new ArgumentNullException(nameof(searchOption));
+            if (searchOption.Messages == null)
+                return (new List<InlineKeyboardButton>(), searchOption);
+
             var keyboardList = new List<InlineKeyboardButton>();
             searchOption.Skip += searchOption.Take;
-            if (searchOption.Messages.Count - searchOption.Take >= 0)
+            if (searchOption.Messages != null && searchOption.Messages.Count - searchOption.Take >= 0)
             {
                 var uuid_nxt = Guid.NewGuid().ToString();
                 Cache.Insert(new CacheData()

@@ -43,7 +43,7 @@ namespace TelegramSearchBot.Manager
             }, false);
         }
 #pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
-        public async Task AddTask(Func<Task> Action, bool IsGroup)
+        public virtual async Task AddTask(Func<Task> Action, bool IsGroup)
         {
             if (IsGroup)
             {
