@@ -12,5 +12,6 @@ namespace TelegramSearchBot.Interface {
                                                   [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default);
         public Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel);
         public Task<IEnumerable<string>> GetAllModels(LLMChannel channel);
+        public virtual async Task<bool> IsHealthyAsync(LLMChannel channel) => (await GetAllModels(channel)).Any();
     }
 }

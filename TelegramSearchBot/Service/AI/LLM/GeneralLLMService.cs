@@ -20,6 +20,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly OllamaService _ollamaService;
         private readonly GeminiService _geminiService;
         private readonly ILogger<GeneralLLMService> _logger;
+        private readonly LLMFactory _LLMFactory;
 
         public string ServiceName => "GeneralLLMService";
 
@@ -35,7 +36,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ILogger<GeneralLLMService> logger,
             OllamaService ollamaService,
             OpenAIService openAIService,
-            GeminiService geminiService
+            GeminiService geminiService,
+            LLMFactory _LLMFactory
             )
         {
             this.connectionMultiplexer = connectionMultiplexer;
@@ -46,8 +48,30 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _openAIService = openAIService;
             _ollamaService = ollamaService;
             _geminiService = geminiService;
+            this._LLMFactory = _LLMFactory;
         }
+        public async Task<List<LLMChannel>> GetChannelsAsync(string modelName) {
+            // 2. 查询ChannelWithModel获取关联的LLMChannel
+            var channelsWithModel = await (from s in _dbContext.ChannelsWithModel
+                                           where s.ModelName == modelName
+                                           select s.LLMChannelId).ToListAsync();
 
+
+            if (!channelsWithModel.Any()) {
+                _logger.LogWarning($"找不到模型 {modelName} 的配置");
+                return new List<LLMChannel>();
+            }
+
+            // 3. 获取关联的LLMChannel并按优先级排序
+            var llmChannels = await (from s in _dbContext.LLMChannels
+                                     where channelsWithModel.Contains(s.Id)
+                                     orderby s.Priority descending
+                                     select s).ToListAsync();
+            if (!llmChannels.Any()) {
+                _logger.LogWarning($"找不到模型 {modelName} 关联的LLM渠道");
+            }
+            return llmChannels;
+        }
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -62,14 +86,37 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 yield break;
             }
 
+            await foreach (var e in ExecOperationAsync((service, channel, cancel) => {
+                return ExecAsync(message, ChatId, modelName, service, channel, cancellationToken);
+            }, modelName, ChatId, cancellationToken)) {
+                yield return e;
+            }
+        }
+        public async IAsyncEnumerable<string> ExecAsync(
+            Model.Data.Message message,
+            long ChatId,
+            string modelName,
+            ILLMService service, 
+            LLMChannel channel, 
+            CancellationToken cancellation) {
+            await foreach (var e in service.ExecAsync(message, ChatId, modelName, channel, cancellation).WithCancellation(cancellation)) {
+                yield return e;
+            }
+        }
+        public async IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(
+            Func<ILLMService, LLMChannel, CancellationToken, IAsyncEnumerable<TResult>> operation,
+            string modelName,
+            long ChatId,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+            ) {
+
             // 2. 查询ChannelWithModel获取关联的LLMChannel
             var channelsWithModel = await (from s in _dbContext.ChannelsWithModel
                                            where s.ModelName == modelName
                                            select s.LLMChannelId).ToListAsync();
 
 
-            if (!channelsWithModel.Any())
-            {
+            if (!channelsWithModel.Any()) {
                 _logger.LogWarning($"找不到模型 {modelName} 的配置");
                 yield break;
             }
@@ -79,8 +126,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                      where channelsWithModel.Contains(s.Id)
                                      orderby s.Priority descending
                                      select s).ToListAsync();
-            if (!llmChannels.Any())
-            {
+            if (!llmChannels.Any()) {
                 _logger.LogWarning($"找不到模型 {modelName} 关联的LLM渠道");
                 yield break;
             }
@@ -90,101 +136,51 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var maxRetries = await GetMaxRetryCountAsync();
             var retryDelay = TimeSpan.FromSeconds(5);
 
-            for (int retry = 0; retry < maxRetries; retry++)
-            {
-                foreach (var channel in llmChannels)
-                {
+            for (int retry = 0; retry < maxRetries; retry++) {
+                foreach (var channel in llmChannels) {
                     var redisKey = $"llm:channel:{channel.Id}:semaphore";
                     var currentCount = await redisDb.StringGetAsync(redisKey);
                     int count = currentCount.HasValue ? (int)currentCount : 0;
+                    var service = _LLMFactory.GetLLMService(channel.Provider);
 
-                    if (count < channel.Parallel)
-                    {
+                    if (count < channel.Parallel) {
                         // 获取锁并增加计数
                         await redisDb.StringIncrementAsync(redisKey);
-                        try
-                        {
+                        try {
                             // 5. 检查服务是否可用
                             bool isHealthy = false;
-                            try 
-                            {
-                                switch (channel.Provider)
-                                {
-                                    case LLMProvider.OpenAI:
-                                        var openaiModels = await _openAIService.GetAllModels(channel);
-                                        isHealthy = openaiModels.Any();
-                                        break;
-                                    case LLMProvider.Ollama:
-                                        var ollamaModels = await _ollamaService.GetAllModels(channel);
-                                        isHealthy = ollamaModels.Any();
-                                        break;
-                                    case LLMProvider.Gemini:
-                                        var geminiModels = await _geminiService.GetAllModels(channel);
-                                        isHealthy = geminiModels.Any();
-                                        break;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
+                            try {
+                                isHealthy = await service.IsHealthyAsync(channel);
+                            } catch (Exception ex) {
                                 _logger.LogWarning(ex, $"LLM渠道 {channel.Id} ({channel.Provider}) 健康检查失败");
                                 continue;
                             }
 
-                            if (!isHealthy) 
-                            {
+                            if (!isHealthy) {
                                 _logger.LogWarning($"LLM渠道 {channel.Id} ({channel.Provider}) 不可用，跳过");
                                 continue;
                             }
 
                             // 6. 根据Provider选择服务
-                            switch (channel.Provider)
-                            {
-                                case LLMProvider.OpenAI:
-                                    await foreach (var response in _openAIService.ExecAsync(message, ChatId, modelName, channel, cancellationToken).WithCancellation(cancellationToken))
-                                    {
-                                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-                                        yield return response;
-                                    }
-                                    break;
-                                case LLMProvider.Ollama:
-                                    await foreach (var response in _ollamaService.ExecAsync(message, ChatId, modelName, channel, cancellationToken).WithCancellation(cancellationToken))
-                                    {
-                                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-                                        yield return response;
-                                    }
-                                    break;
-                                case LLMProvider.Gemini:
-                                    await foreach (var response in _geminiService.ExecAsync(message, ChatId, modelName, channel, cancellationToken).WithCancellation(cancellationToken))
-                                    {
-                                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-                                        yield return response;
-                                    }
-                                    break;
-                                default:
-                                    _logger.LogError($"不支持的LLM提供商: {channel.Provider}");
-                                    yield break; // Or throw, depending on desired error handling for unsupported provider
+                            await foreach(var e in operation(service, channel, new CancellationToken())) {
+                                yield return e;
                             }
-                            // If a service was successfully called and completed its stream, we should exit.
-                            // The yield break here ensures we don't try other channels after a successful stream.
-                            yield break;
-                        }
-                        finally
-                        {
+                        } finally {
                             // 释放锁
                             await redisDb.StringDecrementAsync(redisKey);
                         }
+
                     }
                 }
 
-                if (retry < maxRetries - 1)
-                {
+                if (retry < maxRetries - 1) {
                     await Task.Delay(retryDelay);
                 }
             }
 
-                _logger.LogWarning($"所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃");
-                
-            }
+            _logger.LogWarning($"所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃");
+
+        }
         public async Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default)
         {
             // 1. 获取模型名称
@@ -195,112 +191,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (config != null) {
                 modelName = config.Value;
             }
-
-            // 2. 查询ChannelWithModel获取关联的LLMChannel
-            var channelsWithModel = await (from s in _dbContext.ChannelsWithModel
-                                           where s.ModelName == modelName
-                                           select s.LLMChannelId).ToListAsync();
-
-            if (!channelsWithModel.Any())
-            {
-                _logger.LogWarning($"找不到模型 {modelName} 的配置");
-                return $"Error: 找不到模型 {modelName} 的配置";
+            await foreach (var e in ExecOperationAsync(async (service, channel, cancel) => {
+            }, modelName, ChatId, cancellationToken)) {
+                yield return e;
             }
-
-            // 3. 获取关联的LLMChannel并按优先级排序
-            var llmChannels = await (from s in _dbContext.LLMChannels
-                                     where channelsWithModel.Contains(s.Id)
-                                     orderby s.Priority descending
-                                     select s).ToListAsync();
-            if (!llmChannels.Any())
-            {
-                _logger.LogWarning($"找不到模型 {modelName} 关联的LLM渠道");
-                return $"Error: 找不到模型 {modelName} 关联的LLM渠道";
-            }
-
-            // 4. 使用Redis实现并发控制和优先级调度
-            var redisDb = connectionMultiplexer.GetDatabase();
-            var maxRetries = await GetMaxImageRetryCountAsync();
-            var retryDelay = TimeSpan.FromSeconds(5);
-
-            for (int retry = 0; retry < maxRetries; retry++)
-            {
-                foreach (var channel in llmChannels)
-                {
-                    var redisKey = $"llm:channel:{channel.Id}:semaphore";
-                    var currentCount = await redisDb.StringGetAsync(redisKey);
-                    int count = currentCount.HasValue ? (int)currentCount : 0;
-
-                    if (count < channel.Parallel)
-                    {
-                        // 获取锁并增加计数
-                        await redisDb.StringIncrementAsync(redisKey);
-                        try
-                        {
-                            // 5. 检查服务是否可用
-                            bool isHealthy = false;
-                            try 
-                            {
-                                switch (channel.Provider)
-                                {
-                                    case LLMProvider.Ollama:
-                                        var ollamaModels = await _ollamaService.GetAllModels(channel);
-                                        isHealthy = ollamaModels.Any();
-                                        break;
-                                    case LLMProvider.OpenAI:
-                                        var openAIModels = await _openAIService.GetAllModels(channel);
-                                        isHealthy = openAIModels.Any();
-                                        break;
-                                    case LLMProvider.Gemini:
-                                        var geminiModels = await _geminiService.GetAllModels(channel);
-                                        isHealthy = geminiModels.Any();
-                                        break;
-                                    default:
-                                        _logger.LogWarning($"LLM渠道 {channel.Id} ({channel.Provider}) 不支持图像识别健康检查");
-                                        continue;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, $"LLM渠道 {channel.Id} ({channel.Provider}) 健康检查失败");
-                                continue;
-                            }
-
-                            if (!isHealthy) 
-                            {
-                                _logger.LogWarning($"LLM渠道 {channel.Id} ({channel.Provider}) 不可用，跳过");
-                                continue;
-                            }
-
-                            // 6. 根据Provider选择服务
-                            switch (channel.Provider)
-                            {
-                                case LLMProvider.Ollama:
-                                    return await _ollamaService.AnalyzeImageAsync(PhotoPath, modelName, channel);
-                                case LLMProvider.OpenAI:
-                                    return await _openAIService.AnalyzeImageAsync(PhotoPath, modelName, channel);
-                                case LLMProvider.Gemini:
-                                    return await _geminiService.AnalyzeImageAsync(PhotoPath, modelName, channel);
-                                default:
-                                    _logger.LogError($"当前不支持 {channel.Provider} 的图像识别功能");
-                                    return $"Error: 当前不支持 {channel.Provider} 的图像识别功能";
-                            }
-                        }
-                        finally
-                        {
-                            // 释放锁
-                            await redisDb.StringDecrementAsync(redisKey);
-                        }
-                    }
-
-                    if (retry < maxRetries - 1)
-                    {
-                        await Task.Delay(retryDelay);
-                    }
-                }
-            }
-            _logger.LogWarning($"所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃");
-            return $"Error: 所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃";
         }
 
         private async Task<int> GetMaxRetryCountAsync()
@@ -365,7 +259,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         {
             var redisDb = connectionMultiplexer.GetDatabase();
             var totalKey = $"llm:capacity:{modelName}:total";
-            
+
             // 获取或缓存总容量(15秒钟过期)
             var totalParallel = await redisDb.StringGetAsync(totalKey);
             if (!totalParallel.HasValue)
