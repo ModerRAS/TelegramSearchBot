@@ -5,15 +5,19 @@
 - 核心框架：.NET 6+
 - 关键库：
   - Telegram.Bot：Telegram机器人API
-  - LiteDB：轻量级NoSQL数据库
+  - Entity Framework Core：ORM框架
+  - SQLite：关系型数据库
   - Lucene.NET：全文搜索引擎
   - PaddleOCR：图片OCR处理
   - Whisper：语音识别(ASR)
   - Ollama：大语言模型集成
   - Stateless：状态机管理库
+  - HttpClient：网页抓取
+  - Regex：HTML内容提取
   - Helper类：通用工具方法集合(BiliHelper, MessageFormatHelper等)
 - 进程间通信：共享内存/管道通信
 - 消息处理：消息管道式处理
+- 网页抓取：同步HTTP请求+基础HTML处理
 
 ## 开发环境
 - 开发工具：Visual Studio/VSCode

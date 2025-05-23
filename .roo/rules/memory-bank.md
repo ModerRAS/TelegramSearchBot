@@ -57,7 +57,7 @@ flowchart TD
    - Known issues
 
 ### Additional Context
-Create additional files/folders within memory-bank/ when they help organize:
+Create additional files/folders within .roo/rules/memory-bank/ when they help organize:
 - Complex feature documentation
 - Integration specifications
 - API documentation
@@ -85,7 +85,7 @@ flowchart TD
 flowchart TD
     Start[Start] --> Context[Check Memory Bank]
     Context --> Update[Update Documentation]
-    Update --> Rules[Update .clinerules if needed]
+    Update --> Rules[Update .roo/rules if needed]
     Rules --> Execute[Execute Task]
     Execute --> Document[Document Changes]
 ```
@@ -106,7 +106,7 @@ flowchart TD
         P1[Review ALL Files]
         P2[Document Current State]
         P3[Clarify Next Steps]
-        P4[Update .clinerules]
+        P4[Update .roo/rules]
         
         P1 --> P2 --> P3 --> P4
     end
@@ -116,9 +116,9 @@ flowchart TD
 
 Note: When triggered by **update memory bank**, I MUST review every memory bank file, even if some don't require updates. Focus particularly on activeContext.md and progress.md as they track current state.
 
-## Project Intelligence (.clinerules)
+## Project Intelligence (.roo/rules)
 
-The .clinerules file is my learning journal for each project. It captures important patterns, preferences, and project intelligence that help me work more effectively. As I work with you and the project, I'll discover and document key insights that aren't obvious from the code alone.
+The .roo/rules file is my learning journal for each project. It captures important patterns, preferences, and project intelligence that help me work more effectively. As I work with you and the project, I'll discover and document key insights that aren't obvious from the code alone.
 
 ```mermaid
 flowchart TD
@@ -127,11 +127,11 @@ flowchart TD
     subgraph Learn [Learning Process]
         D1[Identify Pattern]
         D2[Validate with User]
-        D3[Document in .clinerules]
+        D3[Document in .roo/rules]
     end
     
     subgraph Apply [Usage]
-        A1[Read .clinerules]
+        A1[Read .roo/rules]
         A2[Apply Learned Patterns]
         A3[Improve Future Work]
     end
@@ -148,6 +148,6 @@ flowchart TD
 - Evolution of project decisions
 - Tool usage patterns
 
-The format is flexible - focus on capturing valuable insights that help me work more effectively with you and the project. Think of .clinerules as a living document that grows smarter as we work together.
+The format is flexible - focus on capturing valuable insights that help me work more effectively with you and the project. Think of .roo/rules as a living document that grows smarter as we work together.
 
 REMEMBER: After every memory reset, I begin completely fresh. The Memory Bank is my only link to previous work. It must be maintained with precision and clarity, as my effectiveness depends entirely on its accuracy.
