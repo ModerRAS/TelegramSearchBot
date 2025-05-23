@@ -7,10 +7,10 @@ using Qdrant.Client.Grpc;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
-using OllamaSharp;
-using OllamaSharp.Models;
 using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Model;
+using Microsoft.EntityFrameworkCore;
 
 namespace TelegramSearchBot.Service.Vector
 {
@@ -19,99 +19,60 @@ namespace TelegramSearchBot.Service.Vector
         private readonly QdrantClient _qdrantClient;
         private readonly ILogger<VectorGenerationService> _logger;
         private readonly IDatabase _redis;
-        private readonly List<ILLMService> _llmServices;
+        private readonly GeneralLLMService _generalLLMService;
+        private readonly DataDbContext _dataDbContext;
 
         public string ServiceName => "VectorGenerationService";
 
         public VectorGenerationService(
             QdrantClient qdrantClient,
-            IEnumerable<ILLMService> llmServices,
+            GeneralLLMService generalLLMService,
             IConnectionMultiplexer redis,
-            ILogger<VectorGenerationService> logger)
+            ILogger<VectorGenerationService> logger,
+            DataDbContext dataDbContext)
         {
             _qdrantClient = qdrantClient;
-            _llmServices = llmServices.ToList();
+            _generalLLMService = generalLLMService;
             _redis = redis.GetDatabase();
             _logger = logger;
+            _dataDbContext = dataDbContext;
         }
+        public async Task<SearchOption> Search(SearchOption searchOption) {
+            try {
+                // 生成查询向量
+                var queryVector = await GenerateVectorAsync(searchOption.Search);
 
-        public async Task<float[]> GenerateVectorAsync(string text, string modelName = "ollama")
-        {
-            var service = await SelectLLMServiceAsync(modelName);
-            return await service.GenerateEmbeddingsAsync(text, modelName, channel);
-        }
+                // 执行向量搜索
+                var searchResult = await _qdrantClient.SearchAsync(
+                    searchOption.ChatId.ToString(),
+                    queryVector,
+                    offset: (ulong)searchOption.Skip,
+                    limit: (ulong)searchOption.Take);
 
-        private async Task<ILLMService> SelectLLMServiceAsync(string modelName)
-        {
-            if (channel != null)
-            {
-                // 如果已指定渠道，直接返回对应服务
-                var service = _llmServices.FirstOrDefault(s =>
-                    s.GetType().Name.ToLower().Contains(channel.Provider.ToString().ToLower()));
-                if (service == null)
-                {
-                    throw new ArgumentException($"No available service for provider: {channel.Provider}");
+                var orderd = from s in searchResult.ToList()
+                             orderby s.Score descending
+                             select s;
+                if (searchOption?.Messages == null) {
+                    searchOption.Messages = new List<Message>();
                 }
-                return service;
-            }
-
-            // 获取所有匹配模型名称的服务
-            var availableServices = _llmServices
-                .Where(s => s.GetType().Name.ToLower().Contains(modelName.ToLower()))
-                .ToList();
-
-            if (!availableServices.Any())
-            {
-                throw new ArgumentException($"No available service for model: {modelName}");
-            }
-
-            // Redis并发控制
-            var redisKey = $"vector:channel:{modelName}:semaphore";
-            var currentCount = await _redis.StringGetAsync(redisKey);
-            int count = currentCount.HasValue ? (int)currentCount : 0;
-
-            if (count >= 10) // 默认最大并发数
-            {
-                throw new Exception($"Vector generation service for {modelName} is currently at full capacity");
-            }
-
-            // 获取锁并增加计数
-            await _redis.StringIncrementAsync(redisKey);
-            try
-            {
-                // 健康检查
-                var healthyServices = new List<ILLMService>();
-                foreach (var service in availableServices)
-                {
-                    try
-                    {
-                        if (await service.IsHealthyAsync())
-                        {
-                            healthyServices.Add(service);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, $"Health check failed for service: {service.GetType().Name}");
+                // 处理搜索结果
+                foreach (var scoredPoint in orderd) {
+                    if (scoredPoint != null) {
+                        searchOption.Messages.Add(await _dataDbContext.Messages.FirstOrDefaultAsync(s => s.MessageId.Equals((long)scoredPoint.Id.Num) && s.GroupId.Equals(searchOption.ChatId)));
                     }
                 }
 
-                if (!healthyServices.Any())
-                {
-                    throw new Exception($"No healthy services available for model: {modelName}");
-                }
-
-                // 简单实现 - 返回第一个健康服务
-                // 后续可添加更复杂的负载均衡策略
-                return healthyServices.First();
-            }
-            finally
-            {
-                // 释放锁
-                await _redis.StringDecrementAsync(redisKey);
+                return searchOption;
+            } catch (Exception ex) {
+                // 错误处理和日志记录
+                Console.WriteLine($"Search error: {ex.Message}");
+                throw;
             }
         }
-
+        public async Task<float[]> GenerateVectorAsync(string text)
+        {
+            return await _generalLLMService.GenerateEmbeddingsAsync(text);
+        }
         public async Task StoreVectorAsync(string collectionName, ulong id, float[] vector, Dictionary<string, string> Payload)
         {
             var points = new[] { new PointStruct { Id = id, Vectors = vector } };
@@ -126,23 +87,26 @@ namespace TelegramSearchBot.Service.Vector
             await _qdrantClient.UpsertAsync(collectionName, points);
         }
 
-        public async Task<float[][]> GenerateVectorsAsync(IEnumerable<string> texts, string modelName = "openai", LLMChannel channel = null)
-        {
-            var tasks = texts.Select(text => GenerateVectorAsync(text, modelName, channel));
-            return await Task.WhenAll(tasks);
+        public async Task StoreMessageAsync(Message message) {
+            var list = new List<string>();
+            foreach (var e in message.MessageExtensions) { 
+                list.Add(e.Value);
+            }
+            list.Add(message.Content);
+            var vectors = await GenerateVectorsAsync(list);
+            var psl = new List<PointStruct>();
+            foreach (var e in vectors) {
+                var point = new PointStruct { Id = Guid.NewGuid(), Vectors = e };
+                point.Payload.Add("MessageId", message.MessageId);
+                psl.Add(point);
+            }
+            await _qdrantClient.UpsertAsync(message.GroupId.ToString(), psl);
         }
 
-        public async Task<IEnumerable<string>> SearchSimilarAsync(
-            string collectionName,
-            float[] queryVector,
-            int limit = 5)
+        public async Task<float[][]> GenerateVectorsAsync(IEnumerable<string> texts)
         {
-            var result = await _qdrantClient.SearchAsync(
-                collectionName,
-                queryVector,
-                limit: (uint)limit);
-
-            return result.Select(x => x.Id.Num.ToString());
+            var tasks = texts.Select(text => GenerateVectorAsync(text));
+            return await Task.WhenAll(tasks);
         }
 
         public async Task<bool> IsHealthyAsync()

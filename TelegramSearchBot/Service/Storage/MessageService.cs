@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using Nito.AsyncEx;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.Service.Storage
 {
@@ -19,15 +20,17 @@ namespace TelegramSearchBot.Service.Storage
         protected readonly SendMessage Send;
         protected readonly DataDbContext DataContext;
         protected readonly ILogger<MessageService> Logger;
+        protected readonly VectorGenerationService vectorGenerationService;
         private static readonly AsyncLock _asyncLock = new AsyncLock();
         public string ServiceName => "MessageService";
 
-        public MessageService(ILogger<MessageService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context)
+        public MessageService(ILogger<MessageService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context, VectorGenerationService vectorGenerationService)
         {
             this.lucene = lucene;
             this.Send = Send;
             DataContext = context;
             Logger = logger;
+            this.vectorGenerationService = vectorGenerationService;
         }
 
         [Obsolete]
@@ -74,6 +77,15 @@ namespace TelegramSearchBot.Service.Storage
             }
             else
             {
+                Logger.LogWarning($"Message not found in database: {messageOption.MessageDataId}");
+            }
+        }
+
+        public async Task AddToQdrant(MessageOption messageOption) {
+            var message = await DataContext.Messages.FindAsync(messageOption.MessageDataId);
+            if (message != null) {
+                await vectorGenerationService.StoreMessageAsync(message);
+            } else {
                 Logger.LogWarning($"Message not found in database: {messageOption.MessageDataId}");
             }
         }

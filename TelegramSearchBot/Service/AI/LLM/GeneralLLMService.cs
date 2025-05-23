@@ -27,6 +27,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public const string MaxRetryCountKey = "LLM:MaxRetryCount";
         public const string MaxImageRetryCountKey = "LLM:MaxImageRetryCount";
         public const string AltPhotoModelName = "LLM:AltPhotoModelName";
+        public const string EmbeddingModelName = "LLM:EmbeddingModelName";
         public const int DefaultMaxRetryCount = 100;
         public const int DefaultMaxImageRetryCount = 1000;
 
@@ -88,7 +89,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             await foreach (var e in ExecOperationAsync((service, channel, cancel) => {
                 return ExecAsync(message, ChatId, modelName, service, channel, cancellationToken);
-            }, modelName, ChatId, cancellationToken)) {
+            }, modelName, cancellationToken)) {
                 yield return e;
             }
         }
@@ -106,7 +107,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public async IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(
             Func<ILLMService, LLMChannel, CancellationToken, IAsyncEnumerable<TResult>> operation,
             string modelName,
-            long ChatId,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
             ) {
 
@@ -191,10 +191,46 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (config != null) {
                 modelName = config.Value;
             }
-            await foreach (var e in ExecOperationAsync(async (service, channel, cancel) => {
-            }, modelName, ChatId, cancellationToken)) {
-                yield return e;
+            var ret = string.Empty;
+            await foreach (var e in ExecOperationAsync<string>((service, channel, cancel) => {
+                return AnalyzeImageAsync(PhotoPath, ChatId, modelName, service, channel, cancel);
+            }, modelName, cancellationToken)) {
+                ret = e;
             }
+            return ret;
+        }
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
+            yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel);
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(Model.Data.Message message, long ChatId) {
+            var modelName = "bge-m3:latest";
+            var config = await _dbContext.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == EmbeddingModelName);
+            if (config != null) {
+                modelName = config.Value;
+            }
+
+            return null;
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string message, CancellationToken cancellationToken = default) {
+            var modelName = "bge-m3:latest";
+            var config = await _dbContext.AppConfigurationItems
+                .FirstOrDefaultAsync(x => x.Key == EmbeddingModelName);
+            if (config != null) {
+                modelName = config.Value;
+            }
+            var ret = new float[1];
+            await foreach (var e in ExecOperationAsync((service, channel, cancel) => {
+                return GenerateEmbeddingsAsync(message, modelName, service, channel, cancel);
+            }, modelName, cancellationToken)) {
+                ret = e;
+            }
+            return ret;
+        }
+        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
+            yield return await service.GenerateEmbeddingsAsync(message, modelName, channel);
         }
 
         private async Task<int> GetMaxRetryCountAsync()
@@ -307,75 +343,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // 计算并返回可用容量
             return Math.Max(0, (int)totalParallel - used);
-        }
-        public async Task<float[]> GenerateEmbeddingsAsync(Model.Data.Message message, long ChatId, string modelName)
-        {
-            // 1. 使用Redis实现并发控制
-            var redisDb = connectionMultiplexer.GetDatabase();
-            var redisKey = $"llm:channel:{channel.Id}:semaphore";
-            var currentCount = await redisDb.StringGetAsync(redisKey);
-            int count = currentCount.HasValue ? (int)currentCount : 0;
-
-            if (count >= channel.Parallel)
-            {
-                throw new Exception($"LLM渠道 {channel.Id} 当前已满载");
-            }
-
-            // 获取锁并增加计数
-            await redisDb.StringIncrementAsync(redisKey);
-            try
-            {
-                // 2. 检查服务是否可用
-                bool isHealthy = false;
-                try
-                {
-                    switch (channel.Provider)
-                    {
-                        case LLMProvider.OpenAI:
-                            var openaiModels = await _openAIService.GetAllModels(channel);
-                            isHealthy = openaiModels.Any();
-                            break;
-                        case LLMProvider.Ollama:
-                            var ollamaModels = await _ollamaService.GetAllModels(channel);
-                            isHealthy = ollamaModels.Any();
-                            break;
-                        case LLMProvider.Gemini:
-                            var geminiModels = await _geminiService.GetAllModels(channel);
-                            isHealthy = geminiModels.Any();
-                            break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, $"LLM渠道 {channel.Id} ({channel.Provider}) 健康检查失败");
-                    throw;
-                }
-
-                if (!isHealthy)
-                {
-                    _logger.LogWarning($"LLM渠道 {channel.Id} ({channel.Provider}) 不可用");
-                    throw new Exception($"LLM渠道 {channel.Id} 不可用");
-                }
-
-                // 3. 根据Provider选择服务
-                switch (channel.Provider)
-                {
-                    case LLMProvider.OpenAI:
-                        return await _openAIService.GenerateEmbeddingsAsync(text, modelName, channel);
-                    case LLMProvider.Ollama:
-                        return await _ollamaService.GenerateEmbeddingsAsync(text, modelName, channel);
-                    case LLMProvider.Gemini:
-                        return await _geminiService.GenerateEmbeddingsAsync(text, modelName, channel);
-                    default:
-                        _logger.LogError($"不支持的LLM提供商: {channel.Provider}");
-                        throw new Exception($"不支持的LLM提供商: {channel.Provider}");
-                }
-            }
-            finally
-            {
-                // 释放锁
-                await redisDb.StringDecrementAsync(redisKey);
-            }
         }
     }
 

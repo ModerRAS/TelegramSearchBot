@@ -264,39 +264,6 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
-        {
-            if (string.IsNullOrWhiteSpace(modelName))
-            {
-                modelName = "bge-m3";
-            }
-
-            var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(channel.Gateway);
-            var ollama = new OllamaApiClient(httpClient, modelName);
-            
-            if (!await CheckAndPullModelAsync(ollama, modelName))
-            {
-                throw new Exception($"Could not check or pull Ollama model '{modelName}'");
-            }
-
-            try
-            {
-                var embedRequest = new EmbedRequest {
-                    Model = modelName,
-                    Input = new List<string> { text }
-                };
-                var embeddings = await ollama.EmbedAsync(embedRequest, CancellationToken.None);
-                // 返回第一个文本的嵌入向量（因为我们只传入了单个文本）
-                return embeddings.Embeddings.FirstOrDefault() ?? Array.Empty<float>();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating embeddings with Ollama");
-                throw;
-            }
-        }
-
         public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel)
         {
             if (string.IsNullOrWhiteSpace(modelName))

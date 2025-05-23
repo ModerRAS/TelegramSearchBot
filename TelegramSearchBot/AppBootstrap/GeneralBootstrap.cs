@@ -24,10 +24,10 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
-using TelegramSearchBot.Service.Vector; // Added for BotCommandService
+using Qdrant.Client;
+using Qdrant.Client.Grpc;
 
-namespace TelegramSearchBot.AppBootstrap
-{
+namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
         private static IServiceProvider service;
         public static IHostBuilder CreateHostBuilder(string[] args) =>
@@ -35,6 +35,14 @@ namespace TelegramSearchBot.AppBootstrap
                 .UseSerilog()
                 .ConfigureServices(service => {
                     service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl), httpClient: HttpClientHelper.CreateProxyHttpClient()));
+                    service.AddSingleton<QdrantClient>(sp => {
+                        var channel = QdrantChannel.ForAddress($"http://localhost:{Env.QdrantGrpcPort}", new ClientConfiguration {
+                            ApiKey = Env.QdrantApiKey,
+                        });
+                        var grpcClient = new QdrantGrpcClient(channel);
+                        var client = new QdrantClient(grpcClient);
+                        return client;
+                    });
                     service.AddSingleton<SendMessage>();
                     service.AddHostedService<BotCommandService>(); // Register as HostedService
                     service.AddSingleton<LuceneManager>();
@@ -50,6 +58,7 @@ namespace TelegramSearchBot.AppBootstrap
                     service.AddDbContext<DataDbContext>(options => {
                         options.UseSqlite($"Data Source={Path.Combine(Env.WorkDir, "Data.sqlite")};Cache=Shared;Mode=ReadWriteCreate;");
                     }, ServiceLifetime.Transient);
+
                     AddController(service);
                     AddService(service);
 
