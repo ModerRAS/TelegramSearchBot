@@ -165,7 +165,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             [McpParameter("The current thought number.")] int thoughtNumber,
             [McpParameter("The total number of thoughts.")] int totalThoughts,
             [McpParameter("The thought number to branch from.", IsRequired = false)] int? branchFromThought = null,
-            [McpParameter("The branch identifier.", IsRequired = false)] string branchId = null,
+            [McpParameter("The branch identifier.", IsRequired = false)] string? branchId = null,
             [McpParameter("Whether more thoughts are needed.", IsRequired = false)] bool needsMoreThoughts = false,
             [McpParameter("Whether this is a revision.", IsRequired = false)] bool isRevision = false,
             [McpParameter("The thought number this revises.", IsRequired = false)] int? revisesThought = null)

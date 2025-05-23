@@ -14,7 +14,9 @@ namespace TelegramSearchBot.Test.Service.Tools
             var service = new DuckDuckGoToolService();
             var assembly = typeof(DuckDuckGoToolServiceTest).Assembly;
             using var stream = assembly.GetManifestResourceStream("TelegramSearchBot.Test.TestData.DuckDuckGoSearchResult.html");
+#pragma warning disable CS8604 // 引用类型参数可能为 null。
             using var reader = new StreamReader(stream);
+#pragma warning restore CS8604 // 引用类型参数可能为 null。
             var html = reader.ReadToEnd();
             
             // Act
@@ -38,7 +40,9 @@ namespace TelegramSearchBot.Test.Service.Tools
             var service = new DuckDuckGoToolService();
             var assembly = typeof(DuckDuckGoToolServiceTest).Assembly;
             using var stream = assembly.GetManifestResourceStream("TelegramSearchBot.Test.TestData.EmptyResults.html");
+#pragma warning disable CS8604 // 引用类型参数可能为 null。
             using var reader = new StreamReader(stream);
+#pragma warning restore CS8604 // 引用类型参数可能为 null。
             var html = reader.ReadToEnd();
             
             // Act
@@ -56,7 +60,9 @@ namespace TelegramSearchBot.Test.Service.Tools
             var service = new DuckDuckGoToolService();
             var assembly = typeof(DuckDuckGoToolServiceTest).Assembly;
             using var stream = assembly.GetManifestResourceStream("TelegramSearchBot.Test.TestData.SpecialCharsResults.html");
+#pragma warning disable CS8604 // 引用类型参数可能为 null。
             using var reader = new StreamReader(stream);
+#pragma warning restore CS8604 // 引用类型参数可能为 null。
             var html = reader.ReadToEnd();
             
             // Act
