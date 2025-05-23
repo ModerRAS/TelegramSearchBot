@@ -11,6 +11,7 @@ using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Model;
 using Microsoft.EntityFrameworkCore;
+using System.Collections;
 
 namespace TelegramSearchBot.Service.Vector
 {
@@ -82,12 +83,19 @@ namespace TelegramSearchBot.Service.Vector
             await _qdrantClient.UpsertAsync(collectionName, points);
         }
         public async Task StoreVectorAsync(string collectionName, float[] vector, long MessageId) {
+            if (!await _qdrantClient.CollectionExistsAsync(collectionName)) {
+                await _qdrantClient.CreateCollectionAsync(collectionName);
+            }
             var points = new[] { new PointStruct { Id = Guid.NewGuid(), Vectors = vector } };
             points[0].Payload.Add("MessageId", MessageId);
             await _qdrantClient.UpsertAsync(collectionName, points);
         }
 
         public async Task StoreMessageAsync(Message message) {
+            var collectionName = message.GroupId.ToString();
+            if (!await _qdrantClient.CollectionExistsAsync(collectionName)) {
+                await _qdrantClient.CreateCollectionAsync(collectionName, new VectorParams { Size = 1024, Distance = Distance.Cosine });
+            }
             var list = new List<string>();
             if (message.MessageExtensions != null) {
                 foreach (var e in message.MessageExtensions) {

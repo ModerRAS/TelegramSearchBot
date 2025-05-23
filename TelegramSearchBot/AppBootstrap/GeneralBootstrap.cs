@@ -26,6 +26,8 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
+using Grpc.Net.Client;
+using Grpc.Core.Interceptors;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
@@ -36,10 +38,19 @@ namespace TelegramSearchBot.AppBootstrap {
                 .ConfigureServices(service => {
                     service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl), httpClient: HttpClientHelper.CreateProxyHttpClient()));
                     service.AddSingleton<QdrantClient>(sp => {
-                        var channel = QdrantChannel.ForAddress($"http://localhost:{Env.QdrantGrpcPort}", new ClientConfiguration {
-                            ApiKey = Env.QdrantApiKey,
+                        var handler = new HttpClientHandler {
+                            UseProxy = false
+                        };
+                        var channel = GrpcChannel.ForAddress($"http://localhost:{Env.QdrantGrpcPort}", new GrpcChannelOptions {
+                            HttpHandler = handler,
                         });
-                        var grpcClient = new QdrantGrpcClient(channel);
+                        // 创建 CallInvoker，并添加 API Key 到元数据
+                        var callInvoker = channel.Intercept(metadata =>
+                        {
+                            metadata.Add("api-key", Env.QdrantApiKey); // 替换为您的实际 API Key
+                            return metadata;
+                        });
+                        var grpcClient = new QdrantGrpcClient(callInvoker);
                         var client = new QdrantClient(grpcClient);
                         return client;
                     });

@@ -222,13 +222,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (config != null) {
                 modelName = config.Value;
             }
-            var ret = new float[1];
-            await foreach (var e in ExecOperationAsync((service, channel, cancel) => {
+            
+            await using var enumerator = ExecOperationAsync((service, channel, cancel) => {
                 return GenerateEmbeddingsAsync(message, modelName, service, channel, cancel);
-            }, modelName, cancellationToken)) {
-                ret = e;
+            }, modelName, cancellationToken).GetAsyncEnumerator();
+            
+            if (await enumerator.MoveNextAsync()) {
+                return enumerator.Current;
             }
-            return ret;
+            
+            _logger.LogWarning($"未能获取 {modelName} 模型的嵌入向量");
+            return Array.Empty<float>();
         }
         public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
             yield return await service.GenerateEmbeddingsAsync(message, modelName, channel);
