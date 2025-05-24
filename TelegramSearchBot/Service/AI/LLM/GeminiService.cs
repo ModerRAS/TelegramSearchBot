@@ -158,11 +158,11 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
 
             int maxToolCycles = 5;
+            var currentMessageBuilder = new StringBuilder();
             for (int cycle = 0; cycle < maxToolCycles; cycle++)
             {
                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
-                var currentMessageBuilder = new StringBuilder();
                 var fullResponseBuilder = new StringBuilder();
 
                 await foreach (var chunk in chatSession.StreamContentAsync(message.Content)) 

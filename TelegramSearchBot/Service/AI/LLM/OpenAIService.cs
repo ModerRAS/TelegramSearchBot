@@ -234,11 +234,12 @@ namespace TelegramSearchBot.Service.AI.LLM
             try
             {
                 int maxToolCycles = 5;
+                var currentMessageContentBuilder = new StringBuilder(); // Used to build the current full message for yielding
+                    
                 for (int cycle = 0; cycle < maxToolCycles; cycle++)
                 {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
-                    var currentMessageContentBuilder = new StringBuilder(); // Used to build the current full message for yielding
                     var llmResponseAccumulatorForToolParsing = new StringBuilder(); // Accumulates the full response text if needed for tool parsing later
                     
                     // --- Call LLM ---

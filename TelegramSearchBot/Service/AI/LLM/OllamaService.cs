@@ -127,12 +127,12 @@ namespace TelegramSearchBot.Service.AI.LLM
             {
                 string nextMessageToSend = message.Content; 
                 int maxToolCycles = 5;
-
+                var currentLlmResponseBuilder = new StringBuilder(); // Accumulates tokens for the current LLM response
+                    
                 for (int cycle = 0; cycle < maxToolCycles; cycle++)
                 {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
-                    var currentLlmResponseBuilder = new StringBuilder(); // Accumulates tokens for the current LLM response
                     bool receivedAnyToken = false;
                     
                     _logger.LogDebug("Sending to Ollama (Cycle {Cycle}): {Message}", cycle + 1, nextMessageToSend);
