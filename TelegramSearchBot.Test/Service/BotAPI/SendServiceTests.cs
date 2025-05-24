@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -9,10 +11,10 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.BotAPI;
-using LiteDB;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Message = TelegramSearchBot.Model.Data.Message;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
 
@@ -27,14 +29,21 @@ namespace TelegramSearchBot.Test.Service.BotAPI
         }
     }
 
+    public class TestDataDbContext : DataDbContext
+    {
+        public TestDataDbContext(DbContextOptions<DataDbContext> options) : base(options) { }
+        public virtual DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
+    }
+
     [TestClass]
     public class SendServiceTests
     {
         private Mock<ITelegramBotClient> _mockBotClient = null!;
         private Mock<SendMessage> _mockSendMessage = null!;
         private Mock<ILogger<SendMessage>> _mockLogger = null!;
+        private Mock<TestDataDbContext> _mockDbContext = null!;
+        private Mock<IMediator> _mockMediator = null!;
         private SendService _sendService = null!;
-        private ILiteCollection<CacheData> _cache = null!;
 
         [TestInitialize]
         public void Setup()
@@ -43,13 +52,38 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             _mockLogger = new Mock<ILogger<SendMessage>>();
             _mockSendMessage = new Mock<SendMessage>(_mockBotClient.Object, _mockLogger.Object);
             
-            // Setup Env.Cache for testing
-            var memoryStream = new System.IO.MemoryStream();
-            var db = new LiteDatabase(memoryStream);
-            Env.Cache = db;
-            _cache = Env.Cache.GetCollection<CacheData>("CacheData");
+            var mockSearchPageCaches = new Mock<DbSet<SearchPageCache>>();
+            var data = new List<SearchPageCache>();
             
-            _sendService = new SendService(_mockBotClient.Object, _mockSendMessage.Object);
+            mockSearchPageCaches.As<IQueryable<SearchPageCache>>()
+                .Setup(m => m.Provider)
+                .Returns(data.AsQueryable().Provider);
+            mockSearchPageCaches.As<IQueryable<SearchPageCache>>()
+                .Setup(m => m.Expression)
+                .Returns(data.AsQueryable().Expression);
+            mockSearchPageCaches.As<IQueryable<SearchPageCache>>()
+                .Setup(m => m.ElementType)
+                .Returns(data.AsQueryable().ElementType);
+            mockSearchPageCaches.As<IQueryable<SearchPageCache>>()
+                .Setup(m => m.GetEnumerator())
+                .Returns(data.AsQueryable().GetEnumerator());
+                
+            mockSearchPageCaches.Setup(m => m.AddAsync(It.IsAny<SearchPageCache>(), It.IsAny<CancellationToken>()))
+                .Callback<SearchPageCache, CancellationToken>((cache, _) => {
+                    data.Add(cache);
+                })
+                .Returns(ValueTask.FromResult(default(EntityEntry<SearchPageCache>)));
+            
+            var options = new DbContextOptionsBuilder<DataDbContext>()
+                .UseInMemoryDatabase(databaseName: "TestDatabase")
+                .Options;
+            _mockDbContext = new Mock<TestDataDbContext>(options);
+            _mockDbContext.Setup(x => x.SearchPageCaches).Returns(mockSearchPageCaches.Object);
+            _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
+            
+            _mockMediator = new Mock<IMediator>();
+            
+            _sendService = new SendService(_mockBotClient.Object, _mockSendMessage.Object, _mockDbContext.Object);
         }
 
         [TestMethod]
@@ -58,7 +92,6 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             // Assert
             Assert.IsNotNull(_sendService);
             Assert.AreEqual("SendService", _sendService.ServiceName);
-            Assert.IsNotNull(_cache);
             Assert.AreSame(_mockBotClient.Object, _sendService.GetPrivateFieldValue<ITelegramBotClient>("botClient"));
             Assert.AreSame(_mockSendMessage.Object, _sendService.GetPrivateFieldValue<SendMessage>("Send"));
         }
@@ -67,8 +100,9 @@ namespace TelegramSearchBot.Test.Service.BotAPI
         public void Constructor_WithNullParameters_ThrowsException()
         {
             // Arrange & Act & Assert
-            Assert.ThrowsException<ArgumentNullException>(() => new SendService(null, _mockSendMessage.Object));
-            Assert.ThrowsException<ArgumentNullException>(() => new SendService(_mockBotClient.Object, null));
+            Assert.ThrowsException<ArgumentNullException>(() => new SendService(null, _mockSendMessage.Object, _mockDbContext.Object));
+            Assert.ThrowsException<ArgumentNullException>(() => new SendService(_mockBotClient.Object, null, _mockDbContext.Object));
+            Assert.ThrowsException<ArgumentNullException>(() => new SendService(_mockBotClient.Object, _mockSendMessage.Object, null));
         }
 
         [TestMethod]
@@ -137,11 +171,21 @@ namespace TelegramSearchBot.Test.Service.BotAPI
         public async Task GenerateKeyboard_WithMoreResults_AddsNextPageButton()
         {
             // Arrange
+            var messages = new List<Message>();
+            for (int i = 0; i < 10; i++)
+            {
+                messages.Add(new Message { Content = $"Test {i}", GroupId = 12345, MessageId = i });
+            }
+            
             var searchOption = new SearchOption
             {
-                Messages = new List<Message>(new Message[10]),
+                Messages = messages,
                 Take = 5,
-                Skip = 0
+                Skip = 0,
+                Count = 10,
+                ChatId = 12345,
+                ReplyToMessageId = 1,
+                IsGroup = false
             };
 
             // Act
@@ -156,11 +200,21 @@ namespace TelegramSearchBot.Test.Service.BotAPI
         public async Task GenerateKeyboard_WithNoMoreResults_DoesNotAddNextPageButton()
         {
             // Arrange
+            var messages = new List<Message>();
+            for (int i = 0; i < 5; i++)
+            {
+                messages.Add(new Message { Content = $"Test {i}", GroupId = 12345, MessageId = i });
+            }
+            
             var searchOption = new SearchOption
             {
-                Messages = new List<Message>(new Message[5]),
+                Messages = messages,
                 Take = 5,
-                Skip = 0
+                Skip = 0,
+                Count = 5,
+                ChatId = 12345,
+                ReplyToMessageId = 1,
+                IsGroup = false
             };
 
             // Act

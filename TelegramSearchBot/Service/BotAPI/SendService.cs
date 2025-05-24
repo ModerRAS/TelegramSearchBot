@@ -66,33 +66,47 @@ namespace TelegramSearchBot.Service.BotAPI
         {
             if (searchOption == null)
                 throw new ArgumentNullException(nameof(searchOption));
-            if (searchOption.Messages == null)
-                return (new List<InlineKeyboardButton>(), searchOption);
-
+            
             var keyboardList = new List<InlineKeyboardButton>();
+            
+            if (searchOption.Messages == null || searchOption.Messages.Count == 0)
+                return (keyboardList, searchOption);
+
             searchOption.Skip += searchOption.Take;
             if (searchOption.Messages != null && searchOption.Messages.Count - searchOption.Take >= 0)
             {
                 var uuid_nxt = Guid.NewGuid().ToString();
-                _dbContext.SearchPageCaches.Add(new SearchPageCache()
+                var nextPageCache = new SearchPageCache()
                 {
                     UUID = uuid_nxt,
                     SearchOption = searchOption
-                });
-                await _dbContext.SaveChangesAsync();
+                };
+                
+                if (_dbContext.SearchPageCaches != null)
+                {
+                    _dbContext.SearchPageCaches.Add(nextPageCache);
+                    await _dbContext.SaveChangesAsync();
+                }
+                
                 keyboardList.Add(InlineKeyboardButton.WithCallbackData(
                     "下一页",
                     uuid_nxt
                     ));
             }
+            
             var uuid = Guid.NewGuid().ToString();
             searchOption.ToDeleteNow = true;
-            _dbContext.SearchPageCaches.Add(new SearchPageCache()
+            var deleteCache = new SearchPageCache()
             {
                 UUID = uuid,
                 SearchOption = searchOption
-            });
-            await _dbContext.SaveChangesAsync();
+            };
+            
+            if (_dbContext.SearchPageCaches != null)
+            {
+                _dbContext.SearchPageCaches.Add(deleteCache);
+                await _dbContext.SaveChangesAsync();
+            }
 
             searchOption.ToDeleteNow = false; //按理说不需要的
             keyboardList.Add(InlineKeyboardButton.WithCallbackData(
