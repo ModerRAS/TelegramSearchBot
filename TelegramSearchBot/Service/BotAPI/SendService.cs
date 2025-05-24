@@ -15,16 +15,16 @@ namespace TelegramSearchBot.Service.BotAPI
 
     public class SendService : IService
     {
-        private readonly ITelegramBotClient botClient;
+        private readonly ITelegramViewService _viewService;
         private readonly SendMessage Send;
         private readonly ILiteCollection<CacheData> Cache;
 
         public string ServiceName => "SendService";
 
-        public SendService(ITelegramBotClient botClient, SendMessage Send)
+        public SendService(ITelegramViewService viewService, SendMessage Send)
         {
+            _viewService = viewService ?? throw new ArgumentNullException(nameof(viewService));
             this.Send = Send ?? throw new ArgumentNullException(nameof(Send));
-            this.botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
             Cache = Env.Cache.GetCollection<CacheData>("CacheData");
         }
         public static List<string> ConvertToList(IEnumerable<Message> messages)
@@ -45,21 +45,6 @@ namespace TelegramSearchBot.Service.BotAPI
             }
             return list;
 
-        }
-
-        public string GenerateMessage(List<Message> Finded, SearchOption searchOption)
-        {
-            string Begin;
-            if (searchOption.Count > 0)
-            {
-                Begin = $"共找到 {searchOption.Count} 项结果, 当前为第{searchOption.Skip + 1}项到第{(searchOption.Skip + searchOption.Take < searchOption.Count ? searchOption.Skip + searchOption.Take : searchOption.Count)}项\n";
-            }
-            else
-            {
-                Begin = $"未找到结果。\n";
-            }
-            var list = ConvertToList(Finded);
-            return Begin + string.Join("\n", list) + "\n";
         }
 
 #pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
@@ -103,27 +88,17 @@ namespace TelegramSearchBot.Service.BotAPI
             return (keyboardList, searchOption);
         }
 #pragma warning restore CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
+public async Task SendMessage(string Text, SearchOption searchOption, List<InlineKeyboardButton> keyboardList)
+{
+    await _viewService.SendSearchResultMessageAsync(Text, searchOption, keyboardList);
+}
 
-        public async Task SendMessage(string Text, SearchOption searchOption, List<InlineKeyboardButton> keyboardList)
-        {
-            await Send.AddTask(async () =>
-            {
-                await botClient.SendMessage(
-            chatId: searchOption.ChatId,
-            disableNotification: true,
-            parseMode: ParseMode.Markdown,
-            replyParameters: new Telegram.Bot.Types.ReplyParameters() { MessageId = searchOption.ReplyToMessageId },
-            replyMarkup: new InlineKeyboardMarkup(keyboardList),
-            text: Text
-            );
-            }, searchOption.IsGroup);
-        }
+public async Task ExecuteAsync(SearchOption searchOption, List<Message> Finded)
+{
+    var message = _viewService.GenerateSearchResultMessage(Finded, searchOption);
+    var (keyboardList, searchOptionNext) = await GenerateKeyboard(searchOption);
+    await SendMessage(message, searchOptionNext, keyboardList);
+}
 
-        public async Task ExecuteAsync(SearchOption searchOption, List<Message> Finded)
-        {
-            var message = GenerateMessage(Finded, searchOption);
-            var (keyboardList, searchOptionNext) = await GenerateKeyboard(searchOption);
-            await SendMessage(message, searchOptionNext, keyboardList);
-        }
     }
 }
