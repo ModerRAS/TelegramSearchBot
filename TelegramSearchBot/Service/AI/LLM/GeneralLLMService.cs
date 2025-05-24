@@ -184,20 +184,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public async Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default)
         {
             // 1. 获取模型名称
-
             var modelName = "gemma3:27b";
             var config = await _dbContext.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == AltPhotoModelName);
             if (config != null) {
                 modelName = config.Value;
             }
-            var ret = string.Empty;
-            await foreach (var e in ExecOperationAsync<string>((service, channel, cancel) => {
+            
+            await using var enumerator = ExecOperationAsync<string>((service, channel, cancel) => {
                 return AnalyzeImageAsync(PhotoPath, ChatId, modelName, service, channel, cancel);
-            }, modelName, cancellationToken)) {
-                ret = e;
+            }, modelName, cancellationToken).GetAsyncEnumerator();
+            
+            if (await enumerator.MoveNextAsync()) {
+                return enumerator.Current;
             }
-            return ret;
+            
+            _logger.LogWarning($"未能获取 {modelName} 模型的图片分析结果");
+            return $"Error:未能获取 {modelName} 模型的图片分析结果";
         }
         public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
             yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel);
