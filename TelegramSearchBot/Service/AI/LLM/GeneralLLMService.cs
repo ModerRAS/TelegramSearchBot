@@ -162,10 +162,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             }
 
                             // 6. 根据Provider选择服务
-                            await foreach(var e in operation(service, channel, new CancellationToken())) {
+                            await foreach (var e in operation(service, channel, new CancellationToken()))
+                            {
                                 yield return e;
                             }
-                        } finally {
+                            yield break;
+                        }
+                        finally
+                        {
                             // 释放锁
                             await redisDb.StringDecrementAsync(redisKey);
                         }
