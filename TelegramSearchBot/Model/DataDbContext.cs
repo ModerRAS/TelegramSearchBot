@@ -45,5 +45,6 @@ namespace TelegramSearchBot.Model
         public DbSet<TelegramFileCacheEntry> TelegramFileCacheEntries { get; set; } = null!;
         public DbSet<MessageExtension> MessageExtensions { get; set; } = null!;
         public DbSet<MemoryGraph> MemoryGraphs { get; set; } = null!;
+        public DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
     }
 }

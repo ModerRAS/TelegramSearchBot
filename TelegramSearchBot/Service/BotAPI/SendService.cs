@@ -1,5 +1,4 @@
-﻿using LiteDB;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -17,15 +16,15 @@ namespace TelegramSearchBot.Service.BotAPI
     {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
-        private readonly ILiteCollection<CacheData> Cache;
+        private readonly DataDbContext _dbContext;
 
         public string ServiceName => "SendService";
 
-        public SendService(ITelegramBotClient botClient, SendMessage Send)
+        public SendService(ITelegramBotClient botClient, SendMessage Send, DataDbContext dbContext)
         {
             this.Send = Send ?? throw new ArgumentNullException(nameof(Send));
             this.botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
-            Cache = Env.Cache.GetCollection<CacheData>("CacheData");
+            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         }
         public static List<string> ConvertToList(IEnumerable<Message> messages)
         {
@@ -75,11 +74,12 @@ namespace TelegramSearchBot.Service.BotAPI
             if (searchOption.Messages != null && searchOption.Messages.Count - searchOption.Take >= 0)
             {
                 var uuid_nxt = Guid.NewGuid().ToString();
-                Cache.Insert(new CacheData()
+                _dbContext.SearchPageCaches.Add(new SearchPageCache()
                 {
                     UUID = uuid_nxt,
-                    searchOption = searchOption
+                    SearchOption = searchOption
                 });
+                await _dbContext.SaveChangesAsync();
                 keyboardList.Add(InlineKeyboardButton.WithCallbackData(
                     "下一页",
                     uuid_nxt
@@ -87,11 +87,12 @@ namespace TelegramSearchBot.Service.BotAPI
             }
             var uuid = Guid.NewGuid().ToString();
             searchOption.ToDeleteNow = true;
-            Cache.Insert(new CacheData()
+            _dbContext.SearchPageCaches.Add(new SearchPageCache()
             {
                 UUID = uuid,
-                searchOption = searchOption
+                SearchOption = searchOption
             });
+            await _dbContext.SaveChangesAsync();
 
             searchOption.ToDeleteNow = false; //按理说不需要的
             keyboardList.Add(InlineKeyboardButton.WithCallbackData(

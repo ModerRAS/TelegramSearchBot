@@ -5,20 +5,21 @@ using Telegram.Bot;
 using TelegramSearchBot.Interface;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
-using LiteDB;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Model;
+using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 
 namespace TelegramSearchBot.Controller.Search
 {
     public class SearchNextPageController : IOnUpdate
     {
         private readonly SendMessage Send;
-        private readonly ILiteCollection<CacheData> Cache;
+        private readonly DataDbContext _dbContext;
         private readonly ILogger logger;
         private readonly ISearchService searchService;
         private readonly SendService sendService;
@@ -29,13 +30,14 @@ namespace TelegramSearchBot.Controller.Search
             SendMessage Send,
             ILogger<SearchNextPageController> logger,
             SearchService searchService,
-            SendService sendService
+            SendService sendService,
+            DataDbContext dbContext
             )
         {
             this.sendService = sendService;
             this.searchService = searchService;
             this.Send = Send;
-            Cache = Env.Cache.GetCollection<CacheData>("CacheData");
+            _dbContext = dbContext;
             this.logger = logger;
             this.botClient = botClient;
         }
@@ -61,9 +63,15 @@ namespace TelegramSearchBot.Controller.Search
 #pragma warning restore CS8602 // 解引用可能出现空引用。
             try
             {
-                var cacheData = Cache.Find(c => c.UUID.Equals(e.CallbackQuery.Data)).FirstOrDefault();
-                var searchOption = cacheData.searchOption;
-                Cache.Delete(cacheData.Id);
+                var cacheData = await _dbContext.SearchPageCaches
+                    .FirstOrDefaultAsync(c => c.UUID == e.CallbackQuery.Data);
+                if (cacheData == null) throw new KeyNotFoundException();
+                
+                var searchOption = cacheData.SearchOption;
+                if (searchOption == null) throw new ArgumentException("Invalid search option data");
+                
+                _dbContext.SearchPageCaches.Remove(cacheData);
+                await _dbContext.SaveChangesAsync();
 
                 searchOption.ToDelete.Add(e.CallbackQuery.Message.MessageId);
 
