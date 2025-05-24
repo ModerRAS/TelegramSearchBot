@@ -16,7 +16,6 @@ using TelegramSearchBot.Model; // Added for DataDbContext
 
 namespace TelegramSearchBot.Handler
 {
-    [BotCommand("resolveurls", "解析文本中的链接并存储原始链接与解析后链接的映射。")]
     public class UrlProcessingNotificationHandler : INotificationHandler<TextMessageReceivedNotification>
     {
         private readonly SendMessage _sendMessage;

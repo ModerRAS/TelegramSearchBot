@@ -55,7 +55,7 @@ namespace TelegramSearchBot.AppBootstrap {
                         return client;
                     });
                     service.AddSingleton<SendMessage>();
-                    service.AddHostedService<BotCommandService>(); // Register as HostedService
+                    service.AddHostedService<TelegramCommandRegistryService>(); // Register as HostedService
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
