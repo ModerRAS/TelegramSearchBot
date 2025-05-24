@@ -11,9 +11,11 @@ namespace TelegramSearchBot.Service.Search
     public class SearchService : ISearchService, IService
     {
         private readonly LuceneManager lucene;
-        public SearchService(LuceneManager lucene)
+        private readonly DataDbContext dbContext;
+        public SearchService(LuceneManager lucene, DataDbContext dbContext)
         {
             this.lucene = lucene;
+            this.dbContext = dbContext;
         }
 
         public string ServiceName => "SearchService";
@@ -27,8 +29,9 @@ namespace TelegramSearchBot.Service.Search
             }
             else
             {
-                var Users = Env.Database.GetCollection<UserWithGroup>("Users");
-                var UserInGroups = Users.Find(user => searchOption.ChatId.Equals(user.UserId)).ToList();
+                var UserInGroups = dbContext.Set<UserWithGroup>()
+                    .Where(user => searchOption.ChatId.Equals(user.UserId))
+                    .ToList();
                 var GroupsLength = UserInGroups.Count;
                 searchOption.Messages = new List<Message>();
                 foreach (var Group in UserInGroups)
