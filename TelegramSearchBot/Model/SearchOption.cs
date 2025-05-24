@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using Telegram.Bot.Types;
+using Newtonsoft.Json;
 
 namespace TelegramSearchBot.Model
 {
@@ -22,7 +23,9 @@ namespace TelegramSearchBot.Model
         public List<long> ToDelete { get; set; }
         public bool ToDeleteNow { get; set; }
         public int ReplyToMessageId { get; set; }
+        [JsonIgnore]
         public Chat Chat { get; set; }
+        [JsonIgnore]
         public List<Data.Message> Messages { get; set; }
     }
 }
