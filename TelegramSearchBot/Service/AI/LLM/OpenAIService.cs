@@ -329,37 +329,6 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        // --- Methods specific to OpenAIService ---
-         public async Task<bool> NeedReply(string InputToken, long ChatId)
-        {
-            var prompt = $"你是一个判断助手，只负责判断一段消息是否为提问。\r\n判断标准：\r\n1. 如果消息是问题（无论是直接问句还是隐含的提问意图），返回“是”。\r\n2. 如果消息不是问题（陈述、感叹、命令、闲聊等），返回“否”。\r\n重要：只回答“是”或“否”，不要输出其他内容。";
-
-            List<ChatMessage> checkHistory = new List<ChatMessage>() { new SystemChatMessage(prompt) };
-            // Use local GetChatHistory
-            checkHistory = await GetChatHistory(ChatId, checkHistory, null);
-            checkHistory.Add(new UserChatMessage($"消息：{InputToken}"));
-
-             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(Env.OpenAIBaseURL) };
-             var chat = new ChatClient(model: Env.OpenAIModelName, credential: new(Env.OpenAIApiKey), clientOptions);
-
-            var str = new StringBuilder();
-            await foreach (var update in chat.CompleteChatStreamingAsync(checkHistory))
-            {
-                foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>())
-                {
-                     if (updatePart?.Text != null) str.Append(updatePart.Text);
-                }
-            }
-            if (str.Length < 2 && str.ToString().Contains('是'))
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
         {
             var handler = new HttpClientHandler {
@@ -526,22 +495,6 @@ namespace TelegramSearchBot.Service.AI.LLM
             {
                 _logger.LogError(ex, "Error analyzing image with OpenAI");
                 return $"Error analyzing image: {ex.Message}";
-            }
-        }
-
-        public async Task<bool> IsHealthyAsync()
-        {
-            try
-            {
-                // 简单健康检查 - 测试API连通性
-                using var httpClient = new HttpClient();
-                var response = await httpClient.GetAsync($"{Env.OpenAIBaseURL}/health");
-                return response.IsSuccessStatusCode;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "OpenAI health check failed");
-                return false;
             }
         }
     }
