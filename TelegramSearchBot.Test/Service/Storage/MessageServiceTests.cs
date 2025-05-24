@@ -51,9 +51,6 @@ namespace TelegramSearchBot.Test.Service.Storage
 
             _context = new DataDbContext(_dbContextOptions); // For direct assertions
 
-            // Initialize Env.Database with an in-memory LiteDB instance for testing
-            Env.Database = new LiteDatabase(new MemoryStream());
-
             _mockLogger = new Mock<ILogger<MessageService>>();
             _mockTelegramBotClient = new Mock<ITelegramBotClient>();
 

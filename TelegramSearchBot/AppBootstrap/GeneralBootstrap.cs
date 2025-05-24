@@ -86,8 +86,6 @@ namespace TelegramSearchBot.AppBootstrap {
         public static void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
 
-            Env.Database = new LiteDatabase($"{Env.WorkDir}/Data.db");
-            Env.Cache = new LiteDatabase($"{Env.WorkDir}/Cache.db");
             Directory.SetCurrentDirectory(Env.WorkDir);
             
 

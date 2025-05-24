@@ -84,42 +84,6 @@ namespace TelegramSearchBot.Service.Manage
             await Send.Log("导入完成");
         }
 
-        private async Task CopyLiteDbToSqlite()
-        {
-            var Messages = Env.Database.GetCollection<Message>("Messages").FindAll();
-            long count = Messages.LongCount();
-            await Send.Log($"共{count}条消息，现在开始迁移数据至Sqlite");
-            var number = 0;
-            foreach (var e in Messages)
-            {
-                number++;
-                if (number % 10000 == 0)
-                {
-                    await Send.Log($"已迁移{number}条数据");
-                }
-                var sqliteMessage = from sq in DataContext.Messages
-                                    where sq.MessageId == e.MessageId &&
-                                          sq.GroupId == e.GroupId &&
-                                          sq.Content.Equals(e.Content)
-                                    select sq;
-                if (sqliteMessage.FirstOrDefault() != null)
-                {
-                    continue;
-                }
-
-                await DataContext.Messages.AddAsync(new Message()
-                {
-                    DateTime = e.DateTime,
-                    Content = e.Content,
-                    GroupId = e.GroupId,
-                    MessageId = e.MessageId,
-                });
-                await DataContext.SaveChangesAsync();
-            }
-            await DataContext.SaveChangesAsync();
-            await Send.Log($"已迁移{number}条数据，迁移完成");
-        }
-
         private async Task ScanAndProcessAudioFiles()
         {
             var audioDir = Path.Combine(Env.WorkDir, "Audios");
@@ -306,10 +270,6 @@ namespace TelegramSearchBot.Service.Manage
             if (Command.Equals("导入数据"))
             {
                 await ImportAll();
-            }
-            if (Command.Equals("迁移数据"))
-            {
-                await CopyLiteDbToSqlite();
             }
             if (Command.Equals("导入聊天记录"))
             {

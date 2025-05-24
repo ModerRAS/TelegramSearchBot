@@ -48,8 +48,6 @@ namespace TelegramSearchBot {
         public static readonly int TaskDelayTimeout;
         public static readonly bool SameServer;
         public static long BotId { get; set; }
-        public static LiteDatabase Database { get; set; }
-        public static LiteDatabase Cache { get; set; }
         public static string OllamaModelName { get; set; }
         public static bool EnableVideoASR { get; set; }
         public static bool EnableOpenAI { get; set; } = false;
