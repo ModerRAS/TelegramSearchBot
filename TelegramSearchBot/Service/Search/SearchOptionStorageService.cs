@@ -10,6 +10,9 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.Search {
+    /// <summary>
+    /// 搜索选项存储服务，负责管理搜索选项的缓存和分页逻辑
+    /// </summary>
     public class SearchOptionStorageService : IService {
         public string ServiceName => "SearchOptionStorageService";
         private readonly DataDbContext _dataDbContext;
@@ -95,7 +98,6 @@ namespace TelegramSearchBot.Service.Search {
         /// 获取下一个搜索选项（分页用）
         /// </summary>
         /// <param name="currentOption">当前搜索选项</param>
-        /// <param name="take">每次获取的数量</param>
         /// <returns>更新了Skip后的新搜索选项，如果已到达末尾则返回null</returns>
         /// <exception cref="ArgumentNullException">当currentOption为null时抛出</exception>
         public SearchOption GetNextSearchOption(SearchOption currentOption) {
@@ -114,6 +116,12 @@ namespace TelegramSearchBot.Service.Search {
             return nextOption.Skip < nextOption.Count ? nextOption : null;
         }
 
+        /// <summary>
+        /// 获取标记为立即删除的搜索选项
+        /// </summary>
+        /// <param name="currentOption">当前搜索选项</param>
+        /// <returns>标记了ToDeleteNow属性的新搜索选项</returns>
+        /// <exception cref="ArgumentNullException">当currentOption为null时抛出</exception>
         public SearchOption GetToDeleteNowSearchOption(SearchOption currentOption) {
             if (currentOption == null) {
                 throw new ArgumentNullException(nameof(currentOption));
@@ -125,6 +133,33 @@ namespace TelegramSearchBot.Service.Search {
             nextOption.ToDeleteNow = true;
 
             return nextOption;
+        }
+
+        /// <summary>
+        /// 清理指定时间间隔前的搜索页面缓存
+        /// </summary>
+        /// <param name="timeSpan">要清理的时间间隔</param>
+        /// <returns>删除的记录数</returns>
+        public async Task<int> CleanupOldSearchPageCachesAsync(TimeSpan timeSpan) {
+            try {
+                var cutoffTime = DateTime.UtcNow.Subtract(timeSpan);
+                var oldCaches = _dataDbContext.SearchPageCaches
+                    .Where(c => c.CreatedTime < cutoffTime);
+
+                int deletedCount = await oldCaches.CountAsync().ConfigureAwait(false);
+                
+                if (deletedCount > 0) {
+                    _dataDbContext.SearchPageCaches.RemoveRange(oldCaches);
+                    await _dataDbContext.SaveChangesAsync().ConfigureAwait(false);
+                    _logger.LogInformation("Deleted {Count} old search page caches older than {Date}",
+                        deletedCount, cutoffTime);
+                }
+
+                return deletedCount;
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Error cleaning up old search page caches");
+                throw;
+            }
         }
     }
 }
