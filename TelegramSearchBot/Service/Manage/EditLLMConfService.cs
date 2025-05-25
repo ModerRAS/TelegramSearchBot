@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
@@ -351,51 +352,14 @@ namespace TelegramSearchBot.Service.Manage {
                 }
             }
         }
-        private class RedisHelper {
-            private readonly IConnectionMultiplexer _connection;
-            private readonly long _chatId;
-            private IDatabase _database;
 
-            public RedisHelper(IConnectionMultiplexer connection, long chatId) {
-                _connection = connection;
-                _chatId = chatId;
-                _database = _connection.GetDatabase();
-            }
-
-            private IDatabase GetDatabase() => _database;
-
-            private string StateKey => $"llmconf:{_chatId}:state";
-            private string DataKey => $"llmconf:{_chatId}:data";
-
-            public async Task<string?> GetStateAsync() {
-                return await GetDatabase().StringGetAsync(StateKey);
-            }
-
-            public async Task SetStateAsync(string state) {
-                await GetDatabase().StringSetAsync(StateKey, state);
-            }
-
-            public async Task<string?> GetDataAsync() {
-                return await GetDatabase().StringGetAsync(DataKey);
-            }
-
-            public async Task SetDataAsync(string data) {
-                await GetDatabase().StringSetAsync(DataKey, data);
-            }
-
-            public async Task DeleteKeysAsync() {
-                var db = GetDatabase();
-                await db.KeyDeleteAsync(StateKey);
-                await db.KeyDeleteAsync(DataKey);
-            }
-        }
-        private async Task<(bool, string)> HandleAwaitingNameAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAwaitingNameAsync(EditLLMConfRedisHelper redis, string command) {
             await redis.SetDataAsync(command); // 存储名称
             await redis.SetStateAsync(LLMConfState.AwaitingGateway.GetDescription());
             return (true, "请输入渠道地址");
         }
 
-        private async Task<(bool, string)> HandleAwaitingGatewayAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAwaitingGatewayAsync(EditLLMConfRedisHelper redis, string command) {
             var name = await redis.GetDataAsync();
             await redis.SetDataAsync($"{name}|{command}"); // 追加地址
             await redis.SetStateAsync(LLMConfState.AwaitingProvider.GetDescription());
@@ -413,7 +377,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, editProviderOptions.ToString());
         }
 
-        private async Task<(bool, string)> HandleAwaitingProviderAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAwaitingProviderAsync(EditLLMConfRedisHelper redis, string command) {
             var nameAndGateway = ( await redis.GetDataAsync() ).Split('|');
             LLMProvider provider;
             var validProviders = Enum.GetValues(typeof(LLMProvider))
@@ -432,7 +396,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, "请输入渠道的最大并行数量(默认1):");
         }
 
-        private async Task<(bool, string)> HandleAwaitingParallelAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAwaitingParallelAsync(EditLLMConfRedisHelper redis, string command) {
             int parallel = string.IsNullOrEmpty(command) ? 1 : int.Parse(command);
             var data = await redis.GetDataAsync();
             var parts = data.Split('|');
@@ -441,7 +405,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, "请输入渠道的优先级(默认0):");
         }
 
-        private async Task<(bool, string)> HandleAwaitingPriorityAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAwaitingPriorityAsync(EditLLMConfRedisHelper redis, string command) {
             int priority = string.IsNullOrEmpty(command) ? 0 : int.Parse(command);
             var data = await redis.GetDataAsync();
             var parts = data.Split('|');
@@ -450,7 +414,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, "请输入渠道的API Key");
         }
 
-        private async Task<(bool, string)> HandleAwaitingApiKeyAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAwaitingApiKeyAsync(EditLLMConfRedisHelper redis, string command) {
             var data = await redis.GetDataAsync();
             var parts = data.Split('|');
             var apiKey = command;
@@ -471,7 +435,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, result > 0 ? "渠道创建成功" : "渠道创建失败");
         }
 
-        private async Task<(bool, string)> HandleSettingAltPhotoModelAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleSettingAltPhotoModelAsync(EditLLMConfRedisHelper redis, string command) {
             try {
                 var config = await DataContext.AppConfigurationItems
                     .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.AltPhotoModelName);
@@ -493,7 +457,7 @@ namespace TelegramSearchBot.Service.Manage {
             }
         }
 
-        private async Task<(bool, string)> HandleEditingSelectChannelAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleEditingSelectChannelAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var channelId)) {
                 return (false, "请输入有效的渠道ID");
             }
@@ -508,7 +472,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key\n5. 最大并行数量 ({channel.Parallel})\n6. 优先级 ({channel.Priority})");
         }
 
-        private async Task<(bool, string)> HandleEditingSelectFieldAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleEditingSelectFieldAsync(EditLLMConfRedisHelper redis, string command) {
             var value = await redis.GetDataAsync();
             var editChannelId = int.Parse(value);
             await redis.SetDataAsync($"{editChannelId}|{command}");
@@ -533,7 +497,7 @@ namespace TelegramSearchBot.Service.Manage {
             }
         }
 
-        private async Task<(bool, string)> HandleAddingModelSelectChannelAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAddingModelSelectChannelAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var addModelChannelId)) {
                 return (false, "请输入有效的渠道ID");
             }
@@ -548,7 +512,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, "请输入要添加的模型名称，多个模型用逗号或分号分隔");
         }
 
-        private async Task<(bool, string)> HandleAddingModelInputAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAddingModelInputAsync(EditLLMConfRedisHelper redis, string command) {
             var addChannelId = int.Parse(await redis.GetDataAsync());
             var ModelResult = await AddModelWithChannel(addChannelId, command);
 
@@ -558,7 +522,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, ModelResult ? "模型添加成功" : "模型添加失败");
         }
 
-        private async Task<(bool, string)> HandleRemovingModelSelectChannelAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleRemovingModelSelectChannelAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var removeModelChannelId)) {
                 return (false, "请输入有效的渠道ID");
             }
@@ -589,7 +553,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, sb.ToString());
         }
 
-        private async Task<(bool, string)> HandleRemovingModelSelectAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleRemovingModelSelectAsync(EditLLMConfRedisHelper redis, string command) {
             var data = await redis.GetDataAsync();
             var parts = data.Split('|');
             var removeChannelId = int.Parse(parts[0]);
@@ -608,7 +572,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, removeResult ? "模型移除成功" : "模型移除失败");
         }
 
-        private async Task<(bool, string)> HandleViewingModelSelectChannelAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleViewingModelSelectChannelAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var viewModelChannelId)) {
                 return (false, "请输入有效的渠道ID");
             }
@@ -640,7 +604,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, modelSb.ToString());
         }
 
-        private async Task<(bool, string)> HandleEditingInputValueAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleEditingInputValueAsync(EditLLMConfRedisHelper redis, string command) {
             var data = await redis.GetDataAsync();
             var parts = data.Split('|');
             var editId = int.Parse(parts[0]);
@@ -685,7 +649,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, updateResult ? "更新成功" : "更新失败");
         }
 
-        private async Task<(bool, string)> HandleSettingMaxRetryAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleSettingMaxRetryAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var maxRetry) || maxRetry <= 0) {
                 return (false, "请输入有效的正整数");
             }
@@ -707,7 +671,7 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, $"最大重试次数已设置为: {maxRetry}");
         }
 
-        private async Task<(bool, string)> HandleSettingMaxImageRetryAsync(RedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleSettingMaxImageRetryAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var maxImageRetry) || maxImageRetry <= 0) {
                 return (false, "请输入有效的正整数");
             }
@@ -731,7 +695,7 @@ namespace TelegramSearchBot.Service.Manage {
 
 
         public async Task<(bool, string)> ExecuteAsync(string Command, long ChatId) {
-            var redis = new RedisHelper(connectionMultiplexer, ChatId);
+            var redis = new EditLLMConfRedisHelper(connectionMultiplexer, ChatId);
             var currentState = await redis.GetStateAsync();
             if (Command.Trim().Equals("刷新所有渠道", StringComparison.OrdinalIgnoreCase)) {
                 var count = await RefreshAllChannel();
