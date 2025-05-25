@@ -18,8 +18,8 @@ csharp_space_between_method_declaration_parameter_list_parentheses = false
 csharp_space_between_method_call_parameter_list_parentheses = false
 csharp_space_between_parentheses = expressions, type_casts
 
-# 不要在属性中保留单行块
-csharp_preserve_single_line_blocks = false
+# 要在属性中保留单行块
+csharp_preserve_single_line_blocks = true
 
 # 可选：换行配置（更像K&R）
 csharp_new_line_before_else = false
