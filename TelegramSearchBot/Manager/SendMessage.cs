@@ -1,28 +1,25 @@
-﻿using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using RateLimiter;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using RateLimiter;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 
-namespace TelegramSearchBot.Manager
-{
-    public class SendMessage : BackgroundService
-    {
+namespace TelegramSearchBot.Manager {
+    public class SendMessage : BackgroundService {
         private ConcurrentQueue<Task> tasks;
         private readonly TimeLimiter GroupLimit;
         private readonly TimeLimiter GlobalLimit;
         private readonly ITelegramBotClient botClient;
         private readonly ILogger<SendMessage> logger;
         //private List<Task> tasks;
-        public SendMessage(ITelegramBotClient botClient, ILogger<SendMessage> logger)
-        {
+        public SendMessage(ITelegramBotClient botClient, ILogger<SendMessage> logger) {
             //queue = new ConcurrentQueue<SendModel>();
             GroupLimit = TimeLimiter.GetFromMaxCountByInterval(20, TimeSpan.FromMinutes(1));
             GlobalLimit = TimeLimiter.GetFromMaxCountByInterval(30, TimeSpan.FromSeconds(1));
@@ -30,11 +27,9 @@ namespace TelegramSearchBot.Manager
             this.botClient = botClient;
             this.logger = logger;
         }
-        public async Task Log(string Text)
-        {
+        public async Task Log(string Text) {
             logger.LogInformation(Text);
-            await AddTask(async () =>
-            {
+            await AddTask(async () => {
                 await botClient.SendMessage(
                     chatId: Env.AdminId,
                     disableNotification: true,
@@ -44,14 +39,10 @@ namespace TelegramSearchBot.Manager
             }, false);
         }
 #pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
-        public virtual async Task AddTask(Func<Task> Action, bool IsGroup)
-        {
-            if (IsGroup)
-            {
+        public virtual async Task AddTask(Func<Task> Action, bool IsGroup) {
+            if (IsGroup) {
                 tasks.Enqueue(GroupLimit.Enqueue(async () => await GlobalLimit.Enqueue(Action)));
-            }
-            else
-            {
+            } else {
                 tasks.Enqueue(GlobalLimit.Enqueue(Action));
             }
             //queue.Append(new SendModel() { Action = func, IsGroup = IsGroup });
@@ -59,16 +50,14 @@ namespace TelegramSearchBot.Manager
         }
 
         public Task AddTextMessageToSend(
-            long chatId, 
-            string text, 
-            ParseMode? parseMode = null, 
-            Telegram.Bot.Types.ReplyParameters? replyParameters = null, 
+            long chatId,
+            string text,
+            ParseMode? parseMode = null,
+            Telegram.Bot.Types.ReplyParameters? replyParameters = null,
             bool disableNotification = false,
             bool highPriorityForGroup = false, // To determine if it's a group message for rate limiting
-            CancellationToken cancellationToken = default)
-        {
-            Func<Task> action = async () =>
-            {
+            CancellationToken cancellationToken = default) {
+            Func<Task> action = async () => {
                 await botClient.SendMessage(
                     chatId: chatId,
                     text: text,
@@ -85,28 +74,18 @@ namespace TelegramSearchBot.Manager
             return AddTask(action, highPriorityForGroup);
         }
 
-        public async Task Run(CancellationToken stoppingToken)
-        {
+        public async Task Run(CancellationToken stoppingToken) {
 
-            while (true)
-            {
-                if (tasks.IsEmpty)
-                {
+            while (true) {
+                if (tasks.IsEmpty) {
                     await Task.Delay(1000);
-                }
-                else
-                {
-                    while (!tasks.IsEmpty)
-                    {
-                        try
-                        {
-                            if (tasks.TryDequeue(out var result))
-                            {
+                } else {
+                    while (!tasks.IsEmpty) {
+                        try {
+                            if (tasks.TryDequeue(out var result)) {
                                 result.Wait();
                             }
-                        }
-                        catch (Exception)
-                        {
+                        } catch (Exception) {
                         }
                     }
                 }
@@ -119,6 +98,21 @@ namespace TelegramSearchBot.Manager
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
             await Run(stoppingToken);
+        }
+
+        public Task<T> AddTaskWithResult<T>(Func<Task<T>> Action, bool IsGroup) {
+            if (IsGroup) {
+                return GroupLimit.Enqueue(async () => await GlobalLimit.Enqueue(Action));
+            } else {
+                return GlobalLimit.Enqueue(Action);
+            }
+        }
+        public Task<T> AddTaskWithResult<T>(Func<Task<T>> Action, long ChatId) {
+            if (ChatId < 0) {
+                return GroupLimit.Enqueue(async () => await GlobalLimit.Enqueue(Action));
+            } else {
+                return GlobalLimit.Enqueue(Action);
+            }
         }
     }
 }
