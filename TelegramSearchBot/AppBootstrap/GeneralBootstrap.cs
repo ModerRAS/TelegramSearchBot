@@ -29,6 +29,7 @@ using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using Grpc.Net.Client;
 using Grpc.Core.Interceptors;
+using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
@@ -57,6 +58,7 @@ namespace TelegramSearchBot.AppBootstrap {
                     });
                     service.AddSingleton<SendMessage>();
                     service.AddHostedService<TelegramCommandRegistryService>(); // Register as HostedService
+                    service.AddHostedService<SendMessage>(); // Register SendMessage as a HostedService
                     service.AddSingleton<LuceneManager>();
                     service.AddSingleton<PaddleOCR>();
                     service.AddSingleton<WhisperManager>();
@@ -86,7 +88,7 @@ namespace TelegramSearchBot.AppBootstrap {
                     
                     AddView(service);
                 });
-        public static void Startup(string[] args) { // Changed back to void
+        public static async void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
 
             Directory.SetCurrentDirectory(Env.WorkDir);
@@ -120,22 +122,20 @@ namespace TelegramSearchBot.AppBootstrap {
             TelegramSearchBot.Service.AI.LLM.McpToolHelper.EnsureInitialized(mainAssembly, service, mcpLogger);
             Log.Information("McpToolHelper has been initialized.");
 
-            InitController(host.Services);
             using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
                 var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
                 //context.Database.EnsureCreated();
                 context.Database.Migrate();
             }
+            var task = host.RunAsync(); // Changed back to Run() as Startup is now synchronous
+
             Thread.Sleep(5000);
-
-
             bot.StartReceiving(
                 HandleUpdateAsync(service),
                 HandleErrorAsync(service), new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
                 }, cts.Token);
-            
-            host.Run(); // Changed back to Run() as Startup is now synchronous
+            await task;
         }
         public static void AddController(IServiceCollection service) {
             service.Scan(scan => scan
@@ -163,9 +163,6 @@ namespace TelegramSearchBot.AppBootstrap {
             .AsSelf()
             .WithTransientLifetime()
             );
-        }
-        public static void InitController(IServiceProvider service) {
-            _ = service.GetRequiredService<SendMessage>().Run();
         }
 
         public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {

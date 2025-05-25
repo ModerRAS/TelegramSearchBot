@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using RateLimiter;
 using System;
 using System.Collections.Concurrent;
@@ -12,7 +13,7 @@ using Telegram.Bot.Types.Enums;
 
 namespace TelegramSearchBot.Manager
 {
-    public class SendMessage
+    public class SendMessage : BackgroundService
     {
         private ConcurrentQueue<Task> tasks;
         private readonly TimeLimiter GroupLimit;
@@ -84,7 +85,7 @@ namespace TelegramSearchBot.Manager
             return AddTask(action, highPriorityForGroup);
         }
 
-        public async Task Run()
+        public async Task Run(CancellationToken stoppingToken)
         {
 
             while (true)
@@ -109,7 +110,15 @@ namespace TelegramSearchBot.Manager
                         }
                     }
                 }
+                if (stoppingToken.IsCancellationRequested) {
+                    logger.LogInformation("SendMessage service is stopping.");
+                    return;
+                }
             }
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+            await Run(stoppingToken);
         }
     }
 }
