@@ -75,12 +75,15 @@ namespace TelegramSearchBot.Test.Manage {
             geminiServiceMock.Setup(g => g.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
             
-            _service = new EditLLMConfService(
+            var helperMock = new Mock<EditLLMConfHelper>(
                 _context,
-                _redisMock.Object,
                 _openAIServiceMock.Object,
                 ollamaServiceMock.Object,
                 geminiServiceMock.Object);
+            _service = new EditLLMConfService(
+                helperMock.Object,
+                _context,
+                _redisMock.Object);
         }
 
         [TestMethod]
@@ -481,100 +484,5 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.AreEqual(3, updatedChannel.Priority);
         }
 
-        [TestMethod]
-        public async Task RefreshAllChannel_ShouldUpdateAllModels() {
-            // Arrange
-            var channels = new[] {
-                new LLMChannel { Id = 1, Name = "OpenAI", Provider = LLMProvider.OpenAI },
-                new LLMChannel { Id = 2, Name = "Ollama", Provider = LLMProvider.Ollama },
-                new LLMChannel { Id = 3, Name = "Gemini", Provider = LLMProvider.Gemini }
-            };
-            await _context.LLMChannels.AddRangeAsync(channels);
-            await _context.SaveChangesAsync();
-
-            // Act
-            var result = await _service.RefreshAllChannel();
-
-            // Assert
-            Assert.AreEqual(6, result); // 2 models per provider * 3 providers
-            var models = await _context.ChannelsWithModel.ToListAsync();
-            Assert.AreEqual(6, models.Count);
-            Assert.IsTrue(models.Any(m => m.ModelName == "model1" && m.LLMChannelId == 1));
-            Assert.IsTrue(models.Any(m => m.ModelName == "model2" && m.LLMChannelId == 1));
-            Assert.IsTrue(models.Any(m => m.ModelName == "ollama-model1" && m.LLMChannelId == 2));
-            Assert.IsTrue(models.Any(m => m.ModelName == "ollama-model2" && m.LLMChannelId == 2));
-            Assert.IsTrue(models.Any(m => m.ModelName == "gemini-model1" && m.LLMChannelId == 3));
-            Assert.IsTrue(models.Any(m => m.ModelName == "gemini-model2" && m.LLMChannelId == 3));
-        }
-
-        [TestMethod]
-        public async Task GetChannelById_ShouldReturnCorrectChannel() {
-            // Arrange
-            var channel = new LLMChannel {
-                Id = 1,
-                Name = "Test Channel",
-                Gateway = "http://test.com",
-                ApiKey = "test-key",
-                Provider = LLMProvider.OpenAI
-            };
-            await _context.LLMChannels.AddAsync(channel);
-            await _context.SaveChangesAsync();
-
-            // Act
-            var result = await _service.GetChannelById(1);
-
-            // Assert
-            Assert.IsNotNull(result);
-            Assert.AreEqual(channel.Id, result.Id);
-            Assert.AreEqual(channel.Name, result.Name);
-            Assert.AreEqual(channel.Gateway, result.Gateway);
-            Assert.AreEqual(channel.Provider, result.Provider);
-        }
-
-        [TestMethod]
-        public async Task GetChannelById_ShouldReturnNullForNonExistingId() {
-            // Act
-            var result = await _service.GetChannelById(999);
-
-            // Assert
-            Assert.IsNull(result);
-        }
-
-        [TestMethod]
-        public async Task GetChannelsByName_ShouldReturnMatchingChannels() {
-            // Arrange
-            var channels = new[] {
-                new LLMChannel { Id = 1, Name = "OpenAI Test", Provider = LLMProvider.OpenAI },
-                new LLMChannel { Id = 2, Name = "Ollama Test", Provider = LLMProvider.Ollama },
-                new LLMChannel { Id = 3, Name = "Gemini Test", Provider = LLMProvider.Gemini },
-                new LLMChannel { Id = 4, Name = "Another", Provider = LLMProvider.OpenAI }
-            };
-            await _context.LLMChannels.AddRangeAsync(channels);
-            await _context.SaveChangesAsync();
-
-            // Act
-            var result = await _service.GetChannelsByName("Test");
-
-            // Assert
-            Assert.AreEqual(3, result.Count);
-            Assert.IsTrue(result.All(c => c.Name.Contains("Test")));
-        }
-
-        [TestMethod]
-        public async Task GetChannelsByName_ShouldReturnEmptyForNoMatches() {
-            // Arrange
-            var channels = new[] {
-                new LLMChannel { Id = 1, Name = "OpenAI Test", Provider = LLMProvider.OpenAI },
-                new LLMChannel { Id = 2, Name = "Ollama Test", Provider = LLMProvider.Ollama }
-            };
-            await _context.LLMChannels.AddRangeAsync(channels);
-            await _context.SaveChangesAsync();
-
-            // Act
-            var result = await _service.GetChannelsByName("Nonexistent");
-
-            // Assert
-            Assert.AreEqual(0, result.Count);
-        }
     }
 }

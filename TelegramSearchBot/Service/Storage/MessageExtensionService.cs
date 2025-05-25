@@ -26,7 +26,7 @@ namespace TelegramSearchBot.Service.Storage {
                 .ToListAsync();
         }
 
-        public async Task AddOrUpdateAsync(MessageExtension extension) {
+        public virtual async Task AddOrUpdateAsync(MessageExtension extension) {
             var existing = await _context.MessageExtensions
                 .FirstOrDefaultAsync(x => x.MessageDataId == extension.MessageDataId && x.Name == extension.Name);
             
@@ -40,7 +40,7 @@ namespace TelegramSearchBot.Service.Storage {
             await _context.SaveChangesAsync();
         }
 
-        public async Task AddOrUpdateAsync(long messageDataId, string name, string value) {
+        public virtual async Task AddOrUpdateAsync(long messageDataId, string name, string value) {
             var existing = await _context.MessageExtensions
                 .FirstOrDefaultAsync(x => x.MessageDataId == messageDataId && x.Name == name);
             

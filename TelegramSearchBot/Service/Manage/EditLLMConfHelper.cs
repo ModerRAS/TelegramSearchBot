@@ -21,7 +21,6 @@ namespace TelegramSearchBot.Service.Manage {
 
         public EditLLMConfHelper(
             DataDbContext context,
-            IConnectionMultiplexer connectionMultiplexer,
             OpenAIService openAIService,
             OllamaService ollamaService,
             GeminiService geminiService
