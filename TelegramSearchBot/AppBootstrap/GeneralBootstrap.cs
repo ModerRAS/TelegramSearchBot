@@ -22,6 +22,7 @@ using TelegramSearchBot.Executor;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.View;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using Qdrant.Client;
@@ -82,6 +83,8 @@ namespace TelegramSearchBot.AppBootstrap {
                     // Manually register AppConfigurationService and its interface
                     service.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
                     service.AddHostedService<QdrantProcessManager>();
+                    
+                    AddView(service);
                 });
         public static void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
@@ -151,7 +154,15 @@ namespace TelegramSearchBot.AppBootstrap {
             .AsSelf()
             .WithTransientLifetime()
             );
+        }
 
+        public static void AddView(IServiceCollection service) {
+            service.Scan(scan => scan
+            .FromAssemblyOf<IView>()
+            .AddClasses(classes => classes.AssignableTo<IView>())
+            .AsSelf()
+            .WithTransientLifetime()
+            );
         }
         public static void InitController(IServiceProvider service) {
             _ = service.GetRequiredService<SendMessage>().Run();

@@ -78,6 +78,7 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Resources\" />
+    <Folder Include="View\" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Resources\wechat_qrcode\detect.caffemodel">
