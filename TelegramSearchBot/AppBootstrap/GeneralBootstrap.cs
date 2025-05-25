@@ -135,7 +135,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 HandleErrorAsync(service), new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
                 }, cts.Token);
-            await task;
+            task.Wait();
         }
         public static void AddController(IServiceCollection service) {
             service.Scan(scan => scan
