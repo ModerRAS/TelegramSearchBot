@@ -370,32 +370,67 @@ namespace TelegramSearchBot.Service.Manage {
                 }
             }
         }
-        public async Task<(bool, string)> ExecuteAsync(string Command, long ChatId) {
-            var db = connectionMultiplexer.GetDatabase();
-            string stateKey = $"llmconf:{ChatId}:state";
-            string dataKey = $"llmconf:{ChatId}:data";
+        private class RedisHelper {
+            private readonly IConnectionMultiplexer _connection;
+            private readonly long _chatId;
+            private IDatabase _database;
 
-            // 获取当前状态
-            var currentState = await db.StringGetAsync(stateKey);
+            public RedisHelper(IConnectionMultiplexer connection, long chatId) {
+                _connection = connection;
+                _chatId = chatId;
+                _database = _connection.GetDatabase();
+            }
+
+            private IDatabase GetDatabase() => _database;
+
+            private string StateKey => $"llmconf:{_chatId}:state";
+            private string DataKey => $"llmconf:{_chatId}:data";
+
+            public async Task<string?> GetStateAsync() {
+                return await GetDatabase().StringGetAsync(StateKey);
+            }
+
+            public async Task SetStateAsync(string state) {
+                await GetDatabase().StringSetAsync(StateKey, state);
+            }
+
+            public async Task<string?> GetDataAsync() {
+                return await GetDatabase().StringGetAsync(DataKey);
+            }
+
+            public async Task SetDataAsync(string data) {
+                await GetDatabase().StringSetAsync(DataKey, data);
+            }
+
+            public async Task DeleteKeysAsync() {
+                var db = GetDatabase();
+                await db.KeyDeleteAsync(StateKey);
+                await db.KeyDeleteAsync(DataKey);
+            }
+        }
+
+        public async Task<(bool, string)> ExecuteAsync(string Command, long ChatId) {
+            var redis = new RedisHelper(connectionMultiplexer, ChatId);
+            var currentState = await redis.GetStateAsync();
             if (Command.Trim().Equals("刷新所有渠道", StringComparison.OrdinalIgnoreCase)) {
                 var count = await RefreshAllChannel();
                 return (true, $"已添加{count}个模型");
             }
             else if (Command.Trim().Equals("设置重试次数", StringComparison.OrdinalIgnoreCase)) {
-                await db.StringSetAsync(stateKey, LLMConfState.SettingMaxRetry.GetDescription());
+                await redis.SetStateAsync(LLMConfState.SettingMaxRetry.GetDescription());
                 return (true, "请输入最大重试次数(默认100):");
             }
             else if (Command.Trim().Equals("设置图片重试次数", StringComparison.OrdinalIgnoreCase)) {
-                await db.StringSetAsync(stateKey, LLMConfState.SettingMaxImageRetry.GetDescription());
+                await redis.SetStateAsync(LLMConfState.SettingMaxImageRetry.GetDescription());
                 return (true, "请输入图片处理最大重试次数(默认1000):");
             }
             else if (Command.Trim().Equals("设置图片模型", StringComparison.OrdinalIgnoreCase)) {
-                await db.StringSetAsync(stateKey, LLMConfState.SettingAltPhotoModel.GetDescription());
+                await redis.SetStateAsync(LLMConfState.SettingAltPhotoModel.GetDescription());
                 return (true, "请输入图片分析使用的模型名称:");
             }
             
             if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
-                await db.StringSetAsync(stateKey, LLMConfState.AwaitingName.GetDescription());
+                await redis.SetStateAsync(LLMConfState.AwaitingName.GetDescription());
                 return (true, "请输入渠道的名称");
             }
             else if (Command.Trim().Equals("编辑渠道", StringComparison.OrdinalIgnoreCase)) {
@@ -410,7 +445,7 @@ namespace TelegramSearchBot.Service.Manage {
                     sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
                 }
                 
-                await db.StringSetAsync(stateKey, LLMConfState.EditingSelectChannel.GetDescription());
+                await redis.SetStateAsync(LLMConfState.EditingSelectChannel.GetDescription());
                 return (true, sb.ToString());
             }
             else if (Command.Trim().Equals("添加模型", StringComparison.OrdinalIgnoreCase)) {
@@ -425,7 +460,7 @@ namespace TelegramSearchBot.Service.Manage {
                     sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
                 }
                 
-                await db.StringSetAsync(stateKey, LLMConfState.AddingModelSelectChannel.GetDescription());
+                await redis.SetStateAsync(LLMConfState.AddingModelSelectChannel.GetDescription());
                 return (true, sb.ToString());
             }
             else if (Command.Trim().Equals("移除模型", StringComparison.OrdinalIgnoreCase)) {
@@ -440,7 +475,7 @@ namespace TelegramSearchBot.Service.Manage {
                     sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
                 }
                 
-                await db.StringSetAsync(stateKey, LLMConfState.RemovingModelSelectChannel.GetDescription());
+                await redis.SetStateAsync(LLMConfState.RemovingModelSelectChannel.GetDescription());
                 return (true, sb.ToString());
             }
             else if (Command.Trim().Equals("查看模型", StringComparison.OrdinalIgnoreCase)) {
@@ -455,20 +490,20 @@ namespace TelegramSearchBot.Service.Manage {
                     sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
                 }
                 
-                await db.StringSetAsync(stateKey, LLMConfState.ViewingModelSelectChannel.GetDescription());
+                await redis.SetStateAsync(LLMConfState.ViewingModelSelectChannel.GetDescription());
                 return (true, sb.ToString());
             }
 
             switch (currentState.ToString()) {
                 case var _ when currentState == LLMConfState.AwaitingName.GetDescription():
-                    await db.StringSetAsync(dataKey, Command); // 存储名称
-                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingGateway.GetDescription());
+                    await redis.SetDataAsync(Command); // 存储名称
+                    await redis.SetStateAsync(LLMConfState.AwaitingGateway.GetDescription());
                     return (true, "请输入渠道地址");
                 
                 case var _ when currentState == LLMConfState.AwaitingGateway.GetDescription():
-                    var name = await db.StringGetAsync(dataKey);
-                    await db.StringSetAsync(dataKey, $"{name}|{Command}"); // 追加地址
-                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingProvider.GetDescription());
+                    var name = await redis.GetDataAsync();
+                    await redis.SetDataAsync($"{name}|{Command}"); // 追加地址
+                    await redis.SetStateAsync(LLMConfState.AwaitingProvider.GetDescription());
                     
                         // 动态生成LLMProvider枚举选项(编辑模式)
                         var editProviderOptions = new StringBuilder();
@@ -483,7 +518,7 @@ namespace TelegramSearchBot.Service.Manage {
                         return (true, editProviderOptions.ToString());
                 
                 case var _ when currentState == LLMConfState.AwaitingProvider.GetDescription():
-                    var nameAndGateway = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    var nameAndGateway = (await redis.GetDataAsync()).Split('|');
                     LLMProvider provider;
                     var validProviders = Enum.GetValues(typeof(LLMProvider))
                         .Cast<LLMProvider>()
@@ -496,26 +531,29 @@ namespace TelegramSearchBot.Service.Manage {
                     } else {
                         return (false, $"无效的类型选择，请输入1到{validProviders.Count}之间的数字");
                     }
-                    await db.StringSetAsync(dataKey, $"{nameAndGateway[0]}|{nameAndGateway[1]}|{provider}");
-                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingParallel.GetDescription());
+                    await redis.SetDataAsync($"{nameAndGateway[0]}|{nameAndGateway[1]}|{provider}");
+                    await redis.SetStateAsync(LLMConfState.AwaitingParallel.GetDescription());
                     return (true, "请输入渠道的最大并行数量(默认1):");
                 
                 case var _ when currentState == LLMConfState.AwaitingParallel.GetDescription():
                     int parallel = string.IsNullOrEmpty(Command) ? 1 : int.Parse(Command);
-                    var parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
-                    await db.StringSetAsync(dataKey, $"{parts[0]}|{parts[1]}|{parts[2]}|{parallel}");
-                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingPriority.GetDescription());
+                    var data = await redis.GetDataAsync();
+                    var parts = data.Split('|');
+                    await redis.SetDataAsync($"{parts[0]}|{parts[1]}|{parts[2]}|{parallel}");
+                    await redis.SetStateAsync(LLMConfState.AwaitingPriority.GetDescription());
                     return (true, "请输入渠道的优先级(默认0):");
                 
                 case var _ when currentState == LLMConfState.AwaitingPriority.GetDescription():
                     int priority = string.IsNullOrEmpty(Command) ? 0 : int.Parse(Command);
-                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
-                    await db.StringSetAsync(dataKey, $"{parts[0]}|{parts[1]}|{parts[2]}|{parts[3]}|{priority}");
-                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingApiKey.GetDescription());
+                    data = await redis.GetDataAsync();
+                    parts = data.Split('|');
+                    await redis.SetDataAsync($"{parts[0]}|{parts[1]}|{parts[2]}|{parts[3]}|{priority}");
+                    await redis.SetStateAsync(LLMConfState.AwaitingApiKey.GetDescription());
                     return (true, "请输入渠道的API Key");
                 
                 case var _ when currentState == LLMConfState.AwaitingApiKey.GetDescription():
-                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    data = await redis.GetDataAsync();
+                    parts = data.Split('|');
                     var apiKey = Command;
                     provider = (LLMProvider)Enum.Parse(typeof(LLMProvider), parts[2]);
                     
@@ -529,8 +567,7 @@ namespace TelegramSearchBot.Service.Manage {
                         int.Parse(parts[4]));
                     
                     // 清理状态
-                    await db.KeyDeleteAsync(stateKey);
-                    await db.KeyDeleteAsync(dataKey);
+                    await redis.DeleteKeysAsync();
                     
                     return (true, result > 0 ? "渠道创建成功" : "渠道创建失败");
                 
@@ -549,7 +586,7 @@ namespace TelegramSearchBot.Service.Manage {
                         }
                         
                         await DataContext.SaveChangesAsync();
-                        await db.KeyDeleteAsync(stateKey);
+                        await redis.DeleteKeysAsync();
                         return (true, $"图片分析模型已设置为: {Command}");
                     } catch {
                         return (false, "设置图片分析模型失败");
@@ -565,17 +602,17 @@ namespace TelegramSearchBot.Service.Manage {
                         return (false, "找不到指定的渠道");
                     }
                     
-                    await db.StringSetAsync(dataKey, channelId.ToString());
-                    await db.StringSetAsync(stateKey, LLMConfState.EditingSelectField.GetDescription());
+                    await redis.SetDataAsync(channelId.ToString());
+                    await redis.SetStateAsync(LLMConfState.EditingSelectField.GetDescription());
                     return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key\n5. 最大并行数量 ({channel.Parallel})\n6. 优先级 ({channel.Priority})");
                 
                 case var _ when currentState == LLMConfState.EditingSelectField.GetDescription():
-                    var value = await db.StringGetAsync(dataKey);
+                    var value = await redis.GetDataAsync();
                     var editChannelId = int.Parse(value);
-                    await db.StringSetAsync(dataKey, $"{editChannelId}|{Command}");
+                    await redis.SetDataAsync($"{editChannelId}|{Command}");
                     
                     if (Command == "3") {
-                        await db.StringSetAsync(stateKey, LLMConfState.EditingInputValue.GetDescription());
+                        await redis.SetStateAsync(LLMConfState.EditingInputValue.GetDescription());
                         
                         // 动态生成LLMProvider枚举选项
                         var providerOptions = new StringBuilder();
@@ -590,7 +627,7 @@ namespace TelegramSearchBot.Service.Manage {
                         return (true, providerOptions.ToString());
                     }
                     else {
-                        await db.StringSetAsync(stateKey, LLMConfState.EditingInputValue.GetDescription());
+                        await redis.SetStateAsync(LLMConfState.EditingInputValue.GetDescription());
                         return (true, "请输入新的值：");
                     }
                 
@@ -604,17 +641,16 @@ namespace TelegramSearchBot.Service.Manage {
                         return (false, "找不到指定的渠道");
                     }
                     
-                    await db.StringSetAsync(dataKey, addModelChannelId.ToString());
-                    await db.StringSetAsync(stateKey, LLMConfState.AddingModelInput.GetDescription());
+                    await redis.SetDataAsync(addModelChannelId.ToString());
+                    await redis.SetStateAsync(LLMConfState.AddingModelInput.GetDescription());
                     return (true, "请输入要添加的模型名称，多个模型用逗号或分号分隔");
                 
                 case var _ when currentState == LLMConfState.AddingModelInput.GetDescription():
-                    var addChannelId = int.Parse(await db.StringGetAsync(dataKey));
+                    var addChannelId = int.Parse(await redis.GetDataAsync());
                     var ModelResult = await AddModelWithChannel(addChannelId, Command);
                     
                     // 清理状态
-                    await db.KeyDeleteAsync(stateKey);
-                    await db.KeyDeleteAsync(dataKey);
+                    await redis.DeleteKeysAsync();
                     
                     return (true, ModelResult ? "模型添加成功" : "模型添加失败");
                 
@@ -644,12 +680,13 @@ namespace TelegramSearchBot.Service.Manage {
                         sb.AppendLine($"{i + 1}. {models[i]}");
                     }
                     
-                    await db.StringSetAsync(dataKey, $"{removeModelChannelId}|{string.Join(",", models)}");
-                    await db.StringSetAsync(stateKey, LLMConfState.RemovingModelSelect.GetDescription());
+                    await redis.SetDataAsync($"{removeModelChannelId}|{string.Join(",", models)}");
+                    await redis.SetStateAsync(LLMConfState.RemovingModelSelect.GetDescription());
                     return (true, sb.ToString());
                 
                 case var _ when currentState == LLMConfState.RemovingModelSelect.GetDescription():
-                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    data = await redis.GetDataAsync();
+                    parts = data.Split('|');
                     var removeChannelId = int.Parse(parts[0]);
                     var modelList = parts[1].Split(',');
                     
@@ -661,8 +698,7 @@ namespace TelegramSearchBot.Service.Manage {
                     var removeResult = await RemoveModelFromChannel(removeChannelId, modelName);
                     
                     // 清理状态
-                    await db.KeyDeleteAsync(stateKey);
-                    await db.KeyDeleteAsync(dataKey);
+                    await redis.DeleteKeysAsync();
                     
                     return (true, removeResult ? "模型移除成功" : "模型移除失败");
                 
@@ -693,13 +729,13 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     
                     // 清理状态
-                    await db.KeyDeleteAsync(stateKey);
-                    await db.KeyDeleteAsync(dataKey);
+                    await redis.DeleteKeysAsync();
                     
                     return (true, modelSb.ToString());
                 
                 case var _ when currentState == LLMConfState.EditingInputValue.GetDescription():
-                    parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
+                    data = await redis.GetDataAsync();
+                    parts = data.Split('|');
                     var editId = int.Parse(parts[0]);
                     var field = parts[1];
                     
@@ -737,8 +773,7 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     
                     // 清理状态
-                    await db.KeyDeleteAsync(stateKey);
-                    await db.KeyDeleteAsync(dataKey);
+                    await redis.DeleteKeysAsync();
                     
                     return (true, updateResult ? "更新成功" : "更新失败");
                 
@@ -760,7 +795,7 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     
                     await DataContext.SaveChangesAsync();
-                    await db.KeyDeleteAsync(stateKey);
+                    await redis.DeleteKeysAsync();
                     return (true, $"最大重试次数已设置为: {maxRetry}");
 
                 case var _ when currentState == LLMConfState.SettingMaxImageRetry.GetDescription():
@@ -781,7 +816,7 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     
                     await DataContext.SaveChangesAsync();
-                    await db.KeyDeleteAsync(stateKey);
+                    await redis.DeleteKeysAsync();
                     return (true, $"图片处理最大重试次数已设置为: {maxImageRetry}");
 
                 default:
