@@ -33,21 +33,44 @@
 
 ```json
 {
-  "BaseUrl": "http://127.0.0.1:8081",
+  "BaseUrl": "https://api.telegram.org",
   "BotToken": "your-bot-token",
-  "AdminId": "your-user-id",
-  "EnableAutoOCR": true,
-  "EnableAutoASR": true,
-  "IsLocalAPI": true,
-  "SameServer": true,
+  "AdminId": 123456789,
+  "EnableAutoOCR": false,
+  "EnableAutoASR": false,
+  "IsLocalAPI": false,
+  "SameServer": false,
   "TaskDelayTimeout": 1000,
-  "OllamaHost": "http://127.0.0.1:11434",
-  "OpenAIKey": "your-openai-key",
-  "GeminiKey": "your-gemini-key"
+  "OllamaModelName": "qwen2.5:72b-instruct-q2_K",
+  "EnableVideoASR": false,
+  "EnableOpenAI": false,
+  "OpenAIModelName": "gpt-4o",
+  "OLTPAuth": "",
+  "OLTPAuthUrl": "",
+  "OLTPName": "",
+  "QdrantHttpPort": 6333,
+  "QdrantGrpcPort": 6334
 }
 ```
 
-完整配置选项参考: [Env.cs](TelegramSearchBot/Env.cs)
+### 配置说明
+- **必填项**:
+  - `BotToken`: 从@BotFather获取的Telegram机器人token
+  - `AdminId`: 管理员Telegram用户ID(必须为数字)
+
+- **AI相关**:
+  - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")
+  - `EnableOpenAI`: 是否启用OpenAI(默认false)
+  - `OpenAIModelName`: OpenAI模型名称(默认"gpt-4o")
+
+- **日志推送**:
+  - `OLTPAuth`: OLTP日志推送认证密钥
+  - `OLTPAuthUrl`: OLTP日志推送URL
+  - `OLTPName`: OLTP日志推送名称
+  - `QdrantHttpPort`: Qdrant HTTP端口(默认6333)
+  - `QdrantGrpcPort`: Qdrant gRPC端口(默认6334)
+
+完整配置参考: [Env.cs](TelegramSearchBot/Env.cs)
 
 ## 使用方法
 
