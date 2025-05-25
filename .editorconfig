@@ -1,0 +1,35 @@
+# 适用于所有文件
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+charset = utf-8
+
+# K&R 风格的大括号在行尾
+csharp_new_line_before_open_brace = none
+
+# 使用常见的空格规则
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_after_cast = true
+csharp_space_around_binary_operators = before_and_after
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_between_method_call_parameter_list_parentheses = false
+csharp_space_between_parentheses = expressions, type_casts
+
+# 不要在属性中保留单行块
+csharp_preserve_single_line_blocks = false
+
+# 可选：换行配置（更像K&R）
+csharp_new_line_before_else = false
+csharp_new_line_before_catch = false
+csharp_new_line_before_finally = false
+csharp_new_line_between_query_expression_clauses = false
+
+# 可选：using 排序 & 换行
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+# 关闭多余的空行
+dotnet_style_allow_multiple_blank_lines_experimental = false
