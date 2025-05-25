@@ -1,9 +1,8 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Scriban;
 using Telegram.Bot;
-using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
@@ -15,18 +14,112 @@ namespace TelegramSearchBot.View
 {
     public class SearchView : IView
     {
-        private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
-        private readonly ISearchService _searchService;
+        private readonly ITelegramBotClient _botClient;
 
         public SearchView(
-            ITelegramBotClient botClient,
             SendMessage sendMessage,
-            ISearchService searchService = null)
+            ITelegramBotClient botClient)
         {
-            _botClient = botClient;
             _sendMessage = sendMessage;
-            _searchService = searchService;
+            _botClient = botClient;
+        }
+
+
+        private long ChatId { get; set; }
+        private int ReplyToMessageId { get; set; }
+        private bool IsGroup { get => ChatId < 0;}
+        private List<Message> Messages { get; set; }
+        private int Count { get; set; }
+        private int Skip { get; set; }
+        private int Take { get; set; }
+        private List<Button> Buttons { get; set; } = new List<Button>();
+        public class Button
+        {
+            public string Text { get; set; }
+            public string CallbackData { get; set; }
+            public Button(string text, string callbackData)
+            {
+                Text = text;
+                CallbackData = callbackData;
+            }
+        }
+
+        public SearchView WithChatId(long chatId)
+        {
+            ChatId = chatId;
+            return this;
+        }
+
+        public SearchView WithReplyTo(int messageId)
+        {
+            ReplyToMessageId = messageId;
+            return this;
+        }
+
+        public SearchView WithMessages(List<Message> messages)
+        {
+            Messages = messages;
+            return this;
+        }
+
+        public SearchView WithCount(int count)
+        {
+            Count = count;
+            return this;
+        }
+
+        public SearchView WithSkip(int skip)
+        {
+            Skip = skip;
+            return this;
+        }
+
+        public SearchView WithTake(int take)
+        {
+            Take = take;
+            return this;
+        }
+        public SearchView AddButton(string text, string callbackData)
+        {
+            Buttons.Add(new Button(text, callbackData));
+            return this;
+        }
+
+        public async Task Render()
+        {
+            var messageText = RenderSearchResults(new SearchOption
+            {
+                ChatId = this.ChatId,
+                ReplyToMessageId = this.ReplyToMessageId,
+                IsGroup = this.IsGroup,
+                Messages = this.Messages,
+                Count = this.Count,
+                Skip = this.Skip,
+                Take = this.Take
+            });
+
+            var replyParameters = new Telegram.Bot.Types.ReplyParameters
+            {
+                MessageId = this.ReplyToMessageId
+            };
+
+            var inlineButtons = this.Buttons?.Select(b => InlineKeyboardButton.WithCallbackData(b.Text, b.CallbackData)).ToList();
+
+            var replyMarkup = inlineButtons != null ?
+                new Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup(inlineButtons) : null;
+
+            await _sendMessage.AddTask(async () => {
+                await _botClient.SendMessage(
+                chatId: this.ChatId,
+                text: messageText,
+                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
+                replyParameters: replyParameters,
+                disableNotification: true,
+                replyMarkup: replyMarkup
+            );
+            }, ChatId < 0);
+            
         }
 
         private const string SearchResultTemplate = @"
@@ -36,17 +129,21 @@ namespace TelegramSearchBot.View
 未找到结果。
 {{- end -}}
 
+{{ ""\n"" }}
 {{- for message in messages -}}
-[{{message.content | string.truncate 30 | string.replace '\n' '' | string.replace '\r' ''}}](https://t.me/c/{{message.group_id | string.slice 4}}/{{message.message_id}})
+[{{message.content | string.truncate 30 | string.replace '\n' '' | string.replace '\r' ''}}](https://t.me/c/{{message.group_id | string.slice 4}}/{{message.message_id}}){{ ""\n"" }}
+
 {{- end -}}
 ";
 
         public string RenderSearchResults(SearchOption searchOption)
         {
             var template = Template.Parse(SearchResultTemplate);
-            return template.Render(new {
+            return template.Render(new
+            {
                 messages = searchOption.Messages,
-                search_option = new {
+                search_option = new
+                {
                     count = searchOption.Count,
                     skip = searchOption.Skip,
                     take = searchOption.Take
@@ -54,50 +151,22 @@ namespace TelegramSearchBot.View
             });
         }
 
-        public async Task SendSearchResults(
-            ITelegramBotClient botClient,
-            SendMessage send,
-            SearchOption searchOption,
-            List<InlineKeyboardButton> keyboardButtons)
+        public async Task SendSearchResults(SearchView viewModel)
         {
-            var messageText = RenderSearchResults(searchOption);
-            
-            await send.AddTask(async () =>
-            {
-                await botClient.SendMessage(
-                    chatId: searchOption.ChatId,
-                    disableNotification: true,
-                    parseMode: ParseMode.Markdown,
-                    replyParameters: new Telegram.Bot.Types.ReplyParameters
-                    {
-                        MessageId = searchOption.ReplyToMessageId
-                    },
-                    replyMarkup: new InlineKeyboardMarkup(keyboardButtons),
-                    text: messageText
-                );
-            }, searchOption.IsGroup);
+            await viewModel.Render();
         }
+
 
         public List<string> ConvertToMarkdownLinks(IEnumerable<Model.Data.Message> messages)
         {
             var template = Template.Parse("[{{content | string.truncate 30 | string.replace '\n' '' | string.replace '\r' ''}}](https://t.me/c/{{group_id | string.slice 4}}/{{message_id}})");
-            
+
             var result = new List<string>();
             foreach (var message in messages)
             {
                 result.Add(template.Render(message));
             }
             return result;
-        }
-
-        public List<InlineKeyboardButton> GenerateKeyboardButtons(List<(string Text, string CallbackData)> buttonConfigs)
-        {
-            var keyboardButtons = new List<InlineKeyboardButton>();
-            foreach (var config in buttonConfigs)
-            {
-                keyboardButtons.Add(InlineKeyboardButton.WithCallbackData(config.Text, config.CallbackData));
-            }
-            return keyboardButtons;
         }
     }
 }

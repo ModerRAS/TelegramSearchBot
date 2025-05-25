@@ -6,6 +6,7 @@ using TelegramSearchBot.Model;
 using System;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Controller.Search
 {
@@ -13,14 +14,20 @@ namespace TelegramSearchBot.Controller.Search
     {
         private readonly ISearchService searchService;
         private readonly SendService sendService;
+        private readonly SearchOptionStorageService searchOptionStorageService;
+        private readonly SearchView searchView;
         public List<Type> Dependencies => new List<Type>();
         public SearchController(
             SearchService searchService,
-            SendService sendService
+            SendService sendService,
+            SearchOptionStorageService searchOptionStorageService,
+            SearchView searchView
             )
         {
             this.searchService = searchService;
             this.sendService = sendService;
+            this.searchOptionStorageService = searchOptionStorageService;
+            this.searchView = searchView;
         }
 
         public async Task ExecuteAsync(PipelineContext p) {
@@ -45,7 +52,23 @@ namespace TelegramSearchBot.Controller.Search
 
                     var searchOption = await searchService.Search(firstSearch);
 
-                    await sendService.ExecuteAsync(searchOption, searchOption.Messages);
+                    var searchOptionNext = searchOptionStorageService.GetNextSearchOption(searchOption);
+                    var searchOptionToDeleteNow = searchOptionStorageService.GetToDeleteNowSearchOption(searchOption);
+                    var uuidToDeleteNow = await searchOptionStorageService.SetSearchOptionAsync(searchOptionToDeleteNow);
+                    searchView
+                        .WithChatId(searchOption.ChatId)
+                        .WithCount(searchOption.Count)
+                        .WithSkip(searchOption.Skip)
+                        .WithTake(searchOption.Take)
+                        .WithMessages(searchOption.Messages)
+                        .WithReplyTo(searchOption.ReplyToMessageId);
+                    if (searchOptionNext != null) {
+                        var uuidNext = await searchOptionStorageService.SetSearchOptionAsync(searchOptionNext); 
+                        searchView.AddButton("下一页", uuidNext);
+                    }
+                    searchView.AddButton("删除历史", uuidToDeleteNow);
+                    await searchView.Render();
+
                 }
             }
         }

@@ -13,6 +13,7 @@ using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Model;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
+using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Controller.Search
 {
@@ -22,7 +23,8 @@ namespace TelegramSearchBot.Controller.Search
         private readonly DataDbContext _dbContext;
         private readonly ILogger logger;
         private readonly ISearchService searchService;
-        private readonly SendService sendService;
+        private readonly SearchOptionStorageService searchOptionStorageService;
+        private readonly SearchView searchView;
         private readonly ITelegramBotClient botClient;
         public List<Type> Dependencies => new List<Type>();
         public SearchNextPageController(
@@ -30,16 +32,18 @@ namespace TelegramSearchBot.Controller.Search
             SendMessage Send,
             ILogger<SearchNextPageController> logger,
             SearchService searchService,
-            SendService sendService,
-            DataDbContext dbContext
+            DataDbContext dbContext,
+            SearchOptionStorageService searchOptionStorageService,
+            SearchView searchView
             )
         {
-            this.sendService = sendService;
             this.searchService = searchService;
             this.Send = Send;
             _dbContext = dbContext;
             this.logger = logger;
             this.botClient = botClient;
+            this.searchOptionStorageService = searchOptionStorageService;
+            this.searchView = searchView;
         }
 
         public async Task ExecuteAsync(PipelineContext p) {
@@ -63,15 +67,7 @@ namespace TelegramSearchBot.Controller.Search
 #pragma warning restore CS8602 // 解引用可能出现空引用。
             try
             {
-                var cacheData = await _dbContext.SearchPageCaches
-                    .FirstOrDefaultAsync(c => c.UUID == e.CallbackQuery.Data);
-                if (cacheData == null) throw new KeyNotFoundException();
-                
-                var searchOption = cacheData.SearchOption;
-                if (searchOption == null) throw new ArgumentException("Invalid search option data");
-                
-                _dbContext.SearchPageCaches.Remove(cacheData);
-                await _dbContext.SaveChangesAsync();
+                var searchOption = await searchOptionStorageService.GetAndRemoveSearchOptionAsync(e.CallbackQuery.Data);
 
                 searchOption.ToDelete.Add(e.CallbackQuery.Message.MessageId);
 
@@ -98,9 +94,23 @@ namespace TelegramSearchBot.Controller.Search
                     return;
                 }
 
-                var searchOptionNext = await searchService.Search(searchOption);
-
-                await sendService.ExecuteAsync(searchOption, searchOptionNext.Messages);
+                searchOption = await searchService.Search(searchOption);
+                var searchOptionNext = searchOptionStorageService.GetNextSearchOption(searchOption);
+                var searchOptionToDeleteNow = searchOptionStorageService.GetToDeleteNowSearchOption(searchOption);
+                var uuidToDeleteNow = await searchOptionStorageService.SetSearchOptionAsync(searchOptionToDeleteNow);
+                searchView
+                    .WithChatId(searchOption.ChatId)
+                    .WithCount(searchOption.Count)
+                    .WithSkip(searchOption.Skip)
+                    .WithTake(searchOption.Take)
+                    .WithMessages(searchOption.Messages)
+                    .WithReplyTo(searchOption.ReplyToMessageId);
+                if (searchOptionNext != null) {
+                    var uuidNext = await searchOptionStorageService.SetSearchOptionAsync(searchOptionNext);
+                    searchView.AddButton("下一页", uuidNext);
+                }
+                searchView.AddButton("删除历史", uuidToDeleteNow);
+                await searchView.Render();
 
             }
             catch (KeyNotFoundException)
