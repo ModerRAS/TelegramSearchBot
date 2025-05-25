@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Text;
 
 namespace TelegramSearchBot.Model.Data
 {
@@ -20,5 +19,19 @@ namespace TelegramSearchBot.Model.Data
         public string Content { get; set; }
         
         public virtual ICollection<MessageExtension> MessageExtensions { get; set; }
+
+        public static Message FromTelegramMessage(Telegram.Bot.Types.Message telegramMessage)
+        {
+            return new Message
+            {
+                MessageId = telegramMessage.MessageId,
+                GroupId = telegramMessage.Chat.Id,
+                FromUserId = telegramMessage.From?.Id ?? 0,
+                ReplyToUserId = telegramMessage.ReplyToMessage?.From?.Id ?? 0,
+                ReplyToMessageId = telegramMessage.ReplyToMessage?.MessageId ?? 0,
+                Content = telegramMessage.Text ?? telegramMessage.Caption ?? string.Empty,
+                DateTime = telegramMessage.Date
+            };
+        }
     }
 }
