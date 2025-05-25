@@ -382,20 +382,20 @@ namespace TelegramSearchBot.Service.Manage {
                 return (true, $"已添加{count}个模型");
             }
             else if (Command.Trim().Equals("设置重试次数", StringComparison.OrdinalIgnoreCase)) {
-                await db.StringSetAsync(stateKey, "setting_max_retry");
+                await db.StringSetAsync(stateKey, LLMConfState.SettingMaxRetry.GetDescription());
                 return (true, "请输入最大重试次数(默认100):");
             }
             else if (Command.Trim().Equals("设置图片重试次数", StringComparison.OrdinalIgnoreCase)) {
-                await db.StringSetAsync(stateKey, "setting_max_image_retry");
+                await db.StringSetAsync(stateKey, LLMConfState.SettingMaxImageRetry.GetDescription());
                 return (true, "请输入图片处理最大重试次数(默认1000):");
             }
             else if (Command.Trim().Equals("设置图片模型", StringComparison.OrdinalIgnoreCase)) {
-                await db.StringSetAsync(stateKey, "setting_alt_photo_model");
+                await db.StringSetAsync(stateKey, LLMConfState.SettingAltPhotoModel.GetDescription());
                 return (true, "请输入图片分析使用的模型名称:");
             }
             
             if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
-                await db.StringSetAsync(stateKey, "awaiting_name");
+                await db.StringSetAsync(stateKey, LLMConfState.AwaitingName.GetDescription());
                 return (true, "请输入渠道的名称");
             }
             else if (Command.Trim().Equals("编辑渠道", StringComparison.OrdinalIgnoreCase)) {
@@ -410,7 +410,7 @@ namespace TelegramSearchBot.Service.Manage {
                     sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
                 }
                 
-                await db.StringSetAsync(stateKey, "editing_select_channel");
+                await db.StringSetAsync(stateKey, LLMConfState.EditingSelectChannel.GetDescription());
                 return (true, sb.ToString());
             }
             else if (Command.Trim().Equals("添加模型", StringComparison.OrdinalIgnoreCase)) {
@@ -425,7 +425,7 @@ namespace TelegramSearchBot.Service.Manage {
                     sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
                 }
                 
-                await db.StringSetAsync(stateKey, "adding_model_select_channel");
+                await db.StringSetAsync(stateKey, LLMConfState.AddingModelSelectChannel.GetDescription());
                 return (true, sb.ToString());
             }
             else if (Command.Trim().Equals("移除模型", StringComparison.OrdinalIgnoreCase)) {
@@ -440,7 +440,7 @@ namespace TelegramSearchBot.Service.Manage {
                     sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
                 }
                 
-                await db.StringSetAsync(stateKey, "removing_model_select_channel");
+                await db.StringSetAsync(stateKey, LLMConfState.RemovingModelSelectChannel.GetDescription());
                 return (true, sb.ToString());
             }
             else if (Command.Trim().Equals("查看模型", StringComparison.OrdinalIgnoreCase)) {
@@ -455,20 +455,20 @@ namespace TelegramSearchBot.Service.Manage {
                     sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
                 }
                 
-                await db.StringSetAsync(stateKey, "viewing_model_select_channel");
+                await db.StringSetAsync(stateKey, LLMConfState.ViewingModelSelectChannel.GetDescription());
                 return (true, sb.ToString());
             }
 
             switch (currentState.ToString()) {
-                case "awaiting_name":
+                case var _ when currentState == LLMConfState.AwaitingName.GetDescription():
                     await db.StringSetAsync(dataKey, Command); // 存储名称
-                    await db.StringSetAsync(stateKey, "awaiting_gateway");
+                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingGateway.GetDescription());
                     return (true, "请输入渠道地址");
                 
-                case "awaiting_gateway":
+                case var _ when currentState == LLMConfState.AwaitingGateway.GetDescription():
                     var name = await db.StringGetAsync(dataKey);
                     await db.StringSetAsync(dataKey, $"{name}|{Command}"); // 追加地址
-                    await db.StringSetAsync(stateKey, "awaiting_provider");
+                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingProvider.GetDescription());
                     
                         // 动态生成LLMProvider枚举选项(编辑模式)
                         var editProviderOptions = new StringBuilder();
@@ -482,7 +482,7 @@ namespace TelegramSearchBot.Service.Manage {
                         editProviderOptions.AppendJoin("\n", editProviders);
                         return (true, editProviderOptions.ToString());
                 
-                case "awaiting_provider":
+                case var _ when currentState == LLMConfState.AwaitingProvider.GetDescription():
                     var nameAndGateway = (await db.StringGetAsync(dataKey)).ToString().Split('|');
                     LLMProvider provider;
                     var validProviders = Enum.GetValues(typeof(LLMProvider))
@@ -497,24 +497,24 @@ namespace TelegramSearchBot.Service.Manage {
                         return (false, $"无效的类型选择，请输入1到{validProviders.Count}之间的数字");
                     }
                     await db.StringSetAsync(dataKey, $"{nameAndGateway[0]}|{nameAndGateway[1]}|{provider}");
-                    await db.StringSetAsync(stateKey, "awaiting_parallel");
+                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingParallel.GetDescription());
                     return (true, "请输入渠道的最大并行数量(默认1):");
                 
-                case "awaiting_parallel":
+                case var _ when currentState == LLMConfState.AwaitingParallel.GetDescription():
                     int parallel = string.IsNullOrEmpty(Command) ? 1 : int.Parse(Command);
                     var parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
                     await db.StringSetAsync(dataKey, $"{parts[0]}|{parts[1]}|{parts[2]}|{parallel}");
-                    await db.StringSetAsync(stateKey, "awaiting_priority");
+                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingPriority.GetDescription());
                     return (true, "请输入渠道的优先级(默认0):");
                 
-                case "awaiting_priority":
+                case var _ when currentState == LLMConfState.AwaitingPriority.GetDescription():
                     int priority = string.IsNullOrEmpty(Command) ? 0 : int.Parse(Command);
                     parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
                     await db.StringSetAsync(dataKey, $"{parts[0]}|{parts[1]}|{parts[2]}|{parts[3]}|{priority}");
-                    await db.StringSetAsync(stateKey, "awaiting_apikey");
+                    await db.StringSetAsync(stateKey, LLMConfState.AwaitingApiKey.GetDescription());
                     return (true, "请输入渠道的API Key");
                 
-                case "awaiting_apikey":
+                case var _ when currentState == LLMConfState.AwaitingApiKey.GetDescription():
                     parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
                     var apiKey = Command;
                     provider = (LLMProvider)Enum.Parse(typeof(LLMProvider), parts[2]);
@@ -534,7 +534,7 @@ namespace TelegramSearchBot.Service.Manage {
                     
                     return (true, result > 0 ? "渠道创建成功" : "渠道创建失败");
                 
-                case "setting_alt_photo_model":
+                case var _ when currentState == LLMConfState.SettingAltPhotoModel.GetDescription():
                     try {
                         var config = await DataContext.AppConfigurationItems
                             .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.AltPhotoModelName);
@@ -555,7 +555,7 @@ namespace TelegramSearchBot.Service.Manage {
                         return (false, "设置图片分析模型失败");
                     }
                 
-                case "editing_select_channel":
+                case var _ when currentState == LLMConfState.EditingSelectChannel.GetDescription():
                     if (!int.TryParse(Command, out var channelId)) {
                         return (false, "请输入有效的渠道ID");
                     }
@@ -566,16 +566,16 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     
                     await db.StringSetAsync(dataKey, channelId.ToString());
-                    await db.StringSetAsync(stateKey, "editing_select_field");
+                    await db.StringSetAsync(stateKey, LLMConfState.EditingSelectField.GetDescription());
                     return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key\n5. 最大并行数量 ({channel.Parallel})\n6. 优先级 ({channel.Priority})");
                 
-                case "editing_select_field":
+                case var _ when currentState == LLMConfState.EditingSelectField.GetDescription():
                     var value = await db.StringGetAsync(dataKey);
                     var editChannelId = int.Parse(value);
                     await db.StringSetAsync(dataKey, $"{editChannelId}|{Command}");
                     
                     if (Command == "3") {
-                        await db.StringSetAsync(stateKey, "editing_input_value");
+                        await db.StringSetAsync(stateKey, LLMConfState.EditingInputValue.GetDescription());
                         
                         // 动态生成LLMProvider枚举选项
                         var providerOptions = new StringBuilder();
@@ -590,11 +590,11 @@ namespace TelegramSearchBot.Service.Manage {
                         return (true, providerOptions.ToString());
                     }
                     else {
-                        await db.StringSetAsync(stateKey, "editing_input_value");
+                        await db.StringSetAsync(stateKey, LLMConfState.EditingInputValue.GetDescription());
                         return (true, "请输入新的值：");
                     }
                 
-                case "adding_model_select_channel":
+                case var _ when currentState == LLMConfState.AddingModelSelectChannel.GetDescription():
                     if (!int.TryParse(Command, out var addModelChannelId)) {
                         return (false, "请输入有效的渠道ID");
                     }
@@ -605,10 +605,10 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     
                     await db.StringSetAsync(dataKey, addModelChannelId.ToString());
-                    await db.StringSetAsync(stateKey, "adding_model_input");
+                    await db.StringSetAsync(stateKey, LLMConfState.AddingModelInput.GetDescription());
                     return (true, "请输入要添加的模型名称，多个模型用逗号或分号分隔");
                 
-                case "adding_model_input":
+                case var _ when currentState == LLMConfState.AddingModelInput.GetDescription():
                     var addChannelId = int.Parse(await db.StringGetAsync(dataKey));
                     var ModelResult = await AddModelWithChannel(addChannelId, Command);
                     
@@ -618,7 +618,7 @@ namespace TelegramSearchBot.Service.Manage {
                     
                     return (true, ModelResult ? "模型添加成功" : "模型添加失败");
                 
-                case "removing_model_select_channel":
+                case var _ when currentState == LLMConfState.RemovingModelSelectChannel.GetDescription():
                     if (!int.TryParse(Command, out var removeModelChannelId)) {
                         return (false, "请输入有效的渠道ID");
                     }
@@ -645,10 +645,10 @@ namespace TelegramSearchBot.Service.Manage {
                     }
                     
                     await db.StringSetAsync(dataKey, $"{removeModelChannelId}|{string.Join(",", models)}");
-                    await db.StringSetAsync(stateKey, "removing_model_select");
+                    await db.StringSetAsync(stateKey, LLMConfState.RemovingModelSelect.GetDescription());
                     return (true, sb.ToString());
                 
-                case "removing_model_select":
+                case var _ when currentState == LLMConfState.RemovingModelSelect.GetDescription():
                     parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
                     var removeChannelId = int.Parse(parts[0]);
                     var modelList = parts[1].Split(',');
@@ -666,7 +666,7 @@ namespace TelegramSearchBot.Service.Manage {
                     
                     return (true, removeResult ? "模型移除成功" : "模型移除失败");
                 
-                case "viewing_model_select_channel":
+                case var _ when currentState == LLMConfState.ViewingModelSelectChannel.GetDescription():
                     if (!int.TryParse(Command, out var viewModelChannelId)) {
                         return (false, "请输入有效的渠道ID");
                     }
@@ -698,7 +698,7 @@ namespace TelegramSearchBot.Service.Manage {
                     
                     return (true, modelSb.ToString());
                 
-                case "editing_input_value":
+                case var _ when currentState == LLMConfState.EditingInputValue.GetDescription():
                     parts = (await db.StringGetAsync(dataKey)).ToString().Split('|');
                     var editId = int.Parse(parts[0]);
                     var field = parts[1];
@@ -742,7 +742,7 @@ namespace TelegramSearchBot.Service.Manage {
                     
                     return (true, updateResult ? "更新成功" : "更新失败");
                 
-                case "setting_max_retry":
+                case var _ when currentState == LLMConfState.SettingMaxRetry.GetDescription():
                     if (!int.TryParse(Command, out var maxRetry) || maxRetry <= 0) {
                         return (false, "请输入有效的正整数");
                     }
@@ -763,7 +763,7 @@ namespace TelegramSearchBot.Service.Manage {
                     await db.KeyDeleteAsync(stateKey);
                     return (true, $"最大重试次数已设置为: {maxRetry}");
 
-                case "setting_max_image_retry":
+                case var _ when currentState == LLMConfState.SettingMaxImageRetry.GetDescription():
                     if (!int.TryParse(Command, out var maxImageRetry) || maxImageRetry <= 0) {
                         return (false, "请输入有效的正整数");
                     }
