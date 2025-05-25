@@ -1,54 +1,35 @@
-# Active Context - Qdrant Integration & Web Scraping
+# Active Context - View Layer Refactoring
 
-## Recent Changes
-1. 完成Qdrant基础设施集成：
-    - 在Env.cs中添加Qdrant路径配置
-    - 实现QdrantDownloader服务处理二进制下载
-    - 实现QdrantProcessManager管理进程生命周期
-    - 更新GeneralBootstrap.cs中的服务注册
-2. 完成VectorGenerationService核心功能：
-    - 实现批量向量生成方法(GenerateVectorsAsync)
-    - 实现相似性搜索功能(SearchSimilarAsync)
-    - 添加健康检查机制(IsHealthyAsync)
-3. Web Scraping功能：
-    - 添加WebScraperController处理URL消息
-    - 实现IWebScraperService基础HTML抓取功能
-    - 与MessageExtensionService集成存储结果
-4. GeneralLLMService改进：
-    - 将IsSaturatedAsync改为GetAvailableCapacityAsync
-    - 修改ScanAndProcessAltImageFiles使用批量任务添加
-    - 修复异步方法参数问题
+## 视图层重构计划
 
-## Implementation Details
-- Qdrant集成：
-    - 使用HttpClient下载Qdrant二进制文件
-    - 实现SHA256校验验证下载完整性
-    - ProcessManager处理进程启动/停止/监控
-    - 通过环境变量配置Qdrant路径和端口
-- VectorGenerationService：
-    - 支持多模型向量生成(默认openai)
-    - 使用Task.WhenAll实现批量处理
-    - 相似性搜索支持limit参数控制结果数量
-    - 健康检查包含Qdrant连接和模型可用性验证
-- Web Scraping：
-    - WebScraperController检测消息中的URL实体
-    - WebScraperService使用HttpClient获取并清理HTML内容
-    - 结果存储在MessageExtensions中(最大1000字符)
-- GeneralLLMService改进：
-    - ScanAndProcessAltImageFiles使用GetAvailableCapacityAsync批量添加任务
-    - 动态调整任务发送频率
-    - 提取ProcessImageFileAsync方法解决异步参数问题
+### 重构步骤
+1. **ViewModel结构改造** (当前步骤)
+   - 创建不依赖Telegram类型的ViewModel基础结构
+   - 设计Builder模式接口
+   - 确保所有消息类型都能通过ViewModel表达
 
-## Next Steps
-- Qdrant功能优化：
-    - 向量生成性能测试和优化
-    - 相似性搜索效率优化
-    - 添加向量索引管理功能
-- Web Scraping增强：
-    - 改进HTML内容提取
-    - 添加URL验证和清理
-    - 考虑添加常用URL缓存
-- 性能监控：
-    - 监控Qdrant内存使用
-    - 跟踪Web Scraping性能
-    - 建立向量生成性能基准
+2. **渲染层实现**
+   - 完善IViewRenderer接口
+   - 实现TelegramViewRenderer
+   - 处理各种消息类型的渲染逻辑
+
+3. **Service层改造**
+   - 修改各Service返回ViewModel
+   - 移除Service层对Telegram类型的直接依赖
+   - 添加必要的转换逻辑
+
+4. **Controller层调整**
+   - 更新Controller处理流程
+   - 协调Service和View层的交互
+   - 确保原有功能不受影响
+
+### ViewModel设计要点
+- 完全独立于Telegram.Bot.Types
+- 支持文本、媒体、命令等各种消息类型
+- 使用Fluent Builder模式构建复杂消息
+- 包含必要的元数据(chatId, replyTo等)
+
+### 当前任务
+- 修改TelegramViewModel.cs结构
+- 确保Builder模式完整
+- 添加必要的单元测试
