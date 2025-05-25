@@ -15,9 +15,21 @@ using TelegramSearchBot.Helper;
 
 namespace TelegramSearchBot.Service.BotAPI
 {
+    /// <summary>
+    /// 提供Telegram消息流式发送功能的服务类
+    /// </summary>
     public partial class SendMessageService
     {
         #region Incremental Streaming Send Method (Old)
+        /// <summary>
+        /// 增量式流式发送消息(旧版实现)
+        /// </summary>
+        /// <param name="messages">异步消息流</param>
+        /// <param name="ChatId">目标聊天ID</param>
+        /// <param name="replyTo">回复的消息ID</param>
+        /// <param name="InitialContent">初始占位内容</param>
+        /// <param name="parseMode">消息解析模式</param>
+        /// <returns>异步枚举的消息集合</returns>
         public async IAsyncEnumerable<Model.Data.Message> SendMessage(IAsyncEnumerable<string> messages, long ChatId, int replyTo, string InitialContent = "Initializing...", ParseMode parseMode = ParseMode.Html)
         {
             var sentMessage = await botClient.SendMessage(
@@ -90,6 +102,15 @@ namespace TelegramSearchBot.Service.BotAPI
         #endregion
 
         #region Full Message Streaming (Simplified Throttling)
+        /// <summary>
+        /// 完整消息流式发送(带简化节流控制)
+        /// </summary>
+        /// <param name="fullMessagesStream">完整消息流</param>
+        /// <param name="chatId">目标聊天ID</param>
+        /// <param name="replyTo">回复的消息ID</param>
+        /// <param name="initialPlaceholderContent">初始占位内容</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>发送成功的消息列表</returns>
         public async Task<List<Model.Data.Message>> SendFullMessageStream(
             IAsyncEnumerable<string> fullMessagesStream,
             long chatId,
@@ -170,6 +191,16 @@ namespace TelegramSearchBot.Service.BotAPI
             return await BuildResultForDbAsync(chatId, replyTo, sentTelegramMessages, chunksForDb, CancellationToken.None);
         }
         
+        /// <summary>
+        /// 内部方法：同步Telegram消息状态
+        /// </summary>
+        /// <param name="chatId">聊天ID</param>
+        /// <param name="originalReplyTo">原始回复消息ID</param>
+        /// <param name="newMarkdownChunks">新的Markdown消息块</param>
+        /// <param name="currentTgMessages">当前Telegram消息列表</param>
+        /// <param name="currentHtmlMap">当前HTML内容映射</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>更新后的消息列表和HTML映射</returns>
         private async Task<(List<Message> UpdatedMessages, Dictionary<int, string> UpdatedHtmlMap)> SynchronizeTelegramMessagesInternalAsync(
             long chatId,
             int originalReplyTo,
@@ -290,6 +321,15 @@ namespace TelegramSearchBot.Service.BotAPI
             return (nextTgMessagesState, nextHtmlMap);
         }
 
+        /// <summary>
+        /// 构建数据库存储结果
+        /// </summary>
+        /// <param name="chatId">聊天ID</param>
+        /// <param name="originalReplyTo">原始回复消息ID</param>
+        /// <param name="finalSentTgMessages">最终发送的Telegram消息</param>
+        /// <param name="finalMarkdownChunks">最终的Markdown消息块</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>格式化后的消息列表</returns>
         private async Task<List<Model.Data.Message>> BuildResultForDbAsync(
             long chatId, 
             int originalReplyTo, 
@@ -331,6 +371,151 @@ namespace TelegramSearchBot.Service.BotAPI
                 });
             }
             return resultMessagesForDb;
+        }
+        #endregion
+
+        #region Simplified Streaming with Auto-HTML
+        /// <summary>
+        /// 简化版流式消息发送(自动HTML构建和分块)
+        /// </summary>
+        /// <param name="messages">异步消息流</param>
+        /// <param name="chatId">目标聊天ID</param>
+        /// <param name="replyTo">回复的消息ID</param>
+        /// <param name="initialContent">初始占位内容</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>发送成功的消息列表</returns>
+        public async Task<List<Model.Data.Message>> SendStreamingMessage(
+            IAsyncEnumerable<string> messages,
+            long chatId,
+            int replyTo,
+            string initialContent = "⏳",
+            CancellationToken cancellationToken = default)
+        {
+            var sentMessages = new List<Model.Data.Message>();
+            var builder = new StringBuilder();
+            var currentMessage = await botClient.SendMessage(
+                chatId: chatId,
+                text: initialContent,
+                replyParameters: new ReplyParameters { MessageId = replyTo },
+                cancellationToken: cancellationToken);
+            
+            var lastUpdateTime = DateTime.MinValue;
+            var updateInterval = TimeSpan.FromSeconds(1);
+            var botUser = await botClient.GetMe(cancellationToken);
+            var lastMessageId = currentMessage.MessageId;
+            var dict = new Dictionary<int, (int PastMessageId, int CurrentMessageId, int CurrentLength)>();
+            try {
+                await foreach (var chunk in messages.WithCancellation(cancellationToken)) {
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    builder.Append(chunk);
+                    var markdown = builder.ToString();
+                    var html = MessageFormatHelper.ConvertMarkdownToTelegramHtml(markdown);
+
+                    // 节流控制
+                    if (DateTime.UtcNow - lastUpdateTime < updateInterval) {
+                        continue;
+                    }
+
+                    // 自动分块处理
+                    var chunks = MessageFormatHelper.SplitMarkdownIntoChunks(markdown, 1900);
+                    if (chunks.Count == 0) continue;
+
+                    try {
+                        for (var i = 0; i < chunks.Count; i++) {
+                            if (dict.TryGetValue(i, out var dictData)) {
+                                if (chunks[i].Length == dictData.CurrentLength) {
+                                    continue;
+                                } else {
+                                    await botClient.EditMessageText(
+                                        chatId: chatId,
+                                        messageId: dictData.CurrentMessageId,
+                                        text: MessageFormatHelper.ConvertMarkdownToTelegramHtml(chunks[i]),
+                                        parseMode: ParseMode.Html,
+                                        cancellationToken: cancellationToken);
+                                    lastUpdateTime = DateTime.UtcNow;
+                                }
+
+                            } else {
+                                var newMessage = await botClient.SendMessage(
+                                    chatId: chatId,
+                                    text: MessageFormatHelper.ConvertMarkdownToTelegramHtml(chunks[i]),
+                                    replyParameters: new ReplyParameters { MessageId = lastMessageId },
+                                    parseMode: ParseMode.Html,
+                                    cancellationToken: cancellationToken);
+                                dict.Add(i, (lastMessageId, newMessage.MessageId, chunks[i].Length));
+
+                                lastMessageId = newMessage.MessageId;
+                                lastUpdateTime = DateTime.UtcNow;
+                            }
+                        }
+                    } catch (Exception ex) {
+                        logger.LogError(ex, "Error updating streaming message");
+                    }
+                }
+
+                // 最终消息处理
+                var finalMarkdown = builder.ToString();
+                var finalChunks = MessageFormatHelper.SplitMarkdownIntoChunks(finalMarkdown, 4095);
+
+                if (finalChunks.Count > 0) {
+                    // 更新第一条消息
+                    await botClient.EditMessageText(
+                        chatId: chatId,
+                        messageId: currentMessage.MessageId,
+                        text: MessageFormatHelper.ConvertMarkdownToTelegramHtml(finalChunks[0]),
+                        parseMode: ParseMode.Html,
+                        cancellationToken: cancellationToken);
+
+                    // 处理剩余分块
+                    for (int i = 1; i < finalChunks.Count; i++) {
+                        var newMessage = await botClient.SendMessage(
+                            chatId: chatId,
+                            text: MessageFormatHelper.ConvertMarkdownToTelegramHtml(finalChunks[i]),
+                            replyParameters: new ReplyParameters { MessageId = lastMessageId },
+                            parseMode: ParseMode.Html,
+                            cancellationToken: cancellationToken);
+
+                        lastMessageId = newMessage.MessageId;
+                        sentMessages.Add(new Model.Data.Message {
+                            GroupId = chatId,
+                            MessageId = newMessage.MessageId,
+                            DateTime = newMessage.Date,
+                            Content = finalChunks[i],
+                            FromUserId = botUser.Id,
+                            ReplyToMessageId = lastMessageId
+                        });
+                    }
+                }
+
+                // 添加第一条消息到结果
+                sentMessages.Add(new Model.Data.Message {
+                    GroupId = chatId,
+                    MessageId = currentMessage.MessageId,
+                    DateTime = currentMessage.Date,
+                    Content = finalChunks.Count > 0 ? finalChunks[0] : string.Empty,
+                    FromUserId = botUser.Id,
+                    ReplyToMessageId = replyTo
+                });
+            } catch (Exception ex) {
+                logger.LogError(ex, "Error in streaming message handling");
+
+                // 错误处理：发送原始内容作为纯文本
+                if (builder.Length > 0) {
+                    try {
+                        var plainText = MessageFormatHelper.ConvertToPlainText(builder.ToString());
+                        await botClient.SendMessage(
+                            chatId: chatId,
+                            text: $"Error occurred. Original content:\n{plainText}",
+                            replyParameters: new ReplyParameters { MessageId = replyTo },
+                            cancellationToken: cancellationToken);
+                    } catch (Exception fallbackEx) {
+                        logger.LogError(fallbackEx, "Failed to send fallback message");
+                    }
+                }
+            }
+
+            return sentMessages;
         }
         #endregion
     }
