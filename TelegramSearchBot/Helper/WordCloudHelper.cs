@@ -9,7 +9,7 @@ namespace TelegramSearchBot.Helper
 {
     public static class WordCloudHelper
     {
-        public static byte[] GenerateWordCloud(string[] words, int width = 800, int height = 600)
+        public static byte[] GenerateWordCloud(string[] words, int width = 1280, int height = 1280)
         {
             // 中文分词
             var segmenter = new JiebaSegmenter();
