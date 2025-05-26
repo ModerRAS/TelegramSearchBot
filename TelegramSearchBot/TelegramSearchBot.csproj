@@ -16,6 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Google_GenerativeAI" Version="2.5.10" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.1" />
+    <PackageReference Include="jieba.NET" Version="0.42.2" />
     <PackageReference Include="LiteDB" Version="5.0.17" />
     <PackageReference Include="FFMpegCore" Version="5.2.0" />
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00016" />
@@ -57,6 +58,7 @@
     <PackageReference Include="Teru.Code.WechatQrcode.Lite" Version="1.0.0.20230813" />
     <PackageReference Include="Whisper.net" Version="1.8.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.8.1" />
+    <PackageReference Include="WordCloudSharp" Version="1.1.0" />
     <PackageReference Include="ZXing.Net" Version="0.16.10" />
     <PackageReference Include="ZXing.Net.Bindings.SkiaSharp" Version="0.16.21" />
     <PackageReference Include="MSBuildTasks" Version="1.5.0.235">
@@ -84,6 +86,33 @@
     <Folder Include="View\" />
   </ItemGroup>
   <ItemGroup>
+    <None Update="Resources\char_state_tab.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\dict.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\idf.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\pos_prob_emit.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\pos_prob_start.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\pos_prob_trans.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\prob_emit.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\prob_trans.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\stopwords.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\wechat_qrcode\detect.caffemodel">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
