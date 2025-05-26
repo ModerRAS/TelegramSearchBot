@@ -14,6 +14,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Coravel" Version="6.0.2" />
     <PackageReference Include="Google_GenerativeAI" Version="2.5.10" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.1" />
     <PackageReference Include="jieba.NET" Version="0.42.2" />

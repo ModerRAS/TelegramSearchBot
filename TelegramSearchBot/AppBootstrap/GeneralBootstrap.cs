@@ -1,6 +1,10 @@
 ﻿using LiteDB;
 using Microsoft.EntityFrameworkCore;
+using Coravel;
+using Coravel.Scheduling.Schedule.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
+using Coravel.Invocable;
+using TelegramSearchBot.Service.Common;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging; // Added for ILoggerFactory
 using Serilog;
@@ -85,8 +89,11 @@ namespace TelegramSearchBot.AppBootstrap {
                     // Manually register AppConfigurationService and its interface
                     service.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
                     service.AddHostedService<QdrantProcessManager>();
+
+                    service.AddScheduler();
                     
                     AddView(service);
+                    AddInvocable(service);
                 });
         public static async void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
@@ -112,6 +119,10 @@ namespace TelegramSearchBot.AppBootstrap {
                 //    });
                 //})
                 .Build();
+            host.Services.UseScheduler(s => {
+                s.Schedule<DailyTaskService>()
+                 .DailyAt(7, 0);
+            });
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             service = host.Services;
@@ -160,6 +171,15 @@ namespace TelegramSearchBot.AppBootstrap {
             service.Scan(scan => scan
             .FromAssemblyOf<IView>()
             .AddClasses(classes => classes.AssignableTo<IView>())
+            .AsSelf()
+            .WithTransientLifetime()
+            );
+        }
+
+        public static void AddInvocable(IServiceCollection service) {
+            service.Scan(scan => scan
+            .FromAssemblyOf<DailyTaskService>()
+            .AddClasses(classes => classes.AssignableTo<IInvocable>())
             .AsSelf()
             .WithTransientLifetime()
             );
