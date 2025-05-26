@@ -104,7 +104,6 @@ namespace TelegramSearchBot.View {
                 _chatId,
                 _replyToMessageId,
                 _initialContent,
-                inlineButtons,
                 cancellationToken);
             return result;
         }
