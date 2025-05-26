@@ -12,24 +12,25 @@ using TelegramSearchBot.Model.Notifications;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Attributes;
 using Microsoft.EntityFrameworkCore; // Required for ToListAsync, ToDictionaryAsync etc.
-using TelegramSearchBot.Model; // Added for DataDbContext
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Interface; // Added for DataDbContext
 
 namespace TelegramSearchBot.Handler
 {
     public class UrlProcessingNotificationHandler : INotificationHandler<TextMessageReceivedNotification>
     {
         private readonly SendMessage _sendMessage;
-        private readonly DataDbContext _dbContext;
+        private readonly IShortUrlMappingService _shortUrlMappingService;
         private readonly UrlProcessingService _urlProcessingService;
         private const string ResolveUrlsCommand = "/resolveurls";
 
         public UrlProcessingNotificationHandler(
             SendMessage sendMessage,
-            DataDbContext dbContext,
+            IShortUrlMappingService shortUrlMappingService,
             UrlProcessingService urlProcessingService)
         {
             _sendMessage = sendMessage;
-            _dbContext = dbContext;
+            _shortUrlMappingService = shortUrlMappingService;
             _urlProcessingService = urlProcessingService;
         }
         
@@ -64,33 +65,7 @@ namespace TelegramSearchBot.Handler
 
                 if (mappingsToConsiderSaving.Any())
                 {
-                    // Deduplicate mappings from the current message based on OriginalUrl
-                    var distinctNewMappingsFromMessage = mappingsToConsiderSaving
-                        .GroupBy(m => m.OriginalUrl)
-                        .Select(g => g.First())
-                        .ToList();
-
-                    // Find OriginalUrls from the current message that ALREADY have a VALID (non-empty) ExpandedUrl in the database
-                    var originalUrlsWithValidExistingMapping = await _dbContext.ShortUrlMappings
-                        .Where(dbMapping => distinctNewMappingsFromMessage.Select(m => m.OriginalUrl).Contains(dbMapping.OriginalUrl) &&
-                                            !string.IsNullOrWhiteSpace(dbMapping.ExpandedUrl))
-                        .Select(dbMapping => dbMapping.OriginalUrl)
-                        .Distinct()
-                        .ToListAsync(cancellationToken);
-
-                    // Save new mappings if:
-                    // 1. The new mapping itself has a valid (non-empty) ExpandedUrl.
-                    // 2. The OriginalUrl does not already have a valid (non-empty) mapping in the database.
-                    var finalMappingsToSave = distinctNewMappingsFromMessage
-                        .Where(m => !string.IsNullOrWhiteSpace(m.ExpandedUrl) && 
-                                     !originalUrlsWithValidExistingMapping.Contains(m.OriginalUrl))
-                        .ToList();
-                    
-                    if (finalMappingsToSave.Any())
-                    {
-                        _dbContext.ShortUrlMappings.AddRange(finalMappingsToSave);
-                        await _dbContext.SaveChangesAsync(cancellationToken);
-                    }
+                    await _shortUrlMappingService.SaveUrlMappingsAsync(mappingsToConsiderSaving, cancellationToken);
                 }
             }
 
@@ -159,22 +134,7 @@ namespace TelegramSearchBot.Handler
                                                                 .Distinct()
                                                                 .ToList();
 
-                        // Query all potential DB mappings for the distinct URLs found in the command text.
-                        var allPotentialMappingsFromDb = await _dbContext.ShortUrlMappings
-                            .Where(m => distinctOriginalUrlsInCommandText.Contains(m.OriginalUrl))
-                            .ToListAsync(cancellationToken);
-
-                        // Build a dictionary, prioritizing non-empty ExpandedUrl for each OriginalUrl.
-                        var storedMappingsDict = new Dictionary<string, string>();
-                        foreach (var group in allPotentialMappingsFromDb.GroupBy(m => m.OriginalUrl))
-                        {
-                            var bestMapping = group.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.ExpandedUrl));
-                            if (bestMapping != null)
-                            {
-                                // Only add to dictionary if a valid ExpandedUrl is found.
-                                storedMappingsDict[group.Key] = bestMapping.ExpandedUrl;
-                            }
-                        }
+                        var storedMappingsDict = await _shortUrlMappingService.GetUrlMappingsAsync(distinctOriginalUrlsInCommandText, cancellationToken);
 
                         foreach (var liveResult in liveCommandProcessingResults)
                         {

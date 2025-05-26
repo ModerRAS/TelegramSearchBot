@@ -1,4 +1,4 @@
-﻿using LiteDB;
+using LiteDB;
 using Microsoft.EntityFrameworkCore;
 using Coravel;
 using Coravel.Scheduling.Schedule.Interfaces;
@@ -34,6 +34,7 @@ using Qdrant.Client.Grpc;
 using Grpc.Net.Client;
 using Grpc.Core.Interceptors;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Extension;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
@@ -41,59 +42,8 @@ namespace TelegramSearchBot.AppBootstrap {
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .UseSerilog()
-                .ConfigureServices(service => {
-                    service.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl), httpClient: HttpClientHelper.CreateProxyHttpClient()));
-                    service.AddSingleton<QdrantClient>(sp => {
-                        var handler = new HttpClientHandler {
-                            UseProxy = false
-                        };
-                        var channel = GrpcChannel.ForAddress($"http://localhost:{Env.QdrantGrpcPort}", new GrpcChannelOptions {
-                            HttpHandler = handler,
-                        });
-                        // 创建 CallInvoker，并添加 API Key 到元数据
-                        var callInvoker = channel.Intercept(metadata =>
-                        {
-                            metadata.Add("api-key", Env.QdrantApiKey); // 替换为您的实际 API Key
-                            return metadata;
-                        });
-                        var grpcClient = new QdrantGrpcClient(callInvoker);
-                        var client = new QdrantClient(grpcClient);
-                        return client;
-                    });
-                    service.AddSingleton<SendMessage>();
-                    service.AddHostedService<TelegramCommandRegistryService>(); // Register as HostedService
-                    service.AddHostedService<SendMessage>(); // Register SendMessage as a HostedService
-                    service.AddSingleton<LuceneManager>();
-                    service.AddSingleton<PaddleOCR>();
-                    service.AddSingleton<WhisperManager>();
-                    service.AddHttpClient("BiliApiClient").ConfigurePrimaryHttpMessageHandler(HttpClientHelper.CreateProxyHandler);// Named HttpClient for BiliApiService
-                    service.AddHttpClient(string.Empty).ConfigurePrimaryHttpMessageHandler(HttpClientHelper.CreateProxyHandler); // Default HttpClient if still needed elsewhere
-                    service.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<GeneralBootstrap>());
-                    // 配置 Redis 连接
-                    var redisConnectionString = $"localhost:{Env.SchedulerPort}"; // 自定义端口
-                    service.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
-
-                    service.AddDbContext<DataDbContext>(options => {
-                        options.UseSqlite($"Data Source={Path.Combine(Env.WorkDir, "Data.sqlite")};Cache=Shared;Mode=ReadWriteCreate;");
-                    }, ServiceLifetime.Transient);
-
-                    AddController(service);
-                    AddService(service);
-
-                    // Manually register BiliApiService and its interface
-                    service.AddTransient<TelegramSearchBot.Service.Bilibili.IBiliApiService, TelegramSearchBot.Service.Bilibili.BiliApiService>();
-                    // Manually register DownloadService and its interface
-                    service.AddTransient<TelegramSearchBot.Service.Bilibili.IDownloadService, TelegramSearchBot.Service.Bilibili.DownloadService>();
-                    // Manually register TelegramFileCacheService and its interface
-                    service.AddTransient<TelegramSearchBot.Service.Bilibili.ITelegramFileCacheService, TelegramSearchBot.Service.Bilibili.TelegramFileCacheService>();
-                    // Manually register AppConfigurationService and its interface
-                    service.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
-                    service.AddHostedService<QdrantProcessManager>();
-
-                    service.AddScheduler();
-                    
-                    AddView(service);
-                    AddInvocable(service);
+                .ConfigureServices(services => {
+                    services.ConfigureAllServices();
                 });
         public static async void Startup(string[] args) { // Changed back to void
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
@@ -148,43 +98,6 @@ namespace TelegramSearchBot.AppBootstrap {
                 }, cts.Token);
             task.Wait();
         }
-        public static void AddController(IServiceCollection service) {
-            service.Scan(scan => scan
-            .FromAssemblyOf<IOnUpdate>()
-            .AddClasses(classes => classes.AssignableTo<IOnUpdate>())
-            .AsImplementedInterfaces()
-            .WithTransientLifetime()
-            );
-
-        }
-        public static void AddService(IServiceCollection service) {
-            service.Scan(scan => scan
-            .FromAssemblyOf<IService>()
-            .AddClasses(classes => classes.AssignableTo<IService>())
-            //.AsImplementedInterfaces()
-            .AsSelf()
-            .WithTransientLifetime()
-            );
-        }
-
-        public static void AddView(IServiceCollection service) {
-            service.Scan(scan => scan
-            .FromAssemblyOf<IView>()
-            .AddClasses(classes => classes.AssignableTo<IView>())
-            .AsSelf()
-            .WithTransientLifetime()
-            );
-        }
-
-        public static void AddInvocable(IServiceCollection service) {
-            service.Scan(scan => scan
-            .FromAssemblyOf<DailyTaskService>()
-            .AddClasses(classes => classes.AssignableTo<IInvocable>())
-            .AsSelf()
-            .WithTransientLifetime()
-            );
-        }
-
         public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
             return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
                 _ = Task.Run(async () => {
