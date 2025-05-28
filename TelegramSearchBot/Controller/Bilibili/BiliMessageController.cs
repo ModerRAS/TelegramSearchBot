@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Controller.AI.OCR;
+using TelegramSearchBot.Controller.AI.QR;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Bilibili;
@@ -22,7 +24,7 @@ namespace TelegramSearchBot.Controller.Bilibili
 { // Namespace open
     public class BiliMessageController : IOnUpdate
     { // Class open
-        public List<Type> Dependencies => new List<Type>();
+        public List<Type> Dependencies => new List<Type>() {typeof(AutoQRController), typeof(AutoOCRController)};
 
         private readonly ITelegramBotClient _botClient;
         private readonly IBiliApiService _biliApiService;
@@ -65,16 +67,33 @@ namespace TelegramSearchBot.Controller.Bilibili
 
             var message = update.Message ?? update.ChannelPost;
             var text = message?.Text ?? message?.Caption;
-            if (message == null || string.IsNullOrWhiteSpace(text))
+            if (message == null || (string.IsNullOrWhiteSpace(text) && p.ProcessingResults.Count == 0))
                 return;
 
-            var matches = BiliUrlRegex.Matches(text);
-            if (matches.Count == 0)
+            // 从消息文本获取链接
+            var textMatches = string.IsNullOrWhiteSpace(text)
+                ? BiliUrlRegex.Matches("")
+                : BiliUrlRegex.Matches(text);
+
+            // 从ProcessingResults获取链接
+            var processingMatches = p.ProcessingResults
+                .SelectMany(result => BiliUrlRegex.Matches(result).Cast<Match>())
+                .ToList();
+
+            // 合并并去重
+            var allMatches = textMatches.Cast<Match>()
+                .Concat(processingMatches)
+                .GroupBy(m => m.Value)
+                .Select(g => g.First())
+                .ToList();
+
+            if (allMatches.Count == 0)
                 return;
 
-            _logger.LogInformation("Found {MatchCount} Bilibili URLs in message {MessageId} from chat {ChatId}", matches.Count, message.MessageId, message.Chat.Id);
+            _logger.LogInformation("Found {MatchCount} Bilibili URLs (from text: {TextCount}, from processing: {ProcessingCount}) in message {MessageId} from chat {ChatId}",
+                allMatches.Count, textMatches.Count, processingMatches.Count, message.MessageId, message.Chat.Id);
 
-            foreach (Match match in matches)
+            foreach (Match match in allMatches)
             {
                 var url = match.Value;
                 try
