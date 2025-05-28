@@ -11,6 +11,8 @@ using System.Text.Json.Nodes;
 using TelegramSearchBot.Manager; // For Env (though BiliCookie will now come from service)
 using TelegramSearchBot.Service.Common; // For IAppConfigurationService
 using TelegramSearchBot.Helper;
+using MediatR;
+using TelegramSearchBot.Model.Notifications;
 
 namespace TelegramSearchBot.Service.Bilibili;
 
@@ -19,16 +21,21 @@ public class BiliApiService : IBiliApiService
     private readonly HttpClient _httpClient;
     private readonly ILogger<BiliApiService> _logger;
     private readonly IAppConfigurationService _appConfigService;
+    private readonly IMediator _mediator;
 
     private const string BiliApiBaseUrl = "https://api.bilibili.com";
 
-    public BiliApiService(IHttpClientFactory httpClientFactory, ILogger<BiliApiService> logger, IAppConfigurationService appConfigService)
+    public BiliApiService(IHttpClientFactory httpClientFactory,
+                         ILogger<BiliApiService> logger,
+                         IAppConfigurationService appConfigService,
+                         IMediator mediator)
     {
         _httpClient = httpClientFactory.CreateClient("BiliApiClient");
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
         _httpClient.DefaultRequestHeaders.Referrer = new Uri("https://www.bilibili.com/");
         _logger = logger;
         _appConfigService = appConfigService;
+        _mediator = mediator;
     }
 
     public async Task<BiliVideoInfo> GetVideoInfoAsync(string videoUrl)
@@ -40,10 +47,15 @@ public class BiliApiService : IBiliApiService
         int page = 1; string originalUrlToParse = videoUrl;
 
             if (videoUrl.Contains("b23.tv/")) {
-            originalUrlToParse = await BiliHelper.ResolveShortUrlAsync(videoUrl, _logger);
-            if (originalUrlToParse == videoUrl) { _logger.LogWarning("Failed to resolve b23.tv short URL: {VideoUrl}", videoUrl); return null; }
-            _logger.LogInformation("Resolved b23.tv URL {ShortUrl} to {FullUrl}", videoUrl, originalUrlToParse);
-        }
+                var processedUrl = videoUrl.StartsWith("http") ? videoUrl : "https://" + videoUrl;
+                var resolvedUrl = await _mediator.Send(new ProcessUrlRequest(processedUrl, _logger));
+                if (string.IsNullOrEmpty(resolvedUrl)) {
+                    _logger.LogWarning("Failed to resolve b23.tv short URL: {VideoUrl}", videoUrl);
+                    return null;
+                }
+                originalUrlToParse = resolvedUrl;
+                _logger.LogInformation("Resolved b23.tv URL {ShortUrl} to {FullUrl}", videoUrl, originalUrlToParse);
+            }
         
         var match = BiliHelper.BiliUrlParseRegex.Match(originalUrlToParse);
         if (!match.Success) { _logger.LogWarning("URL did not match Bilibili video/bangumi pattern: {ParsedUrl}", originalUrlToParse); return null; }
