@@ -48,7 +48,7 @@ namespace TelegramSearchBot.Helper {
             };
 
             return new HttpClient(handler) {
-                Timeout = TimeSpan.FromSeconds(30)
+                Timeout = TimeSpan.FromHours(1)
             };
         }
 
