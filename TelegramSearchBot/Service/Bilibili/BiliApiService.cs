@@ -52,7 +52,7 @@ public class BiliApiService : IBiliApiService
         if (match.Groups["page"].Success && int.TryParse(match.Groups["page"].Value, out int pVal)) 
             page = pVal > 0 ? pVal : 1;
 
-        BiliVideoInfo videoInfo = new BiliVideoInfo { OriginalUrl = videoUrl, Page = page };
+        BiliVideoInfo videoInfo = new BiliVideoInfo { OriginalUrl = originalUrlToParse, Page = page };
 
         try {
             if (!string.IsNullOrWhiteSpace(epid) || !string.IsNullOrWhiteSpace(ssid)) {
