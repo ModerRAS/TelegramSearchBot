@@ -16,6 +16,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Bilibili;
 using TelegramSearchBot.Service.Bilibili;
 using TelegramSearchBot.Service.Common;
+using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Controller.Bilibili
 { // Namespace open
@@ -27,8 +28,10 @@ namespace TelegramSearchBot.Controller.Bilibili
         private readonly IBiliApiService _biliApiService;
         private readonly BiliVideoProcessingService _videoProcessingService;
         private readonly BiliOpusProcessingService _opusProcessingService;
-        private readonly SendMessage _sendMessage;
+        private readonly VideoView _videoView;
+        private readonly GenericView _genericView;
         private readonly ILogger<BiliMessageController> _logger;
+        private readonly ILogger<VideoView> _videoViewLogger;
 
         private static readonly Regex BiliUrlRegex = BiliHelper.BiliUrlParseRegex;
         private static readonly Regex BiliVideoUrlPattern = BiliHelper.BiliUrlParseRegex;
@@ -39,15 +42,19 @@ namespace TelegramSearchBot.Controller.Bilibili
             IBiliApiService biliApiService,
             BiliVideoProcessingService videoProcessingService,
             BiliOpusProcessingService opusProcessingService,
-            SendMessage sendMessage,
-            ILogger<BiliMessageController> logger)
+            VideoView videoView,
+            GenericView genericView,
+            ILogger<BiliMessageController> logger,
+            ILogger<VideoView> videoViewLogger)
         {
             _botClient = botClient;
             _biliApiService = biliApiService;
             _videoProcessingService = videoProcessingService;
             _opusProcessingService = opusProcessingService;
-            _sendMessage = sendMessage;
+            _videoView = videoView;
+            _genericView = genericView;
             _logger = logger;
+            _videoViewLogger = videoViewLogger;
         }
 
         public async Task ExecuteAsync(PipelineContext p)
@@ -136,46 +143,28 @@ namespace TelegramSearchBot.Controller.Bilibili
             {
                 if (result.VideoInputFile != null)
                 {
-                    var sendTcs = new TaskCompletionSource<bool>();
-                    await _sendMessage.AddTask(async () =>
+                    var videoView = _videoView
+                        .WithChatId(message.Chat.Id)
+                        .WithReplyTo(message.MessageId)
+                        .WithTitle(result.Title)
+                        .WithOwnerName(result.OwnerName)
+                        .WithCategory(result.Category)
+                        .WithOriginalUrl(result.OriginalUrl)
+                        .WithVideo(result.VideoInputFile)
+                        .WithDuration(videoInfo.Duration)
+                        .WithDimensions(videoInfo.DimensionWidth, videoInfo.DimensionHeight)
+                        .WithThumbnail(result.ThumbnailInputFile);
+
+                    Message sentMessage = await videoView.Render();
+                    videoSent = true;
+                    _logger.LogInformation("Video send task completed for {VideoTitle}", videoInfo.Title);
+                    
+                    if (sentMessage?.Video != null && !string.IsNullOrWhiteSpace(result.VideoFileToCacheKey) && result.VideoFileStream != null)
                     {
-                        try
-                        {
-                            Message sentMessage = await _botClient.SendVideo(
-                                chatId: message.Chat.Id, 
-                                video: result.VideoInputFile, 
-                                caption: result.Caption, 
-                                parseMode: ParseMode.MarkdownV2,
-                                replyParameters: new ReplyParameters { MessageId = message.MessageId },
-                                duration: videoInfo.Duration > 0 ? videoInfo.Duration : null,
-                                width: videoInfo.DimensionWidth > 0 ? videoInfo.DimensionWidth : null,
-                                height: videoInfo.DimensionHeight > 0 ? videoInfo.DimensionHeight : null,
-                                supportsStreaming: true, 
-                                thumbnail: result.ThumbnailInputFile
-                            );
-                            videoSent = true;
-                            _logger.LogInformation("Video send task completed for {VideoTitle}", videoInfo.Title);
-                            
-                            if (sentMessage?.Video != null && !string.IsNullOrWhiteSpace(result.VideoFileToCacheKey) && result.VideoFileStream != null)
-                            {
-                                await _videoProcessingService.CacheFileIdAsync(
-                                    result.VideoFileToCacheKey,
-                                    sentMessage.Video.FileId);
-                            }
-                            sendTcs.TrySetResult(true);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error sending video task for {VideoTitle}", videoInfo.Title);
-                            sendTcs.TrySetResult(false);
-                        }
-                        finally
-                        {
-                            if (result.VideoFileStream != null) await result.VideoFileStream.DisposeAsync();
-                            if (result.ThumbnailMemoryStream != null) await result.ThumbnailMemoryStream.DisposeAsync();
-                        }
-                    }, isGroup);
-                    videoSent = await sendTcs.Task;
+                        await _videoProcessingService.CacheFileIdAsync(
+                            result.VideoFileToCacheKey,
+                            sentMessage.Video.FileId);
+                    }
                 }
             }
             catch (Exception ex)
@@ -198,14 +187,16 @@ namespace TelegramSearchBot.Controller.Bilibili
             if (!videoSent)
             {
                 _logger.LogWarning("Failed to send video for {VideoTitle}, sending text info instead.", videoInfo.Title);
-                await _sendMessage.AddTask(async () =>
-                {
-                    await _botClient.SendMessage(
-                        message.Chat.Id, 
-                        result.FallbackCaption, 
-                        parseMode: ParseMode.MarkdownV2, 
-                        replyParameters: new ReplyParameters { MessageId = message.MessageId });
-                }, isGroup);
+                await _videoView
+                    .WithChatId(message.Chat.Id)
+                    .WithReplyTo(message.MessageId)
+                    .WithTitle(result.Title)
+                    .WithOwnerName(result.OwnerName)
+                    .WithCategory(result.Category)
+                    .WithTemplateDuration(result.Duration)
+                    .WithTemplateDescription(result.Description)
+                    .WithOriginalUrl(result.OriginalUrl)
+                    .Render();
             }
         }
 
@@ -218,39 +209,38 @@ namespace TelegramSearchBot.Controller.Bilibili
             
             if (!string.IsNullOrEmpty(result.ErrorMessage))
             {
-                await _sendMessage.AddTask(async () => { 
-                    await _botClient.SendMessage(message.Chat.Id, result.ErrorMessage, 
-                        parseMode: ParseMode.MarkdownV2, 
-                        replyParameters: new ReplyParameters { MessageId = message.MessageId }); 
-                }, isGroup);
+                await _genericView
+                    .WithChatId(message.Chat.Id)
+                    .WithReplyTo(message.MessageId)
+                    .WithText(result.ErrorMessage)
+                    .DisableNotification(isGroup)
+                    .Render();
                 return;
             }
 
             if (result.HasImages)
             {
                 var tcs = new TaskCompletionSource<Message[]>();
-                await _sendMessage.AddTask(async () =>
+                // Send media group directly, no need for AddTask
+                try
                 {
-                    try
-                    {
-                        var sentMediaMessages = await _botClient.SendMediaGroup(
-                            message.Chat.Id, 
-                            result.MediaGroup, 
-                            replyParameters: new ReplyParameters { MessageId = message.MessageId });
-                        _logger.LogInformation("Sent opus images for dynamic ID: {DynamicId}", opusInfo.DynamicId);
-                        tcs.TrySetResult(sentMediaMessages);
-                    }
-                    catch (Exception ex) 
-                    { 
-                        _logger.LogError(ex, "Error sending media group for dynamic ID: {DynamicId}", opusInfo.DynamicId); 
-                        tcs.TrySetException(ex); 
-                    }
-                    finally 
-                    { 
-                        foreach (var stream in result.CurrentBatchMemoryStreams) 
-                            await stream.DisposeAsync(); 
-                    }
-                }, isGroup);
+                    var sentMediaMessages = await _botClient.SendMediaGroup(
+                        message.Chat.Id,
+                        result.MediaGroup,
+                        replyParameters: new ReplyParameters { MessageId = message.MessageId });
+                    _logger.LogInformation("Sent opus images for dynamic ID: {DynamicId}", opusInfo.DynamicId);
+                    tcs.TrySetResult(sentMediaMessages);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error sending media group for dynamic ID: {DynamicId}", opusInfo.DynamicId);
+                    tcs.TrySetException(ex);
+                }
+                finally
+                {
+                    foreach (var stream in result.CurrentBatchMemoryStreams)
+                        await stream.DisposeAsync();
+                }
 
                 var sendTask = tcs.Task;
                 if (await Task.WhenAny(sendTask, Task.Delay(TimeSpan.FromMinutes(2))) == sendTask && sendTask.IsCompletedSuccessfully)
@@ -275,24 +265,22 @@ namespace TelegramSearchBot.Controller.Bilibili
 
                 if (!result.FirstImageHasCaption && result.MainCaption.Length > 1024)
                 {
-                    await _sendMessage.AddTask(async () => { 
-                        await _botClient.SendMessage(
-                            message.Chat.Id, 
-                            result.MainCaption, 
-                            parseMode: ParseMode.MarkdownV2, 
-                            replyParameters: new ReplyParameters { MessageId = message.MessageId }); 
-                    }, isGroup);
+                    await _genericView
+                        .WithChatId(message.Chat.Id)
+                        .WithReplyTo(message.MessageId)
+                        .WithText(result.MainCaption)
+                        .DisableNotification(isGroup)
+                        .Render();
                 }
             }
             else 
             { 
-                await _sendMessage.AddTask(async () => { 
-                    await _botClient.SendMessage(
-                        message.Chat.Id, 
-                        result.MainCaption, 
-                        parseMode: ParseMode.MarkdownV2, 
-                        replyParameters: new ReplyParameters { MessageId = message.MessageId }); 
-                }, isGroup); 
+                await _genericView
+                    .WithChatId(message.Chat.Id)
+                    .WithReplyTo(message.MessageId)
+                    .WithText(result.MainCaption)
+                    .DisableNotification(isGroup)
+                    .Render();
             }
         }
     } // Class close

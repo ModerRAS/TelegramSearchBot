@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Scriban;
 using Telegram.Bot;
+using Telegram.Bot.Extensions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
@@ -17,11 +20,26 @@ namespace TelegramSearchBot.View
     {
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
+        private readonly ILogger<VideoView> _logger;
 
         // ViewModel properties
         private long _chatId;
         private int _replyToMessageId;
         private string _caption;
+        private string _captionTemplate;
+        private object _templateModel;
+
+        private const string VideoCaptionTemplate = @"*{{ title }}*
+UP: {{ owner_name }}
+分类: {{ category }}
+{{ original_url }}";
+
+        private const string FallbackCaptionTemplate = @"*{{ title }}*
+UP: {{ owner_name }}
+分类: {{ category }}
+{{ duration }}
+{{ description }}
+{{ original_url }}";
         private List<ViewButton> _buttons = new List<ViewButton>();
         private bool _disableNotification;
         private InputFile _video;
@@ -31,10 +49,11 @@ namespace TelegramSearchBot.View
         private bool _supportsStreaming = true;
         private InputFile? _thumbnail;
 
-        public VideoView(ITelegramBotClient botClient, SendMessage sendMessage) 
+        public VideoView(ITelegramBotClient botClient, SendMessage sendMessage, ILogger<VideoView> logger) 
         {
             _botClient = botClient;
             _sendMessage = sendMessage;
+            _logger = logger;
         }
 
         public class ViewButton
@@ -62,9 +81,54 @@ namespace TelegramSearchBot.View
             return this;
         }
 
+
+        public VideoView WithTitle(string title)
+        {
+            if (_templateModel == null) _templateModel = new Dictionary<string, object>();
+            ((Dictionary<string, object>)_templateModel)["title"] = title;
+            return this;
+        }
+
+        public VideoView WithOwnerName(string ownerName)
+        {
+            if (_templateModel == null) _templateModel = new Dictionary<string, object>();
+            ((Dictionary<string, object>)_templateModel)["owner_name"] = ownerName;
+            return this;
+        }
+
+        public VideoView WithCategory(string category)
+        {
+            if (_templateModel == null) _templateModel = new Dictionary<string, object>();
+            ((Dictionary<string, object>)_templateModel)["category"] = category;
+            return this;
+        }
+
+        public VideoView WithOriginalUrl(string originalUrl)
+        {
+            if (_templateModel == null) _templateModel = new Dictionary<string, object>();
+            ((Dictionary<string, object>)_templateModel)["original_url"] = originalUrl;
+            return this;
+        }
+
+        public VideoView WithTemplateDuration(int duration)
+        {
+            if (_templateModel == null) _templateModel = new Dictionary<string, object>();
+            ((Dictionary<string, object>)_templateModel)["duration"] = duration > 0 ? $"时长: {TimeSpan.FromSeconds(duration):g}\n" : "";
+            return this;
+        }
+
+        public VideoView WithTemplateDescription(string description)
+        {
+            if (_templateModel == null) _templateModel = new Dictionary<string, object>();
+            ((Dictionary<string, object>)_templateModel)["description"] = !string.IsNullOrWhiteSpace(description) ? 
+                $"简介: {description.Substring(0, Math.Min(description.Length, 100)) + (description.Length > 100 ? "..." : "")}\n" : "";
+            return this;
+        }
+
         public VideoView WithCaption(string caption)
         {
             _caption = MessageFormatHelper.ConvertMarkdownToTelegramHtml(caption);
+            _captionTemplate = null; // Ensure template is not used if a direct caption is provided
             return this;
         }
 
@@ -77,6 +141,12 @@ namespace TelegramSearchBot.View
         public VideoView AddButton(string text, string callbackData)
         {
             _buttons.Add(new ViewButton(text, callbackData));
+            return this;
+        }
+
+        public VideoView WithVideo(InputFile videoInputFile)
+        {
+            _video = videoInputFile;
             return this;
         }
 
@@ -130,7 +200,7 @@ namespace TelegramSearchBot.View
             return this;
         }
 
-        public async Task Render()
+        public async Task<Message> Render()
         {
             var replyParameters = new Telegram.Bot.Types.ReplyParameters
             {
@@ -143,10 +213,64 @@ namespace TelegramSearchBot.View
             var replyMarkup = inlineButtons != null && inlineButtons.Any() ? 
                 new InlineKeyboardMarkup(inlineButtons) : null;
 
-            await _sendMessage.AddTaskWithResult(async () => await _botClient.SendVideo(
+            if (_video == null)
+            {
+                // Handle text message case
+                var caption = _caption ?? string.Empty;
+                if (_captionTemplate == null && _templateModel != null) // Only use template if no direct caption is set
+                {
+                    try 
+                    {
+                        caption = Template.Parse(FallbackCaptionTemplate).Render(_templateModel);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error rendering fallback caption template");
+                        caption = _caption ?? "视频内容";
+                    }
+                }
+
+                await _sendMessage.AddTextMessageToSend(
+                    chatId: _chatId,
+                    text: caption,
+                    parseMode: ParseMode.Html,
+                    replyParameters: replyParameters,
+                    disableNotification: _disableNotification,
+                    highPriorityForGroup: _chatId < 0 // Groups have negative chat IDs
+                );
+                if (replyMarkup != null)
+                {
+                    await _sendMessage.AddTask(async () => 
+                        await _botClient.SendMessage(
+                            chatId: _chatId,
+                            text: " ", // Empty message just to send buttons
+                            replyMarkup: replyMarkup
+                        ), 
+                        _chatId < 0
+                    );
+                }
+                return new Message(); // Return dummy message since we don't have the actual message
+            }
+
+            // Handle video message case
+            var videoCaption = _caption ?? string.Empty;
+            if (_captionTemplate == null && _templateModel != null) // Only use template if no direct caption is set
+            {
+                try
+                {
+                    videoCaption = Template.Parse(VideoCaptionTemplate).Render(_templateModel);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error rendering video caption template");
+                    videoCaption = _caption ?? "视频内容";
+                }
+            }
+
+            return await _sendMessage.AddTaskWithResult(async () => await _botClient.SendVideo(
                 chatId: _chatId,
                 video: _video,
-                caption: _caption,
+                caption: videoCaption,
                 parseMode: ParseMode.Html,
                 replyParameters: replyParameters,
                 disableNotification: _disableNotification,

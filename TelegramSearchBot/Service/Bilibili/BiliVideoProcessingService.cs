@@ -137,27 +137,12 @@ namespace TelegramSearchBot.Service.Bilibili
                     }
                 }
 
-                result.Caption = $"*{MessageFormatHelper.EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*\n" +
-                                $"UP: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.OwnerName)}\n" +
-                                $"分类: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.TName ?? "N/A")}\n" +
-                                $"{MessageFormatHelper.EscapeMarkdownV2(videoInfo.OriginalUrl)}";
-
-                if (result.Caption.Length > 1024)
-                {
-                    result.Caption = result.Caption.Substring(0, 1021) + "...";
-                }
-
-                result.FallbackCaption = $"*{MessageFormatHelper.EscapeMarkdownV2(videoInfo.FormattedTitlePageInfo)}*\n" +
-                                        $"UP: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.OwnerName)}\n" +
-                                        $"分类: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.TName ?? "N/A")}\n" +
-                                        (videoInfo.Duration > 0 ? $"时长: {TimeSpan.FromSeconds(videoInfo.Duration):g}\n" : "") +
-                                        (!string.IsNullOrWhiteSpace(videoInfo.Description) ? $"简介: {MessageFormatHelper.EscapeMarkdownV2(videoInfo.Description.Substring(0, Math.Min(videoInfo.Description.Length, 100)) + (videoInfo.Description.Length > 100 ? "..." : ""))}\n" : "") +
-                                        $"{MessageFormatHelper.EscapeMarkdownV2(videoInfo.OriginalUrl)}";
-
-                if (result.FallbackCaption.Length > 4096)
-                {
-                    result.FallbackCaption = result.FallbackCaption.Substring(0, 4093) + "...";
-                }
+                result.Title = videoInfo.FormattedTitlePageInfo;
+                result.OwnerName = videoInfo.OwnerName;
+                result.Category = videoInfo.TName ?? "N/A";
+                result.OriginalUrl = videoInfo.OriginalUrl;
+                result.Duration = videoInfo.Duration;
+                result.Description = videoInfo.Description;
 
                 result.VideoFileToCacheKey = videoFileToCacheKey;
                 result.Success = true;
@@ -172,17 +157,4 @@ namespace TelegramSearchBot.Service.Bilibili
         }
     }
 
-    public class VideoProcessingResult
-    {
-        public bool Success { get; set; }
-        public string ErrorMessage { get; set; }
-        public InputFile VideoInputFile { get; set; }
-        public Stream VideoFileStream { get; set; }
-        public InputFile ThumbnailInputFile { get; set; }
-        public MemoryStream ThumbnailMemoryStream { get; set; }
-        public string Caption { get; set; }
-        public string FallbackCaption { get; set; }
-        public string VideoFileToCacheKey { get; set; }
-        public List<string> TempFiles { get; } = new List<string>();
-    }
 }
