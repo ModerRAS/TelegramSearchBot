@@ -1,3 +1,4 @@
+using System.Reflection;
 using LiteDB;
 using Microsoft.EntityFrameworkCore;
 using Coravel;
@@ -31,6 +32,8 @@ using Grpc.Net.Client;
 using Grpc.Core.Interceptors;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.AppBootstrap;
+using TelegramSearchBot.Attributes;
+using System.Linq;
 
 namespace TelegramSearchBot.Extension {
     public static class ServiceCollectionExtension {
@@ -127,6 +130,7 @@ namespace TelegramSearchBot.Extension {
         }
 
         public static IServiceCollection ConfigureAllServices(this IServiceCollection services) {
+            var assembly = typeof(GeneralBootstrap).Assembly;
             return services
                 .AddTelegramBotClient()
                 .AddQdrantClient()
@@ -136,7 +140,40 @@ namespace TelegramSearchBot.Extension {
                 .AddCoreServices()
                 .AddBilibiliServices()
                 .AddCommonServices()
-                .AddAutoRegisteredServices();
+                .AddAutoRegisteredServices()
+                .AddInjectables(assembly);
+        }
+
+        /// <summary>
+        /// 自动注册带有[Injectable]特性的类到DI容器
+        /// </summary>
+        /// <param name="services">服务集合</param>
+        /// <param name="assembly">要扫描的程序集</param>
+        /// <returns>服务集合</returns>
+        public static IServiceCollection AddInjectables(this IServiceCollection services, Assembly assembly) {
+            var injectableTypes = assembly.GetTypes()
+                .Where(t => t.IsClass && !t.IsAbstract && t.GetCustomAttribute<InjectableAttribute>() != null);
+
+            foreach (var type in injectableTypes) {
+                var attribute = type.GetCustomAttribute<InjectableAttribute>();
+                var interfaces = type.GetInterfaces();
+
+                // 注册为所有实现的接口
+                foreach (var interfaceType in interfaces) {
+                    services.Add(new ServiceDescriptor(
+                        interfaceType,
+                        type,
+                        attribute!.Lifetime));
+                }
+
+                // 始终注册类本身
+                services.Add(new ServiceDescriptor(
+                    type,
+                    type,
+                    attribute!.Lifetime));
+            }
+
+            return services;
         }
     }
 }
