@@ -51,6 +51,12 @@ public class DownloadService : IDownloadService
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             if (!string.IsNullOrWhiteSpace(referer))
             {
+                // Attempt to create a Uri to check if it has a scheme
+                if (!Uri.TryCreate(referer, UriKind.Absolute, out Uri refererUri) || string.IsNullOrEmpty(refererUri.Scheme))
+                {
+                    // If no scheme or invalid URI, prepend https://
+                    referer = "https://" + referer;
+                }
                 request.Headers.Referrer = new Uri(referer);
             }
             // Add User-Agent, consistent with BiliApiService
