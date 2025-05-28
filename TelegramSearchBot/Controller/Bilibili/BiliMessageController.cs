@@ -10,8 +10,9 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Bilibili;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model; // Added for IAppConfigurationService
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Bilibili;
 using TelegramSearchBot.Service.Bilibili;
 using TelegramSearchBot.Service.Common;
@@ -293,27 +294,6 @@ namespace TelegramSearchBot.Controller.Bilibili
                         replyParameters: new ReplyParameters { MessageId = message.MessageId }); 
                 }, isGroup); 
             }
-        }
-        private interface IOpusProcessingResult
-        {
-            string MainCaption { get; set; }
-            List<IAlbumInputMedia> MediaGroup { get; set; }
-            List<string> CurrentBatchImageUrls { get; set; }
-            List<MemoryStream> CurrentBatchMemoryStreams { get; set; }
-            bool HasImages { get; set; }
-            bool FirstImageHasCaption { get; set; }
-            string ErrorMessage { get; set; }
-        }
-
-        private class OpusProcessingResult : IOpusProcessingResult
-        {
-            public string MainCaption { get; set; }
-            public List<IAlbumInputMedia> MediaGroup { get; set; }
-            public List<string> CurrentBatchImageUrls { get; set; }
-            public List<MemoryStream> CurrentBatchMemoryStreams { get; set; }
-            public bool HasImages { get; set; }
-            public bool FirstImageHasCaption { get; set; }
-            public string ErrorMessage { get; set; }
         }
     } // Class close
 } // Namespace close
