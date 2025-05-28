@@ -48,11 +48,7 @@ namespace TelegramSearchBot.Controller.Storage
                 ReplyTo = e.Message.ReplyToMessage?.Id ?? 0,
                 Chat = e.Message.Chat,
             });
-            if (e.Message != null) 
-            {
-                 // Pass the full Message object to the constructor
-                 await _mediator.Publish(new TextMessageReceivedNotification(e.Message));
-            }
+            p.ProcessingResults.Add(ToAdd);
         }
         
     }

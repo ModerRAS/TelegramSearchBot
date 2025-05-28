@@ -67,6 +67,7 @@ namespace TelegramSearchBot.Controller.AI.OCR
                 if (!string.IsNullOrWhiteSpace(OcrStr)) {
                     logger.LogInformation(OcrStr);
                     await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
+                    p.ProcessingResults.Add($"[OCR识别结果] {OcrStr}");
                 }
             }
             catch (Exception ex) when (

@@ -73,24 +73,16 @@ namespace TelegramSearchBot.Controller.AI.QR
                 }
 
                 _logger.LogInformation("QR Code recognized for {ChatId}/{MessageId}. Content: {QrStr}", e.Message.Chat.Id, e.Message.MessageId, qrStr);
+                
+                // Add QR result to processing results
+                p.ProcessingResults.Add($"[QR识别结果] {qrStr}");
 
                 // 1. Original logic: Send the raw QR string back to the user.
                 await _sendMessageService.SendMessage(qrStr, e.Message.Chat.Id, e.Message.MessageId);
                 _logger.LogInformation("Sent raw QR content for {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
 
-                // 2. New logic: Publish notification for URL processing.
-                // The UrlProcessingNotificationHandler will pick this up.
-                // We pass qrStr as the text, and the original e.Message as the context.
-                // The MessageId here refers to the photo message that contained the QR code.
-                await _mediator.Publish(new TextMessageReceivedNotification(
-                    qrStr, 
-                    e.Message.Chat.Id, 
-                    e.Message.MessageId, 
-                    e.Message.Chat.Type,
-                    e.Message // Pass the original photo message as context
-                ));
 
-                // 3. Storing the raw QR content as a message.
+                // 2. Storing the raw QR content as a message.
                 await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "QR_Result", qrStr);
             }
             catch (Exception ex) when (
