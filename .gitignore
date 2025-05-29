@@ -354,3 +354,4 @@ tessdata/
 /TelegramSearchBot.Agent.PaddleOCR/Properties/launchSettings.json
 
 example/
+.VsCodeCounter/
