@@ -4,18 +4,18 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.Abstract;
 
 using TelegramSearchBot.Interface.AI.ASR;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.AI.ASR
 {
-    public class AutoASRService : SubProcessService, IAutoASRService
-    {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
+    public class AutoASRService : SubProcessService, IAutoASRService {
 
 
         public new string ServiceName => "AutoASRService";
         public WhisperManager WhisperManager { get; set; }
 
-        public AutoASRService(IConnectionMultiplexer connectionMultiplexer) : base(connectionMultiplexer)
-        {
+        public AutoASRService(IConnectionMultiplexer connectionMultiplexer) : base(connectionMultiplexer) {
             ForkName = "ASR";
         }
 
@@ -24,8 +24,7 @@ namespace TelegramSearchBot.Service.AI.ASR
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
-        public async Task<string> ExecuteAsync(string path)
-        {
+        public async Task<string> ExecuteAsync(string path) {
             return await RunRpc(path);
         }
     }

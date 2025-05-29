@@ -1,11 +1,13 @@
 ﻿using StackExchange.Redis;
 using System;
 using System.Threading.Tasks;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface.AI.QR;
 using TelegramSearchBot.Service.Abstract;
 
 namespace TelegramSearchBot.Service.AI.QR {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public class AutoQRService : SubProcessService, IAutoQRService {
         public AutoQRService(IConnectionMultiplexer connectionMultiplexer) : base(connectionMultiplexer) {
             ForkName = "QR";

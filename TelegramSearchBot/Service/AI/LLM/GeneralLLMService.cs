@@ -12,8 +12,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore; // For AnyAsync()
 
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.AI.LLM {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped)]
     public class GeneralLLMService : IService, IGeneralLLMService {
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
         private readonly DataDbContext _dbContext;

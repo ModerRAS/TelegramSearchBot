@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
@@ -13,6 +14,7 @@ using TelegramSearchBot.Model.AI;
 using static GenerativeAI.VertexAIModels;
 
 namespace TelegramSearchBot.Service.AI.LLM {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public class LLMFactory : IService, ILLMFactory {
         public string ServiceName => "LLMFactory";
 
