@@ -15,20 +15,14 @@ namespace TelegramSearchBot.Service.Manage {
     public class EditLLMConfHelper : IService {
         public string ServiceName => "EditLLMConfHelper";
         protected readonly DataDbContext DataContext;
-        protected OllamaService OllamaService { get; set; }
-        protected GeminiService GeminiService { get; set; }
-        protected OpenAIService OpenAIService { get; set; }
+        private readonly LLMFactory _LLMFactory;
 
         public EditLLMConfHelper(
             DataDbContext context,
-            OpenAIService openAIService,
-            OllamaService ollamaService,
-            GeminiService geminiService
+            LLMFactory llmFactory
             ) {
             DataContext = context;
-            OpenAIService = openAIService;
-            OllamaService = ollamaService;
-            GeminiService = geminiService;
+            _LLMFactory = llmFactory;
         }
         /// <summary>
         /// 添加一个新的LLM通道到数据库
@@ -52,19 +46,11 @@ namespace TelegramSearchBot.Service.Manage {
                 await DataContext.LLMChannels.AddAsync(channel);
                 await DataContext.SaveChangesAsync();
                 IEnumerable<string> models;
-                switch (Provider) {
-                    case LLMProvider.OpenAI:
-                        models = await OpenAIService.GetAllModels(channel);
-                        break;
-                    case LLMProvider.Ollama:
-                        models = await OllamaService.GetAllModels(channel);
-                        break;
-                    case LLMProvider.Gemini:
-                        models = await GeminiService.GetAllModels(channel);
-                        break;
-                    default:
-                        return -1;
+                var service = _LLMFactory.GetLLMService(Provider);
+                if (service == null) {
+                    return -1;
                 }
+                models = await service.GetAllModels(channel);
                 var list = new List<ChannelWithModel>();
                 foreach (var e in models) {
                     list.Add(new ChannelWithModel() { LLMChannelId = channel.Id, ModelName = e });
@@ -83,19 +69,11 @@ namespace TelegramSearchBot.Service.Manage {
                            select s;
             IEnumerable<string> models;
             foreach (var channel in channels) {
-                switch (channel.Provider) {
-                    case LLMProvider.OpenAI:
-                        models = await OpenAIService.GetAllModels(channel);
-                        break;
-                    case LLMProvider.Ollama:
-                        models = await OllamaService.GetAllModels(channel);
-                        break;
-                    case LLMProvider.Gemini:
-                        models = await GeminiService.GetAllModels(channel);
-                        break;
-                    default:
-                        continue;
+                var service = _LLMFactory.GetLLMService(channel.Provider);
+                if (service == null) {
+                    continue;
                 }
+                models = await service.GetAllModels(channel);
 
                 var list = new List<ChannelWithModel>();
 
