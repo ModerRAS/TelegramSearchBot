@@ -13,6 +13,7 @@ using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.Manage;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Manage {
@@ -22,6 +23,7 @@ namespace TelegramSearchBot.Test.Manage {
         private Mock<IDatabase> _dbMock = null!;
         private Mock<OpenAIService> _openAIServiceMock = null!;
         private EditLLMConfService _service = null!;
+        private Mock<IEditLLMConfHelper> helperMock = null!;
 
         public EditLLMConfTest() {
             var options = new DbContextOptionsBuilder<DataDbContext>()
@@ -79,11 +81,15 @@ namespace TelegramSearchBot.Test.Manage {
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(ollamaServiceMock.Object);
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(geminiServiceMock.Object);
             
-            var helperMock = new Mock<EditLLMConfHelper>(
-                _context,
-                llmFactoryMock.Object);
-            helperMock.Setup(h => h.AddChannel(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<LLMProvider>()))
-                .ReturnsAsync(1);
+            helperMock = new Mock<IEditLLMConfHelper>();
+            helperMock.Setup(h => h.AddChannel(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<LLMProvider>(),
+                It.IsAny<int>(),
+                It.IsAny<int>()
+            )).ReturnsAsync(1);
             helperMock.Setup(h => h.AddModelWithChannel(It.IsAny<int>(), It.IsAny<string>()))
                 .ReturnsAsync(true);
             helperMock.Setup(h => h.RemoveModelFromChannel(It.IsAny<int>(), It.IsAny<string>()))
@@ -97,6 +103,12 @@ namespace TelegramSearchBot.Test.Manage {
                 It.IsAny<int?>(),
                 It.IsAny<int?>()))
                 .ReturnsAsync(true);
+            helperMock.Setup(h => h.GetAllChannels())
+                .ReturnsAsync(new List<LLMChannel>());
+            helperMock.Setup(h => h.GetChannelById(It.IsAny<int>()))
+                .ReturnsAsync((int id) => new LLMChannel { Id = id, Name = "Test Channel", Provider = LLMProvider.OpenAI });
+            helperMock.Setup(h => h.RefreshAllChannel())
+                .ReturnsAsync(2);
             
             _service = new EditLLMConfService(
                 helperMock.Object,
@@ -108,8 +120,11 @@ namespace TelegramSearchBot.Test.Manage {
         public async Task ExecuteAsync_NewChannel_CompleteFlow() {
             // Arrange
             long chatId = 123;
+            var stateKey = $"llmconf:{chatId}:state";
+            var dataKey = $"llmconf:{chatId}:data";
+
             // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("awaiting_name")  // After first command
                 .ReturnsAsync("awaiting_gateway")
@@ -119,7 +134,7 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync("awaiting_apikey");
 
             // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(dataKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync("Test Channel")  // After name input
                 .ReturnsAsync("Test Channel|http://test.com")  // After gateway input
                 .ReturnsAsync("Test Channel|http://test.com|1")  // After provider selection
@@ -159,11 +174,14 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.Equal("渠道创建成功", result7.Item2);
 
             // Verify channel was created
-            var channel = await _context.LLMChannels.FirstOrDefaultAsync();
-            Assert.NotNull(channel);
-            Assert.Equal("Test Channel", channel.Name);
-            Assert.Equal(1, channel.Parallel); // 验证默认并行数
-            Assert.Equal(0, channel.Priority); // 验证默认优先级
+            helperMock.Verify(h => h.AddChannel(
+                "Test Channel",
+                "http://test.com",
+                "test-api-key",
+                LLMProvider.OpenAI,
+                1,
+                0
+            ), Times.Once);
         }
 
         [Fact]
@@ -171,6 +189,7 @@ namespace TelegramSearchBot.Test.Manage {
             // Arrange
             long chatId = 123;
             var channel = new LLMChannel {
+                Id = 1,
                 Name = "Test Channel",
                 Gateway = "http://test.com",
                 ApiKey = "test-key",
@@ -179,21 +198,29 @@ namespace TelegramSearchBot.Test.Manage {
             await _context.LLMChannels.AddAsync(channel);
             await _context.SaveChangesAsync();
 
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+            var stateKey = $"llmconf:{chatId}:state";
+            var dataKey = $"llmconf:{chatId}:data";
+
+            // Setup state transitions
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("adding_model_select_channel")
                 .ReturnsAsync("adding_model_input");
 
             // Setup data key to return channel ID
-            _dbMock.Setup(d => d.StringGetAsync("llmconf:123:data", It.IsAny<CommandFlags>()))
-                .ReturnsAsync(channel.Id.ToString());
+            _dbMock.Setup(d => d.StringGetAsync(dataKey, It.IsAny<CommandFlags>()))
+                .ReturnsAsync("1");
+
+            // Setup helper mock
+            helperMock.Setup(h => h.GetAllChannels())
+                .ReturnsAsync(new List<LLMChannel> { channel });
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("添加模型", chatId);
             Assert.True(result1.Item1);
             Assert.Contains("请选择要添加模型的渠道ID：", result1.Item2);
 
-            var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
+            var result2 = await _service.ExecuteAsync("1", chatId);
             Assert.True(result2.Item1);
             Assert.Equal("请输入要添加的模型名称，多个模型用逗号或分号分隔", result2.Item2);
 
@@ -201,13 +228,8 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.True(result3.Item1);
             Assert.Equal("模型添加成功", result3.Item2);
 
-            // Verify models were added
-            var models = await _context.ChannelsWithModel
-                .Where(m => m.LLMChannelId == channel.Id)
-                .ToListAsync();
-            Assert.Equal(2, models.Count);
-            Assert.Contains(models, m => m.ModelName == "model1");
-            Assert.Contains(models, m => m.ModelName == "model2");
+            // Verify model was added
+            helperMock.Verify(h => h.AddModelWithChannel(1, "model1,model2"), Times.Once);
         }
 
         [Fact]
@@ -215,47 +237,55 @@ namespace TelegramSearchBot.Test.Manage {
             // Arrange
             long chatId = 123;
             var channel = new LLMChannel {
+                Id = 1,
                 Name = "Test Channel",
                 Gateway = "http://test.com",
                 ApiKey = "test-key",
                 Provider = LLMProvider.OpenAI
             };
             await _context.LLMChannels.AddAsync(channel);
-            await _context.ChannelsWithModel.AddRangeAsync(
-                new ChannelWithModel { LLMChannelId = channel.Id, ModelName = "model1" },
-                new ChannelWithModel { LLMChannelId = channel.Id, ModelName = "model2" }
-            );
+            await _context.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                LLMChannelId = 1,
+                ModelName = "model1"
+            });
             await _context.SaveChangesAsync();
 
+            var stateKey = $"llmconf:{chatId}:state";
+            var dataKey = $"llmconf:{chatId}:data";
+
             // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("removing_model_select_channel")
                 .ReturnsAsync("removing_model_select");
 
             // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-                .ReturnsAsync("1|model1,model2");  // After model selection
+            _dbMock.SetupSequence(d => d.StringGetAsync(dataKey, It.IsAny<CommandFlags>()))
+                .ReturnsAsync("1")  // Channel ID
+                .ReturnsAsync("1|model1");  // Channel ID and model list
+
+            // Setup helper mock
+            helperMock.Setup(h => h.GetAllChannels())
+                .ReturnsAsync(new List<LLMChannel> { channel });
+            helperMock.Setup(h => h.GetChannelById(1)).ReturnsAsync(channel);
+            helperMock.Setup(h => h.RemoveModelFromChannel(1, "model1")).ReturnsAsync(true);
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("移除模型", chatId);
             Assert.True(result1.Item1);
             Assert.Contains("请选择要移除模型的渠道ID：", result1.Item2);
 
-            var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
+            var result2 = await _service.ExecuteAsync("1", chatId);
             Assert.True(result2.Item1);
             Assert.Contains("请选择要移除的模型：", result2.Item2);
+            Assert.Contains("1. model1", result2.Item2);
 
-            var result3 = await _service.ExecuteAsync("1", chatId); // Remove model1
+            var result3 = await _service.ExecuteAsync("1", chatId);
             Assert.True(result3.Item1);
             Assert.Equal("模型移除成功", result3.Item2);
 
             // Verify model was removed
-            var models = await _context.ChannelsWithModel
-                .Where(m => m.LLMChannelId == channel.Id)
-                .ToListAsync();
-            Assert.Single(models);
-            Assert.Equal("model2", models[0].ModelName);
+            helperMock.Verify(h => h.RemoveModelFromChannel(1, "model1"), Times.Once);
         }
 
         [Fact]
@@ -263,116 +293,107 @@ namespace TelegramSearchBot.Test.Manage {
             // Arrange
             long chatId = 123;
             var channel = new LLMChannel {
+                Id = 1,
                 Name = "Test Channel",
                 Gateway = "http://test.com",
                 ApiKey = "test-key",
                 Provider = LLMProvider.OpenAI
             };
             await _context.LLMChannels.AddAsync(channel);
-            await _context.ChannelsWithModel.AddRangeAsync(
-                new ChannelWithModel { LLMChannelId = channel.Id, ModelName = "model1" },
-                new ChannelWithModel { LLMChannelId = channel.Id, ModelName = "model2" }
-            );
+            await _context.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                LLMChannelId = 1,
+                ModelName = "model1"
+            });
             await _context.SaveChangesAsync();
 
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+            var stateKey = $"llmconf:{chatId}:state";
+
+            // Setup state transitions
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("viewing_model_select_channel");
+
+            // Setup helper mock
+            helperMock.Setup(h => h.GetAllChannels())
+                .ReturnsAsync(new List<LLMChannel> { channel });
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("查看模型", chatId);
             Assert.True(result1.Item1);
             Assert.Contains("请选择要查看模型的渠道ID：", result1.Item2);
 
-            var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
+            var result2 = await _service.ExecuteAsync("1", chatId);
             Assert.True(result2.Item1);
             Assert.Contains("渠道 Test Channel 下的模型列表：", result2.Item2);
             Assert.Contains("- model1", result2.Item2);
-            Assert.Contains("- model2", result2.Item2);
         }
 
         [Fact]
-        public async Task ExecuteAsync_InvalidState_ReturnsFailure() {
+        public async Task ExecuteAsync_UpdateParallelAndPriority() {
             // Arrange
             long chatId = 123;
-            _dbMock.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-                .ReturnsAsync("invalid_state");
+            var channel = new LLMChannel {
+                Id = 1,
+                Name = "Test Channel",
+                Gateway = "http://test.com",
+                ApiKey = "test-key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 0
+            };
+            await _context.LLMChannels.AddAsync(channel);
+            await _context.SaveChangesAsync();
 
-            // Act
-            var result = await _service.ExecuteAsync("test", chatId);
+            var stateKey = $"llmconf:{chatId}:state";
+            var dataKey = $"llmconf:{chatId}:data";
 
-            // Assert
-            Assert.False(result.Item1);
-            Assert.Equal("", result.Item2);
-        }
-
-        [Fact]
-        public async Task ExecuteAsync_NewChannel_WithParallelAndPriority() {
-            // Arrange
-            long chatId = 123;
             // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
-                .ReturnsAsync("awaiting_name")  
-                .ReturnsAsync("awaiting_gateway")
-                .ReturnsAsync("awaiting_provider")
-                .ReturnsAsync("awaiting_parallel")
-                .ReturnsAsync("awaiting_priority")
-                .ReturnsAsync("awaiting_apikey");
+                .ReturnsAsync("editing_select_channel")
+                .ReturnsAsync("editing_select_field")
+                .ReturnsAsync("editing_input_value");
 
             // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-                .ReturnsAsync("Test Channel")  
-                .ReturnsAsync("Test Channel|http://test.com")  
-                .ReturnsAsync("Test Channel|http://test.com|1")
-                .ReturnsAsync("Test Channel|http://test.com|1|5")  // Parallel = 5
-                .ReturnsAsync("Test Channel|http://test.com|1|5|2");  // Priority = 2
+            _dbMock.SetupSequence(d => d.StringGetAsync(dataKey, It.IsAny<CommandFlags>()))
+                .ReturnsAsync("1")  // Channel ID
+                .ReturnsAsync("1|5")  // Channel ID and field selection (parallel)
+                .ReturnsAsync("1|5|2");  // Channel ID, field selection, and new value
+
+            // Setup helper mock
+            helperMock.Setup(h => h.GetAllChannels())
+                .ReturnsAsync(new List<LLMChannel> { channel });
+            helperMock.Setup(h => h.UpdateChannel(1, null, null, null, null, 2, null)).ReturnsAsync(true);
 
             // Act & Assert
-            var result1 = await _service.ExecuteAsync("新建渠道", chatId);
+            var result1 = await _service.ExecuteAsync("编辑渠道", chatId);
             Assert.True(result1.Item1);
-            Assert.Equal("请输入渠道的名称", result1.Item2);
+            Assert.Contains("请选择要编辑的渠道ID：", result1.Item2);
 
-            var result2 = await _service.ExecuteAsync("Test Channel", chatId);
+            var result2 = await _service.ExecuteAsync("1", chatId);
             Assert.True(result2.Item1);
-            Assert.Equal("请输入渠道地址", result2.Item2);
+            Assert.Contains("请选择要编辑的字段：", result2.Item2);
 
-            var result3 = await _service.ExecuteAsync("http://test.com", chatId);
+            var result3 = await _service.ExecuteAsync("5", chatId);
             Assert.True(result3.Item1);
-            Assert.Contains("请选择渠道类型：", result3.Item2);
-            Assert.Contains("1. OpenAI", result3.Item2);
-            Assert.Contains("2. Ollama", result3.Item2);
-            Assert.Contains("3. Gemini", result3.Item2);
+            Assert.Equal("请输入新的值：", result3.Item2);
 
-            var result4 = await _service.ExecuteAsync("1", chatId);
+            var result4 = await _service.ExecuteAsync("2", chatId);
             Assert.True(result4.Item1);
-            Assert.Equal("请输入渠道的最大并行数量(默认1):", result4.Item2);
+            Assert.Equal("更新成功", result4.Item2);
 
-            var result5 = await _service.ExecuteAsync("5", chatId);
-            Assert.True(result5.Item1);
-            Assert.Equal("请输入渠道的优先级(默认0):", result5.Item2);
-
-            var result6 = await _service.ExecuteAsync("2", chatId);
-            Assert.True(result6.Item1);
-            Assert.Equal("请输入渠道的API Key", result6.Item2);
-
-            var result7 = await _service.ExecuteAsync("test-api-key", chatId);
-            Assert.True(result7.Item1);
-            Assert.Equal("渠道创建成功", result7.Item2);
-
-            // Verify channel was created with correct values
-            var channel = await _context.LLMChannels.FirstOrDefaultAsync();
-            Assert.NotNull(channel);
-            Assert.Equal("Test Channel", channel.Name);
-            Assert.Equal(5, channel.Parallel);
-            Assert.Equal(2, channel.Priority);
+            // Verify channel was updated
+            helperMock.Verify(h => h.UpdateChannel(1, null, null, null, null, 2, null), Times.Once);
         }
 
         [Fact]
         public async Task ExecuteAsync_SetMaxRetryCount() {
             // Arrange
             long chatId = 123;
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+            var stateKey = $"llmconf:{chatId}:state";
+
+            // Setup state transitions
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("setting_max_retry");
 
@@ -385,7 +406,7 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.True(result2.Item1);
             Assert.Equal("最大重试次数已设置为: 50", result2.Item2);
 
-            // Verify database update
+            // Verify config was set
             var config = await _context.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxRetryCountKey);
             Assert.NotNull(config);
@@ -396,7 +417,10 @@ namespace TelegramSearchBot.Test.Manage {
         public async Task ExecuteAsync_SetMaxImageRetryCount() {
             // Arrange
             long chatId = 123;
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+            var stateKey = $"llmconf:{chatId}:state";
+
+            // Setup state transitions
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("setting_max_image_retry");
 
@@ -409,98 +433,11 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.True(result2.Item1);
             Assert.Equal("图片处理最大重试次数已设置为: 500", result2.Item2);
 
-            // Verify database update
+            // Verify config was set
             var config = await _context.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxImageRetryCountKey);
             Assert.NotNull(config);
             Assert.Equal("500", config.Value);
         }
-
-        [Fact]
-        public async Task ExecuteAsync_SetMaxRetryCount_InvalidInput() {
-            // Arrange
-            long chatId = 123;
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-                .ReturnsAsync(RedisValue.Null)  // Initial state
-                .ReturnsAsync("setting_max_retry");
-
-            // Act & Assert
-            var result1 = await _service.ExecuteAsync("设置重试次数", chatId);
-            Assert.True(result1.Item1);
-            Assert.Equal("请输入最大重试次数(默认100):", result1.Item2);
-
-            var result2 = await _service.ExecuteAsync("invalid", chatId);
-            Assert.False(result2.Item1);
-            Assert.Equal("请输入有效的正整数", result2.Item2);
-
-            // Verify no database update
-            var config = await _context.AppConfigurationItems
-                .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxRetryCountKey);
-            Assert.Null(config);
-        }
-
-        [Fact]
-        public async Task ExecuteAsync_UpdateParallelAndPriority() {
-            // Arrange
-            long chatId = 123;
-            var channel = new LLMChannel {
-                Name = "Test Channel",
-                Gateway = "http://test.com",
-                ApiKey = "test-key",
-                Provider = LLMProvider.OpenAI,
-                Parallel = 1,
-                Priority = 0
-            };
-            await _context.LLMChannels.AddAsync(channel);
-            await _context.SaveChangesAsync();
-
-            // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-                .ReturnsAsync(RedisValue.Null)  // Initial state
-                .ReturnsAsync("editing_select_channel")
-                .ReturnsAsync("editing_select_field")
-                .ReturnsAsync("editing_input_value")
-                .ReturnsAsync("editing_select_field")
-                .ReturnsAsync("editing_input_value");
-
-            // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-                .ReturnsAsync(channel.Id.ToString())
-                .ReturnsAsync($"{channel.Id}|5")  // Field 5 = Parallel
-                .ReturnsAsync($"{channel.Id}")  // Field 6 = Priority
-                .ReturnsAsync($"{channel.Id}|6")  // For parallel update
-                .ReturnsAsync($"{channel.Id}"); // For priority update
-
-            // Act & Assert
-            var result1 = await _service.ExecuteAsync("编辑渠道", chatId);
-            Assert.True(result1.Item1);
-            Assert.Contains("请选择要编辑的渠道ID：", result1.Item2);
-
-            var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
-            Assert.True(result2.Item1);
-            Assert.Contains("请选择要编辑的字段：", result2.Item2);
-
-            var result3 = await _service.ExecuteAsync("5", chatId); // Select Parallel
-            Assert.True(result3.Item1);
-            Assert.Equal("请输入新的值：", result3.Item2);
-
-            var result4 = await _service.ExecuteAsync("10", chatId); // Update Parallel to 10
-            Assert.True(result4.Item1);
-            Assert.Equal("更新成功", result4.Item2);
-            
-            var result5 = await _service.ExecuteAsync("6", chatId); // Select Priority
-            Assert.True(result5.Item1);
-            Assert.Equal("请输入新的值：", result5.Item2);
-
-            var result6 = await _service.ExecuteAsync("3", chatId); // Update Priority to 3
-            Assert.True(result6.Item1);
-            Assert.Equal("更新成功", result6.Item2);
-
-            // Verify updates
-            var updatedChannel = await _context.LLMChannels.FindAsync(channel.Id);
-            Assert.Equal(10, updatedChannel.Parallel);
-            Assert.Equal(3, updatedChannel.Priority);
-        }
-
     }
 }

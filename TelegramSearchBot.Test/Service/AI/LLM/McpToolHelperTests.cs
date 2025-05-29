@@ -183,13 +183,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
         public McpToolHelperTests()
         {
+            McpToolHelper.ResetForTest();
             _mockLogger = new Mock<ILogger>();
             _mockServiceProvider = new Mock<IServiceProvider>();
-            _mockToolProviderInstance = new Mock<TestToolProvider>(); // Create a mock instance
-
-            // Setup ServiceProvider mock to return the mock instance when requested
-            _mockServiceProvider.Setup(sp => sp.GetService(typeof(TestToolProvider)))
-                                .Returns(_mockToolProviderInstance.Object);
+            _mockToolProviderInstance = new Mock<TestToolProvider> { CallBase = true };
+            _mockServiceProvider.Setup(sp => sp.GetService(typeof(TestToolProvider))).Returns(_mockToolProviderInstance.Object);
+            McpToolHelper.EnsureInitialized(typeof(TestToolProvider).Assembly, _mockServiceProvider.Object, _mockLogger.Object);
 
             // Setup mock instance methods
             _mockToolProviderInstance.Setup(x => x.InstanceTool(It.IsAny<bool>()))
@@ -198,9 +197,6 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
                 .Returns((string text) => Task.FromResult($"Async processed: {text}"));
             _mockToolProviderInstance.Setup(x => x.ComplexParamTool(It.IsAny<TestToolProvider.ComplexParam>()))
                 .Returns((TestToolProvider.ComplexParam data) => $"Complex: {data?.Name} = {data?.Value}");
-
-            // Initialize McpToolHelper once for all tests in this class
-            McpToolHelper.EnsureInitialized(typeof(TestToolProvider).Assembly, _mockServiceProvider.Object, _mockLogger.Object);
 
             // Reset static flags before each test
             TestToolProvider.StaticMethodCalled = false;
@@ -479,16 +475,16 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         [Fact]
         public async Task ExecuteRegisteredToolAsync_InstanceMethod_ViaActivator_Executes()
         {
-             // Arrange
-             var args = new Dictionary<string, string> { { "input", "true" } };
-             
-             // Act
-             var result = await McpToolHelper.ExecuteRegisteredToolAsync("InstanceTool", args);
+            // Arrange
+            var args = new Dictionary<string, string> { { "input", "true" } };
+            _mockToolProviderInstance.Setup(p => p.InstanceTool(true)).Returns(false);
+            
+            // Act
+            var result = await McpToolHelper.ExecuteRegisteredToolAsync("InstanceTool", args);
 
-             // Assert
-             _mockToolProviderInstance.Setup(p => p.InstanceTool(true)).Returns(false); 
-             Assert.Equal(false, result); 
-             _mockToolProviderInstance.Verify(p => p.InstanceTool(true), Times.AtLeastOnce()); 
+            // Assert
+            Assert.Equal(false, result); 
+            _mockToolProviderInstance.Verify(p => p.InstanceTool(true), Times.AtLeastOnce()); 
         }
 
         [Fact]

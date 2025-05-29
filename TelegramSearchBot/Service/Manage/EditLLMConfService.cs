@@ -14,16 +14,17 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Interface.Manage;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class EditLLMConfService : IService {
         public string ServiceName => "EditLLMConfService";
         protected readonly DataDbContext DataContext;
-        protected readonly EditLLMConfHelper Helper;
+        protected readonly IEditLLMConfHelper Helper;
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
         public EditLLMConfService(
-            EditLLMConfHelper helper,
+            IEditLLMConfHelper helper,
             DataDbContext context,
             IConnectionMultiplexer connectionMultiplexer
             ) {
@@ -450,7 +451,11 @@ namespace TelegramSearchBot.Service.Manage {
                 return (true, sb.ToString());
             }
 
-            switch (currentState.ToString()) {
+            if (string.IsNullOrEmpty(currentState)) {
+                return (false, "请先选择一个操作");
+            }
+
+            switch (currentState) {
                 case var _ when currentState == LLMConfState.AwaitingName.GetDescription():
                     return await HandleAwaitingNameAsync(redis, Command);
 

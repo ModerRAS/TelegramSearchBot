@@ -153,8 +153,7 @@ namespace TelegramSearchBot.Test.Service.Common
                 });
 
             var result = await _urlProcessingService.ProcessUrlAsync(originalUrl);
-            // Uri class might add a trailing slash if path is empty and no query. Let's be flexible.
-            Assert.True(result == expectedCleanedUrl || result == expectedCleanedUrl + "/", $"Expected '{expectedCleanedUrl}' or '{expectedCleanedUrl}/', but got '{result}'");
+            Assert.Contains(result, new[] { expectedCleanedUrl, expectedCleanedUrl + "/" });
         }
         
         [Fact]
@@ -301,7 +300,7 @@ namespace TelegramSearchBot.Test.Service.Common
             var text = "Some text without any links.";
             var result = await _urlProcessingService.ProcessUrlsInTextAsync(text);
             Assert.NotNull(result);
-            Assert.False(result.Any());
+            Assert.Empty(result);
         }
 
         [Fact]
@@ -324,8 +323,7 @@ namespace TelegramSearchBot.Test.Service.Common
                 });
             
             var result = await _urlProcessingService.ProcessUrlsInTextAsync(text);
-            Assert.True(result[0].ProcessedUrl == expectedCleanedUrl || result[0].ProcessedUrl == expectedCleanedUrl + "/", 
-                $"Expected '{expectedCleanedUrl}' or '{expectedCleanedUrl}/', but got '{result[0].ProcessedUrl}'");
+            Assert.Contains(result[0].ProcessedUrl, new[] { expectedCleanedUrl, expectedCleanedUrl + "/" });
         }
 
         [Fact]
@@ -353,8 +351,8 @@ namespace TelegramSearchBot.Test.Service.Common
             Assert.Equal(3, result.Count);
 
             // Verify all URLs were processed correctly
-            Assert.True(result.Any(r => r.ProcessedUrl == cleanedA || r.ProcessedUrl == cleanedA + "/"));
-            Assert.True(result.Any(r => r.ProcessedUrl == cleanedB || r.ProcessedUrl == cleanedB + "/"));
+            Assert.Contains(cleanedA, result.Select(r => r.ProcessedUrl));
+            Assert.Contains(cleanedB, result.Select(r => r.ProcessedUrl));
         }
     }
 }

@@ -12,10 +12,11 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Interface.Manage;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class EditLLMConfHelper : IService {
+    public class EditLLMConfHelper : IService, IEditLLMConfHelper {
         public string ServiceName => "EditLLMConfHelper";
         protected readonly DataDbContext DataContext;
         private readonly ILLMFactory _LLMFactory;

@@ -291,7 +291,10 @@ namespace TelegramSearchBot.Test.Manage {
 
             // Assert
             Assert.Equal(3, result.Count);
-            Assert.True(result.All(c => c.Name.Contains("Test")));
+            foreach (var c in result)
+            {
+                Assert.Contains("Test", c.Name);
+            }
         }
 
         [Fact]
@@ -308,7 +311,7 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _helper.GetChannelsByName("Nonexistent");
 
             // Assert
-            Assert.Equal(0, result.Count);
+            Assert.Empty(result);
         }
     }
 }
