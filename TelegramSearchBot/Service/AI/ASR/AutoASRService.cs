@@ -3,9 +3,11 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.Abstract;
 
+using TelegramSearchBot.Interface.AI.ASR;
+
 namespace TelegramSearchBot.Service.AI.ASR
 {
-    public class AutoASRService : SubProcessService
+    public class AutoASRService : SubProcessService, IAutoASRService
     {
 
 

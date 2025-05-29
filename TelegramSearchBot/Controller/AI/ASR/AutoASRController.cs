@@ -10,6 +10,7 @@ using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.ASR;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.ASR;
 using TelegramSearchBot.Service.BotAPI;
@@ -19,7 +20,7 @@ namespace TelegramSearchBot.Controller.AI.ASR
 {
     public class AutoASRController : IOnUpdate
     {
-        private readonly AutoASRService autoASRService;
+        private readonly IAutoASRService autoASRService;
         private readonly MessageService messageService;
         private readonly ILogger<AutoASRController> logger;
         private readonly MessageExtensionService MessageExtensionService;
@@ -27,7 +28,7 @@ namespace TelegramSearchBot.Controller.AI.ASR
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadAudioController), typeof(DownloadVideoController), typeof(MessageController) };
         public SendMessageService SendMessageService { get; set; }
         public AutoASRController(
-            AutoASRService autoASRService,
+            IAutoASRService autoASRService,
             MessageService messageService,
             ILogger<AutoASRController> logger,
             SendMessageService SendMessageService,

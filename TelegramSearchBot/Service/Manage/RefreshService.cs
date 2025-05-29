@@ -17,6 +17,9 @@ using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Service.Vector;
 using MediatR;
+using TelegramSearchBot.Interface.AI.OCR;
+using TelegramSearchBot.Interface.AI.ASR;
+using TelegramSearchBot.Interface.AI.LLM;
 
 namespace TelegramSearchBot.Service.Manage
 {
@@ -25,11 +28,11 @@ namespace TelegramSearchBot.Service.Manage
         public new string ServiceName => "RefreshService";
         private readonly ILogger<RefreshService> _logger;
         private readonly ChatImportService _chatImport;
-        private readonly AutoASRService _autoASRService;
+        private readonly IAutoASRService _autoASRService;
         private readonly MessageExtensionService _messageExtensionService;
-        private readonly PaddleOCRService _paddleOCRService;
+        private readonly IPaddleOCRService _paddleOCRService;
         private readonly AutoQRService _autoQRService;
-        private readonly GeneralLLMService _generalLLMService;
+        private readonly IGeneralLLMService _generalLLMService;
         private readonly IMediator _mediator;
 
         public RefreshService(ILogger<RefreshService> logger,
@@ -38,11 +41,11 @@ namespace TelegramSearchBot.Service.Manage
                             DataDbContext context,
                             VectorGenerationService vectorGenerationService,
                             ChatImportService chatImport,
-                            AutoASRService autoASRService,
+                            IAutoASRService autoASRService,
                             MessageExtensionService messageExtensionService,
-                            PaddleOCRService paddleOCRService,
+                            IPaddleOCRService paddleOCRService,
                             AutoQRService autoQRService,
-                            GeneralLLMService generalLLMService,
+                            IGeneralLLMService generalLLMService,
                             IMediator mediator) : base(logger, lucene, Send, context, mediator)
         {
             _logger = logger;

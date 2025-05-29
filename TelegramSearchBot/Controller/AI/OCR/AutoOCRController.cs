@@ -10,6 +10,7 @@ using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.OCR;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.OCR;
@@ -20,7 +21,7 @@ namespace TelegramSearchBot.Controller.AI.OCR
 {
     public class AutoOCRController : IOnUpdate
     {
-        private readonly PaddleOCRService paddleOCRService;
+        private readonly IPaddleOCRService paddleOCRService;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
@@ -29,7 +30,7 @@ namespace TelegramSearchBot.Controller.AI.OCR
         private readonly MessageExtensionService MessageExtensionService;
         public AutoOCRController(
             ITelegramBotClient botClient,
-            PaddleOCRService paddleOCRService,
+            IPaddleOCRService paddleOCRService,
             SendMessage Send,
             MessageService messageService,
             ILogger<AutoOCRController> logger,

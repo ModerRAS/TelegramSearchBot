@@ -3,17 +3,17 @@ using System.IO;
 using System.Threading.Tasks;
 using SkiaSharp;
 using StackExchange.Redis;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Service.Abstract;
+using TelegramSearchBot.Interface.AI.OCR;
 
-namespace TelegramSearchBot.Service.AI.OCR
-{
-    public class PaddleOCRService : SubProcessService
-    {
+namespace TelegramSearchBot.Service.AI.OCR {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
+    public class PaddleOCRService : SubProcessService, IPaddleOCRService {
         public new string ServiceName => "PaddleOCRService";
 
 
-        public PaddleOCRService(IConnectionMultiplexer connectionMultiplexer) : base(connectionMultiplexer)
-        {
+        public PaddleOCRService(IConnectionMultiplexer connectionMultiplexer) : base(connectionMultiplexer) {
             ForkName = "OCR";
         }
 
@@ -22,8 +22,7 @@ namespace TelegramSearchBot.Service.AI.OCR
         /// </summary>
         /// <param name="messageOption"></param>
         /// <returns></returns>
-        public async Task<string> ExecuteAsync(Stream file)
-        {
+        public async Task<string> ExecuteAsync(Stream file) {
             var tg_img = SKBitmap.Decode(file);
             var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Jpeg, 99);
             var tg_img_arr = tg_img_data.ToArray();

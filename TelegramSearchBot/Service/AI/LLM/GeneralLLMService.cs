@@ -11,9 +11,10 @@ using TelegramSearchBot.Model.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore; // For AnyAsync()
 
+using TelegramSearchBot.Interface.AI.LLM;
+
 namespace TelegramSearchBot.Service.AI.LLM {
-    public class GeneralLLMService : IService
-    {
+    public class GeneralLLMService : IService, IGeneralLLMService {
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
         private readonly DataDbContext _dbContext;
         private readonly OpenAIService _openAIService;
@@ -39,8 +40,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             OpenAIService openAIService,
             GeminiService geminiService,
             LLMFactory _LLMFactory
-            )
-        {
+            ) {
             this.connectionMultiplexer = connectionMultiplexer;
             _dbContext = dbContext;
             _logger = logger;
@@ -53,9 +53,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
         public async Task<List<LLMChannel>> GetChannelsAsync(string modelName) {
             // 2. 查询ChannelWithModel获取关联的LLMChannel
-            var channelsWithModel = await (from s in _dbContext.ChannelsWithModel
-                                           where s.ModelName == modelName
-                                           select s.LLMChannelId).ToListAsync();
+            var channelsWithModel = await ( from s in _dbContext.ChannelsWithModel
+                                            where s.ModelName == modelName
+                                            select s.LLMChannelId ).ToListAsync();
 
 
             if (!channelsWithModel.Any()) {
@@ -64,25 +64,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             // 3. 获取关联的LLMChannel并按优先级排序
-            var llmChannels = await (from s in _dbContext.LLMChannels
-                                     where channelsWithModel.Contains(s.Id)
-                                     orderby s.Priority descending
-                                     select s).ToListAsync();
+            var llmChannels = await ( from s in _dbContext.LLMChannels
+                                      where channelsWithModel.Contains(s.Id)
+                                      orderby s.Priority descending
+                                      select s ).ToListAsync();
             if (!llmChannels.Any()) {
                 _logger.LogWarning($"找不到模型 {modelName} 关联的LLM渠道");
             }
             return llmChannels;
         }
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
+                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             // 1. 获取模型名称
-            var modelName = await (from s in _dbContext.GroupSettings
-                                   where s.GroupId == ChatId
-                                   select s.LLMModelName).FirstOrDefaultAsync();
+            var modelName = await ( from s in _dbContext.GroupSettings
+                                    where s.GroupId == ChatId
+                                    select s.LLMModelName ).FirstOrDefaultAsync();
 
-            if (string.IsNullOrEmpty(modelName))
-            {
+            if (string.IsNullOrEmpty(modelName)) {
                 _logger.LogWarning("请指定模型名称");
                 yield break;
             }
@@ -97,8 +95,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             Model.Data.Message message,
             long ChatId,
             string modelName,
-            ILLMService service, 
-            LLMChannel channel, 
+            ILLMService service,
+            LLMChannel channel,
             CancellationToken cancellation) {
             await foreach (var e in service.ExecAsync(message, ChatId, modelName, channel, cancellation).WithCancellation(cancellation)) {
                 yield return e;
@@ -111,9 +109,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ) {
 
             // 2. 查询ChannelWithModel获取关联的LLMChannel
-            var channelsWithModel = await (from s in _dbContext.ChannelsWithModel
-                                           where s.ModelName == modelName
-                                           select s.LLMChannelId).ToListAsync();
+            var channelsWithModel = await ( from s in _dbContext.ChannelsWithModel
+                                            where s.ModelName == modelName
+                                            select s.LLMChannelId ).ToListAsync();
 
 
             if (!channelsWithModel.Any()) {
@@ -122,10 +120,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             // 3. 获取关联的LLMChannel并按优先级排序
-            var llmChannels = await (from s in _dbContext.LLMChannels
-                                     where channelsWithModel.Contains(s.Id)
-                                     orderby s.Priority descending
-                                     select s).ToListAsync();
+            var llmChannels = await ( from s in _dbContext.LLMChannels
+                                      where channelsWithModel.Contains(s.Id)
+                                      orderby s.Priority descending
+                                      select s ).ToListAsync();
             if (!llmChannels.Any()) {
                 _logger.LogWarning($"找不到模型 {modelName} 关联的LLM渠道");
                 yield break;
@@ -140,7 +138,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 foreach (var channel in llmChannels) {
                     var redisKey = $"llm:channel:{channel.Id}:semaphore";
                     var currentCount = await redisDb.StringGetAsync(redisKey);
-                    int count = currentCount.HasValue ? (int)currentCount : 0;
+                    int count = currentCount.HasValue ? ( int ) currentCount : 0;
                     var service = _LLMFactory.GetLLMService(channel.Provider);
 
                     if (count < channel.Parallel) {
@@ -162,14 +160,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             }
 
                             // 6. 根据Provider选择服务
-                            await foreach (var e in operation(service, channel, new CancellationToken()))
-                            {
+                            await foreach (var e in operation(service, channel, new CancellationToken())) {
                                 yield return e;
                             }
                             yield break;
-                        }
-                        finally
-                        {
+                        } finally {
                             // 释放锁
                             await redisDb.StringDecrementAsync(redisKey);
                         }
@@ -185,8 +180,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogWarning($"所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃");
 
         }
-        public async Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default)
-        {
+        public async Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default) {
             // 1. 获取模型名称
             var modelName = "gemma3:27b";
             var config = await _dbContext.AppConfigurationItems
@@ -194,15 +188,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (config != null) {
                 modelName = config.Value;
             }
-            
+
             await using var enumerator = ExecOperationAsync<string>((service, channel, cancel) => {
                 return AnalyzeImageAsync(PhotoPath, ChatId, modelName, service, channel, cancel);
             }, modelName, cancellationToken).GetAsyncEnumerator();
-            
+
             if (await enumerator.MoveNextAsync()) {
                 return enumerator.Current;
             }
-            
+
             _logger.LogWarning($"未能获取 {modelName} 模型的图片分析结果");
             return $"Error:未能获取 {modelName} 模型的图片分析结果";
         }
@@ -229,15 +223,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (config != null) {
                 modelName = config.Value;
             }
-            
+
             await using var enumerator = ExecOperationAsync((service, channel, cancel) => {
                 return GenerateEmbeddingsAsync(message, modelName, service, channel, cancel);
             }, modelName, cancellationToken).GetAsyncEnumerator();
-            
+
             if (await enumerator.MoveNextAsync()) {
                 return enumerator.Current;
             }
-            
+
             _logger.LogWarning($"未能获取 {modelName} 模型的嵌入向量");
             return Array.Empty<float>();
         }
@@ -246,50 +240,42 @@ namespace TelegramSearchBot.Service.AI.LLM {
             yield break;
         }
 
-        private async Task<int> GetMaxRetryCountAsync()
-        {
+        private async Task<int> GetMaxRetryCountAsync() {
             var config = await _dbContext.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == MaxRetryCountKey);
-            
-            if (config == null || !int.TryParse(config.Value, out var value))
-            {
+
+            if (config == null || !int.TryParse(config.Value, out var value)) {
                 // Set default value if not exists
                 await SetDefaultMaxRetryCountAsync();
                 return DefaultMaxRetryCount;
             }
-            
+
             return value;
         }
 
-        private async Task<int> GetMaxImageRetryCountAsync()
-        {
+        private async Task<int> GetMaxImageRetryCountAsync() {
             var config = await _dbContext.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == MaxImageRetryCountKey);
-            
-            if (config == null || !int.TryParse(config.Value, out var value))
-            {
+
+            if (config == null || !int.TryParse(config.Value, out var value)) {
                 // Set default value if not exists
                 await SetDefaultMaxImageRetryCountAsync();
                 return DefaultMaxImageRetryCount;
             }
-            
+
             return value;
         }
 
-        private async Task SetDefaultMaxRetryCountAsync()
-        {
-            await _dbContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem
-            {
+        private async Task SetDefaultMaxRetryCountAsync() {
+            await _dbContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
                 Key = MaxRetryCountKey,
                 Value = DefaultMaxRetryCount.ToString()
             });
             await _dbContext.SaveChangesAsync();
         }
 
-        private async Task SetDefaultMaxImageRetryCountAsync()
-        {
-            await _dbContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem
-            {
+        private async Task SetDefaultMaxImageRetryCountAsync() {
+            await _dbContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
                 Key = MaxImageRetryCountKey,
                 Value = DefaultMaxImageRetryCount.ToString()
             });
@@ -304,28 +290,25 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
             return await GetAvailableCapacityAsync(modelName);
         }
-        public async Task<int> GetAvailableCapacityAsync(string modelName = "gemma3:27b")
-        {
+        public async Task<int> GetAvailableCapacityAsync(string modelName = "gemma3:27b") {
             var redisDb = connectionMultiplexer.GetDatabase();
             var totalKey = $"llm:capacity:{modelName}:total";
 
             // 获取或缓存总容量(15秒钟过期)
             var totalParallel = await redisDb.StringGetAsync(totalKey);
-            if (!totalParallel.HasValue)
-            {
-                var channelsWithModel = await (from s in _dbContext.ChannelsWithModel
-                                           where s.ModelName == modelName
-                                           select s.LLMChannelId).ToListAsync();
+            if (!totalParallel.HasValue) {
+                var channelsWithModel = await ( from s in _dbContext.ChannelsWithModel
+                                                where s.ModelName == modelName
+                                                select s.LLMChannelId ).ToListAsync();
 
-                if (!channelsWithModel.Any())
-                {
+                if (!channelsWithModel.Any()) {
                     await redisDb.StringSetAsync(totalKey, 0, TimeSpan.FromSeconds(15));
                     return 0;
                 }
 
-                var llmChannels = await (from s in _dbContext.LLMChannels
-                                       where channelsWithModel.Contains(s.Id)
-                                       select s).ToListAsync();
+                var llmChannels = await ( from s in _dbContext.LLMChannels
+                                          where channelsWithModel.Contains(s.Id)
+                                          select s ).ToListAsync();
 
                 int total = llmChannels.Sum(c => c.Parallel);
                 await redisDb.StringSetAsync(totalKey, total, TimeSpan.FromSeconds(15));
@@ -333,29 +316,27 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             // 重新查询当前使用量
-            var currentChannelsWithModel = await (from s in _dbContext.ChannelsWithModel
-                                           where s.ModelName == modelName
-                                           select s.LLMChannelId).ToListAsync();
+            var currentChannelsWithModel = await ( from s in _dbContext.ChannelsWithModel
+                                                   where s.ModelName == modelName
+                                                   select s.LLMChannelId ).ToListAsync();
 
-            if (!currentChannelsWithModel.Any())
-            {
+            if (!currentChannelsWithModel.Any()) {
                 return 0;
             }
 
-            var currentLlmChannels = await (from s in _dbContext.LLMChannels
-                                   where currentChannelsWithModel.Contains(s.Id)
-                                   select s).ToListAsync();
+            var currentLlmChannels = await ( from s in _dbContext.LLMChannels
+                                             where currentChannelsWithModel.Contains(s.Id)
+                                             select s ).ToListAsync();
 
             int used = 0;
-            foreach (var channel in currentLlmChannels)
-            {
+            foreach (var channel in currentLlmChannels) {
                 var semaphoreKey = $"llm:channel:{channel.Id}:semaphore";
                 var currentCount = await redisDb.StringGetAsync(semaphoreKey);
-                used += currentCount.HasValue ? (int)currentCount : 0;
+                used += currentCount.HasValue ? ( int ) currentCount : 0;
             }
 
             // 计算并返回可用容量
-            return Math.Max(0, (int)totalParallel - used);
+            return Math.Max(0, ( int ) totalParallel - used);
         }
     }
 

@@ -11,6 +11,7 @@ using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
@@ -21,7 +22,7 @@ using TelegramSearchBot.Service.Storage;
 namespace TelegramSearchBot.Controller.AI.LLM {
     public class AltPhotoController : IOnUpdate {
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController), typeof(MessageController) };
-        private readonly GeneralLLMService generalLLMService;
+        private readonly IGeneralLLMService generalLLMService;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
@@ -30,7 +31,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly MessageExtensionService MessageExtensionService;
         public AltPhotoController(
             ITelegramBotClient botClient,
-            GeneralLLMService generalLLMService,
+            IGeneralLLMService generalLLMService,
             SendMessage Send,
             MessageService messageService,
             ILogger<AutoOCRController> logger,

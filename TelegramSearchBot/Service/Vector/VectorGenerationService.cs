@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Model;
 using Microsoft.EntityFrameworkCore;
 using System.Collections;
+using TelegramSearchBot.Interface.AI.LLM;
 
 namespace TelegramSearchBot.Service.Vector
 {
@@ -20,14 +21,14 @@ namespace TelegramSearchBot.Service.Vector
         private readonly QdrantClient _qdrantClient;
         private readonly ILogger<VectorGenerationService> _logger;
         private readonly IDatabase _redis;
-        private readonly GeneralLLMService _generalLLMService;
+        private readonly IGeneralLLMService _generalLLMService;
         private readonly DataDbContext _dataDbContext;
 
         public string ServiceName => "VectorGenerationService";
 
         public VectorGenerationService(
             QdrantClient qdrantClient,
-            GeneralLLMService generalLLMService,
+            IGeneralLLMService generalLLMService,
             IConnectionMultiplexer redis,
             ILogger<VectorGenerationService> logger,
             DataDbContext dataDbContext)
