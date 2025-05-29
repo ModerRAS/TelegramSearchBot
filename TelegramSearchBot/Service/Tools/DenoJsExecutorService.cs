@@ -6,13 +6,14 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Attributes;
 using J2N.IO;
 
 namespace TelegramSearchBot.Service.Tools
 {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class DenoJsExecutorService : IService
+    public class DenoJsExecutorService : IService, IDenoJsExecutorService
     {
         private readonly IHttpClientFactory _httpClientFactory;
         internal string _denoPath;

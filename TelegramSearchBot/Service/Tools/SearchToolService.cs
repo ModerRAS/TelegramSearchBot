@@ -8,55 +8,16 @@ using System;
 using System.Threading.Tasks; // For async operations
 using Microsoft.EntityFrameworkCore; // For EF Core operations
 using TelegramSearchBot.Interface; // Added for IService
+using TelegramSearchBot.Interface.Tools;
 using System.Globalization;
 using TelegramSearchBot.Attributes; // For DateTime parsing
 using TelegramSearchBot.Service.Storage; // For MessageExtensionService
+using TelegramSearchBot.Model.Tools;
 
 namespace TelegramSearchBot.Service.Tools
 {
-    // DTO for Lucene Search Result
-    public class SearchToolResult
-    {
-        public string Query { get; set; }
-        public int TotalFound { get; set; }
-        public int CurrentPage { get; set; }
-        public int PageSize { get; set; }
-        public List<SearchResultItem> Results { get; set; }
-        public string Note { get; set; }
-    }
-
-    public class SearchResultItem
-    {
-        public long MessageId { get; set; }
-        public string ContentPreview { get; set; }
-        public List<HistoryMessageItem> ContextBefore { get; set; }
-        public List<HistoryMessageItem> ContextAfter { get; set; }
-        public List<MessageExtension> Extensions { get; set; }
-    }
-
-    // DTOs for History Query Result
-    public class HistoryQueryResult
-    {
-        public int TotalFound { get; set; }
-        public int CurrentPage { get; set; }
-        public int PageSize { get; set; }
-        public List<HistoryMessageItem> Results { get; set; }
-        public string Note { get; set; }
-    }
-
-    public class HistoryMessageItem
-    {
-        public long MessageId { get; set; }
-        public string Content { get; set; }
-        public long SenderUserId { get; set; }
-        public string SenderName { get; set; } // Added sender name
-        public DateTime DateTime { get; set; }
-        public long? ReplyToMessageId { get; set; } // Made nullable
-        public List<MessageExtension> Extensions { get; set; }
-    }
-
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class SearchToolService : IService
+    public class SearchToolService : IService, ISearchToolService
     {
         public string ServiceName => "SearchToolService";
 

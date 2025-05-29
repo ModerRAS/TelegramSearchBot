@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
 
@@ -67,7 +68,8 @@ namespace TelegramSearchBot.Service.Tools
         public string Status { get; set; }
     }
 
-    public class SequentialThinkingService : IService
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
+    public class SequentialThinkingService : IService, ISequentialThinkingService
     {
         public string ServiceName => "SequentialThinkingService";
 

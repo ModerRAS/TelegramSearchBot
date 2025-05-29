@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
@@ -33,7 +34,7 @@ namespace TelegramSearchBot.Service.Tools
     }
 
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class MemoryService : IService
+    public class MemoryService : IService, IMemoryService
     {
         public string ServiceName => "MemoryService";
 

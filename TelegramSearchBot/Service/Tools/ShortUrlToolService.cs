@@ -6,19 +6,15 @@ using System.Linq;
 using System.Threading.Tasks; // For async operations
 using Microsoft.EntityFrameworkCore; // For EF Core operations
 using TelegramSearchBot.Interface; // Added for IService
+using TelegramSearchBot.Interface.Tools;
+using TelegramSearchBot.Model.Tools;
 using System.Collections.Generic; // For List
 using System; // For DateTime
 
 namespace TelegramSearchBot.Service.Tools
 {
-    public class ShortUrlMappingResult
-    {
-        public string OriginalUrl { get; set; }
-        public string ExpandedUrl { get; set; }
-        public DateTime CreationDate { get; set; }
-    }
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class ShortUrlToolService : IService
+    public class ShortUrlToolService : IService, IShortUrlToolService
     {
         public string ServiceName => "ShortUrlToolService";
 

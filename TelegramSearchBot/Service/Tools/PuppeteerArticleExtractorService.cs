@@ -3,12 +3,13 @@ using System.IO;
 using System.Linq;
 using PuppeteerSharp;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Tools
 {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class PuppeteerArticleExtractorService : IService
+    public class PuppeteerArticleExtractorService : IService, IPuppeteerArticleExtractorService
     {
         public string ServiceName => "PuppeteerArticleExtractorService";
         private readonly string _toolDir = Path.Combine(Env.WorkDir, "Tool");

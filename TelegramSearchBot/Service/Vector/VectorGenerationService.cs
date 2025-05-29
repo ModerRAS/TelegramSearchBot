@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 using StackExchange.Redis;
@@ -18,7 +19,7 @@ using TelegramSearchBot.Attributes;
 namespace TelegramSearchBot.Service.Vector
 {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class VectorGenerationService : IService
+    public class VectorGenerationService : IService, IVectorGenerationService
     {
         private readonly QdrantClient _qdrantClient;
         private readonly ILogger<VectorGenerationService> _logger;
@@ -69,7 +70,7 @@ namespace TelegramSearchBot.Service.Vector
                 return searchOption;
             } catch (Exception ex) {
                 // 错误处理和日志记录
-                Console.WriteLine($"Search error: {ex.Message}");
+                _logger.LogError($"Search error: {ex.Message}");
                 throw;
             }
         }
