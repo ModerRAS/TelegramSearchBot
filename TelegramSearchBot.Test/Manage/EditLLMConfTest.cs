@@ -13,6 +13,7 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Interface.AI.LLM;
 
 namespace TelegramSearchBot.Test.Manage {
     [TestClass]
@@ -75,11 +76,14 @@ namespace TelegramSearchBot.Test.Manage {
             geminiServiceMock.Setup(g => g.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
             
+            var llmFactoryMock = new Mock<ILLMFactory>();
+            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(ollamaServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(geminiServiceMock.Object);
+            
             var helperMock = new Mock<EditLLMConfHelper>(
                 _context,
-                _openAIServiceMock.Object,
-                ollamaServiceMock.Object,
-                geminiServiceMock.Object);
+                llmFactoryMock.Object);
             _service = new EditLLMConfService(
                 helperMock.Object,
                 _context,

@@ -13,6 +13,7 @@ using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 
 namespace TelegramSearchBot.Test.Manage {
     [TestClass]
@@ -70,11 +71,15 @@ namespace TelegramSearchBot.Test.Manage {
             var geminiLoggerMock = new Mock<ILogger<GeminiService>>();
             _geminiServiceMock = new Mock<GeminiService>(_context, geminiLoggerMock.Object, httpClientFactoryMock.Object);
 
+            // 新增 ILLMFactory mock
+            var llmFactoryMock = new Mock<ILLMFactory>();
+            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(_ollamaServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(_geminiServiceMock.Object);
+
             _helper = new EditLLMConfHelper(
                 _context,
-                _openAIServiceMock.Object,
-                _ollamaServiceMock.Object,
-                _geminiServiceMock.Object);
+                llmFactoryMock.Object);
             
             _messageExtensionServiceMock.Setup(m => m.AddOrUpdateAsync(It.IsAny<MessageExtension>()))
                 .Returns(Task.CompletedTask);
