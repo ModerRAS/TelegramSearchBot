@@ -26,7 +26,7 @@ namespace TelegramSearchBot.Controller.AI.OCR
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
         private readonly ILogger<AutoOCRController> logger;
-        private readonly SendMessageService SendMessageService;
+        private readonly ISendMessageService SendMessageService;
         private readonly MessageExtensionService MessageExtensionService;
         public AutoOCRController(
             ITelegramBotClient botClient,
@@ -34,7 +34,7 @@ namespace TelegramSearchBot.Controller.AI.OCR
             SendMessage Send,
             MessageService messageService,
             ILogger<AutoOCRController> logger,
-            SendMessageService sendMessageService,
+            ISendMessageService sendMessageService,
             MessageExtensionService messageExtensionService
             )
         {

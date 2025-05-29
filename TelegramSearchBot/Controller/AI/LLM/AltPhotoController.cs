@@ -27,7 +27,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
         private readonly ILogger<AutoOCRController> logger;
-        private readonly SendMessageService SendMessageService;
+        private readonly ISendMessageService SendMessageService;
         private readonly MessageExtensionService MessageExtensionService;
         public AltPhotoController(
             ITelegramBotClient botClient,
@@ -35,7 +35,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             SendMessage Send,
             MessageService messageService,
             ILogger<AutoOCRController> logger,
-            SendMessageService sendMessageService,
+            ISendMessageService sendMessageService,
             MessageExtensionService messageExtensionService
             ) {
             this.generalLLMService = generalLLMService;

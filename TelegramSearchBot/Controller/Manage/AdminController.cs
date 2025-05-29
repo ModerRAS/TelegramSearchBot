@@ -17,9 +17,9 @@ namespace TelegramSearchBot.Controller.Manage
     {
         public List<Type> Dependencies => new List<Type>();
         public AdminService AdminService { get; set; }
-        public SendMessageService Send { get; set; }
+        public ISendMessageService Send { get; set; }
         public ITelegramBotClient botClient { get; set; }
-        public AdminController(ITelegramBotClient botClient, AdminService adminService, SendMessageService Send)
+        public AdminController(ITelegramBotClient botClient, AdminService adminService, ISendMessageService Send)
         {
             AdminService = adminService;
             this.Send = Send;

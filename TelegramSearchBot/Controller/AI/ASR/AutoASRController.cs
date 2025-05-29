@@ -26,12 +26,12 @@ namespace TelegramSearchBot.Controller.AI.ASR
         private readonly MessageExtensionService MessageExtensionService;
 
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadAudioController), typeof(DownloadVideoController), typeof(MessageController) };
-        public SendMessageService SendMessageService { get; set; }
+        public ISendMessageService SendMessageService { get; set; }
         public AutoASRController(
             IAutoASRService autoASRService,
             MessageService messageService,
             ILogger<AutoASRController> logger,
-            SendMessageService SendMessageService,
+            ISendMessageService SendMessageService,
             MessageExtensionService messageExtensionService
             )
         {

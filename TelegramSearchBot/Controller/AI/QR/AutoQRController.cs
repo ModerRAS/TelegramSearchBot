@@ -20,6 +20,7 @@ using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Manager; 
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Controller.Storage; // Added for SendMessageService
+using TelegramSearchBot.Interface; // Added for ISendMessageService
 
 namespace TelegramSearchBot.Controller.AI.QR
 {
@@ -29,7 +30,7 @@ namespace TelegramSearchBot.Controller.AI.QR
         private readonly MessageService _messageService;
         private readonly ILogger<AutoQRController> _logger;
         private readonly IMediator _mediator;
-        private readonly SendMessageService _sendMessageService;
+        private readonly ISendMessageService _sendMessageService;
         private readonly MessageExtensionService MessageExtensionService;
 
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController), typeof(MessageController) };
@@ -39,7 +40,7 @@ namespace TelegramSearchBot.Controller.AI.QR
             AutoQRService autoQRService,
             MessageService messageService,
             IMediator mediator,
-            SendMessageService sendMessageService,
+            ISendMessageService sendMessageService,
             MessageExtensionService messageExtensionService
             )
         {

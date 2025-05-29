@@ -18,10 +18,12 @@ using HtmlAgilityPack;
 using System.Web;
 using System.Threading;
 using TelegramSearchBot.Helper;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.BotAPI
 {
-    public partial class SendMessageService : IService
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
+    public partial class SendMessageService : ISendMessageService
     {
         #region Fields and Constructor
         public string ServiceName => "SendMessageService";
@@ -41,7 +43,7 @@ namespace TelegramSearchBot.Service.BotAPI
 
 
         #region Fallback and Formatting Helpers
-        private async Task TrySendMessageWithFallback(long chatId, int messageId, string originalMarkdownText, ParseMode preferredParseMode, bool isGroup, int replyToMessageId, string initialContentForNewMessage, bool isEdit)
+        public async Task TrySendMessageWithFallback(long chatId, int messageId, string originalMarkdownText, ParseMode preferredParseMode, bool isGroup, int replyToMessageId, string initialContentForNewMessage, bool isEdit)
         {
             string textToSend = originalMarkdownText;
             ParseMode currentParseMode = preferredParseMode;
@@ -108,7 +110,7 @@ namespace TelegramSearchBot.Service.BotAPI
             }
         }
         
-        private async Task AttemptFallbackSend(long chatId, int messageId, string originalMarkdownText, bool isGroup, int replyToMessageId, bool wasEditAttempt, string initialFailureReason)
+        public async Task AttemptFallbackSend(long chatId, int messageId, string originalMarkdownText, bool isGroup, int replyToMessageId, bool wasEditAttempt, string initialFailureReason)
         {
             var plainText = MessageFormatHelper.ConvertToPlainText(originalMarkdownText);
             try

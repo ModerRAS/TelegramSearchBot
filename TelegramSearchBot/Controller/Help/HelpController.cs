@@ -12,10 +12,10 @@ namespace TelegramSearchBot.Controller.Help
 {
     public class HelpController : IOnUpdate
     {
-        private readonly SendMessageService sendMessageService;
+        private readonly ISendMessageService sendMessageService;
         public List<Type> Dependencies => new List<Type>();
 
-        public HelpController(SendMessageService sendMessageService)
+        public HelpController(ISendMessageService sendMessageService)
         {
             this.sendMessageService = sendMessageService;
         }

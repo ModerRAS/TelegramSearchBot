@@ -7,13 +7,13 @@ namespace TelegramSearchBot.View
 {
     public class EditLLMConfView : IView
     {
-        private readonly SendMessageService _sendMessageService;
+        private readonly ISendMessageService _sendMessageService;
 
         private long _chatId;
         private int _replyToMessageId;
         private string _messageText;
 
-        public EditLLMConfView(SendMessageService sendMessageService)
+        public EditLLMConfView(ISendMessageService sendMessageService)
         {
             _sendMessageService = sendMessageService;
         }

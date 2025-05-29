@@ -27,7 +27,7 @@ namespace TelegramSearchBot.Controller.AI.LLM
         public ITelegramBotClient botClient { get; set; }
         public MessageService messageService { get; set; }
         public AdminService adminService { get; set; }
-        public SendMessageService SendMessageService { get; set; }
+        public ISendMessageService SendMessageService { get; set; }
         public IGeneralLLMService GeneralLLMService { get; set; }
         public GeneralLLMController(
             MessageService messageService,
@@ -36,7 +36,7 @@ namespace TelegramSearchBot.Controller.AI.LLM
             SendMessage Send,
             ILogger<GeneralLLMController> logger,
             AdminService adminService,
-            SendMessageService SendMessageService,
+            ISendMessageService SendMessageService,
             IGeneralLLMService generalLLMService
             )
         {

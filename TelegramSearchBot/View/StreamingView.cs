@@ -13,7 +13,7 @@ using TelegramSearchBot.Service.BotAPI;
 namespace TelegramSearchBot.View {
     public class StreamingView : IView {
         private readonly ITelegramBotClient _botClient;
-        private readonly SendMessageService _sendMessageService;
+        private readonly ISendMessageService _sendMessageService;
         private readonly SendMessage _sendMessage;
 
         // ViewModel properties
@@ -25,7 +25,7 @@ namespace TelegramSearchBot.View {
         private bool _disableNotification;
         private ParseMode _parseMode = ParseMode.Html;
 
-        public StreamingView(ITelegramBotClient botClient, SendMessageService sendMessageService, SendMessage sendMessage) {
+        public StreamingView(ITelegramBotClient botClient, ISendMessageService sendMessageService, SendMessage sendMessage) {
             _botClient = botClient;
             _sendMessageService = sendMessageService;
             _sendMessage = sendMessage;
