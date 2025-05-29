@@ -10,9 +10,11 @@ using TelegramSearchBot.Controller;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Manage
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class CheckBanGroupService : IService
     {
         protected readonly DataDbContext DataContext;

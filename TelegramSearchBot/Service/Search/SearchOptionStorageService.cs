@@ -8,11 +8,13 @@ using Newtonsoft.Json;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Search {
     /// <summary>
     /// 搜索选项存储服务，负责管理搜索选项的缓存和分页逻辑
     /// </summary>
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class SearchOptionStorageService : IService {
         public string ServiceName => "SearchOptionStorageService";
         private readonly DataDbContext _dataDbContext;

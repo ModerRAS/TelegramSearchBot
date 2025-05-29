@@ -2,11 +2,13 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection; // For IServiceScopeFactory
 using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model; // For DataDbContext
 using TelegramSearchBot.Model.Data; // For AppConfigurationItem
 
 namespace TelegramSearchBot.Service.Common;
 
+[Injectable(ServiceLifetime.Transient)]
 public class AppConfigurationService : IAppConfigurationService
 {
     private readonly IServiceScopeFactory _scopeFactory;

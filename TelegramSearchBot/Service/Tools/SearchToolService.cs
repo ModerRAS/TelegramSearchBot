@@ -55,6 +55,7 @@ namespace TelegramSearchBot.Service.Tools
         public List<MessageExtension> Extensions { get; set; }
     }
 
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class SearchToolService : IService
     {
         public string ServiceName => "SearchToolService";

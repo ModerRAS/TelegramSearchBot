@@ -13,9 +13,11 @@ using TelegramSearchBot.Model;
 using Microsoft.EntityFrameworkCore;
 using System.Collections;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Vector
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class VectorGenerationService : IService
     {
         private readonly QdrantClient _qdrantClient;

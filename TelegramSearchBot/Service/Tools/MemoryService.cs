@@ -32,6 +32,7 @@ namespace TelegramSearchBot.Service.Tools
         public List<Relation> Relations { get; set; } = new List<Relation>();
     }
 
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class MemoryService : IService
     {
         public string ServiceName => "MemoryService";
@@ -235,6 +236,7 @@ For open_nodes:
         }
     }
 
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class KnowledgeGraphManager : IService
     {
         public string ServiceName => "KnowledgeGraphManager";

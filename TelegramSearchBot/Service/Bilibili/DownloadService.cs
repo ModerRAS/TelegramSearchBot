@@ -6,12 +6,15 @@ using System.Linq; // Added for Any()
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Manager; // For Env.WorkDir
 using FFMpegCore; // Added for FFMpeg manipulation
 using FFMpegCore.Enums; // Added for SpeedArgument (may not be needed now)
 
 namespace TelegramSearchBot.Service.Bilibili;
 
+[Injectable(ServiceLifetime.Transient)]
 public class DownloadService : IDownloadService
 {
     private readonly HttpClient _httpClient;

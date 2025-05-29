@@ -12,9 +12,11 @@ using Newtonsoft.Json;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Manage
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class ChatImportService : IService
     {
         public string ServiceName => "ChatImportService";

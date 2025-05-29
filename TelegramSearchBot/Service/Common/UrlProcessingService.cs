@@ -5,13 +5,16 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web; // For HttpUtility. NuGet: System.Web.HttpUtility if not available by default
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging; // Added for ILogger
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Common
 {
     public record UrlProcessResult(string OriginalUrl, string? ProcessedUrl); // Define the result record
 
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class UrlProcessingService : IService
     {
         public string ServiceName => nameof(UrlProcessingService);

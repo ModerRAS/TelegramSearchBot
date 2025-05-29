@@ -5,9 +5,11 @@ using TelegramSearchBot.Manager;
 using System.Collections.Generic;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Search
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class SearchService : ISearchService, IService
     {
         private readonly LuceneManager lucene;

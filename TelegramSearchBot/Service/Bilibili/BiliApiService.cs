@@ -5,6 +5,8 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model.Bilibili;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -16,6 +18,7 @@ using TelegramSearchBot.Model.Notifications;
 
 namespace TelegramSearchBot.Service.Bilibili;
 
+[Injectable(ServiceLifetime.Transient)]
 public class BiliApiService : IBiliApiService
 {
     private readonly HttpClient _httpClient;

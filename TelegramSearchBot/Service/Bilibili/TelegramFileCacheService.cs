@@ -2,11 +2,14 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.Bilibili;
 
+[Injectable(ServiceLifetime.Transient)]
 public class TelegramFileCacheService : ITelegramFileCacheService
 {
     private readonly DataDbContext _dbContext;

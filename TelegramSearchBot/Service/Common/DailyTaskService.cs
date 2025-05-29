@@ -10,9 +10,11 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.View;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Common
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class DailyTaskService : IInvocable
     {
         /// <summary>

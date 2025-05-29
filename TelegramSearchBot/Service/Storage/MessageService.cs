@@ -12,9 +12,11 @@ using Microsoft.Extensions.Logging;
 using MediatR;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Notifications;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Storage
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class MessageService : IMessageService, IService
     {
         protected readonly LuceneManager lucene;

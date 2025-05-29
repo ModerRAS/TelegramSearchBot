@@ -20,9 +20,11 @@ using MediatR;
 using TelegramSearchBot.Interface.AI.OCR;
 using TelegramSearchBot.Interface.AI.ASR;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Manage
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class RefreshService : MessageService, IService
     {
         public new string ServiceName => "RefreshService";

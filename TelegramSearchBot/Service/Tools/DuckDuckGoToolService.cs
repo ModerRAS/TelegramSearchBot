@@ -24,7 +24,7 @@ namespace TelegramSearchBot.Service.Tools
         public string Description { get; set; }
         public string Favicon { get; set; }
     }
-
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class DuckDuckGoToolService : IService
     {
         public string ServiceName => "DuckDuckGoToolService";

@@ -4,12 +4,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Common
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class ShortUrlMappingService : IShortUrlMappingService
     {
         public string ServiceName => "ShortUrlMappingService";

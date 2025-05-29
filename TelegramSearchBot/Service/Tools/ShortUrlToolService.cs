@@ -17,7 +17,7 @@ namespace TelegramSearchBot.Service.Tools
         public string ExpandedUrl { get; set; }
         public DateTime CreationDate { get; set; }
     }
-
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class ShortUrlToolService : IService
     {
         public string ServiceName => "ShortUrlToolService";

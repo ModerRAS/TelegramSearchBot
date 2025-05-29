@@ -7,6 +7,7 @@ using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Tools
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class PuppeteerArticleExtractorService : IService
     {
         public string ServiceName => "PuppeteerArticleExtractorService";

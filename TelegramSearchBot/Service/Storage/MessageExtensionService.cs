@@ -6,8 +6,10 @@ using Microsoft.EntityFrameworkCore;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Storage {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class MessageExtensionService : IMessageExtensionService, IService {
         private readonly DataDbContext _context;
         public string ServiceName => "MessageExtensionService";

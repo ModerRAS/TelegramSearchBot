@@ -11,6 +11,7 @@ using J2N.IO;
 
 namespace TelegramSearchBot.Service.Tools
 {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class DenoJsExecutorService : IService
     {
         private readonly IHttpClientFactory _httpClientFactory;
