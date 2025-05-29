@@ -21,7 +21,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly OllamaService _ollamaService;
         private readonly GeminiService _geminiService;
         private readonly ILogger<GeneralLLMService> _logger;
-        private readonly LLMFactory _LLMFactory;
+        private readonly ILLMFactory _LLMFactory;
 
         public string ServiceName => "GeneralLLMService";
 
@@ -39,7 +39,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             OllamaService ollamaService,
             OpenAIService openAIService,
             GeminiService geminiService,
-            LLMFactory _LLMFactory
+            ILLMFactory _LLMFactory
             ) {
             this.connectionMultiplexer = connectionMultiplexer;
             _dbContext = dbContext;

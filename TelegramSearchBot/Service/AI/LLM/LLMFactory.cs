@@ -7,12 +7,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using static GenerativeAI.VertexAIModels;
 
 namespace TelegramSearchBot.Service.AI.LLM {
-    public class LLMFactory : IService {
+    public class LLMFactory : IService, ILLMFactory {
         public string ServiceName => "LLMFactory";
 
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
@@ -15,11 +16,11 @@ namespace TelegramSearchBot.Service.Manage {
     public class EditLLMConfHelper : IService {
         public string ServiceName => "EditLLMConfHelper";
         protected readonly DataDbContext DataContext;
-        private readonly LLMFactory _LLMFactory;
+        private readonly ILLMFactory _LLMFactory;
 
         public EditLLMConfHelper(
             DataDbContext context,
-            LLMFactory llmFactory
+            ILLMFactory llmFactory
             ) {
             DataContext = context;
             _LLMFactory = llmFactory;
