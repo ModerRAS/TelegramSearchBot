@@ -94,6 +94,14 @@ namespace TelegramSearchBot.Test.Service.Storage
             // Setup default mediator behavior
             _mockMediator.Setup(m => m.Publish(It.IsAny<MessageVectorGenerationNotification>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
+
+            // Setup specific mediator behavior for vector generation notification
+            _mockMediator.Setup(m => m.Publish(
+                It.Is<MessageVectorGenerationNotification>(n => 
+                    n.Message.MessageId == It.IsAny<long>() && 
+                    n.Message.GroupId == It.IsAny<long>()),
+                It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
         }
         
         private MessageService CreateService()

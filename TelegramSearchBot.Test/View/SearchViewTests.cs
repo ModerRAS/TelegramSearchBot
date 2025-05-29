@@ -111,7 +111,7 @@ namespace TelegramSearchBot.Test.View
             Assert.True(result[0].Contains("Test content 1"));
             Assert.True(result[0].Contains("t.me/c/123456789/123"));
             Assert.True(result[1].Contains("Test content 2"));
-            Assert.True(result[1].Contains("t.me/c/987656789/456"));
+            Assert.True(result[1].Contains("t.me/c/987654321/456"));
         }
 
         [Fact]

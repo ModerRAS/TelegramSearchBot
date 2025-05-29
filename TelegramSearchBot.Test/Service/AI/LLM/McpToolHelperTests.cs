@@ -191,22 +191,26 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             _mockServiceProvider.Setup(sp => sp.GetService(typeof(TestToolProvider)))
                                 .Returns(_mockToolProviderInstance.Object);
 
+            // Setup mock instance methods
+            _mockToolProviderInstance.Setup(x => x.InstanceTool(It.IsAny<bool>()))
+                .Returns((bool input) => !input);
+            _mockToolProviderInstance.Setup(x => x.InstanceToolAsync(It.IsAny<string>()))
+                .Returns((string text) => Task.FromResult($"Async processed: {text}"));
+            _mockToolProviderInstance.Setup(x => x.ComplexParamTool(It.IsAny<TestToolProvider.ComplexParam>()))
+                .Returns((TestToolProvider.ComplexParam data) => $"Complex: {data?.Name} = {data?.Value}");
+
             // Initialize McpToolHelper once for all tests in this class
-            // Note: EnsureInitialized is designed to be called once. 
-            // Calling it in each test class constructor might not be intended.
-            // If it truly needs to be initialized per class, consider xUnit's Class Fixtures.
-            // For now, we'll call it here, assuming it's idempotent or the tests are independent.
             McpToolHelper.EnsureInitialized(typeof(TestToolProvider).Assembly, _mockServiceProvider.Object, _mockLogger.Object);
 
-             // Reset static flags before each test (not ideal in multi-threaded runners)
-             TestToolProvider.StaticMethodCalled = false;
-             TestToolProvider.LastStaticArg = null;
-             TestToolProvider.LastStaticIntArg = 0;
-             // Reset mock instance state if needed (Moq resets automatically usually)
-             _mockToolProviderInstance.Object.InstanceMethodCalled = false;
-             _mockToolProviderInstance.Object.LastInstanceArg = null;
-             _mockToolProviderInstance.Object.LastInstanceBoolArg = false;
-             _mockToolProviderInstance.Invocations.Clear(); // Clear invocation tracking
+            // Reset static flags before each test
+            TestToolProvider.StaticMethodCalled = false;
+            TestToolProvider.LastStaticArg = null;
+            TestToolProvider.LastStaticIntArg = 0;
+            // Reset mock instance state
+            _mockToolProviderInstance.Object.InstanceMethodCalled = false;
+            _mockToolProviderInstance.Object.LastInstanceArg = null;
+            _mockToolProviderInstance.Object.LastInstanceBoolArg = false;
+            _mockToolProviderInstance.Invocations.Clear();
         }
 
         [Fact]

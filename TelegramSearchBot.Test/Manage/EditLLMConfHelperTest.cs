@@ -17,17 +17,16 @@ using Xunit;
 
 namespace TelegramSearchBot.Test.Manage {
     public class EditLLMConfHelperTest {
-        private DataDbContext _context = null!;
-        private Mock<IConnectionMultiplexer> _redisMock = null!;
-        private Mock<IDatabase> _dbMock = null!;
-        private Mock<OpenAIService> _openAIServiceMock = null!;
-        private Mock<MessageExtensionService> _messageExtensionServiceMock = null!;
-        private Mock<OllamaService> _ollamaServiceMock = null!;
-        private Mock<GeminiService> _geminiServiceMock = null!;
-        private EditLLMConfHelper _helper = null!;
+        private readonly DataDbContext _context;
+        private readonly Mock<IConnectionMultiplexer> _redisMock;
+        private readonly Mock<IDatabase> _dbMock;
+        private readonly Mock<OpenAIService> _openAIServiceMock;
+        private readonly Mock<MessageExtensionService> _messageExtensionServiceMock;
+        private readonly Mock<OllamaService> _ollamaServiceMock;
+        private readonly Mock<GeminiService> _geminiServiceMock;
+        private readonly EditLLMConfHelper _helper;
 
-        [Fact]
-        public void Initialize() {
+        public EditLLMConfHelperTest() {
             var options = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
@@ -84,7 +83,6 @@ namespace TelegramSearchBot.Test.Manage {
                 .Returns(Task.CompletedTask);
             _geminiServiceMock.Setup(g => g.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
-            
         }
 
         [Fact]
@@ -136,12 +134,12 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.Equal(6, result); // 2 models per provider * 3 providers
             var models = await _context.ChannelsWithModel.ToListAsync();
             Assert.Equal(6, models.Count);
-            Assert.True(models.Any(m => m.ModelName == "openai-model1" && m.LLMChannelId == 1));
-            Assert.True(models.Any(m => m.ModelName == "openai-model2" && m.LLMChannelId == 1));
-            Assert.True(models.Any(m => m.ModelName == "ollama-model1" && m.LLMChannelId == 2));
-            Assert.True(models.Any(m => m.ModelName == "ollama-model2" && m.LLMChannelId == 2));
-            Assert.True(models.Any(m => m.ModelName == "gemini-model1" && m.LLMChannelId == 3));
-            Assert.True(models.Any(m => m.ModelName == "gemini-model2" && m.LLMChannelId == 3));
+            Assert.Contains(models, m => m.ModelName == "openai-model1" && m.LLMChannelId == 1);
+            Assert.Contains(models, m => m.ModelName == "openai-model2" && m.LLMChannelId == 1);
+            Assert.Contains(models, m => m.ModelName == "ollama-model1" && m.LLMChannelId == 2);
+            Assert.Contains(models, m => m.ModelName == "ollama-model2" && m.LLMChannelId == 2);
+            Assert.Contains(models, m => m.ModelName == "gemini-model1" && m.LLMChannelId == 3);
+            Assert.Contains(models, m => m.ModelName == "gemini-model2" && m.LLMChannelId == 3);
         }
 
         [Fact]

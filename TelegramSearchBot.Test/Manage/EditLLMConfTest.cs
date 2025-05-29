@@ -82,6 +82,22 @@ namespace TelegramSearchBot.Test.Manage {
             var helperMock = new Mock<EditLLMConfHelper>(
                 _context,
                 llmFactoryMock.Object);
+            helperMock.Setup(h => h.AddChannel(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<LLMProvider>()))
+                .ReturnsAsync(1);
+            helperMock.Setup(h => h.AddModelWithChannel(It.IsAny<int>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+            helperMock.Setup(h => h.RemoveModelFromChannel(It.IsAny<int>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+            helperMock.Setup(h => h.UpdateChannel(
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<LLMProvider>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>()))
+                .ReturnsAsync(true);
+            
             _service = new EditLLMConfService(
                 helperMock.Object,
                 _context,
@@ -190,8 +206,8 @@ namespace TelegramSearchBot.Test.Manage {
                 .Where(m => m.LLMChannelId == channel.Id)
                 .ToListAsync();
             Assert.Equal(2, models.Count);
-            Assert.True(models.Any(m => m.ModelName == "model1"));
-            Assert.True(models.Any(m => m.ModelName == "model2"));
+            Assert.Contains(models, m => m.ModelName == "model1");
+            Assert.Contains(models, m => m.ModelName == "model2");
         }
 
         [Fact]
@@ -238,7 +254,7 @@ namespace TelegramSearchBot.Test.Manage {
             var models = await _context.ChannelsWithModel
                 .Where(m => m.LLMChannelId == channel.Id)
                 .ToListAsync();
-            Assert.Equal(1, models.Count);
+            Assert.Single(models);
             Assert.Equal("model2", models[0].ModelName);
         }
 
