@@ -1,6 +1,5 @@
 #pragma warning disable CS8602 // 解引用可能出现空引用
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -10,6 +9,7 @@ using TelegramSearchBot.Service.AI.LLM;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model;
+using Xunit;
 
 namespace TelegramSearchBot.Test.Service.AI.LLM
 {
@@ -173,17 +173,15 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
     }
 
     // --- Test Class ---
-    [TestClass]
     public class McpToolHelperTests
     {
         #pragma warning disable CS8618 // 单元测试中字段会在初始化方法中赋值
-        private static Mock<ILogger> _mockLogger;
-        private static Mock<IServiceProvider> _mockServiceProvider;
-        private static Mock<TestToolProvider> _mockToolProviderInstance;
+        private Mock<ILogger> _mockLogger = null!;
+        private Mock<IServiceProvider> _mockServiceProvider = null!;
+        private Mock<TestToolProvider> _mockToolProviderInstance = null!;
         #pragma warning restore CS8618
 
-        [ClassInitialize]
-        public static void ClassInitialize(TestContext context)
+        public McpToolHelperTests()
         {
             _mockLogger = new Mock<ILogger>();
             _mockServiceProvider = new Mock<IServiceProvider>();
@@ -194,13 +192,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
                                 .Returns(_mockToolProviderInstance.Object);
 
             // Initialize McpToolHelper once for all tests in this class
+            // Note: EnsureInitialized is designed to be called once. 
+            // Calling it in each test class constructor might not be intended.
+            // If it truly needs to be initialized per class, consider xUnit's Class Fixtures.
+            // For now, we'll call it here, assuming it's idempotent or the tests are independent.
             McpToolHelper.EnsureInitialized(typeof(TestToolProvider).Assembly, _mockServiceProvider.Object, _mockLogger.Object);
-        }
 
-        [TestInitialize]
-        public void TestInitialize()
-        {
-             // Reset static flags before each test
+             // Reset static flags before each test (not ideal in multi-threaded runners)
              TestToolProvider.StaticMethodCalled = false;
              TestToolProvider.LastStaticArg = null;
              TestToolProvider.LastStaticIntArg = 0;
@@ -211,164 +209,164 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
              _mockToolProviderInstance.Invocations.Clear(); // Clear invocation tracking
         }
 
-        [TestMethod]
+        [Fact]
         public void CleanLlmResponse_RemovesThinkTags()
         {
             var raw = "Some text <think>This is thinking</think> more text.";
             var expected = "Some text more text.";
             var actual = McpToolHelper.CleanLlmResponse(raw);
-            Assert.AreEqual(expected, actual);
+            Assert.Equal(expected, actual);
         }
 
-        [TestMethod]
+        [Fact]
         public void CleanLlmResponse_RemovesMultipleThinkTags()
         {
             var raw = "<think>First thought.</think>Response<think>Second thought\nmulti-line</think>";
             var expected = "Response";
             var actual = McpToolHelper.CleanLlmResponse(raw);
-            Assert.AreEqual(expected, actual);
+            Assert.Equal(expected, actual);
         }
 
-        [TestMethod]
+        [Fact]
         public void CleanLlmResponse_HandlesNoThinkTags()
         {
             var raw = "Just plain text.";
             var expected = "Just plain text.";
             var actual = McpToolHelper.CleanLlmResponse(raw);
-            Assert.AreEqual(expected, actual);
+            Assert.Equal(expected, actual);
         }
 
-        [TestMethod]
+        [Fact]
         public void CleanLlmResponse_HandlesEmptyInput()
         {
-            Assert.AreEqual("", McpToolHelper.CleanLlmResponse(""));
-            Assert.IsNull(McpToolHelper.CleanLlmResponse(null));
+            Assert.Equal("", McpToolHelper.CleanLlmResponse(""));
+            Assert.Null(McpToolHelper.CleanLlmResponse(null));
         }
 
-        [TestMethod]
+        [Fact]
         public void CleanLlmResponse_TrimsResult()
         {
             var raw = "  <think> pensée </think>   Result   ";
             var expected = "Result";
             var actual = McpToolHelper.CleanLlmResponse(raw);
-            Assert.AreEqual(expected, actual);
+            Assert.Equal(expected, actual);
         }
 
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_DirectParams_ParsesSingleToolCorrectly()
         {
             var xml = "<StaticTool><arg1>hello</arg1><arg2>10</arg2></StaticTool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
-            Assert.IsTrue(result);
-            Assert.AreEqual(1, parsedToolCalls.Count);
+            Assert.True(result);
+            Assert.Equal(1, parsedToolCalls.Count);
             var firstTool = parsedToolCalls[0];
-            Assert.AreEqual("StaticTool", firstTool.toolName);
-            Assert.AreEqual(2, firstTool.arguments.Count);
-            Assert.AreEqual("hello", firstTool.arguments["arg1"]);
-            Assert.AreEqual("10", firstTool.arguments["arg2"]);
+            Assert.Equal("StaticTool", firstTool.toolName);
+            Assert.Equal(2, firstTool.arguments.Count);
+            Assert.Equal("hello", firstTool.arguments["arg1"]);
+            Assert.Equal("10", firstTool.arguments["arg2"]);
         }
 
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_NestedParams_ParsesSingleToolCorrectly()
         {
             var xml = "<tool name=\"InstanceTool\"><parameters><parameter name=\"input\">true</parameter></parameters></tool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
-            Assert.IsTrue(result);
-            Assert.AreEqual(1, parsedToolCalls.Count);
+            Assert.True(result);
+            Assert.Equal(1, parsedToolCalls.Count);
             var firstTool = parsedToolCalls[0];
-            Assert.AreEqual("InstanceTool", firstTool.toolName);
-            Assert.AreEqual(1, firstTool.arguments.Count);
-            Assert.AreEqual("true", firstTool.arguments["input"]);
+            Assert.Equal("InstanceTool", firstTool.toolName);
+            Assert.Equal(1, firstTool.arguments.Count);
+            Assert.Equal("true", firstTool.arguments["input"]);
         }
         
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_NestedParams_HandlesMissingParametersTagForSingleTool()
         {
             var xml = "<tool name=\"InstanceTool\"><parameter name=\"input\">false</parameter></tool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
-            Assert.IsTrue(result); 
-            Assert.AreEqual(1, parsedToolCalls.Count);
+            Assert.True(result); 
+            Assert.Equal(1, parsedToolCalls.Count);
             var firstTool = parsedToolCalls[0];
-            Assert.AreEqual("InstanceTool", firstTool.toolName);
-            Assert.AreEqual(1, firstTool.arguments.Count);
-            Assert.AreEqual("false", firstTool.arguments["input"]);
+            Assert.Equal("InstanceTool", firstTool.toolName);
+            Assert.Equal(1, firstTool.arguments.Count);
+            Assert.Equal("false", firstTool.arguments["input"]);
         }
 
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_InvalidXml_ReturnsFalse()
         {
             var xml = "<StaticTool><arg1>hello</arg1"; // Malformed
             bool result = McpToolHelper.TryParseToolCalls(xml, out _);
-            Assert.IsFalse(result);
+            Assert.False(result);
         }
 
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_UnregisteredTool_ReturnsFalseOrEmpty() 
         {
             var xml = "<NotARealTool><arg1>hello</arg1></NotARealTool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
             
-            Assert.IsFalse(parsedToolCalls.Any());
-            Assert.IsFalse(result);
+            Assert.False(parsedToolCalls.Any());
+            Assert.False(result);
         }
         
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_WithMarkdownFences_ParsesSingleToolCorrectly()
         {
             var xml = "```xml\n<StaticTool><arg1>fenced</arg1></StaticTool>\n```";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
-            Assert.IsTrue(result);
-            Assert.AreEqual(1, parsedToolCalls.Count);
+            Assert.True(result);
+            Assert.Equal(1, parsedToolCalls.Count);
             var firstTool = parsedToolCalls[0];
-            Assert.AreEqual("StaticTool", firstTool.toolName);
-            Assert.AreEqual(1, firstTool.arguments.Count);
-            Assert.AreEqual("fenced", firstTool.arguments["arg1"]);
+            Assert.Equal("StaticTool", firstTool.toolName);
+            Assert.Equal(1, firstTool.arguments.Count);
+            Assert.Equal("fenced", firstTool.arguments["arg1"]);
         }
 
-        [TestMethod]
-        public void TryParseToolCalls_MultipleRootElements_ParsesFirstTool()
+        [Fact]
+        public void TryParseToolCalls_MultipleRootElements_ParsesAll()
         {
             var xml = "<StaticTool><arg1>first</arg1></StaticTool><InstanceTool><input>true</input></InstanceTool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
-            Assert.IsTrue(result);
-            Assert.AreEqual(2, parsedToolCalls.Count);
+            Assert.True(result);
+            Assert.Equal(2, parsedToolCalls.Count);
             
             var firstTool = parsedToolCalls.FirstOrDefault(t => t.toolName == "StaticTool");
-            Assert.IsNotNull(firstTool);
-            Assert.AreEqual("StaticTool", firstTool.toolName);
-            Assert.AreEqual(1, firstTool.arguments.Count);
-            Assert.AreEqual("first", firstTool.arguments["arg1"]);
+            Assert.NotNull(firstTool);
+            Assert.Equal("StaticTool", firstTool.toolName);
+            Assert.Equal(1, firstTool.arguments.Count);
+            Assert.Equal("first", firstTool.arguments["arg1"]);
 
             var secondTool = parsedToolCalls.FirstOrDefault(t => t.toolName == "InstanceTool");
-            Assert.IsNotNull(secondTool);
-            Assert.AreEqual("InstanceTool", secondTool.toolName);
-            Assert.AreEqual(1, secondTool.arguments.Count);
-            Assert.AreEqual("true", secondTool.arguments["input"]);
+            Assert.NotNull(secondTool);
+            Assert.Equal("InstanceTool", secondTool.toolName);
+            Assert.Equal(1, secondTool.arguments.Count);
+            Assert.Equal("true", secondTool.arguments["input"]);
         }
         
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_MultipleNestedToolElements_ParsesAll()
         {
             var xml = "<tools_wrapper><tool name=\"StaticTool\"><parameters><arg1>val1</arg1></parameters></tool><tool name=\"InstanceTool\"><parameters><input>true</input></parameters></tool></tools_wrapper>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
-            Assert.IsTrue(result);
-            Assert.AreEqual(2, parsedToolCalls.Count);
+            Assert.True(result);
+            Assert.Equal(2, parsedToolCalls.Count);
 
-            Assert.AreEqual("StaticTool", parsedToolCalls[0].toolName);
-            Assert.AreEqual("val1", parsedToolCalls[0].arguments["arg1"]);
+            Assert.Equal("StaticTool", parsedToolCalls[0].toolName);
+            Assert.Equal("val1", parsedToolCalls[0].arguments["arg1"]);
             
-            Assert.AreEqual("InstanceTool", parsedToolCalls[1].toolName);
-            Assert.AreEqual("true", parsedToolCalls[1].arguments["input"]);
+            Assert.Equal("InstanceTool", parsedToolCalls[1].toolName);
+            Assert.Equal("true", parsedToolCalls[1].arguments["input"]);
         }
 
         // 新增测试方法
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_ShouldParseSimpleToolCall()
         {
             // Arrange
@@ -386,14 +384,14 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             bool result = McpToolHelper.TryParseToolCalls(input, out var parsedToolCalls);
 
             // Assert
-            Assert.IsTrue(result);
-            Assert.AreEqual(1, parsedToolCalls.Count);
-            Assert.AreEqual("TestTool", parsedToolCalls[0].toolName);
-            Assert.AreEqual("value1", parsedToolCalls[0].arguments["param1"]);
-            Assert.AreEqual("123", parsedToolCalls[0].arguments["param2"]);
+            Assert.True(result);
+            Assert.Equal(1, parsedToolCalls.Count);
+            Assert.Equal("TestTool", parsedToolCalls[0].toolName);
+            Assert.Equal("value1", parsedToolCalls[0].arguments["param1"]);
+            Assert.Equal("123", parsedToolCalls[0].arguments["param2"]);
         }
 
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_ShouldParseCDataContent()
         {
             // Arrange
@@ -420,14 +418,14 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             bool result = McpToolHelper.TryParseToolCalls(input, out var parsedToolCalls);
 
             // Assert
-            Assert.IsTrue(result);
-            Assert.AreEqual(1, parsedToolCalls.Count);
+            Assert.True(result);
+            Assert.Equal(1, parsedToolCalls.Count);
             var args = parsedToolCalls[0].arguments;
-            Assert.AreEqual("add_observations", args["command"]);
-            Assert.IsTrue(args["arguments"].Contains("\"entityName\": \"测试实体\""));
+            Assert.Equal("add_observations", args["command"]);
+            Assert.Contains("\"entityName\": \"测试实体\"", args["arguments"]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteRegisteredToolAsync_StaticMethod_Executes()
         {
             // Arrange
@@ -437,13 +435,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             var result = await McpToolHelper.ExecuteRegisteredToolAsync("StaticTool", args);
 
             // Assert
-            Assert.IsTrue(TestToolProvider.StaticMethodCalled);
-            Assert.AreEqual("test static", TestToolProvider.LastStaticArg);
-            Assert.AreEqual(99, TestToolProvider.LastStaticIntArg);
-            Assert.AreEqual("Static received: test static, 99", result);
+            Assert.True(TestToolProvider.StaticMethodCalled);
+            Assert.Equal("test static", TestToolProvider.LastStaticArg);
+            Assert.Equal(99, TestToolProvider.LastStaticIntArg);
+            Assert.Equal("Static received: test static, 99", result);
         }
         
-        [TestMethod]
+        [Fact]
         public async Task ExecuteRegisteredToolAsync_StaticMethod_UsesDefaultParam()
         {
             // Arrange
@@ -453,13 +451,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             var result = await McpToolHelper.ExecuteRegisteredToolAsync("StaticTool", args);
 
             // Assert
-            Assert.IsTrue(TestToolProvider.StaticMethodCalled);
-            Assert.AreEqual("default test", TestToolProvider.LastStaticArg);
-            Assert.AreEqual(5, TestToolProvider.LastStaticIntArg); // Default value
-            Assert.AreEqual("Static received: default test, 5", result);
+            Assert.True(TestToolProvider.StaticMethodCalled);
+            Assert.Equal("default test", TestToolProvider.LastStaticArg);
+            Assert.Equal(5, TestToolProvider.LastStaticIntArg); // Default value
+            Assert.Equal("Static received: default test, 5", result);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteRegisteredToolAsync_InstanceMethod_ViaDI_Executes()
         {
             // Arrange
@@ -471,10 +469,10 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
             // Assert
             _mockToolProviderInstance.Verify(p => p.InstanceTool(false), Times.Once);
-            Assert.AreEqual(true, result);
+            Assert.Equal(true, result);
         }
         
-        [TestMethod]
+        [Fact]
         public async Task ExecuteRegisteredToolAsync_InstanceMethod_ViaActivator_Executes()
         {
              // Arrange
@@ -485,11 +483,11 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
              // Assert
              _mockToolProviderInstance.Setup(p => p.InstanceTool(true)).Returns(false); 
-             Assert.AreEqual(false, result); 
+             Assert.Equal(false, result); 
              _mockToolProviderInstance.Verify(p => p.InstanceTool(true), Times.AtLeastOnce()); 
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteRegisteredToolAsync_AsyncInstanceMethod_Executes()
         {
             // Arrange
@@ -502,10 +500,10 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
             // Assert
             _mockToolProviderInstance.Verify(p => p.InstanceToolAsync("async test"), Times.Once);
-            Assert.AreEqual("Async processed: async test", result);
+            Assert.Equal("Async processed: async test", result);
         }
         
-        [TestMethod]
+        [Fact]
         public async Task ExecuteRegisteredToolAsync_ComplexParam_DeserializesAndExecutes()
         {
             // Arrange
@@ -519,36 +517,34 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
             // Assert
             _mockToolProviderInstance.Verify(p => p.ComplexParamTool(It.Is<TestToolProvider.ComplexParam>(cp => cp.Name == "Widget" && cp.Value == 123)), Times.Once);
-            Assert.AreEqual("Complex: Widget = 123", result);
+            Assert.Equal("Complex: Widget = 123", result);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteRegisteredToolAsync_MissingRequiredArg_ThrowsArgumentException()
         {
             // Arrange
             var args = new Dictionary<string, string>(); // Missing arg1 for StaticTool
 
             // Act & Assert
-            await Assert.ThrowsExceptionAsync<ArgumentException>(
-                () => McpToolHelper.ExecuteRegisteredToolAsync("StaticTool", args),
-                "Missing required parameter 'arg1'"
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => McpToolHelper.ExecuteRegisteredToolAsync("StaticTool", args)
             );
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteRegisteredToolAsync_UnregisteredTool_ThrowsArgumentException()
         {
             // Arrange
             var args = new Dictionary<string, string>();
 
             // Act & Assert
-            await Assert.ThrowsExceptionAsync<ArgumentException>(
-                () => McpToolHelper.ExecuteRegisteredToolAsync("NonExistentTool", args),
-                "Tool 'NonExistentTool' not registered"
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => McpToolHelper.ExecuteRegisteredToolAsync("NonExistentTool", args)
             );
         }
 
-        [TestMethod]
+        [Fact]
         public void TryParseToolCalls_ShouldParseComplexMultiToolCommand()
         {
             // Arrange
@@ -558,34 +554,34 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             bool result = McpToolHelper.TryParseToolCalls(input, out var parsedToolCalls);
 
             // Assert
-            Assert.IsTrue(result);
-            Assert.AreEqual(4, parsedToolCalls.Count);
+            Assert.True(result);
+            Assert.Equal(4, parsedToolCalls.Count);
 
             // Verify first tool (ProcessMemoryCommandAsync)
             var firstTool = parsedToolCalls[0];
-            Assert.AreEqual("ProcessMemoryCommandAsync", firstTool.toolName);
-            Assert.AreEqual("add_observations", firstTool.arguments["command"]);
-            Assert.AreEqual("current_chat", firstTool.arguments["toolContext"]);
-            Assert.IsTrue(firstTool.arguments["arguments"].Contains("\"entityName\": \"多模态推理测试用例_01\""));
+            Assert.Equal("ProcessMemoryCommandAsync", firstTool.toolName);
+            Assert.Equal("add_observations", firstTool.arguments["command"]);
+            Assert.Equal("current_chat", firstTool.arguments["toolContext"]);
+            Assert.Contains("\"entityName\": \"多模态推理测试用例_01\"", firstTool.arguments["arguments"]);
 
             // Verify second tool (ProcessThoughtAsync)
             var secondTool = parsedToolCalls[1];
-            Assert.AreEqual("ProcessThoughtAsync", secondTool.toolName);
-            Assert.AreEqual("current_chat", secondTool.arguments["toolContext"]);
-            Assert.AreEqual("启动压力测试协议：加载分布式推理负载，注入随机噪声干扰...", secondTool.arguments["input"]);
-            Assert.AreEqual("true", secondTool.arguments["nextThoughtNeeded"]);
+            Assert.Equal("ProcessThoughtAsync", secondTool.toolName);
+            Assert.Equal("current_chat", secondTool.arguments["toolContext"]);
+            Assert.Equal("启动压力测试协议：加载分布式推理负载，注入随机噪声干扰...", secondTool.arguments["input"]);
+            Assert.Equal("true", secondTool.arguments["nextThoughtNeeded"]);
 
             // Verify third tool (ProcessMemoryCommandAsync)
             var thirdTool = parsedToolCalls[2];
-            Assert.AreEqual("ProcessMemoryCommandAsync", thirdTool.toolName);
-            Assert.AreEqual("create_relations", thirdTool.arguments["command"]);
-            Assert.IsTrue(thirdTool.arguments["arguments"].Contains("\"from\": \"异常记忆回溯测试模块\""));
+            Assert.Equal("ProcessMemoryCommandAsync", thirdTool.toolName);
+            Assert.Equal("create_relations", thirdTool.arguments["command"]);
+            Assert.Contains("\"from\": \"异常记忆回溯测试模块\"", thirdTool.arguments["arguments"]);
 
             // Verify fourth tool (ProcessThoughtAsync)
             var fourthTool = parsedToolCalls[3];
-            Assert.AreEqual("ProcessThoughtAsync", fourthTool.toolName);
-            Assert.AreEqual("检测到推理延迟波动，启动自适应调节机制：动态调整神经符号权重比例...", fourthTool.arguments["input"]);
-            Assert.AreEqual("true", fourthTool.arguments["isRevision"]);
+            Assert.Equal("ProcessThoughtAsync", fourthTool.toolName);
+            Assert.Equal("检测到推理延迟波动，启动自适应调节机制：动态调整神经符号权重比例...", fourthTool.arguments["input"]);
+            Assert.Equal("true", fourthTool.arguments["isRevision"]);
         }
     }
 }

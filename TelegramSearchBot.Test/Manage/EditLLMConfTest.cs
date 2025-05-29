@@ -1,7 +1,6 @@
 ﻿﻿#pragma warning disable CS8602 // 解引用可能出现空引用
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using StackExchange.Redis;
 using System;
@@ -14,9 +13,9 @@ using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Interface.AI.LLM;
+using Xunit;
 
 namespace TelegramSearchBot.Test.Manage {
-    [TestClass]
     public class EditLLMConfTest {
         private DataDbContext _context = null!;
         private Mock<IConnectionMultiplexer> _redisMock = null!;
@@ -24,8 +23,7 @@ namespace TelegramSearchBot.Test.Manage {
         private Mock<OpenAIService> _openAIServiceMock = null!;
         private EditLLMConfService _service = null!;
 
-        [TestInitialize]
-        public void Initialize() {
+        public EditLLMConfTest() {
             var options = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
@@ -90,12 +88,12 @@ namespace TelegramSearchBot.Test.Manage {
                 _redisMock.Object);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_NewChannel_CompleteFlow() {
             // Arrange
             long chatId = 123;
             // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("awaiting_name")  // After first command
                 .ReturnsAsync("awaiting_gateway")
@@ -105,7 +103,7 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync("awaiting_apikey");
 
             // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:data", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync("Test Channel")  // After name input
                 .ReturnsAsync("Test Channel|http://test.com")  // After gateway input
                 .ReturnsAsync("Test Channel|http://test.com|1")  // After provider selection
@@ -114,45 +112,45 @@ namespace TelegramSearchBot.Test.Manage {
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("新建渠道", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.AreEqual("请输入渠道的名称", result1.Item2);
+            Assert.True(result1.Item1);
+            Assert.Equal("请输入渠道的名称", result1.Item2);
 
             var result2 = await _service.ExecuteAsync("Test Channel", chatId);
-            Assert.IsTrue(result2.Item1);
-            Assert.AreEqual("请输入渠道地址", result2.Item2);
+            Assert.True(result2.Item1);
+            Assert.Equal("请输入渠道地址", result2.Item2);
 
             var result3 = await _service.ExecuteAsync("http://test.com", chatId);
-            Assert.IsTrue(result3.Item1);
-            StringAssert.Contains(result3.Item2, "请选择渠道类型：");
-            StringAssert.Contains(result3.Item2, "1. OpenAI");
-            StringAssert.Contains(result3.Item2, "2. Ollama"); 
-            StringAssert.Contains(result3.Item2, "3. Gemini");
+            Assert.True(result3.Item1);
+            Assert.Contains("请选择渠道类型：", result3.Item2);
+            Assert.Contains("1. OpenAI", result3.Item2);
+            Assert.Contains("2. Ollama", result3.Item2); 
+            Assert.Contains("3. Gemini", result3.Item2);
 
             var result4 = await _service.ExecuteAsync("1", chatId);
-            Assert.IsTrue(result4.Item1);
-            Assert.AreEqual("请输入渠道的最大并行数量(默认1):", result4.Item2);
+            Assert.True(result4.Item1);
+            Assert.Equal("请输入渠道的最大并行数量(默认1):", result4.Item2);
 
             var result5 = await _service.ExecuteAsync("", chatId); // 使用默认值1
-            Assert.IsTrue(result5.Item1);
-            Assert.AreEqual("请输入渠道的优先级(默认0):", result5.Item2);
+            Assert.True(result5.Item1);
+            Assert.Equal("请输入渠道的优先级(默认0):", result5.Item2);
 
             var result6 = await _service.ExecuteAsync("", chatId); // 使用默认值0
-            Assert.IsTrue(result6.Item1);
-            Assert.AreEqual("请输入渠道的API Key", result6.Item2);
+            Assert.True(result6.Item1);
+            Assert.Equal("请输入渠道的API Key", result6.Item2);
 
             var result7 = await _service.ExecuteAsync("test-api-key", chatId);
-            Assert.IsTrue(result7.Item1);
-            Assert.AreEqual("渠道创建成功", result7.Item2);
+            Assert.True(result7.Item1);
+            Assert.Equal("渠道创建成功", result7.Item2);
 
             // Verify channel was created
             var channel = await _context.LLMChannels.FirstOrDefaultAsync();
-            Assert.IsNotNull(channel);
-            Assert.AreEqual("Test Channel", channel.Name);
-            Assert.AreEqual(1, channel.Parallel); // 验证默认并行数
-            Assert.AreEqual(0, channel.Priority); // 验证默认优先级
+            Assert.NotNull(channel);
+            Assert.Equal("Test Channel", channel.Name);
+            Assert.Equal(1, channel.Parallel); // 验证默认并行数
+            Assert.Equal(0, channel.Priority); // 验证默认优先级
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_AddModel_CompleteFlow() {
             // Arrange
             long chatId = 123;
@@ -176,27 +174,27 @@ namespace TelegramSearchBot.Test.Manage {
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("添加模型", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.IsTrue(result1.Item2.Contains("请选择要添加模型的渠道ID："));
+            Assert.True(result1.Item1);
+            Assert.Contains("请选择要添加模型的渠道ID：", result1.Item2);
 
             var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
-            Assert.IsTrue(result2.Item1);
-            Assert.AreEqual("请输入要添加的模型名称，多个模型用逗号或分号分隔", result2.Item2);
+            Assert.True(result2.Item1);
+            Assert.Equal("请输入要添加的模型名称，多个模型用逗号或分号分隔", result2.Item2);
 
             var result3 = await _service.ExecuteAsync("model1,model2", chatId);
-            Assert.IsTrue(result3.Item1);
-            Assert.AreEqual("模型添加成功", result3.Item2);
+            Assert.True(result3.Item1);
+            Assert.Equal("模型添加成功", result3.Item2);
 
             // Verify models were added
             var models = await _context.ChannelsWithModel
                 .Where(m => m.LLMChannelId == channel.Id)
                 .ToListAsync();
-            Assert.AreEqual(2, models.Count);
-            Assert.IsTrue(models.Any(m => m.ModelName == "model1"));
-            Assert.IsTrue(models.Any(m => m.ModelName == "model2"));
+            Assert.Equal(2, models.Count);
+            Assert.True(models.Any(m => m.ModelName == "model1"));
+            Assert.True(models.Any(m => m.ModelName == "model2"));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_RemoveModel_CompleteFlow() {
             // Arrange
             long chatId = 123;
@@ -214,37 +212,37 @@ namespace TelegramSearchBot.Test.Manage {
             await _context.SaveChangesAsync();
 
             // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("removing_model_select_channel")
                 .ReturnsAsync("removing_model_select");
 
             // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:data", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync("1|model1,model2");  // After model selection
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("移除模型", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.IsTrue(result1.Item2.Contains("请选择要移除模型的渠道ID："));
+            Assert.True(result1.Item1);
+            Assert.Contains("请选择要移除模型的渠道ID：", result1.Item2);
 
             var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
-            Assert.IsTrue(result2.Item1);
-            Assert.IsTrue(result2.Item2.Contains("请选择要移除的模型："));
+            Assert.True(result2.Item1);
+            Assert.Contains("请选择要移除的模型：", result2.Item2);
 
             var result3 = await _service.ExecuteAsync("1", chatId); // Remove model1
-            Assert.IsTrue(result3.Item1);
-            Assert.AreEqual("模型移除成功", result3.Item2);
+            Assert.True(result3.Item1);
+            Assert.Equal("模型移除成功", result3.Item2);
 
             // Verify model was removed
             var models = await _context.ChannelsWithModel
                 .Where(m => m.LLMChannelId == channel.Id)
                 .ToListAsync();
-            Assert.AreEqual(1, models.Count);
-            Assert.AreEqual("model2", models[0].ModelName);
+            Assert.Equal(1, models.Count);
+            Assert.Equal("model2", models[0].ModelName);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_ViewModels_CompleteFlow() {
             // Arrange
             long chatId = 123;
@@ -267,17 +265,17 @@ namespace TelegramSearchBot.Test.Manage {
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("查看模型", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.IsTrue(result1.Item2.Contains("请选择要查看模型的渠道ID："));
+            Assert.True(result1.Item1);
+            Assert.Contains("请选择要查看模型的渠道ID：", result1.Item2);
 
             var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
-            Assert.IsTrue(result2.Item1);
-            Assert.IsTrue(result2.Item2.Contains("渠道 Test Channel 下的模型列表："));
-            Assert.IsTrue(result2.Item2.Contains("- model1"));
-            Assert.IsTrue(result2.Item2.Contains("- model2"));
+            Assert.True(result2.Item1);
+            Assert.Contains("渠道 Test Channel 下的模型列表：", result2.Item2);
+            Assert.Contains("- model1", result2.Item2);
+            Assert.Contains("- model2", result2.Item2);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_InvalidState_ReturnsFailure() {
             // Arrange
             long chatId = 123;
@@ -288,16 +286,16 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _service.ExecuteAsync("test", chatId);
 
             // Assert
-            Assert.IsFalse(result.Item1);
-            Assert.AreEqual("", result.Item2);
+            Assert.False(result.Item1);
+            Assert.Equal("", result.Item2);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_NewChannel_WithParallelAndPriority() {
             // Arrange
             long chatId = 123;
             // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("awaiting_name")  
                 .ReturnsAsync("awaiting_gateway")
@@ -307,7 +305,7 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync("awaiting_apikey");
 
             // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:data", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync("Test Channel")  
                 .ReturnsAsync("Test Channel|http://test.com")  
                 .ReturnsAsync("Test Channel|http://test.com|1")
@@ -316,116 +314,116 @@ namespace TelegramSearchBot.Test.Manage {
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("新建渠道", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.AreEqual("请输入渠道的名称", result1.Item2);
+            Assert.True(result1.Item1);
+            Assert.Equal("请输入渠道的名称", result1.Item2);
 
             var result2 = await _service.ExecuteAsync("Test Channel", chatId);
-            Assert.IsTrue(result2.Item1);
-            Assert.AreEqual("请输入渠道地址", result2.Item2);
+            Assert.True(result2.Item1);
+            Assert.Equal("请输入渠道地址", result2.Item2);
 
             var result3 = await _service.ExecuteAsync("http://test.com", chatId);
-            Assert.IsTrue(result3.Item1);
-            StringAssert.Contains(result3.Item2, "请选择渠道类型：");
-            StringAssert.Contains(result3.Item2, "1. OpenAI");
-            StringAssert.Contains(result3.Item2, "2. Ollama");
-            StringAssert.Contains(result3.Item2, "3. Gemini");
+            Assert.True(result3.Item1);
+            Assert.Contains("请选择渠道类型：", result3.Item2);
+            Assert.Contains("1. OpenAI", result3.Item2);
+            Assert.Contains("2. Ollama", result3.Item2);
+            Assert.Contains("3. Gemini", result3.Item2);
 
             var result4 = await _service.ExecuteAsync("1", chatId);
-            Assert.IsTrue(result4.Item1);
-            Assert.AreEqual("请输入渠道的最大并行数量(默认1):", result4.Item2);
+            Assert.True(result4.Item1);
+            Assert.Equal("请输入渠道的最大并行数量(默认1):", result4.Item2);
 
             var result5 = await _service.ExecuteAsync("5", chatId);
-            Assert.IsTrue(result5.Item1);
-            Assert.AreEqual("请输入渠道的优先级(默认0):", result5.Item2);
+            Assert.True(result5.Item1);
+            Assert.Equal("请输入渠道的优先级(默认0):", result5.Item2);
 
             var result6 = await _service.ExecuteAsync("2", chatId);
-            Assert.IsTrue(result6.Item1);
-            Assert.AreEqual("请输入渠道的API Key", result6.Item2);
+            Assert.True(result6.Item1);
+            Assert.Equal("请输入渠道的API Key", result6.Item2);
 
             var result7 = await _service.ExecuteAsync("test-api-key", chatId);
-            Assert.IsTrue(result7.Item1);
-            Assert.AreEqual("渠道创建成功", result7.Item2);
+            Assert.True(result7.Item1);
+            Assert.Equal("渠道创建成功", result7.Item2);
 
             // Verify channel was created with correct values
             var channel = await _context.LLMChannels.FirstOrDefaultAsync();
-            Assert.IsNotNull(channel);
-            Assert.AreEqual("Test Channel", channel.Name);
-            Assert.AreEqual(5, channel.Parallel);
-            Assert.AreEqual(2, channel.Priority);
+            Assert.NotNull(channel);
+            Assert.Equal("Test Channel", channel.Name);
+            Assert.Equal(5, channel.Parallel);
+            Assert.Equal(2, channel.Priority);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_SetMaxRetryCount() {
             // Arrange
             long chatId = 123;
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("setting_max_retry");
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("设置重试次数", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.AreEqual("请输入最大重试次数(默认100):", result1.Item2);
+            Assert.True(result1.Item1);
+            Assert.Equal("请输入最大重试次数(默认100):", result1.Item2);
 
             var result2 = await _service.ExecuteAsync("50", chatId);
-            Assert.IsTrue(result2.Item1);
-            Assert.AreEqual("最大重试次数已设置为: 50", result2.Item2);
+            Assert.True(result2.Item1);
+            Assert.Equal("最大重试次数已设置为: 50", result2.Item2);
 
             // Verify database update
             var config = await _context.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxRetryCountKey);
-            Assert.IsNotNull(config);
-            Assert.AreEqual("50", config.Value);
+            Assert.NotNull(config);
+            Assert.Equal("50", config.Value);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_SetMaxImageRetryCount() {
             // Arrange
             long chatId = 123;
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("setting_max_image_retry");
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("设置图片重试次数", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.AreEqual("请输入图片处理最大重试次数(默认1000):", result1.Item2);
+            Assert.True(result1.Item1);
+            Assert.Equal("请输入图片处理最大重试次数(默认1000):", result1.Item2);
 
             var result2 = await _service.ExecuteAsync("500", chatId);
-            Assert.IsTrue(result2.Item1);
-            Assert.AreEqual("图片处理最大重试次数已设置为: 500", result2.Item2);
+            Assert.True(result2.Item1);
+            Assert.Equal("图片处理最大重试次数已设置为: 500", result2.Item2);
 
             // Verify database update
             var config = await _context.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxImageRetryCountKey);
-            Assert.IsNotNull(config);
-            Assert.AreEqual("500", config.Value);
+            Assert.NotNull(config);
+            Assert.Equal("500", config.Value);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_SetMaxRetryCount_InvalidInput() {
             // Arrange
             long chatId = 123;
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("setting_max_retry");
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("设置重试次数", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.AreEqual("请输入最大重试次数(默认100):", result1.Item2);
+            Assert.True(result1.Item1);
+            Assert.Equal("请输入最大重试次数(默认100):", result1.Item2);
 
             var result2 = await _service.ExecuteAsync("invalid", chatId);
-            Assert.IsFalse(result2.Item1);
-            Assert.AreEqual("请输入有效的正整数", result2.Item2);
+            Assert.False(result2.Item1);
+            Assert.Equal("请输入有效的正整数", result2.Item2);
 
             // Verify no database update
             var config = await _context.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxRetryCountKey);
-            Assert.IsNull(config);
+            Assert.Null(config);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_UpdateParallelAndPriority() {
             // Arrange
             long chatId = 123;
@@ -441,7 +439,7 @@ namespace TelegramSearchBot.Test.Manage {
             await _context.SaveChangesAsync();
 
             // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:state", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)  // Initial state
                 .ReturnsAsync("editing_select_channel")
                 .ReturnsAsync("editing_select_field")
@@ -450,7 +448,7 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync("editing_input_value");
 
             // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync("llmconf:123:data", It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(channel.Id.ToString())
                 .ReturnsAsync($"{channel.Id}|5")  // Field 5 = Parallel
                 .ReturnsAsync($"{channel.Id}")  // Field 6 = Priority
@@ -459,33 +457,33 @@ namespace TelegramSearchBot.Test.Manage {
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("编辑渠道", chatId);
-            Assert.IsTrue(result1.Item1);
-            Assert.IsTrue(result1.Item2.Contains("请选择要编辑的渠道ID："));
+            Assert.True(result1.Item1);
+            Assert.Contains("请选择要编辑的渠道ID：", result1.Item2);
 
             var result2 = await _service.ExecuteAsync(channel.Id.ToString(), chatId);
-            Assert.IsTrue(result2.Item1);
-            Assert.IsTrue(result2.Item2.Contains("请选择要编辑的字段："));
+            Assert.True(result2.Item1);
+            Assert.Contains("请选择要编辑的字段：", result2.Item2);
 
             var result3 = await _service.ExecuteAsync("5", chatId); // Select Parallel
-            Assert.IsTrue(result3.Item1);
-            Assert.AreEqual("请输入新的值：", result3.Item2);
+            Assert.True(result3.Item1);
+            Assert.Equal("请输入新的值：", result3.Item2);
 
             var result4 = await _service.ExecuteAsync("10", chatId); // Update Parallel to 10
-            Assert.IsTrue(result4.Item1);
-            Assert.AreEqual("更新成功", result4.Item2);
+            Assert.True(result4.Item1);
+            Assert.Equal("更新成功", result4.Item2);
             
             var result5 = await _service.ExecuteAsync("6", chatId); // Select Priority
-            Assert.IsTrue(result5.Item1);
-            Assert.AreEqual("请输入新的值：", result5.Item2);
+            Assert.True(result5.Item1);
+            Assert.Equal("请输入新的值：", result5.Item2);
 
             var result6 = await _service.ExecuteAsync("3", chatId); // Update Priority to 3
-            Assert.IsTrue(result6.Item1);
-            Assert.AreEqual("更新成功", result6.Item2);
+            Assert.True(result6.Item1);
+            Assert.Equal("更新成功", result6.Item2);
 
             // Verify updates
             var updatedChannel = await _context.LLMChannels.FindAsync(channel.Id);
-            Assert.AreEqual(10, updatedChannel.Parallel);
-            Assert.AreEqual(3, updatedChannel.Priority);
+            Assert.Equal(10, updatedChannel.Parallel);
+            Assert.Equal(3, updatedChannel.Priority);
         }
 
     }

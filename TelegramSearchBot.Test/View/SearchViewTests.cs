@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Telegram.Bot;
@@ -8,10 +7,10 @@ using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.View;
+using Xunit;
 
 namespace TelegramSearchBot.Test.View
 {
-    [TestClass]
     public class SearchViewTests
     {
         private Mock<SendMessage> _sendMessageMock;
@@ -19,8 +18,7 @@ namespace TelegramSearchBot.Test.View
         private Mock<ILogger<SendMessage>> _loggerMock;
         private SearchView _searchView;
 
-        [TestInitialize]
-        public void Setup()
+        public SearchViewTests()
         {
             _botClientMock = new Mock<ITelegramBotClient>();
             _loggerMock = new Mock<ILogger<SendMessage>>();
@@ -28,10 +26,9 @@ namespace TelegramSearchBot.Test.View
                 MockBehavior.Strict,
                 _botClientMock.Object,
                 _loggerMock.Object);
-            _botClientMock = new Mock<ITelegramBotClient>();
             _searchView = new SearchView(_sendMessageMock.Object, _botClientMock.Object);
         }
-        [TestMethod]
+        [Fact]
         public void RenderSearchResults_WithResults_ReturnsFormattedString()
         {
             // Arrange
@@ -61,14 +58,14 @@ namespace TelegramSearchBot.Test.View
             var result = _searchView.RenderSearchResults(searchOption);
 
             // Assert
-            Assert.IsTrue(result.Contains("共找到 2 项结果"));
-            Assert.IsTrue(result.Contains("Test message 1"));
-            Assert.IsTrue(result.Contains("Test message 2"));
-            Assert.IsTrue(result.Contains("t.me/c/123456789/123"));
-            Assert.IsTrue(result.Contains("t.me/c/987654321/456"));
+            Assert.True(result.Contains("共找到 2 项结果"));
+            Assert.True(result.Contains("Test message 1"));
+            Assert.True(result.Contains("Test message 2"));
+            Assert.True(result.Contains("t.me/c/123456789/123"));
+            Assert.True(result.Contains("t.me/c/987654321/456"));
         }
 
-        [TestMethod]
+        [Fact]
         public void RenderSearchResults_NoResults_ReturnsNoResultsMessage()
         {
             // Arrange
@@ -85,10 +82,10 @@ namespace TelegramSearchBot.Test.View
             var result = _searchView.RenderSearchResults(searchOption);
 
             // Assert
-            Assert.AreEqual("未找到结果。\n", result);
+            Assert.Equal("未找到结果。\n", result);
         }
 
-        [TestMethod]
+        [Fact]
         public void ConvertToMarkdownLinks_ReturnsCorrectLinks()
         {
             // Arrange
@@ -110,14 +107,14 @@ namespace TelegramSearchBot.Test.View
             var result = _searchView.ConvertToMarkdownLinks(messages);
 
             // Assert
-            Assert.AreEqual(2, result.Count);
-            Assert.IsTrue(result[0].Contains("Test content 1"));
-            Assert.IsTrue(result[0].Contains("t.me/c/123456789/123"));
-            Assert.IsTrue(result[1].Contains("Test content 2"));
-            Assert.IsTrue(result[1].Contains("t.me/c/987654321/456"));
+            Assert.Equal(2, result.Count);
+            Assert.True(result[0].Contains("Test content 1"));
+            Assert.True(result[0].Contains("t.me/c/123456789/123"));
+            Assert.True(result[1].Contains("Test content 2"));
+            Assert.True(result[1].Contains("t.me/c/987656789/456"));
         }
 
-        [TestMethod]
+        [Fact]
         public void ConvertToMarkdownLinks_WithNewlines_RemovesNewlines()
         {
             // Arrange
@@ -134,8 +131,8 @@ namespace TelegramSearchBot.Test.View
             var result = _searchView.ConvertToMarkdownLinks(messages);
 
             // Assert
-            Assert.IsFalse(result[0].Contains("\n"));
-            Assert.IsFalse(result[0].Contains("\r"));
+            Assert.False(result[0].Contains("\n"));
+            Assert.False(result[0].Contains("\r"));
         }
     }
 }

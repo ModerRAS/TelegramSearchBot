@@ -8,10 +8,10 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
+using Xunit;
 
 namespace TelegramSearchBot.Test.Service.Common
 {
-    [TestClass]
     public class AppConfigurationServiceTests
     {
 #pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
@@ -30,8 +30,7 @@ namespace TelegramSearchBot.Test.Service.Common
         private Mock<IServiceProvider> _mockServiceProvider;
 #pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
 
-        [TestInitialize]
-        public void TestInitialize()
+        public AppConfigurationServiceTests()
         {
             // Setup InMemory database
             _dbContextOptions = new DbContextOptionsBuilder<DataDbContext>()
@@ -60,7 +59,7 @@ namespace TelegramSearchBot.Test.Service.Common
             return new AppConfigurationService(_mockScopeFactory.Object, _mockLogger.Object);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetConfigurationValueAsync_KeyExists_ReturnsValue()
         {
             var service = CreateService();
@@ -74,30 +73,30 @@ namespace TelegramSearchBot.Test.Service.Common
             }
 
             var actualValue = await service.GetConfigurationValueAsync(testKey);
-            Assert.AreEqual(expectedValue, actualValue);
+            Assert.Equal(expectedValue, actualValue);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetConfigurationValueAsync_KeyNotExists_ReturnsNull()
         {
             var service = CreateService();
             var testKey = "NonExistentKey";
 
             var actualValue = await service.GetConfigurationValueAsync(testKey);
-            Assert.IsNull(actualValue);
+            Assert.Null(actualValue);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetConfigurationValueAsync_NullOrWhiteSpaceKey_ReturnsNull()
         {
             var service = CreateService();
 
-            Assert.IsNull(await service.GetConfigurationValueAsync(null));
-            Assert.IsNull(await service.GetConfigurationValueAsync(string.Empty));
-            Assert.IsNull(await service.GetConfigurationValueAsync("   "));
+            Assert.Null(await service.GetConfigurationValueAsync(null));
+            Assert.Null(await service.GetConfigurationValueAsync(string.Empty));
+            Assert.Null(await service.GetConfigurationValueAsync("   "));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SetConfigurationValueAsync_NewKey_AddsItem()
         {
             var service = CreateService();
@@ -109,12 +108,12 @@ namespace TelegramSearchBot.Test.Service.Common
             using (var context = new DataDbContext(_dbContextOptions))
             {
                 var item = await context.AppConfigurationItems.FindAsync(testKey);
-                Assert.IsNotNull(item);
-                Assert.AreEqual(testValue, item.Value);
+                Assert.NotNull(item);
+                Assert.Equal(testValue, item.Value);
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SetConfigurationValueAsync_ExistingKey_UpdatesItem()
         {
             var service = CreateService();
@@ -133,12 +132,12 @@ namespace TelegramSearchBot.Test.Service.Common
             using (var context = new DataDbContext(_dbContextOptions))
             {
                 var item = await context.AppConfigurationItems.FindAsync(testKey);
-                Assert.IsNotNull(item);
-                Assert.AreEqual(updatedValue, item.Value);
+                Assert.NotNull(item);
+                Assert.Equal(updatedValue, item.Value);
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SetConfigurationValueAsync_NullOrWhiteSpaceKey_DoesNotAddItemAndLogsWarning()
         {
             var service = CreateService();
@@ -150,7 +149,7 @@ namespace TelegramSearchBot.Test.Service.Common
 
             using (var context = new DataDbContext(_dbContextOptions))
             {
-                Assert.IsFalse(context.AppConfigurationItems.Any(), "No items should be added for null or whitespace keys.");
+                Assert.False(context.AppConfigurationItems.Any(), "No items should be added for null or whitespace keys.");
             }
 
             // Verify logger was called for warning (at least once, for the first invalid key)

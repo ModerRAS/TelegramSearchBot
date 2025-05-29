@@ -12,10 +12,10 @@ using Moq;
 using StackExchange.Redis;
 using TelegramSearchBot.Interface; // Keep this if other interfaces from here are used
 using TelegramSearchBot.Service.Common; // Add this for IAppConfigurationService
+using Xunit;
 
 namespace TelegramSearchBot.Test.Admin
 {
-    [TestClass]
     public class AdminServiceTests {
 #pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
         private Mock<IAppConfigurationService> _mockAppConfigService;
@@ -84,43 +84,43 @@ namespace TelegramSearchBot.Test.Admin
             // 例如: _mockAppConfigService.Setup(s => s.GetConfigurationValueAsync(It.IsAny<string>())).ReturnsAsync("DefaultValue");
         }
 
-        [TestMethod]
+        [Fact]
         public async Task UserIsAdmin_ShouldReturnTrue() {
             SetupMocks();
             using (var context = await GetDbContextAsync()) {
                 var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object);
                 var result = await service.IsNormalAdmin(1);
-                Assert.IsTrue(result, "用户 1 属于管理员组，结果应为 true");
+                Assert.True(result);
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task UserIsNotAdmin_ShouldReturnFalse() {
             SetupMocks();
             using (var context = await GetDbContextAsync()) {
                 var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object);
                 var result = await service.IsNormalAdmin(2);
-                Assert.IsFalse(result, "用户 2 不在管理员组中，结果应为 false");
+                Assert.False(result);
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task UserInNonAdminGroup_ShouldReturnFalse() {
             SetupMocks();
             using (var context = await GetDbContextAsync()) {
                 var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object);
                 var result = await service.IsNormalAdmin(3);
-                Assert.IsFalse(result, "用户 3 属于普通组，不是管理员组，结果应为 false");
+                Assert.False(result);
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task UserNotExists_ShouldReturnFalse() {
             SetupMocks();
             using (var context = await GetDbContextAsync()) {
                 var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object);
                 var result = await service.IsNormalAdmin(999);
-                Assert.IsFalse(result, "用户 999 不存在，结果应为 false");
+                Assert.False(result);
             }
         }
     }

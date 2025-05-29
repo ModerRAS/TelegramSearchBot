@@ -4,14 +4,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Common;
+using Xunit;
 
 namespace TelegramSearchBot.Test.Service.Common
 {
-    [TestClass]
     public class ShortUrlMappingServiceTests : IDisposable
     {
         private readonly DataDbContext _dbContext;
@@ -32,7 +31,7 @@ namespace TelegramSearchBot.Test.Service.Common
             _dbContext.Dispose();
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SaveUrlMappingsAsync_ShouldSaveNewMappings()
         {
             // Arrange
@@ -46,11 +45,11 @@ namespace TelegramSearchBot.Test.Service.Common
             var result = await _service.SaveUrlMappingsAsync(mappings, CancellationToken.None);
 
             // Assert
-            Assert.AreEqual(2, result);
-            Assert.AreEqual(2, await _dbContext.ShortUrlMappings.CountAsync());
+            Assert.Equal(2, result);
+            Assert.Equal(2, await _dbContext.ShortUrlMappings.CountAsync());
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SaveUrlMappingsAsync_ShouldNotSaveDuplicates()
         {
             // Arrange
@@ -68,11 +67,11 @@ namespace TelegramSearchBot.Test.Service.Common
             var result = await _service.SaveUrlMappingsAsync(mappings, CancellationToken.None);
 
             // Assert
-            Assert.AreEqual(1, result); // Only short2 should be saved
-            Assert.AreEqual(2, await _dbContext.ShortUrlMappings.CountAsync());
+            Assert.Equal(1, result); // Only short2 should be saved
+            Assert.Equal(2, await _dbContext.ShortUrlMappings.CountAsync());
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetUrlMappingsAsync_ShouldReturnCorrectMappings()
         {
             // Arrange
@@ -88,12 +87,12 @@ namespace TelegramSearchBot.Test.Service.Common
             var result = await _service.GetUrlMappingsAsync(new[] { "short1", "short2" }, CancellationToken.None);
 
             // Assert
-            Assert.AreEqual(2, result.Count);
-            Assert.AreEqual("long1", result["short1"]); // First one should be returned
-            Assert.AreEqual("long2", result["short2"]);
+            Assert.Equal(2, result.Count);
+            Assert.Equal("long1", result["short1"]); // First one should be returned
+            Assert.Equal("long2", result["short2"]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetUrlMappingsAsync_ShouldIgnoreEmptyExpandedUrls()
         {
             // Arrange
@@ -108,8 +107,8 @@ namespace TelegramSearchBot.Test.Service.Common
             var result = await _service.GetUrlMappingsAsync(new[] { "short1", "short2" }, CancellationToken.None);
 
             // Assert
-            Assert.AreEqual(1, result.Count);
-            Assert.AreEqual("long2", result["short2"]);
+            Assert.Equal(1, result.Count);
+            Assert.Equal("long2", result["short2"]);
         }
     }
 }
