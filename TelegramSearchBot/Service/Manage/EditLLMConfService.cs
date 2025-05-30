@@ -218,7 +218,7 @@ namespace TelegramSearchBot.Service.Manage {
                 .ToListAsync();
 
             if (models.Count == 0) {
-                return (true, "该渠道下没有可移除的模型");
+                return (false, "该渠道下没有可移除的模型");
             }
 
             var sb = new StringBuilder();
@@ -235,8 +235,19 @@ namespace TelegramSearchBot.Service.Manage {
         private async Task<(bool, string)> HandleRemovingModelSelectAsync(EditLLMConfRedisHelper redis, string command) {
             var data = await redis.GetDataAsync();
             var parts = data.Split('|');
+
+            if (parts.Length < 2)
+            {
+                return (false, "内部错误：模型数据格式不正确");
+            }
+
             var removeChannelId = int.Parse(parts[0]);
             var modelList = parts[1].Split(',');
+
+            if (modelList.Length == 0 || (modelList.Length == 1 && string.IsNullOrEmpty(modelList[0])))
+            {
+                 return (false, "该渠道下没有可移除的模型");
+            }
 
             if (!int.TryParse(command, out var modelIndex) || modelIndex < 1 || modelIndex > modelList.Length) {
                 return (false, "请输入有效的模型序号");
@@ -248,7 +259,7 @@ namespace TelegramSearchBot.Service.Manage {
             // 清理状态
             await redis.DeleteKeysAsync();
 
-            return (true, removeResult ? "模型移除成功" : "模型移除失败");
+            return (removeResult, removeResult ? "模型移除成功" : "模型移除失败");
         }
 
         private async Task<(bool, string)> HandleViewingModelSelectChannelAsync(EditLLMConfRedisHelper redis, string command) {
@@ -299,7 +310,7 @@ namespace TelegramSearchBot.Service.Manage {
                     break;
                 case "3":
                     if (!Enum.TryParse<LLMProvider>(command, out var newProvider)) {
-                        return (true, "无效的类型");
+                        return (false, "无效的类型");
                     }
                     updateResult = await Helper.UpdateChannel(editId, provider: newProvider);
                     break;

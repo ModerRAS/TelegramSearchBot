@@ -249,67 +249,51 @@ namespace TelegramSearchBot.Test.Manage {
                 LLMChannelId = 1,
                 ModelName = "model1"
             });
+            // Add model2 to the in-memory database
+            await _context.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                LLMChannelId = 1,
+                ModelName = "model2"
+            });
             await _context.SaveChangesAsync();
 
             var stateKey = $"llmconf:{chatId}:state";
             var dataKey = $"llmconf:{chatId}:data";
 
             // Setup state transitions
-            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
-                .ReturnsAsync(RedisValue.Null)  // Initial state: user enters "移除模型"
-                .ReturnsAsync("removing_model_select_channel") // After "移除模型", awaiting channel ID
-                .ReturnsAsync("removing_model_select"); // After channel ID, awaiting model selection
-
-            // Setup data key responses
-            _dbMock.SetupSequence(d => d.StringGetAsync(dataKey, It.IsAny<CommandFlags>()))
-                .ReturnsAsync("1") // User enters channel ID "1" - This value is written to dataKey initially
-                .ReturnsAsync("1|model1,model2"); // After channel ID is processed, service writes this to dataKey
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)  // 1. Initial state before "移除模型"
+                .ReturnsAsync("removing_model_select_channel") // 2. State after "移除模型" command
+                .ReturnsAsync("removing_model_select") // 3. State after channel ID input
+                .ReturnsAsync("1|model1,model2"); // 4. Data read by HandleRemovingModelSelectAsync
 
             // Setup helper mock to return channel
             helperMock.Setup(h => h.GetChannelById(1))
                 .ReturnsAsync(channel);
 
-            // Mock the DataContext.ChannelsWithModel DbSet using an in-memory list
-            var modelsData = new List<ChannelWithModel>
-            {
-                new ChannelWithModel { LLMChannelId = 1, ModelName = "model1" },
-                new ChannelWithModel { LLMChannelId = 1, ModelName = "model2" }
-            };
-
-            var mockDbSet = new Mock<DbSet<ChannelWithModel>>();
-            // Setup the mock DbSet to use the in-memory list as its source
-            mockDbSet.As<IQueryable<ChannelWithModel>>().Setup(m => m.Provider)
-                .Returns(modelsData.AsQueryable().Provider);
-            mockDbSet.As<IQueryable<ChannelWithModel>>().Setup(m => m.Expression)
-                .Returns(modelsData.AsQueryable().Expression);
-            mockDbSet.As<IQueryable<ChannelWithModel>>().Setup(m => m.ElementType)
-                .Returns(modelsData.AsQueryable().ElementType);
-            mockDbSet.As<IQueryable<ChannelWithModel>>().Setup(m => m.GetEnumerator())
-                .Returns(modelsData.AsQueryable().GetEnumerator());
-
-            // Setup the mock DataContext to return the mock DbSet
-            var mockContext = new Mock<DataDbContext>();
-            mockContext.Setup(c => c.ChannelsWithModel).Returns(mockDbSet.Object);
-
-            // Create a new service instance for this test, passing the mock context
-            var serviceForTest = new EditLLMConfService(
-                helperMock.Object,
-                mockContext.Object, // Pass the mock context
-                _redisMock.Object);
+            // Setup helper mock to return a channel in GetAllChannels, which should trigger GetModelsByChannelId in service (but service doesn't call helper here)
+            // This setup is still needed for the initial "移除模型" command which lists channels.
+            helperMock.Setup(h => h.GetAllChannels())
+                .ReturnsAsync(new List<LLMChannel> { channel });
 
             // Act & Assert
-            var result1 = await serviceForTest.ExecuteAsync("移除模型", chatId);
+            var result1 = await _service.ExecuteAsync("移除模型", chatId);
             Assert.True(result1.Item1);
             Assert.Contains("请选择要移除模型的渠道ID：", result1.Item2);
 
-            var result2 = await serviceForTest.ExecuteAsync("1", chatId); // User inputs channel ID
+            // Verify the in-memory database contains the expected models
+            var modelsInDb = await _context.ChannelsWithModel.Where(m => m.LLMChannelId == 1).ToListAsync();
+            Assert.NotNull(modelsInDb);
+            Assert.Equal(2, modelsInDb.Count);
+            Assert.Contains(modelsInDb, m => m.ModelName == "model1");
+            Assert.Contains(modelsInDb, m => m.ModelName == "model2");
+
+            var result2 = await _service.ExecuteAsync("1", chatId); // User inputs channel ID
             Assert.True(result2.Item1);
             // Verify the response lists models
             Assert.Contains("请选择要移除的模型：", result2.Item2);
             Assert.Contains("1. model1", result2.Item2);
-            Assert.Contains("2. model2", result2.Item2);
 
-            var result3 = await serviceForTest.ExecuteAsync("1", chatId); // User inputs model index (1 for model1)
+            var result3 = await _service.ExecuteAsync("1", chatId); // User inputs model index (1 for model1)
             Assert.True(result3.Item1);
             Assert.Equal("模型移除成功", result3.Item2);
 

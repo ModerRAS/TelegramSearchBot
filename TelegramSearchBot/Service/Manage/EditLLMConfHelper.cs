@@ -328,5 +328,14 @@ namespace TelegramSearchBot.Service.Manage {
                 }
             }
         }
+
+        public async Task<List<string>> GetModelsByChannelId(long channelId)
+        {
+            var models = await DataContext.ChannelsWithModel
+                .Where(c => c.LLMChannelId == channelId)
+                .Select(c => c.ModelName)
+                .ToListAsync();
+            return models;
+        }
     }
 }
