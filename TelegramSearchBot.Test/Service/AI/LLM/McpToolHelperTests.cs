@@ -199,52 +199,58 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         // private Mock<TestToolProvider> _mockToolProviderInstance = null!;
         #pragma warning restore CS8618
 
+        private Mock<ILogger> _mockLogger;
+        private Mock<IServiceProvider> _mockServiceProvider;
+        private Mock<TestToolProvider> _mockToolProviderInstance;
+
         public McpToolHelperTests()
-        // {
-        //     // 移除ResetForTest调用
-        //     _mockLogger = new Mock<ILogger>();
-        //     // 启用Debug级别日志用于诊断
-        //     _mockLogger.Setup(x => x.IsEnabled(LogLevel.Debug)).Returns(true);
-        //     _mockLogger.Setup(x => x.Log(
-        //         LogLevel.Debug,
-        //         It.IsAny<EventId>(),
-        //         It.IsAny<object>(),  // 使用通配符匹配任何TState
-        //         It.IsAny<Exception?>(), // Exception可以为null
-        //         It.IsAny<Func<object, Exception?, string>>()))  // 使用通配符匹配任何TState的formatter
-        //         .Callback<LogLevel, EventId, object, Exception?, Func<object, Exception?, string>>((level, eventId, state, exception, formatter) =>
-        //         {
-        //             // 使用formatter来获取日志信息，这更符合ILogger的工作方式
-        //             var message = formatter(state, exception);
-        //             Console.WriteLine($"[DEBUG] {message}");
-        //         });
+        {
+            _mockLogger = new Mock<ILogger>();
+            // 启用Debug级别日志用于诊断
+            _mockLogger.Setup(x => x.IsEnabled(LogLevel.Debug)).Returns(true);
+            _mockLogger.Setup(x => x.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.IsAny<object>(),  // 使用通配符匹配任何TState
+                It.IsAny<Exception?>(), // Exception可以为null
+                It.IsAny<Func<object, Exception?, string>>()))  // 使用通配符匹配任何TState的formatter
+                .Callback<LogLevel, EventId, object, Exception?, Func<object, Exception?, string>>((level, eventId, state, exception, formatter) =>
+                {
+                    // 使用formatter来获取日志信息，这更符合ILogger的工作方式
+                    var message = formatter(state, exception);
+                    Console.WriteLine($"[DEBUG] {message}");
+                });
 
-        //     _mockServiceProvider = new Mock<IServiceProvider>();
-        //     _mockToolProviderInstance = new Mock<TestToolProvider> { CallBase = true };
-        //     // 确保TestToolProvider类型也被注册，使用 It.Is<Type> 进行更精确的匹配
-        //     _mockServiceProvider.Setup(sp => sp.GetService(It.Is<Type>(t => t == typeof(TestToolProvider)))).Returns(_mockToolProviderInstance.Object);
-        //     // 移除对 McpToolHelper 实例的模拟设置
-        //     // _mockServiceProvider.Setup(sp => sp.GetService(It.Is<Type>(t => t == typeof(McpToolHelper)))).Returns(new McpToolHelper(typeof(TestToolProvider).Assembly, _mockServiceProvider.Object, _mockLogger.Object));
+            _mockServiceProvider = new Mock<IServiceProvider>();
+            _mockToolProviderInstance = new Mock<TestToolProvider> { CallBase = true };
+            // 确保TestToolProvider类型也被注册
+            _mockServiceProvider.Setup(sp => sp.GetService(It.Is<Type>(t => t == typeof(TestToolProvider)))).Returns(_mockToolProviderInstance.Object);
 
-        //     McpToolHelper.EnsureInitialized(typeof(TestToolProvider).Assembly, _mockServiceProvider.Object, _mockLogger.Object);
+            McpToolHelper.EnsureInitialized(typeof(TestToolProvider).Assembly, _mockServiceProvider.Object, _mockLogger.Object);
 
-        //     // Setup mock instance methods
-        //     _mockToolProviderInstance.Setup(x => x.InstanceTool(It.IsAny<bool>()))
-        //         .Returns((bool input) => !input);
-        //     _mockToolProviderInstance.Setup(x => x.InstanceToolAsync(It.IsAny<string>()))
-        //         .Returns((string text) => Task.FromResult($"Async processed: {text}"));
-        //     _mockToolProviderInstance.Setup(x => x.ComplexParamTool(It.IsAny<TestToolProvider.ComplexParam>()))
-        //         .Returns((TestToolProvider.ComplexParam data) => $"Complex: {data?.Name} = {data?.Value}");
+            // Setup mock instance methods
+            _mockToolProviderInstance.Setup(x => x.InstanceTool(It.IsAny<bool>()))
+                .Returns((bool input) => !input);
+            _mockToolProviderInstance.Setup(x => x.InstanceToolAsync(It.IsAny<string>()))
+                .Returns((string text) => Task.FromResult($"Async processed: {text}"));
+            _mockToolProviderInstance.Setup(x => x.ComplexParamTool(It.IsAny<TestToolProvider.ComplexParam>()))
+                .Returns((TestToolProvider.ComplexParam data) => $"Complex: {data?.Name} = {data?.Value}");
 
-        //     // Reset static flags before each test
-        //     TestToolProvider.StaticMethodCalled = false;
-        //     TestToolProvider.LastStaticArg = null;
-        //     TestToolProvider.LastStaticIntArg = 0;
-        //     // Reset mock instance state
-        //     _mockToolProviderInstance.Object.InstanceMethodCalled = false;
-        //     _mockToolProviderInstance.Object.LastInstanceArg = null;
-        //     _mockToolProviderInstance.Object.LastInstanceBoolArg = false;
-        //     _mockToolProviderInstance.Invocations.Clear();
-        // }
+            ResetTestState();
+        }
+
+        private void ResetTestState()
+        {
+            // Reset static flags before each test
+            TestToolProvider.StaticMethodCalled = false;
+            TestToolProvider.LastStaticArg = null;
+            TestToolProvider.LastStaticIntArg = 0;
+            // Reset mock instance state
+            _mockToolProviderInstance.Object.InstanceMethodCalled = false;
+            _mockToolProviderInstance.Object.LastInstanceArg = null;
+            _mockToolProviderInstance.Object.LastInstanceBoolArg = false;
+            _mockToolProviderInstance.Invocations.Clear();
+        }
 
         [Fact]
         public void CleanLlmResponse_RemovesThinkTags()
@@ -472,6 +478,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         public async Task ExecuteRegisteredToolAsync_StaticMethod_Executes()
         {
             // Arrange
+            ResetTestState();
             var args = new Dictionary<string, string> { { "arg1", "test static" }, { "arg2", "99" } };
 
             // Act
