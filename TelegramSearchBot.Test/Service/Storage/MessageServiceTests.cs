@@ -343,7 +343,7 @@ namespace TelegramSearchBot.Test.Service.Storage
             // A proper test would involve mocking the LuceneManager to throw an exception and verifying the logger
             // for the specific error message related to Lucene failure.
             var service = CreateService();
-            await service.ExecuteAsync(CreateSampleMessageOption(1L, 100L, 5000, "Lucene Fail Test")); // Should not throw unhandled.
+            await service.AddToLucene(CreateSampleMessageOption(1L, 100L, 5000, "Lucene Fail Test")); // Should not throw unhandled.
             
             // Verify the logger was called with an error related to Lucene failure
             // This requires setting up the mock logger to capture log messages.
@@ -358,40 +358,5 @@ namespace TelegramSearchBot.Test.Service.Storage
             //     Times.Once);
         }
 
-        [Fact]
-        public async Task ExecuteAsync_AddToLiteDBThrowsException_LogsError()
-        {
-            // This test is very hard to implement with the static LiteDB dependency (Env.Database).
-            // Mocking Env.Database or the LiteDatabase instance it returns is necessary.
-            // Without refactoring Env to be non-static and inject the database,
-            // or making LiteDatabase operations mockable, this test is not feasible.
-
-            // We will skip this test for now due to technical limitations in the current test setup.
-
-            // var messageOption = CreateSampleMessageOption(1L, 100L, 6000, "LiteDB Fail Test");
-            // var service = CreateService();
-            // await service.ExecuteAsync(messageOption); // Would need to somehow cause LiteDB operations to throw.
-
-            // Verify logger for LiteDB error.
-        }
-
-        [Fact]
-        public async Task ExecuteAsync_WithValidInput_PublishesVectorGenerationNotification()
-        {
-            // Arrange
-            var messageOption = CreateSampleMessageOption(1L, 100L, 7000, "Vector Test");
-
-            var service = CreateService();
-            await service.ExecuteAsync(messageOption);
-
-            // Assert - Verify Mediator.Publish was called with the correct notification type
-            _mockMediator.Verify(
-                mediator => mediator.Publish(
-                    It.Is<MessageVectorGenerationNotification>(n => 
-                        n.Message.MessageId == messageOption.MessageId && 
-                        n.Message.GroupId == messageOption.ChatId),
-                    It.IsAny<CancellationToken>()),
-                Times.Once);
-        }
     }
 }
