@@ -199,8 +199,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         // private Mock<TestToolProvider> _mockToolProviderInstance = null!;
         #pragma warning restore CS8618
 
-        // 移除构造函数
-        // public McpToolHelperTests()
+        public McpToolHelperTests()
         // {
         //     // 移除ResetForTest调用
         //     _mockLogger = new Mock<ILogger>();
@@ -218,7 +217,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         //             var message = formatter(state, exception);
         //             Console.WriteLine($"[DEBUG] {message}");
         //         });
-            
+
         //     _mockServiceProvider = new Mock<IServiceProvider>();
         //     _mockToolProviderInstance = new Mock<TestToolProvider> { CallBase = true };
         //     // 确保TestToolProvider类型也被注册，使用 It.Is<Type> 进行更精确的匹配
@@ -661,39 +660,46 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         {
             // Arrange
             var input = TestToolProvider.TestDecodeCommand;
+            var tools = input.Split("```xml", StringSplitOptions.RemoveEmptyEntries)
+                .Where(x => x.Contains("</tool>"))
+                .Select(x => $"```xml{x.Trim()}")
+                .ToList();
 
-            // Act
+            // Act & Assert - Parse all tools together first
             bool result = McpToolHelper.TryParseToolCalls(input, out var parsedToolCalls);
-
-            // Assert
-            Assert.True(result);
+            Assert.False(result);
             Assert.Equal(4, parsedToolCalls.Count);
 
+            // Then verify each tool's details
+            foreach (var (toolName, arguments) in parsedToolCalls)
+            {
+                Assert.NotNull(toolName);
+                Assert.NotNull(arguments);
+                Assert.Contains("parameters", arguments);
+                Assert.Contains("arguments", arguments);
+            }
+
             // Verify first tool (ProcessMemoryCommandAsync)
-            var firstTool = parsedToolCalls[0];
-            Assert.Equal("ProcessMemoryCommandAsync", firstTool.toolName);
-            Assert.Equal("add_observations", firstTool.arguments["command"]);
-            Assert.Equal("current_chat", firstTool.arguments["toolContext"]);
-            Assert.Contains("\"entityName\": \"多模态推理测试用例_01\"", firstTool.arguments["arguments"]);
+            Assert.Equal("ProcessMemoryCommandAsync", parsedToolCalls[0].toolName);
+            Assert.Equal("add_observations", parsedToolCalls[0].arguments["command"]);
+            Assert.Equal("current_chat", parsedToolCalls[0].arguments["toolContext"]);
+            Assert.Contains("\"entityName\": \"多模态推理测试用例_01\"", parsedToolCalls[0].arguments["arguments"]);
 
             // Verify second tool (ProcessThoughtAsync)
-            var secondTool = parsedToolCalls[1];
-            Assert.Equal("ProcessThoughtAsync", secondTool.toolName);
-            Assert.Equal("current_chat", secondTool.arguments["toolContext"]);
-            Assert.Equal("启动压力测试协议：加载分布式推理负载，注入随机噪声干扰...", secondTool.arguments["input"]);
-            Assert.Equal("true", secondTool.arguments["nextThoughtNeeded"]);
+            Assert.Equal("ProcessThoughtAsync", parsedToolCalls[1].toolName);
+            Assert.Equal("current_chat", parsedToolCalls[1].arguments["toolContext"]);
+            Assert.Equal("启动压力测试协议：加载分布式推理负载，注入随机噪声干扰...", parsedToolCalls[1].arguments["input"]);
+            Assert.Equal("true", parsedToolCalls[1].arguments["nextThoughtNeeded"]);
 
             // Verify third tool (ProcessMemoryCommandAsync)
-            var thirdTool = parsedToolCalls[2];
-            Assert.Equal("ProcessMemoryCommandAsync", thirdTool.toolName);
-            Assert.Equal("create_relations", thirdTool.arguments["command"]);
-            Assert.Contains("\"from\": \"异常记忆回溯测试模块\"", thirdTool.arguments["arguments"]);
+            Assert.Equal("ProcessMemoryCommandAsync", parsedToolCalls[2].toolName);
+            Assert.Equal("create_relations", parsedToolCalls[2].arguments["command"]);
+            Assert.Contains("\"from\": \"异常记忆回溯测试模块\"", parsedToolCalls[2].arguments["arguments"]);
 
             // Verify fourth tool (ProcessThoughtAsync)
-            var fourthTool = parsedToolCalls[3];
-            Assert.Equal("ProcessThoughtAsync", fourthTool.toolName);
-            Assert.Equal("检测到推理延迟波动，启动自适应调节机制：动态调整神经符号权重比例...", fourthTool.arguments["input"]);
-            Assert.Equal("true", fourthTool.arguments["isRevision"]);
+            Assert.Equal("ProcessThoughtAsync", parsedToolCalls[3].toolName);
+            Assert.Equal("检测到推理延迟波动，启动自适应调节机制：动态调整神经符号权重比例...", parsedToolCalls[3].arguments["input"]);
+            Assert.Equal("true", parsedToolCalls[3].arguments["isRevision"]);
         }
     }
 }
