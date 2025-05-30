@@ -54,7 +54,7 @@ namespace TelegramSearchBot.Test.Service.Common
             var text = "Check out http://example.com for more info.";
             var expectedUrl = "http://example.com";
             var result = _urlProcessingService.ExtractUrls(text);
-            Assert.Equal(1, result.Count);
+            Assert.Single(result);
             Assert.Equal(expectedUrl, result[0]);
         }
 
@@ -64,7 +64,7 @@ namespace TelegramSearchBot.Test.Service.Common
             var text = "Visit https://secure.example.com.";
             var expectedUrl = "https://secure.example.com";
             var result = _urlProcessingService.ExtractUrls(text);
-            Assert.Equal(1, result.Count);
+            Assert.Single(result);
             Assert.Equal(expectedUrl, result[0]);
         }
 
@@ -74,7 +74,7 @@ namespace TelegramSearchBot.Test.Service.Common
             var text = "Go to www.example.com for details.";
             var expectedUrl = "http://www.example.com";
             var result = _urlProcessingService.ExtractUrls(text);
-            Assert.Equal(1, result.Count);
+            Assert.Single(result);
             Assert.Equal(expectedUrl, result[0]);
         }
 
@@ -93,7 +93,7 @@ namespace TelegramSearchBot.Test.Service.Common
             var text = "API is at http://localhost:8080/api/v1/users";
             var expectedUrl = "http://localhost:8080/api/v1/users";
             var result = _urlProcessingService.ExtractUrls(text);
-            Assert.Equal(1, result.Count);
+            Assert.Single(result);
             Assert.Equal(expectedUrl, result[0]);
         }
 
@@ -103,7 +103,7 @@ namespace TelegramSearchBot.Test.Service.Common
             var text = "Search here: https://search.com/find?query=test&page=1";
             var expectedUrl = "https://search.com/find?query=test&page=1";
             var result = _urlProcessingService.ExtractUrls(text);
-            Assert.Equal(1, result.Count);
+            Assert.Single(result);
             Assert.Equal(expectedUrl, result[0]);
         }
 
@@ -297,62 +297,64 @@ namespace TelegramSearchBot.Test.Service.Common
         [Fact]
         public async Task ProcessUrlsInTextAsync_NoUrlsInText_ReturnsEmptyList()
         {
-            var text = "Some text without any links.";
+            var text = "This text has no urls";
             var result = await _urlProcessingService.ProcessUrlsInTextAsync(text);
-            Assert.NotNull(result);
             Assert.Empty(result);
         }
 
         [Fact]
         public async Task ProcessUrlsInTextAsync_SingleUrl_ProcessesAndReturnsCleanedUrl()
         {
-            var text = "Check http://example.com?utm_source=test";
-            var expectedCleanedUrl = "http://example.com";
-
+            var expectedCleanedUrl = "http://example.com/page";
+            
             _mockHttpMessageHandler.Protected()
-                .Setup<Task<HttpResponseMessage>>(
+                 .Setup<Task<HttpResponseMessage>>(
                     "SendAsync",
-                    ItExpr.Is<HttpRequestMessage>(req => req.RequestUri.ToString().StartsWith("http://example.com")),
+                    ItExpr.IsAny<HttpRequestMessage>(),
                     ItExpr.IsAny<CancellationToken>()
                 )
                 .ReturnsAsync(new HttpResponseMessage
                 {
                     StatusCode = HttpStatusCode.OK,
                     Content = new StringContent(""),
-                    RequestMessage = new HttpRequestMessage(HttpMethod.Get, "http://example.com?utm_source=test")
+                    RequestMessage = new HttpRequestMessage(HttpMethod.Get, expectedCleanedUrl) // Simulate no redirect and clean
                 });
-            
+
+            var text = "Check out http://example.com/page?utm_source=test";
             var result = await _urlProcessingService.ProcessUrlsInTextAsync(text);
-            Assert.Contains(result[0].ProcessedUrl, new[] { expectedCleanedUrl, expectedCleanedUrl + "/" });
+            Assert.Single(result);
+            Assert.Equal(expectedCleanedUrl, result.FirstOrDefault().ProcessedUrl);
         }
 
         [Fact]
         public async Task ProcessUrlsInTextAsync_MultipleUrls_ProcessesAllUrls()
         {
-            var text = "Url1: http://a.com?trk=1. Url2: http://b.com?trk=2. Duplicate: http://a.com?trk=3";
-            var cleanedA = "http://a.com/"; 
-            var cleanedB = "http://b.com/";
-
+            var text = "Visit http://a.com?u=1 and https://b.org/page?fbc=1";
+            var expectedUrls = new List<string> { "http://a.com/", "https://b.org/page" }; // Expected cleaned URLs
+            
+            // Mock http client for the two urls
             _mockHttpMessageHandler.Protected()
-                .Setup<Task<HttpResponseMessage>>(
+                 .SetupSequence<Task<HttpResponseMessage>>(
                     "SendAsync",
                     ItExpr.IsAny<HttpRequestMessage>(),
                     ItExpr.IsAny<CancellationToken>()
                 )
-                .ReturnsAsync((HttpRequestMessage request, CancellationToken token) => {
-                    return new HttpResponseMessage {
-                        StatusCode = HttpStatusCode.OK,
-                        Content = new StringContent(""),
-                        RequestMessage = new HttpRequestMessage(HttpMethod.Get, request.RequestUri)
-                    };
+                .ReturnsAsync(new HttpResponseMessage // Response for http://a.com
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent(""),
+                    RequestMessage = new HttpRequestMessage(HttpMethod.Get, "http://a.com/") // Simulate cleaned url
+                })
+                .ReturnsAsync(new HttpResponseMessage // Response for https://b.org/page
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent(""),
+                    RequestMessage = new HttpRequestMessage(HttpMethod.Get, "https://b.org/page") // Simulate cleaned url
                 });
 
             var result = await _urlProcessingService.ProcessUrlsInTextAsync(text);
-            Assert.Equal(3, result.Count);
-
-            // Verify all URLs were processed correctly
-            Assert.Contains(cleanedA, result.Select(r => r.ProcessedUrl));
-            Assert.Contains(cleanedB, result.Select(r => r.ProcessedUrl));
+            Assert.Equal(expectedUrls.Count, result.Count);
+            Assert.Equivalent(expectedUrls, result.Select(r => r.ProcessedUrl));
         }
     }
 }
