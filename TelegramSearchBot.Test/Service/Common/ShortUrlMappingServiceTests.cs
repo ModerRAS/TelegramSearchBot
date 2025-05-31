@@ -107,7 +107,7 @@ namespace TelegramSearchBot.Test.Service.Common
             var result = await _service.GetUrlMappingsAsync(new[] { "short1", "short2" }, CancellationToken.None);
 
             // Assert
-            Assert.Equal(1, result.Count);
+            Assert.Single(result);
             Assert.Equal("long2", result["short2"]);
         }
     }

@@ -290,8 +290,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
             Assert.True(result);
-            Assert.Equal(1, parsedToolCalls.Count);
-            var firstTool = parsedToolCalls[0];
+            Assert.Single(parsedToolCalls);
+            var firstTool = parsedToolCalls.First();
             Assert.Equal("StaticTool", firstTool.toolName);
             Assert.Equal(2, firstTool.arguments.Count);
             Assert.Equal("hello", firstTool.arguments["arg1"]);
@@ -305,8 +305,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
             Assert.True(result);
-            Assert.Equal(1, parsedToolCalls.Count);
-            var firstTool = parsedToolCalls[0];
+            Assert.Single(parsedToolCalls);
+            var firstTool = parsedToolCalls.First();
             Assert.Equal("InstanceTool", firstTool.toolName);
             Assert.Equal(1, firstTool.arguments.Count);
             Assert.Equal("true", firstTool.arguments["input"]);
@@ -319,8 +319,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
             Assert.True(result); 
-            Assert.Equal(1, parsedToolCalls.Count);
-            var firstTool = parsedToolCalls[0];
+            Assert.Single(parsedToolCalls);
+            var firstTool = parsedToolCalls.First();
             Assert.Equal("InstanceTool", firstTool.toolName);
             Assert.Equal(1, firstTool.arguments.Count);
             Assert.Equal("false", firstTool.arguments["input"]);
@@ -351,8 +351,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
             Assert.True(result);
-            Assert.Equal(1, parsedToolCalls.Count);
-            var firstTool = parsedToolCalls[0];
+            Assert.Single(parsedToolCalls);
+            var firstTool = parsedToolCalls.First();
             Assert.Equal("StaticTool", firstTool.toolName);
             Assert.Equal(1, firstTool.arguments.Count);
             Assert.Equal("fenced", firstTool.arguments["arg1"]);
@@ -419,10 +419,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
             // Assert
             Assert.True(result);
-            Assert.Equal(1, parsedToolCalls.Count);
-            Assert.Equal("TestTool", parsedToolCalls[0].toolName);
-            Assert.Equal("value1", parsedToolCalls[0].arguments["param1"]);
-            Assert.Equal("123", parsedToolCalls[0].arguments["param2"]);
+            Assert.Single(parsedToolCalls);
+            var toolCall = parsedToolCalls.First();
+            // Removed Assert.NotNull(toolCall) as it's a value type tuple
+            Assert.Equal("TestTool", toolCall.toolName);
+            Assert.Equal(2, toolCall.arguments.Count);
+            Assert.Equal("value1", toolCall.arguments["param1"]);
+            Assert.Equal("123", toolCall.arguments["param2"]);
         }
 
         [Fact]
@@ -456,7 +459,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
             // Assert
             Assert.True(result);
-            Assert.Equal(1, parsedToolCalls.Count);
+            Assert.Single(parsedToolCalls);
             var args = parsedToolCalls[0].arguments;
             Assert.Equal("add_observations", args["command"]);
             Assert.Contains("\"entityName\": \"测试实体\"", args["arguments"]);

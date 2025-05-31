@@ -49,7 +49,7 @@ namespace TelegramSearchBot.Test.Service.Tools
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(0, result.Results.Count);
+            Assert.Empty(result.Results);
         }
 
         [Fact]
@@ -88,7 +88,7 @@ namespace TelegramSearchBot.Test.Service.Tools
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(0, result.Results.Count);
+            Assert.Empty(result.Results);
         }
     }
 }
