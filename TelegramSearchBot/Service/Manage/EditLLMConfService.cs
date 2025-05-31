@@ -14,16 +14,17 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Interface.Manage;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class EditLLMConfService : IService {
         public string ServiceName => "EditLLMConfService";
         protected readonly DataDbContext DataContext;
-        protected readonly EditLLMConfHelper Helper;
+        protected readonly IEditLLMConfHelper Helper;
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
         public EditLLMConfService(
-            EditLLMConfHelper helper,
+            IEditLLMConfHelper helper,
             DataDbContext context,
             IConnectionMultiplexer connectionMultiplexer
             ) {
@@ -202,12 +203,12 @@ namespace TelegramSearchBot.Service.Manage {
 
         private async Task<(bool, string)> HandleRemovingModelSelectChannelAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var removeModelChannelId)) {
-                return (false, "请输入有效的渠道ID");
+                return (true, "请输入有效的渠道ID");
             }
 
             var removeModelChannel = await Helper.GetChannelById(removeModelChannelId);
             if (removeModelChannel == null) {
-                return (false, "找不到指定的渠道");
+                return (true, "找不到指定的渠道");
             }
 
             // 获取该渠道下的所有模型
@@ -234,11 +235,27 @@ namespace TelegramSearchBot.Service.Manage {
         private async Task<(bool, string)> HandleRemovingModelSelectAsync(EditLLMConfRedisHelper redis, string command) {
             var data = await redis.GetDataAsync();
             var parts = data.Split('|');
+
+            if (parts.Length < 2)
+            {
+                return (false, "内部错误：模型数据格式不正确");
+            }
+
             var removeChannelId = int.Parse(parts[0]);
             var modelList = parts[1].Split(',');
 
+            if (modelList.Length == 0 || (modelList.Length == 1 && string.IsNullOrEmpty(modelList[0])))
+            {
+                 return (true, "该渠道下没有可移除的模型");
+            }
+
             if (!int.TryParse(command, out var modelIndex) || modelIndex < 1 || modelIndex > modelList.Length) {
-                return (false, "请输入有效的模型序号");
+                return (true, "请输入有效的模型序号");
+            }
+
+            if (modelIndex - 1 < 0 || modelIndex - 1 >= modelList.Length)
+            {
+                 return (true, "内部错误：无效的模型序号");
             }
 
             var modelName = modelList[modelIndex - 1];
@@ -252,12 +269,12 @@ namespace TelegramSearchBot.Service.Manage {
 
         private async Task<(bool, string)> HandleViewingModelSelectChannelAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var viewModelChannelId)) {
-                return (false, "请输入有效的渠道ID");
+                return (true, "请输入有效的渠道ID");
             }
 
             var viewModelChannel = await Helper.GetChannelById(viewModelChannelId);
             if (viewModelChannel == null) {
-                return (false, "找不到指定的渠道");
+                return (true, "找不到指定的渠道");
             }
 
             // 获取该渠道下的所有模型
@@ -307,18 +324,18 @@ namespace TelegramSearchBot.Service.Manage {
                     break;
                 case "5":
                     if (!int.TryParse(command, out var tmp_parallel)) {
-                        return (false, "请输入有效的数字");
+                        return (true, "请输入有效的数字");
                     }
                     updateResult = await Helper.UpdateChannel(editId, parallel: tmp_parallel);
                     break;
                 case "6":
                     if (!int.TryParse(command, out var tmp_priority)) {
-                        return (false, "请输入有效的数字");
+                        return (true, "请输入有效的数字");
                     }
                     updateResult = await Helper.UpdateChannel(editId, priority: tmp_priority);
                     break;
                 default:
-                    return (false, "无效的字段选择");
+                    return (true, "无效的字段选择");
             }
 
             // 清理状态
@@ -351,7 +368,7 @@ namespace TelegramSearchBot.Service.Manage {
 
         private async Task<(bool, string)> HandleSettingMaxImageRetryAsync(EditLLMConfRedisHelper redis, string command) {
             if (!int.TryParse(command, out var maxImageRetry) || maxImageRetry <= 0) {
-                return (false, "请输入有效的正整数");
+                return (true, "请输入有效的正整数");
             }
 
             var imageRetryConfig = await DataContext.AppConfigurationItems
@@ -450,7 +467,11 @@ namespace TelegramSearchBot.Service.Manage {
                 return (true, sb.ToString());
             }
 
-            switch (currentState.ToString()) {
+            if (string.IsNullOrEmpty(currentState)) {
+                return (false, "请先选择一个操作");
+            }
+
+            switch (currentState) {
                 case var _ when currentState == LLMConfState.AwaitingName.GetDescription():
                     return await HandleAwaitingNameAsync(redis, Command);
 

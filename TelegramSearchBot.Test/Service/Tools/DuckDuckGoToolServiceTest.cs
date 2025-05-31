@@ -1,13 +1,12 @@
 using System.IO;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using TelegramSearchBot.Service.Tools;
+using Xunit;
 
 namespace TelegramSearchBot.Test.Service.Tools
 {
-    [TestClass]
     public class DuckDuckGoToolServiceTest
     {
-        [TestMethod]
+        [Fact]
         public void ParseHtml_ShouldReturnCorrectResults()
         {
             // Arrange
@@ -23,17 +22,17 @@ namespace TelegramSearchBot.Test.Service.Tools
             var result = service.ParseHtml(html, "test query");
 
             // Assert
-            Assert.IsNotNull(result);
-            Assert.AreEqual("test query", result.Query);
-            Assert.IsTrue(result.Results.Count > 0);
+            Assert.NotNull(result);
+            Assert.Equal("test query", result.Query);
+            Assert.True(result.Results.Count > 0);
             foreach (var item in result.Results)
             {
-                Assert.IsFalse(string.IsNullOrEmpty(item.Title));
-                Assert.IsFalse(string.IsNullOrEmpty(item.Url));
+                Assert.False(string.IsNullOrEmpty(item.Title));
+                Assert.False(string.IsNullOrEmpty(item.Url));
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void ParseHtml_ShouldHandleEmptyResults()
         {
             // Arrange
@@ -49,11 +48,11 @@ namespace TelegramSearchBot.Test.Service.Tools
             var result = service.ParseHtml(html, "test query");
 
             // Assert
-            Assert.IsNotNull(result);
-            Assert.AreEqual(0, result.Results.Count);
+            Assert.NotNull(result);
+            Assert.Empty(result.Results);
         }
 
-        [TestMethod]
+        [Fact]
         public void ParseHtml_ShouldHandleSpecialCharacters()
         {
             // Arrange
@@ -69,15 +68,15 @@ namespace TelegramSearchBot.Test.Service.Tools
             var result = service.ParseHtml(html, "test query");
 
             // Assert
-            Assert.IsNotNull(result);
-            Assert.AreEqual(2, result.Results.Count, "Expected exactly 2 search result");
+            Assert.NotNull(result);
+            Assert.Equal(2, result.Results.Count);
             var item = result.Results[0];
-            Assert.AreEqual("Test & Result <3>", item.Title, "Title should match with HTML entities decoded");
-            Assert.AreEqual("example.com?q=1&w=2", item.Url, "URL should match with special characters");
-            Assert.AreEqual("Description with \"quotes\" & special chars", item.Description, "Description should match with special characters");
+            Assert.Equal("Test & Result <3>", item.Title);
+            Assert.Equal("example.com?q=1&w=2", item.Url);
+            Assert.Equal("Description with \"quotes\" & special chars", item.Description);
         }
 
-        [TestMethod]
+        [Fact]
         public void ParseHtml_ShouldHandleMissingFields()
         {
             // Arrange
@@ -88,8 +87,8 @@ namespace TelegramSearchBot.Test.Service.Tools
             var result = service.ParseHtml(html, "test query");
 
             // Assert
-            Assert.IsNotNull(result);
-            Assert.AreEqual(0, result.Results.Count);
+            Assert.NotNull(result);
+            Assert.Empty(result.Results);
         }
     }
 }

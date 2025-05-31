@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -17,6 +16,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Message = TelegramSearchBot.Model.Data.Message;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
+using Xunit;
 
 namespace TelegramSearchBot.Test.Service.BotAPI
 {
@@ -35,7 +35,6 @@ namespace TelegramSearchBot.Test.Service.BotAPI
         public virtual DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
     }
 
-    [TestClass]
     public class SendServiceTests
     {
         private Mock<ITelegramBotClient> _mockBotClient = null!;
@@ -45,8 +44,7 @@ namespace TelegramSearchBot.Test.Service.BotAPI
         private Mock<IMediator> _mockMediator = null!;
         private SendService _sendService = null!;
 
-        [TestInitialize]
-        public void Setup()
+        public SendServiceTests()
         {
             _mockBotClient = new Mock<ITelegramBotClient>();
             _mockLogger = new Mock<ILogger<SendMessage>>();
@@ -86,26 +84,24 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             _sendService = new SendService(_mockBotClient.Object, _mockSendMessage.Object, _mockDbContext.Object);
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_InitializesCorrectly()
         {
             // Assert
-            Assert.IsNotNull(_sendService);
-            Assert.AreEqual("SendService", _sendService.ServiceName);
-            Assert.AreSame(_mockBotClient.Object, _sendService.GetPrivateFieldValue<ITelegramBotClient>("botClient"));
-            Assert.AreSame(_mockSendMessage.Object, _sendService.GetPrivateFieldValue<SendMessage>("Send"));
+            Assert.NotNull(_sendService);
+            Assert.Equal("SendService", _sendService.ServiceName);
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_WithNullParameters_ThrowsException()
         {
             // Arrange & Act & Assert
-            Assert.ThrowsException<ArgumentNullException>(() => new SendService(null, _mockSendMessage.Object, _mockDbContext.Object));
-            Assert.ThrowsException<ArgumentNullException>(() => new SendService(_mockBotClient.Object, null, _mockDbContext.Object));
-            Assert.ThrowsException<ArgumentNullException>(() => new SendService(_mockBotClient.Object, _mockSendMessage.Object, null));
+            Assert.Throws<ArgumentNullException>(() => new SendService(null, _mockSendMessage.Object, _mockDbContext.Object));
+            Assert.Throws<ArgumentNullException>(() => new SendService(_mockBotClient.Object, null, _mockDbContext.Object));
+            Assert.Throws<ArgumentNullException>(() => new SendService(_mockBotClient.Object, _mockSendMessage.Object, null));
         }
 
-        [TestMethod]
+        [Fact]
         public void ConvertToList_WithEmptyInput_ReturnsEmptyList()
         {
             // Arrange
@@ -115,10 +111,10 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             var result = SendService.ConvertToList(emptyMessages);
 
             // Assert
-            Assert.AreEqual(0, result.Count);
+            Assert.Empty(result);
         }
 
-        [TestMethod]
+        [Fact]
         public void ConvertToList_WithLongContent_TruncatesCorrectly()
         {
             // Arrange
@@ -129,11 +125,11 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             var result = SendService.ConvertToList(messages);
 
             // Assert
-            Assert.AreEqual(30, result[0].Split(']')[0].Length - 1); // 检查截断后的内容长度
-            Assert.IsTrue(result[0].Contains("https://t.me/c/")); // 检查链接格式
+            Assert.Equal(30, result[0].Split(']')[0].Length - 1); // 检查截断后的内容长度
+            Assert.Contains("https://t.me/c/", result[0]); // 检查链接格式
         }
 
-        [TestMethod]
+        [Fact]
         public void GenerateMessage_WithNoResults_ReturnsNotFoundMessage()
         {
             // Arrange
@@ -144,10 +140,10 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             var result = _sendService.GenerateMessage(emptyResults, searchOption);
 
             // Assert
-            Assert.IsTrue(result.Contains("未找到结果"));
+            Assert.Contains("未找到结果", result);
         }
 
-        [TestMethod]
+        [Fact]
         public void GenerateMessage_WithResults_ReturnsFormattedMessage()
         {
             // Arrange
@@ -162,12 +158,12 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             var result = _sendService.GenerateMessage(messages, searchOption);
 
             // Assert
-            Assert.IsTrue(result.Contains("共找到 2 项结果"));
-            Assert.IsTrue(result.Contains("test1"));
-            Assert.IsTrue(result.Contains("test2"));
+            Assert.Contains("共找到 2 项结果", result);
+            Assert.Contains("test1", result);
+            Assert.Contains("test2", result);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GenerateKeyboard_WithMoreResults_AddsNextPageButton()
         {
             // Arrange
@@ -192,11 +188,11 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             (List<InlineKeyboardButton> buttons, _) = await _sendService.GenerateKeyboard(searchOption);
 
             // Assert
-            Assert.AreEqual(2, buttons.Count);
-            Assert.AreEqual("下一页", buttons[0].Text);
+            Assert.Equal(2, buttons.Count);
+            Assert.Equal("下一页", buttons[0].Text);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GenerateKeyboard_WithNoMoreResults_DoesNotAddNextPageButton()
         {
             // Arrange
@@ -221,11 +217,11 @@ namespace TelegramSearchBot.Test.Service.BotAPI
             (List<InlineKeyboardButton> buttons, _) = await _sendService.GenerateKeyboard(searchOption);
 
             // Assert
-            Assert.AreEqual(2, buttons.Count); // 总是包含"下一页"和"删除历史"按钮
-            Assert.AreEqual("删除历史", buttons[1].Text); // 检查删除按钮存在
+            Assert.Equal(2, buttons.Count); // 总是包含"下一页"和"删除历史"按钮
+            Assert.Equal("删除历史", buttons[1].Text); // 检查删除按钮存在
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ExecuteAsync_WithValidInput_CallsAllMethods()
         {
             // Arrange

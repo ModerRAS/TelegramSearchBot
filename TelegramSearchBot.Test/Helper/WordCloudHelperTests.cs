@@ -1,14 +1,13 @@
 using System.IO;
 using System.Linq;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using TelegramSearchBot.Helper;
+using Xunit;
 
 namespace TelegramSearchBot.Test.Helper
 {
-    [TestClass]
     public class WordCloudHelperTests
     {
-        [TestMethod]
+        [Fact]
         public void GenerateWordCloud_ShouldCreateImageFile()
         {
             // 准备测试数据
@@ -30,8 +29,8 @@ namespace TelegramSearchBot.Test.Helper
             File.WriteAllBytes(outputPath, imageBytes);
 
             // 验证文件存在且非空
-            Assert.IsTrue(File.Exists(outputPath));
-            Assert.IsTrue(new FileInfo(outputPath).Length > 0);
+            Assert.True(File.Exists(outputPath));
+            Assert.True(new FileInfo(outputPath).Length > 0);
 
             // 打印文件路径
             System.Console.WriteLine($"词云图片已保存到: {Path.GetFullPath(outputPath)}");

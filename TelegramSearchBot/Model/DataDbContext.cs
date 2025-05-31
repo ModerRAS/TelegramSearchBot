@@ -30,21 +30,21 @@ namespace TelegramSearchBot.Model
             modelBuilder.Entity<TelegramFileCacheEntry>()
                 .HasIndex(e => e.CacheKey)
                 .IsUnique();
-            
+
             // You can add other configurations here if needed
         }
-        public DbSet<Message> Messages { get; set; }
-        public DbSet<UserWithGroup> UsersWithGroup { get; set; }
-        public DbSet<UserData> UserData { get; set; }
-        public DbSet<GroupData> GroupData { get; set; }
-        public DbSet<GroupSettings> GroupSettings { get; set; }
-        public DbSet<LLMChannel> LLMChannels { get; set; }
-        public DbSet<ChannelWithModel> ChannelsWithModel { get; set; }
-        public DbSet<AppConfigurationItem> AppConfigurationItems { get; set; } // Added for BiliCookie and other app configs
-        public DbSet<ShortUrlMapping> ShortUrlMappings { get; set; } = null!;
-        public DbSet<TelegramFileCacheEntry> TelegramFileCacheEntries { get; set; } = null!;
-        public DbSet<MessageExtension> MessageExtensions { get; set; } = null!;
-        public DbSet<MemoryGraph> MemoryGraphs { get; set; } = null!;
-        public DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
+        public virtual DbSet<Message> Messages { get; set; }
+        public virtual DbSet<UserWithGroup> UsersWithGroup { get; set; }
+        public virtual DbSet<UserData> UserData { get; set; }
+        public virtual DbSet<GroupData> GroupData { get; set; }
+        public virtual DbSet<GroupSettings> GroupSettings { get; set; }
+        public virtual DbSet<LLMChannel> LLMChannels { get; set; }
+        public virtual DbSet<ChannelWithModel> ChannelsWithModel { get; set; }
+        public virtual DbSet<AppConfigurationItem> AppConfigurationItems { get; set; } // Added for BiliCookie and other app configs
+        public virtual DbSet<ShortUrlMapping> ShortUrlMappings { get; set; } = null!;
+        public virtual DbSet<TelegramFileCacheEntry> TelegramFileCacheEntries { get; set; } = null!;
+        public virtual DbSet<MessageExtension> MessageExtensions { get; set; } = null!;
+        public virtual DbSet<MemoryGraph> MemoryGraphs { get; set; } = null!;
+        public virtual DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
     }
 }

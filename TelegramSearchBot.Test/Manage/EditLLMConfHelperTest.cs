@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using StackExchange.Redis;
 using System;
@@ -14,21 +13,20 @@ using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
+using Xunit;
 
 namespace TelegramSearchBot.Test.Manage {
-    [TestClass]
     public class EditLLMConfHelperTest {
-        private DataDbContext _context = null!;
-        private Mock<IConnectionMultiplexer> _redisMock = null!;
-        private Mock<IDatabase> _dbMock = null!;
-        private Mock<OpenAIService> _openAIServiceMock = null!;
-        private Mock<MessageExtensionService> _messageExtensionServiceMock = null!;
-        private Mock<OllamaService> _ollamaServiceMock = null!;
-        private Mock<GeminiService> _geminiServiceMock = null!;
-        private EditLLMConfHelper _helper = null!;
+        private readonly DataDbContext _context;
+        private readonly Mock<IConnectionMultiplexer> _redisMock;
+        private readonly Mock<IDatabase> _dbMock;
+        private readonly Mock<OpenAIService> _openAIServiceMock;
+        private readonly Mock<MessageExtensionService> _messageExtensionServiceMock;
+        private readonly Mock<OllamaService> _ollamaServiceMock;
+        private readonly Mock<GeminiService> _geminiServiceMock;
+        private readonly EditLLMConfHelper _helper;
 
-        [TestInitialize]
-        public void Initialize() {
+        public EditLLMConfHelperTest() {
             var options = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
@@ -85,10 +83,9 @@ namespace TelegramSearchBot.Test.Manage {
                 .Returns(Task.CompletedTask);
             _geminiServiceMock.Setup(g => g.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
-            
         }
 
-        [TestMethod]
+        [Fact]
         public async Task RefreshAllChannel_ShouldUpdateAllModels() {
             // Arrange
             // Use mocks initialized in Initialize()
@@ -111,14 +108,12 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _helper.RefreshAllChannel();
 
             // Assert
-            Assert.AreEqual(6, result); // 2 models per provider * 3 providers
+            Assert.Equal(6, result); // 2 models per provider * 3 providers
             var models = await _context.ChannelsWithModel.ToListAsync();
-            Assert.AreEqual(6, models.Count);
+            Assert.Equal(6, models.Count);
         }
 
-
-
-        [TestMethod]
+        [Fact]
         public async Task RefreshAllChannel_ShouldUpdateAllModels_2() {
             // Arrange
             // Use mocks initialized in Initialize()
@@ -136,33 +131,33 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _helper.RefreshAllChannel();
 
             // Assert
-            Assert.AreEqual(6, result); // 2 models per provider * 3 providers
+            Assert.Equal(6, result); // 2 models per provider * 3 providers
             var models = await _context.ChannelsWithModel.ToListAsync();
-            Assert.AreEqual(6, models.Count);
-            Assert.IsTrue(models.Any(m => m.ModelName == "openai-model1" && m.LLMChannelId == 1));
-            Assert.IsTrue(models.Any(m => m.ModelName == "openai-model2" && m.LLMChannelId == 1));
-            Assert.IsTrue(models.Any(m => m.ModelName == "ollama-model1" && m.LLMChannelId == 2));
-            Assert.IsTrue(models.Any(m => m.ModelName == "ollama-model2" && m.LLMChannelId == 2));
-            Assert.IsTrue(models.Any(m => m.ModelName == "gemini-model1" && m.LLMChannelId == 3));
-            Assert.IsTrue(models.Any(m => m.ModelName == "gemini-model2" && m.LLMChannelId == 3));
+            Assert.Equal(6, models.Count);
+            Assert.Contains(models, m => m.ModelName == "openai-model1" && m.LLMChannelId == 1);
+            Assert.Contains(models, m => m.ModelName == "openai-model2" && m.LLMChannelId == 1);
+            Assert.Contains(models, m => m.ModelName == "ollama-model1" && m.LLMChannelId == 2);
+            Assert.Contains(models, m => m.ModelName == "ollama-model2" && m.LLMChannelId == 2);
+            Assert.Contains(models, m => m.ModelName == "gemini-model1" && m.LLMChannelId == 3);
+            Assert.Contains(models, m => m.ModelName == "gemini-model2" && m.LLMChannelId == 3);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task AddChannel_ShouldAddModelsForProvider() {
             // Act
             var result = await _helper.AddChannel("Test", "http://test.com", "key", LLMProvider.OpenAI);
 
             // Assert
-            Assert.IsTrue(result > 0);
+            Assert.True(result > 0);
             var channel = await _context.LLMChannels.FindAsync(result);
-            Assert.IsNotNull(channel);
+            Assert.NotNull(channel);
             var models = await _context.ChannelsWithModel
                 .Where(m => m.LLMChannelId == result)
                 .ToListAsync();
-            Assert.AreEqual(2, models.Count);
+            Assert.Equal(2, models.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task AddModelWithChannel_ShouldAddMultipleModels() {
             // Arrange
             var channel = new LLMChannel {
@@ -178,14 +173,14 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _helper.AddModelWithChannel(channel.Id, "new1,new2");
 
             // Assert
-            Assert.IsTrue(result);
+            Assert.True(result);
             var models = await _context.ChannelsWithModel
                 .Where(m => m.LLMChannelId == channel.Id)
                 .ToListAsync();
-            Assert.AreEqual(2, models.Count);
+            Assert.Equal(2, models.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task RemoveModelFromChannel_ShouldRemoveModel() {
             // Arrange
             var channel = new LLMChannel {
@@ -205,13 +200,13 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _helper.RemoveModelFromChannel(channel.Id, "test-model");
 
             // Assert
-            Assert.IsTrue(result);
+            Assert.True(result);
             var model = await _context.ChannelsWithModel
                 .FirstOrDefaultAsync(m => m.LLMChannelId == channel.Id);
-            Assert.IsNull(model);
+            Assert.Null(model);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task UpdateChannel_ShouldUpdateProperties() {
             // Arrange
             var channel = new LLMChannel {
@@ -236,17 +231,17 @@ namespace TelegramSearchBot.Test.Manage {
                 priority: 2);
 
             // Assert
-            Assert.IsTrue(result);
+            Assert.True(result);
             var updated = await _context.LLMChannels.FindAsync(channel.Id);
-            Assert.AreEqual("New", updated.Name);
-            Assert.AreEqual("http://new.com", updated.Gateway);
-            Assert.AreEqual("new-key", updated.ApiKey);
-            Assert.AreEqual(LLMProvider.Ollama, updated.Provider);
-            Assert.AreEqual(5, updated.Parallel);
-            Assert.AreEqual(2, updated.Priority);
+            Assert.Equal("New", updated.Name);
+            Assert.Equal("http://new.com", updated.Gateway);
+            Assert.Equal("new-key", updated.ApiKey);
+            Assert.Equal(LLMProvider.Ollama, updated.Provider);
+            Assert.Equal(5, updated.Parallel);
+            Assert.Equal(2, updated.Priority);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetChannelById_ShouldReturnCorrectChannel() {
             // Arrange
             var channel = new LLMChannel {
@@ -263,23 +258,23 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _helper.GetChannelById(1);
 
             // Assert
-            Assert.IsNotNull(result);
-            Assert.AreEqual(channel.Id, result.Id);
-            Assert.AreEqual(channel.Name, result.Name);
-            Assert.AreEqual(channel.Gateway, result.Gateway);
-            Assert.AreEqual(channel.Provider, result.Provider);
+            Assert.NotNull(result);
+            Assert.Equal(channel.Id, result.Id);
+            Assert.Equal(channel.Name, result.Name);
+            Assert.Equal(channel.Gateway, result.Gateway);
+            Assert.Equal(channel.Provider, result.Provider);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetChannelById_ShouldReturnNullForNonExistingId() {
             // Act
             var result = await _helper.GetChannelById(999);
 
             // Assert
-            Assert.IsNull(result);
+            Assert.Null(result);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetChannelsByName_ShouldReturnMatchingChannels() {
             // Arrange
             var channels = new[] {
@@ -295,11 +290,14 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _helper.GetChannelsByName("Test");
 
             // Assert
-            Assert.AreEqual(3, result.Count);
-            Assert.IsTrue(result.All(c => c.Name.Contains("Test")));
+            Assert.Equal(3, result.Count);
+            foreach (var c in result)
+            {
+                Assert.Contains("Test", c.Name);
+            }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task GetChannelsByName_ShouldReturnEmptyForNoMatches() {
             // Arrange
             var channels = new[] {
@@ -313,7 +311,7 @@ namespace TelegramSearchBot.Test.Manage {
             var result = await _helper.GetChannelsByName("Nonexistent");
 
             // Assert
-            Assert.AreEqual(0, result.Count);
+            Assert.Empty(result);
         }
     }
 }
