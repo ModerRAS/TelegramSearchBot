@@ -24,6 +24,7 @@ namespace TelegramSearchBot.Test.Manage {
         private readonly Mock<MessageExtensionService> _messageExtensionServiceMock;
         private readonly Mock<OllamaService> _ollamaServiceMock;
         private readonly Mock<GeminiService> _geminiServiceMock;
+        private readonly Mock<IModelCapabilityService> _modelCapabilityServiceMock;
         private readonly EditLLMConfHelper _helper;
 
         public EditLLMConfHelperTest() {
@@ -43,6 +44,12 @@ namespace TelegramSearchBot.Test.Manage {
             var ollamaLogger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<OllamaService>();
             var serviceProviderMock = new Mock<IServiceProvider>();
             _messageExtensionServiceMock = new Mock<MessageExtensionService>(_context);
+            
+            // Setup ModelCapabilityService mock
+            _modelCapabilityServiceMock = new Mock<IModelCapabilityService>();
+            _modelCapabilityServiceMock
+                .Setup(m => m.UpdateChannelModelCapabilities(It.IsAny<int>()))
+                .ReturnsAsync(true);
             
             // Setup mock LLM services
             _ollamaServiceMock = new Mock<OllamaService>(
@@ -75,9 +82,14 @@ namespace TelegramSearchBot.Test.Manage {
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(_ollamaServiceMock.Object);
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(_geminiServiceMock.Object);
 
+            // 创建Logger mock
+            var loggerMock = new Mock<ILogger<EditLLMConfHelper>>();
+
             _helper = new EditLLMConfHelper(
                 _context,
-                llmFactoryMock.Object);
+                llmFactoryMock.Object,
+                _modelCapabilityServiceMock.Object,
+                loggerMock.Object);
             
             _messageExtensionServiceMock.Setup(m => m.AddOrUpdateAsync(It.IsAny<MessageExtension>()))
                 .Returns(Task.CompletedTask);
