@@ -47,7 +47,19 @@ namespace TelegramSearchBot.Service.Vector
                 // 生成查询向量
                 var queryVector = await GenerateVectorAsync(searchOption.Search);
 
-                // 执行向量搜索
+                // 如果是第一次搜索，先获取总数
+                if (searchOption.Count < 0)
+                {
+                    // 使用较大的 limit 来获取总数的估算
+                    var countResult = await _qdrantClient.SearchAsync(
+                        searchOption.ChatId.ToString(),
+                        queryVector,
+                        offset: 0,
+                        limit: 10000); // 使用一个较大的数来估算总数
+                    searchOption.Count = countResult.Count();
+                }
+
+                // 执行实际搜索
                 var searchResult = await _qdrantClient.SearchAsync(
                     searchOption.ChatId.ToString(),
                     queryVector,
@@ -57,13 +69,19 @@ namespace TelegramSearchBot.Service.Vector
                 var orderd = from s in searchResult.ToList()
                              orderby s.Score descending
                              select s;
+                             
                 if (searchOption?.Messages == null) {
                     searchOption.Messages = new List<Message>();
                 }
+                
                 // 处理搜索结果
                 foreach (var scoredPoint in orderd) {
                     if (scoredPoint != null) {
-                        searchOption.Messages.Add(await _dataDbContext.Messages.FirstOrDefaultAsync(s => s.MessageId.Equals((long)scoredPoint.Id.Num) && s.GroupId.Equals(searchOption.ChatId)));
+                        var message = await _dataDbContext.Messages.FirstOrDefaultAsync(s => s.MessageId.Equals((long)scoredPoint.Id.Num) && s.GroupId.Equals(searchOption.ChatId));
+                        if (message != null)
+                        {
+                            searchOption.Messages.Add(message);
+                        }
                     }
                 }
 

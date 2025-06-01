@@ -31,6 +31,20 @@ namespace TelegramSearchBot.Model
                 .HasIndex(e => e.CacheKey)
                 .IsUnique();
 
+            // 配置对话段模型
+            modelBuilder.Entity<ConversationSegment>()
+                .HasIndex(cs => new { cs.GroupId, cs.StartTime, cs.EndTime });
+
+            modelBuilder.Entity<ConversationSegmentMessage>()
+                .HasOne(csm => csm.ConversationSegment)
+                .WithMany(cs => cs.Messages)
+                .HasForeignKey(csm => csm.ConversationSegmentId);
+
+            modelBuilder.Entity<ConversationSegmentMessage>()
+                .HasOne(csm => csm.Message)
+                .WithMany()
+                .HasForeignKey(csm => csm.MessageDataId);
+
             // You can add other configurations here if needed
         }
         public virtual DbSet<Message> Messages { get; set; }
@@ -46,5 +60,7 @@ namespace TelegramSearchBot.Model
         public virtual DbSet<MessageExtension> MessageExtensions { get; set; } = null!;
         public virtual DbSet<MemoryGraph> MemoryGraphs { get; set; } = null!;
         public virtual DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
+        public virtual DbSet<ConversationSegment> ConversationSegments { get; set; } = null!;
+        public virtual DbSet<ConversationSegmentMessage> ConversationSegmentMessages { get; set; } = null!;
     }
 }

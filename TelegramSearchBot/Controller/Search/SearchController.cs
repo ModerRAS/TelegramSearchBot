@@ -15,18 +15,21 @@ namespace TelegramSearchBot.Controller.Search
         private readonly ISearchService searchService;
         private readonly SendService sendService;
         private readonly SearchOptionStorageService searchOptionStorageService;
+        private readonly CallbackDataService callbackDataService;
         private readonly SearchView searchView;
         public List<Type> Dependencies => new List<Type>();
         public SearchController(
             SearchService searchService,
             SendService sendService,
             SearchOptionStorageService searchOptionStorageService,
+            CallbackDataService callbackDataService,
             SearchView searchView
             )
         {
             this.searchService = searchService;
             this.sendService = sendService;
             this.searchOptionStorageService = searchOptionStorageService;
+            this.callbackDataService = callbackDataService;
             this.searchView = searchView;
         }
 
@@ -36,41 +39,72 @@ namespace TelegramSearchBot.Controller.Search
             {
                 if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 "))
                 {
-                    var firstSearch = new SearchOption()
-                    {
-                        Search = e.Message.Text.Substring(3),
-                        ChatId = e.Message.Chat.Id,
-                        IsGroup = e.Message.Chat.Id < 0,
-                        Skip = 0,
-                        Take = 20,
-                        Count = -1,
-                        ToDelete = new List<long>(),
-                        ToDeleteNow = false,
-                        ReplyToMessageId = e.Message.MessageId,
-                        Chat = e.Message.Chat
-                    };
-
-                    var searchOption = await searchService.Search(firstSearch);
-
-                    var searchOptionNext = searchOptionStorageService.GetNextSearchOption(searchOption);
-                    var searchOptionToDeleteNow = searchOptionStorageService.GetToDeleteNowSearchOption(searchOption);
-                    var uuidToDeleteNow = await searchOptionStorageService.SetSearchOptionAsync(searchOptionToDeleteNow);
-                    searchView
-                        .WithChatId(searchOption.ChatId)
-                        .WithCount(searchOption.Count)
-                        .WithSkip(searchOption.Skip)
-                        .WithTake(searchOption.Take)
-                        .WithMessages(searchOption.Messages)
-                        .WithReplyTo(searchOption.ReplyToMessageId);
-                    if (searchOptionNext != null) {
-                        var uuidNext = await searchOptionStorageService.SetSearchOptionAsync(searchOptionNext); 
-                        searchView.AddButton("下一页", uuidNext);
-                    }
-                    searchView.AddButton("删除历史", uuidToDeleteNow);
-                    await searchView.Render();
-
+                    await HandleSearch(e.Message);
+                }
+                else if (e.Message.Text.Length >= 6 && e.Message.Text.Substring(0, 5).Equals("向量搜索 "))
+                {
+                    await HandleVectorSearch(e.Message);
                 }
             }
+        }
+
+        private async Task HandleSearch(Message message)
+        {
+            await HandleSearchInternal(message, SearchType.InvertedIndex, 3);
+        }
+
+        private async Task HandleVectorSearch(Message message)
+        {
+            await HandleSearchInternal(message, SearchType.Vector, 5);
+        }
+
+        private async Task HandleSearchInternal(Message message, SearchType searchType, int prefixLength)
+        {
+            var firstSearch = new SearchOption()
+            {
+                Search = message.Text.Substring(prefixLength),
+                ChatId = message.Chat.Id,
+                IsGroup = message.Chat.Id < 0,
+                SearchType = searchType,
+                Skip = 0,
+                Take = 20,
+                Count = -1,
+                ToDelete = new List<long>(),
+                ToDeleteNow = false,
+                ReplyToMessageId = message.MessageId,
+                Chat = message.Chat
+            };
+
+            var searchOption = await searchService.Search(firstSearch);
+
+            // 生成按钮
+            searchView
+                .WithChatId(searchOption.ChatId)
+                .WithCount(searchOption.Count)
+                .WithSkip(searchOption.Skip)
+                .WithTake(searchOption.Take)
+                .WithSearchType(searchOption.SearchType)
+                .WithMessages(searchOption.Messages)
+                .WithReplyTo(searchOption.ReplyToMessageId);
+
+            // 添加下一页按钮
+            var nextPageCallback = await callbackDataService.GenerateNextPageCallbackAsync(searchOption);
+            if (nextPageCallback != null)
+            {
+                searchView.AddButton("下一页", nextPageCallback);
+            }
+
+            // 添加切换搜索方式按钮
+            var alternativeSearchType = searchType == SearchType.InvertedIndex ? SearchType.Vector : SearchType.InvertedIndex;
+            var searchTypeText = alternativeSearchType == SearchType.Vector ? "向量搜索" : "倒排索引";
+            var changeSearchTypeCallback = await callbackDataService.GenerateChangeSearchTypeCallbackAsync(searchOption, alternativeSearchType);
+            searchView.AddButton($"切换到{searchTypeText}", changeSearchTypeCallback);
+
+            // 添加删除历史按钮
+            var deleteHistoryCallback = await callbackDataService.GenerateDeleteHistoryCallbackAsync(searchOption);
+            searchView.AddButton("删除历史", deleteHistoryCallback);
+
+            await searchView.Render();
         }
     }
 }

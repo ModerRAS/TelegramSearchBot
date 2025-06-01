@@ -24,6 +24,7 @@ namespace TelegramSearchBot.Controller.Search
         private readonly ILogger logger;
         private readonly ISearchService searchService;
         private readonly SearchOptionStorageService searchOptionStorageService;
+        private readonly CallbackDataService callbackDataService;
         private readonly SearchView searchView;
         private readonly ITelegramBotClient botClient;
         public List<Type> Dependencies => new List<Type>();
@@ -34,6 +35,7 @@ namespace TelegramSearchBot.Controller.Search
             SearchService searchService,
             DataDbContext dbContext,
             SearchOptionStorageService searchOptionStorageService,
+            CallbackDataService callbackDataService,
             SearchView searchView
             )
         {
@@ -43,6 +45,7 @@ namespace TelegramSearchBot.Controller.Search
             this.logger = logger;
             this.botClient = botClient;
             this.searchOptionStorageService = searchOptionStorageService;
+            this.callbackDataService = callbackDataService;
             this.searchView = searchView;
         }
 
@@ -63,63 +66,80 @@ namespace TelegramSearchBot.Controller.Search
             logger.LogInformation($"CallbackQuery is: {e.CallbackQuery}, ChatId is: {ChatId}");
             var IsGroup = e?.CallbackQuery?.Message?.Chat.Id < 0;
 #pragma warning disable CS8602 // 解引用可能出现空引用。
-            await botClient.AnswerCallbackQuery(e.CallbackQuery.Id, "搜索中。。。");
+            await botClient.AnswerCallbackQuery(e.CallbackQuery.Id, "处理中。。。");
 #pragma warning restore CS8602 // 解引用可能出现空引用。
             try
             {
-                var searchOption = await searchOptionStorageService.GetAndRemoveSearchOptionAsync(e.CallbackQuery.Data);
+                var searchOption = await callbackDataService.ParseCallbackDataAsync(e.CallbackQuery.Data);
 
                 searchOption.ToDelete.Add(e.CallbackQuery.Message.MessageId);
-
                 searchOption.ReplyToMessageId = e.CallbackQuery.Message.MessageId;
                 searchOption.Chat = e.CallbackQuery.Message.Chat;
 
                 if (searchOption.ToDeleteNow)
                 {
-                    foreach (var i in searchOption.ToDelete)
-                    {
-                        await Send.AddTask(async () =>
-                        {
-                            try
-                            {
-                                await botClient.DeleteMessage(ChatId, (int)i);
-                            }
-                            catch (AggregateException)
-                            {
-                                logger.LogError("删除了不存在的消息");
-                            }
-                        }, IsGroup);
-
-                    }
+                    await HandleDeleteHistory(searchOption, ChatId, IsGroup);
                     return;
                 }
 
+                // 执行搜索（使用searchOption中指定的搜索类型）
                 searchOption = await searchService.Search(searchOption);
-                var searchOptionNext = searchOptionStorageService.GetNextSearchOption(searchOption);
-                var searchOptionToDeleteNow = searchOptionStorageService.GetToDeleteNowSearchOption(searchOption);
-                var uuidToDeleteNow = await searchOptionStorageService.SetSearchOptionAsync(searchOptionToDeleteNow);
+                
+                // 生成新的按钮
                 searchView
                     .WithChatId(searchOption.ChatId)
                     .WithCount(searchOption.Count)
                     .WithSkip(searchOption.Skip)
                     .WithTake(searchOption.Take)
+                    .WithSearchType(searchOption.SearchType)
                     .WithMessages(searchOption.Messages)
                     .WithReplyTo(searchOption.ReplyToMessageId);
-                if (searchOptionNext != null) {
-                    var uuidNext = await searchOptionStorageService.SetSearchOptionAsync(searchOptionNext);
-                    searchView.AddButton("下一页", uuidNext);
+
+                // 添加下一页按钮
+                var nextPageCallback = await callbackDataService.GenerateNextPageCallbackAsync(searchOption);
+                if (nextPageCallback != null)
+                {
+                    searchView.AddButton("下一页", nextPageCallback);
                 }
-                searchView.AddButton("删除历史", uuidToDeleteNow);
+
+                // 添加切换搜索方式按钮
+                var alternativeSearchType = searchOption.SearchType == SearchType.InvertedIndex ? SearchType.Vector : SearchType.InvertedIndex;
+                var searchTypeText = alternativeSearchType == SearchType.Vector ? "向量搜索" : "倒排索引";
+                var changeSearchTypeCallback = await callbackDataService.GenerateChangeSearchTypeCallbackAsync(searchOption, alternativeSearchType);
+                searchView.AddButton($"切换到{searchTypeText}", changeSearchTypeCallback);
+
+                // 添加删除历史按钮
+                var deleteHistoryCallback = await callbackDataService.GenerateDeleteHistoryCallbackAsync(searchOption);
+                searchView.AddButton("删除历史", deleteHistoryCallback);
+
                 await searchView.Render();
 
             }
             catch (KeyNotFoundException)
             {
-
+                logger.LogWarning("搜索选项未找到");
             }
             catch (ArgumentException)
             {
+                logger.LogWarning("无效的回调数据");
+            }
+        }
 
+        private async Task HandleDeleteHistory(SearchOption searchOption, long? ChatId, bool? IsGroup)
+        {
+            foreach (var i in searchOption.ToDelete)
+            {
+                await Send.AddTask(async () =>
+                {
+                    try
+                    {
+                        await botClient.DeleteMessage(ChatId, (int)i);
+                    }
+                    catch (AggregateException)
+                    {
+                        logger.LogError("删除了不存在的消息");
+                    }
+                }, IsGroup ?? false);
             }
         }
     }

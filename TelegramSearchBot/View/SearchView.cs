@@ -33,6 +33,7 @@ namespace TelegramSearchBot.View
         private int Count { get; set; }
         private int Skip { get; set; }
         private int Take { get; set; }
+        private SearchType SearchType { get; set; } = SearchType.InvertedIndex;
         private List<Button> Buttons { get; set; } = new List<Button>();
         public class Button
         {
@@ -80,6 +81,13 @@ namespace TelegramSearchBot.View
             Take = take;
             return this;
         }
+
+        public SearchView WithSearchType(SearchType searchType)
+        {
+            SearchType = searchType;
+            return this;
+        }
+
         public SearchView AddButton(string text, string callbackData)
         {
             Buttons.Add(new Button(text, callbackData));
@@ -96,7 +104,8 @@ namespace TelegramSearchBot.View
                 Messages = this.Messages,
                 Count = this.Count,
                 Skip = this.Skip,
-                Take = this.Take
+                Take = this.Take,
+                SearchType = this.SearchType
             });
 
             var replyParameters = new Telegram.Bot.Types.ReplyParameters
@@ -123,6 +132,9 @@ namespace TelegramSearchBot.View
         }
 
         private const string SearchResultTemplate = @"
+{{- search_type_text = search_option.search_type == 0 ? ""倒排索引"" : ""向量搜索"" -}}
+**搜索方式**: {{search_type_text}}
+
 {{- if search_option.count > 0 -}}
 共找到 {{search_option.count}} 项结果, 当前为第{{search_option.skip + 1}}项到第{{if (search_option.skip + search_option.take) < search_option.count; search_option.skip + search_option.take; else; search_option.count; end}}项
 {{- else -}}
@@ -146,7 +158,8 @@ namespace TelegramSearchBot.View
                 {
                     count = searchOption.Count,
                     skip = searchOption.Skip,
-                    take = searchOption.Take
+                    take = searchOption.Take,
+                    search_type = (int)searchOption.SearchType
                 }
             });
         }

@@ -6,11 +6,27 @@ using Newtonsoft.Json;
 
 namespace TelegramSearchBot.Model
 {
+    public enum SearchType
+    {
+        /// <summary>
+        /// 倒排索引搜索（Lucene）
+        /// </summary>
+        InvertedIndex = 0,
+        /// <summary>
+        /// 向量搜索
+        /// </summary>
+        Vector = 1
+    }
+
     public class SearchOption {
         public string Search { get; set; }
         public int MessageId { get; set; }
         public long ChatId { get; set; }
         public bool IsGroup { get; set; }
+        /// <summary>
+        /// 搜索方式，默认为倒排索引搜索
+        /// </summary>
+        public SearchType SearchType { get; set; } = SearchType.InvertedIndex;
         /// <summary>
         /// 在GenerateKeyboard的时候会被增加
         /// </summary>
