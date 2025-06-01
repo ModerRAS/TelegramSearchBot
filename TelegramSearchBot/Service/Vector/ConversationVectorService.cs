@@ -26,7 +26,7 @@ namespace TelegramSearchBot.Service.Vector
         private readonly IGeneralLLMService _generalLLMService;
         private readonly ConversationSegmentationService _segmentationService;
 
-        private const string ConversationCollectionPrefix = "conversation_";
+        private const string ConversationCollectionPrefix = "conv_segment_";
 
         public ConversationVectorService(
             QdrantClient qdrantClient,
@@ -54,7 +54,7 @@ namespace TelegramSearchBot.Service.Vector
                 // 检查集合是否存在
                 if (!await _qdrantClient.CollectionExistsAsync(collectionName))
                 {
-                    _logger.LogWarning($"向量集合 {collectionName} 不存在，创建空结果");
+                    _logger.LogWarning($"对话段向量集合 {collectionName} 不存在，创建空结果");
                     searchOption.Messages = new List<Message>();
                     searchOption.Count = 0;
                     return searchOption;
@@ -299,7 +299,7 @@ namespace TelegramSearchBot.Service.Vector
                         Distance = Distance.Cosine 
                     });
                 
-                _logger.LogInformation($"创建向量集合: {collectionName}");
+                _logger.LogInformation($"创建对话段向量集合: {collectionName}");
             }
         }
 

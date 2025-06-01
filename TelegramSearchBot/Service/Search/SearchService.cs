@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using TelegramSearchBot.Interface;
 using System.Threading.Tasks;
 using TelegramSearchBot.Manager;
@@ -98,7 +98,7 @@ namespace TelegramSearchBot.Service.Search
                     };
 
                     var groupResult = await conversationVectorService.Search(groupSearchOption);
-                    if (groupResult.Messages != null)
+                    if (groupResult.Messages.Count > 0)
                     {
                         allMessages.AddRange(groupResult.Messages);
                         totalCount += groupResult.Count;
