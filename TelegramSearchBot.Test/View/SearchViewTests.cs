@@ -82,7 +82,7 @@ namespace TelegramSearchBot.Test.View
             var result = _searchView.RenderSearchResults(searchOption);
 
             // Assert
-            Assert.Equal("未找到结果。\n", result);
+            Assert.Equal("**搜索方式**: 倒排索引未找到结果。\n", result);
         }
 
         [Fact]
