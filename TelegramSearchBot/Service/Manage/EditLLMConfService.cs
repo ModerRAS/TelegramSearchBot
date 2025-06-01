@@ -23,6 +23,13 @@ namespace TelegramSearchBot.Service.Manage {
         protected readonly DataDbContext DataContext;
         protected readonly IEditLLMConfHelper Helper;
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
+
+        // 状态处理器映射字典
+        private readonly Dictionary<string, Func<EditLLMConfRedisHelper, string, Task<(bool, string)>>> _stateHandlers;
+
+        // 字段更新处理器映射字典
+        private readonly Dictionary<string, Func<int, string, Task<bool>>> _fieldUpdaters;
+
         public EditLLMConfService(
             IEditLLMConfHelper helper,
             DataDbContext context,
@@ -31,7 +38,50 @@ namespace TelegramSearchBot.Service.Manage {
             this.connectionMultiplexer = connectionMultiplexer;
             DataContext = context;
             Helper = helper ?? throw new ArgumentNullException(nameof(helper));
+
+            // 初始化状态处理器映射
+            _stateHandlers = new Dictionary<string, Func<EditLLMConfRedisHelper, string, Task<(bool, string)>>>
+            {
+                { LLMConfState.AwaitingName.GetDescription(), HandleAwaitingNameAsync },
+                { LLMConfState.AwaitingGateway.GetDescription(), HandleAwaitingGatewayAsync },
+                { LLMConfState.AwaitingProvider.GetDescription(), HandleAwaitingProviderAsync },
+                { LLMConfState.AwaitingParallel.GetDescription(), HandleAwaitingParallelAsync },
+                { LLMConfState.AwaitingPriority.GetDescription(), HandleAwaitingPriorityAsync },
+                { LLMConfState.AwaitingApiKey.GetDescription(), HandleAwaitingApiKeyAsync },
+                { LLMConfState.SettingAltPhotoModel.GetDescription(), HandleSettingAltPhotoModelAsync },
+                { LLMConfState.EditingSelectChannel.GetDescription(), HandleEditingSelectChannelAsync },
+                { LLMConfState.EditingSelectField.GetDescription(), HandleEditingSelectFieldAsync },
+                { LLMConfState.AddingModelSelectChannel.GetDescription(), HandleAddingModelSelectChannelAsync },
+                { LLMConfState.AddingModelInput.GetDescription(), HandleAddingModelInputAsync },
+                { LLMConfState.RemovingModelSelectChannel.GetDescription(), HandleRemovingModelSelectChannelAsync },
+                { LLMConfState.RemovingModelSelect.GetDescription(), HandleRemovingModelSelectAsync },
+                { LLMConfState.ViewingModelSelectChannel.GetDescription(), HandleViewingModelSelectChannelAsync },
+                { LLMConfState.EditingInputValue.GetDescription(), HandleEditingInputValueAsync },
+                { LLMConfState.SettingMaxRetry.GetDescription(), HandleSettingMaxRetryAsync },
+                { LLMConfState.SettingMaxImageRetry.GetDescription(), HandleSettingMaxImageRetryAsync }
+            };
+
+            // 初始化字段更新处理器映射
+            _fieldUpdaters = new Dictionary<string, Func<int, string, Task<bool>>>
+            {
+                { "1", async (id, value) => await Helper.UpdateChannel(id, name: value) },
+                { "2", async (id, value) => await Helper.UpdateChannel(id, gateway: value) },
+                { "3", async (id, value) => {
+                    if (!Enum.TryParse<LLMProvider>(value, out var provider)) return false;
+                    return await Helper.UpdateChannel(id, provider: provider);
+                }},
+                { "4", async (id, value) => await Helper.UpdateChannel(id, apiKey: value) },
+                { "5", async (id, value) => {
+                    if (!int.TryParse(value, out var parallel)) return false;
+                    return await Helper.UpdateChannel(id, parallel: parallel);
+                }},
+                { "6", async (id, value) => {
+                    if (!int.TryParse(value, out var priority)) return false;
+                    return await Helper.UpdateChannel(id, priority: priority);
+                }}
+            };
         }
+
         private async Task<(bool, string)> HandleAwaitingNameAsync(EditLLMConfRedisHelper redis, string command) {
             await redis.SetDataAsync(command); // 存储名称
             await redis.SetStateAsync(LLMConfState.AwaitingGateway.GetDescription());
@@ -305,43 +355,39 @@ namespace TelegramSearchBot.Service.Manage {
             var editId = int.Parse(parts[0]);
             var field = parts[1];
 
-            bool updateResult = false;
-            switch (field) {
-                case "1":
-                    updateResult = await Helper.UpdateChannel(editId, name: command);
-                    break;
-                case "2":
-                    updateResult = await Helper.UpdateChannel(editId, gateway: command);
-                    break;
-                case "3":
-                    if (!Enum.TryParse<LLMProvider>(command, out var newProvider)) {
-                        return (true, "无效的类型");
-                    }
-                    updateResult = await Helper.UpdateChannel(editId, provider: newProvider);
-                    break;
-                case "4":
-                    updateResult = await Helper.UpdateChannel(editId, apiKey: command);
-                    break;
-                case "5":
-                    if (!int.TryParse(command, out var tmp_parallel)) {
-                        return (true, "请输入有效的数字");
-                    }
-                    updateResult = await Helper.UpdateChannel(editId, parallel: tmp_parallel);
-                    break;
-                case "6":
-                    if (!int.TryParse(command, out var tmp_priority)) {
-                        return (true, "请输入有效的数字");
-                    }
-                    updateResult = await Helper.UpdateChannel(editId, priority: tmp_priority);
-                    break;
-                default:
-                    return (true, "无效的字段选择");
+            // 使用字典映射替换switch case
+            if (!_fieldUpdaters.TryGetValue(field, out var updater)) {
+                return (true, "无效的字段选择");
             }
 
-            // 清理状态
-            await redis.DeleteKeysAsync();
+            // 对于类型字段(3)，需要特殊处理输入格式
+            if (field == "3") {
+                var validProviders = Enum.GetValues(typeof(LLMProvider))
+                    .Cast<LLMProvider>()
+                    .Where(p => p != LLMProvider.None)
+                    .ToList();
 
-            return (true, updateResult ? "更新成功" : "更新失败");
+                if (int.TryParse(command.Trim(), out int providerIndex) &&
+                    providerIndex > 0 && providerIndex <= validProviders.Count) {
+                    command = validProviders[providerIndex - 1].ToString();
+                } else {
+                    return (true, $"无效的类型选择，请输入1到{validProviders.Count}之间的数字");
+                }
+            }
+
+            try {
+                var updateResult = await updater(editId, command);
+                
+                // 清理状态
+                await redis.DeleteKeysAsync();
+
+                return (true, updateResult ? "更新成功" : "更新失败");
+            }
+            catch (Exception) {
+                // 清理状态
+                await redis.DeleteKeysAsync();
+                return (true, "更新过程中发生错误");
+            }
         }
 
         private async Task<(bool, string)> HandleSettingMaxRetryAsync(EditLLMConfRedisHelper redis, string command) {
@@ -388,145 +434,151 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, $"图片处理最大重试次数已设置为: {maxImageRetry}");
         }
 
-
         public async Task<(bool, string)> ExecuteAsync(string Command, long ChatId) {
             var redis = new EditLLMConfRedisHelper(connectionMultiplexer, ChatId);
             var currentState = await redis.GetStateAsync();
-            if (Command.Trim().Equals("刷新所有渠道", StringComparison.OrdinalIgnoreCase)) {
-                var count = await Helper.RefreshAllChannel();
-                return (true, $"已添加{count}个模型");
-            } else if (Command.Trim().Equals("设置重试次数", StringComparison.OrdinalIgnoreCase)) {
-                await redis.SetStateAsync(LLMConfState.SettingMaxRetry.GetDescription());
-                return (true, "请输入最大重试次数(默认100):");
-            } else if (Command.Trim().Equals("设置图片重试次数", StringComparison.OrdinalIgnoreCase)) {
-                await redis.SetStateAsync(LLMConfState.SettingMaxImageRetry.GetDescription());
-                return (true, "请输入图片处理最大重试次数(默认1000):");
-            } else if (Command.Trim().Equals("设置图片模型", StringComparison.OrdinalIgnoreCase)) {
-                await redis.SetStateAsync(LLMConfState.SettingAltPhotoModel.GetDescription());
-                return (true, "请输入图片分析使用的模型名称:");
+            
+            // 处理直接命令
+            var directCommandResult = await HandleDirectCommandsAsync(redis, Command);
+            if (directCommandResult.HasValue) {
+                return directCommandResult.Value;
             }
 
-            if (Command.Trim().Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
-                await redis.SetStateAsync(LLMConfState.AwaitingName.GetDescription());
-                return (true, "请输入渠道的名称");
-            } else if (Command.Trim().Equals("编辑渠道", StringComparison.OrdinalIgnoreCase)) {
-                var channels = await Helper.GetAllChannels();
-                if (channels.Count == 0) {
-                    return (true, "当前没有可编辑的渠道");
-                }
-
-                var sb = new StringBuilder();
-                sb.AppendLine("请选择要编辑的渠道ID：");
-                foreach (var channel in channels) {
-                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
-                }
-
-                await redis.SetStateAsync(LLMConfState.EditingSelectChannel.GetDescription());
-                return (true, sb.ToString());
-            } else if (Command.Trim().Equals("添加模型", StringComparison.OrdinalIgnoreCase)) {
-                var channels = await Helper.GetAllChannels();
-                if (channels.Count == 0) {
-                    return (true, "当前没有可添加模型的渠道");
-                }
-
-                var sb = new StringBuilder();
-                sb.AppendLine("请选择要添加模型的渠道ID：");
-                foreach (var channel in channels) {
-                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
-                }
-
-                await redis.SetStateAsync(LLMConfState.AddingModelSelectChannel.GetDescription());
-                return (true, sb.ToString());
-            } else if (Command.Trim().Equals("移除模型", StringComparison.OrdinalIgnoreCase)) {
-                var channels = await Helper.GetAllChannels();
-                if (channels.Count == 0) {
-                    return (true, "当前没有可移除模型的渠道");
-                }
-
-                var sb = new StringBuilder();
-                sb.AppendLine("请选择要移除模型的渠道ID：");
-                foreach (var channel in channels) {
-                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
-                }
-
-                await redis.SetStateAsync(LLMConfState.RemovingModelSelectChannel.GetDescription());
-                return (true, sb.ToString());
-            } else if (Command.Trim().Equals("查看模型", StringComparison.OrdinalIgnoreCase)) {
-                var channels = await Helper.GetAllChannels();
-                if (channels.Count == 0) {
-                    return (true, "当前没有可查看模型的渠道");
-                }
-
-                var sb = new StringBuilder();
-                sb.AppendLine("请选择要查看模型的渠道ID：");
-                foreach (var channel in channels) {
-                    sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
-                }
-
-                await redis.SetStateAsync(LLMConfState.ViewingModelSelectChannel.GetDescription());
-                return (true, sb.ToString());
+            // 处理基于状态的命令
+            var stateCommandResult = await HandleStateBasedCommandsAsync(redis, Command);
+            if (stateCommandResult.HasValue) {
+                return stateCommandResult.Value;
             }
 
+            // 处理当前状态的输入
             if (string.IsNullOrEmpty(currentState)) {
                 return (false, "请先选择一个操作");
             }
 
-            switch (currentState) {
-                case var _ when currentState == LLMConfState.AwaitingName.GetDescription():
-                    return await HandleAwaitingNameAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.AwaitingGateway.GetDescription():
-                    return await HandleAwaitingGatewayAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.AwaitingProvider.GetDescription():
-                    return await HandleAwaitingProviderAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.AwaitingParallel.GetDescription():
-                    return await HandleAwaitingParallelAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.AwaitingPriority.GetDescription():
-                    return await HandleAwaitingPriorityAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.AwaitingApiKey.GetDescription():
-                    return await HandleAwaitingApiKeyAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.SettingAltPhotoModel.GetDescription():
-                    return await HandleSettingAltPhotoModelAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.EditingSelectChannel.GetDescription():
-                    return await HandleEditingSelectChannelAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.EditingSelectField.GetDescription():
-                    return await HandleEditingSelectFieldAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.AddingModelSelectChannel.GetDescription():
-                    return await HandleAddingModelSelectChannelAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.AddingModelInput.GetDescription():
-                    return await HandleAddingModelInputAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.RemovingModelSelectChannel.GetDescription():
-                    return await HandleRemovingModelSelectChannelAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.RemovingModelSelect.GetDescription():
-                    return await HandleRemovingModelSelectAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.ViewingModelSelectChannel.GetDescription():
-                    return await HandleViewingModelSelectChannelAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.EditingInputValue.GetDescription():
-                    return await HandleEditingInputValueAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.SettingMaxRetry.GetDescription():
-                    return await HandleSettingMaxRetryAsync(redis, Command);
-
-                case var _ when currentState == LLMConfState.SettingMaxImageRetry.GetDescription():
-                    return await HandleSettingMaxImageRetryAsync(redis, Command);
-
-                default:
-                    // 非预期状态或初始状态
-                    return (false, "");
+            // 使用字典映射替换大型switch case
+            if (_stateHandlers.TryGetValue(currentState, out var handler)) {
+                return await handler(redis, Command);
             }
+
+            // 非预期状态
+            return (false, "");
+        }
+
+        private async Task<(bool, string)?> HandleDirectCommandsAsync(EditLLMConfRedisHelper redis, string command) {
+            var cmd = command.Trim();
+            
+            if (cmd.Equals("刷新所有渠道", StringComparison.OrdinalIgnoreCase)) {
+                var count = await Helper.RefreshAllChannel();
+                return (true, $"已添加{count}个模型");
+            }
+            
+            if (cmd.Equals("设置重试次数", StringComparison.OrdinalIgnoreCase)) {
+                await redis.SetStateAsync(LLMConfState.SettingMaxRetry.GetDescription());
+                return (true, "请输入最大重试次数(默认100):");
+            }
+            
+            if (cmd.Equals("设置图片重试次数", StringComparison.OrdinalIgnoreCase)) {
+                await redis.SetStateAsync(LLMConfState.SettingMaxImageRetry.GetDescription());
+                return (true, "请输入图片处理最大重试次数(默认1000):");
+            }
+            
+            if (cmd.Equals("设置图片模型", StringComparison.OrdinalIgnoreCase)) {
+                await redis.SetStateAsync(LLMConfState.SettingAltPhotoModel.GetDescription());
+                return (true, "请输入图片分析使用的模型名称:");
+            }
+            
+            return null;
+        }
+
+        private async Task<(bool, string)?> HandleStateBasedCommandsAsync(EditLLMConfRedisHelper redis, string command) {
+            var cmd = command.Trim();
+            
+            if (cmd.Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
+                await redis.SetStateAsync(LLMConfState.AwaitingName.GetDescription());
+                return (true, "请输入渠道的名称");
+            }
+            
+            if (cmd.Equals("编辑渠道", StringComparison.OrdinalIgnoreCase)) {
+                return await HandleEditChannelCommandAsync(redis);
+            }
+            
+            if (cmd.Equals("添加模型", StringComparison.OrdinalIgnoreCase)) {
+                return await HandleAddModelCommandAsync(redis);
+            }
+            
+            if (cmd.Equals("移除模型", StringComparison.OrdinalIgnoreCase)) {
+                return await HandleRemoveModelCommandAsync(redis);
+            }
+            
+            if (cmd.Equals("查看模型", StringComparison.OrdinalIgnoreCase)) {
+                return await HandleViewModelCommandAsync(redis);
+            }
+            
+            return null;
+        }
+
+        private async Task<(bool, string)> HandleEditChannelCommandAsync(EditLLMConfRedisHelper redis) {
+            var channels = await Helper.GetAllChannels();
+            if (channels.Count == 0) {
+                return (true, "当前没有可编辑的渠道");
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("请选择要编辑的渠道ID：");
+            foreach (var channel in channels) {
+                sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+            }
+
+            await redis.SetStateAsync(LLMConfState.EditingSelectChannel.GetDescription());
+            return (true, sb.ToString());
+        }
+
+        private async Task<(bool, string)> HandleAddModelCommandAsync(EditLLMConfRedisHelper redis) {
+            var channels = await Helper.GetAllChannels();
+            if (channels.Count == 0) {
+                return (true, "当前没有可添加模型的渠道");
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("请选择要添加模型的渠道ID：");
+            foreach (var channel in channels) {
+                sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+            }
+
+            await redis.SetStateAsync(LLMConfState.AddingModelSelectChannel.GetDescription());
+            return (true, sb.ToString());
+        }
+
+        private async Task<(bool, string)> HandleRemoveModelCommandAsync(EditLLMConfRedisHelper redis) {
+            var channels = await Helper.GetAllChannels();
+            if (channels.Count == 0) {
+                return (true, "当前没有可移除模型的渠道");
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("请选择要移除模型的渠道ID：");
+            foreach (var channel in channels) {
+                sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+            }
+
+            await redis.SetStateAsync(LLMConfState.RemovingModelSelectChannel.GetDescription());
+            return (true, sb.ToString());
+        }
+
+        private async Task<(bool, string)> HandleViewModelCommandAsync(EditLLMConfRedisHelper redis) {
+            var channels = await Helper.GetAllChannels();
+            if (channels.Count == 0) {
+                return (true, "当前没有可查看模型的渠道");
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("请选择要查看模型的渠道ID：");
+            foreach (var channel in channels) {
+                sb.AppendLine($"{channel.Id}. {channel.Name} ({channel.Provider})");
+            }
+
+            await redis.SetStateAsync(LLMConfState.ViewingModelSelectChannel.GetDescription());
+            return (true, sb.ToString());
         }
     }
 }
