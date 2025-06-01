@@ -54,6 +54,7 @@ namespace TelegramSearchBot.Model
         public virtual DbSet<GroupSettings> GroupSettings { get; set; }
         public virtual DbSet<LLMChannel> LLMChannels { get; set; }
         public virtual DbSet<ChannelWithModel> ChannelsWithModel { get; set; }
+        public virtual DbSet<ModelCapability> ModelCapabilities { get; set; }
         public virtual DbSet<AppConfigurationItem> AppConfigurationItems { get; set; } // Added for BiliCookie and other app configs
         public virtual DbSet<ShortUrlMapping> ShortUrlMappings { get; set; } = null!;
         public virtual DbSet<TelegramFileCacheEntry> TelegramFileCacheEntries { get; set; } = null!;

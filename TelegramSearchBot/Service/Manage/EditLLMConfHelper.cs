@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
@@ -20,13 +21,19 @@ namespace TelegramSearchBot.Service.Manage {
         public string ServiceName => "EditLLMConfHelper";
         protected readonly DataDbContext DataContext;
         private readonly ILLMFactory _LLMFactory;
+        private readonly IModelCapabilityService _modelCapabilityService;
+        private readonly ILogger<EditLLMConfHelper> _logger;
 
         public EditLLMConfHelper(
             DataDbContext context,
-            ILLMFactory llmFactory
+            ILLMFactory llmFactory,
+            IModelCapabilityService modelCapabilityService,
+            ILogger<EditLLMConfHelper> logger
             ) {
             DataContext = context;
             _LLMFactory = llmFactory;
+            _modelCapabilityService = modelCapabilityService;
+            _logger = logger;
         }
         /// <summary>
         /// 添加一个新的LLM通道到数据库
@@ -49,11 +56,16 @@ namespace TelegramSearchBot.Service.Manage {
 
                 await DataContext.LLMChannels.AddAsync(channel);
                 await DataContext.SaveChangesAsync();
+                
+                _logger.LogInformation("成功添加新通道: {ChannelName} ({Provider})", Name, Provider);
+                
                 IEnumerable<string> models;
                 var service = _LLMFactory.GetLLMService(Provider);
                 if (service == null) {
+                    _logger.LogWarning("未找到提供商 {Provider} 的LLM服务", Provider);
                     return -1;
                 }
+                
                 models = await service.GetAllModels(channel);
                 var list = new List<ChannelWithModel>();
                 foreach (var e in models) {
@@ -61,8 +73,22 @@ namespace TelegramSearchBot.Service.Manage {
                 }
                 await DataContext.ChannelsWithModel.AddRangeAsync(list);
                 await DataContext.SaveChangesAsync();
+                
+                _logger.LogInformation("为新通道 {ChannelName} 添加了 {Count} 个模型", Name, list.Count);
+                
+                // 获取并存储模型能力信息
+                _logger.LogInformation("正在获取通道 {ChannelName} 的模型能力信息...", Name);
+                bool capabilityUpdateSuccess = await _modelCapabilityService.UpdateChannelModelCapabilities(channel.Id);
+                
+                if (capabilityUpdateSuccess) {
+                    _logger.LogInformation("成功获取通道 {ChannelName} 的模型能力信息", Name);
+                } else {
+                    _logger.LogWarning("获取通道 {ChannelName} 的模型能力信息失败", Name);
+                }
+                
                 return channel.Id;
-            } catch {
+            } catch (Exception ex) {
+                _logger.LogError(ex, "添加通道 {Name} ({Provider}) 时出错", Name, Provider);
                 return -1;
             }
         }
@@ -72,34 +98,60 @@ namespace TelegramSearchBot.Service.Manage {
             var channels = from s in DataContext.LLMChannels
                            select s;
             IEnumerable<string> models;
+            
+            _logger.LogInformation("开始刷新所有通道的模型和能力信息...");
+            
             foreach (var channel in channels) {
                 var service = _LLMFactory.GetLLMService(channel.Provider);
                 if (service == null) {
+                    _logger.LogWarning("未找到通道 {ChannelName} ({Provider}) 的LLM服务", channel.Name, channel.Provider);
                     continue;
                 }
-                models = await service.GetAllModels(channel);
+                
+                _logger.LogInformation("正在刷新通道: {ChannelName} ({Provider})", channel.Name, channel.Provider);
+                
+                try {
+                    models = await service.GetAllModels(channel);
 
-                var list = new List<ChannelWithModel>();
+                    var list = new List<ChannelWithModel>();
 
-                foreach (var model in models) {
-                    bool exists = await DataContext.ChannelsWithModel
-                        .AnyAsync(x => x.LLMChannelId == channel.Id && x.ModelName == model);
+                    foreach (var model in models) {
+                        bool exists = await DataContext.ChannelsWithModel
+                            .AnyAsync(x => x.LLMChannelId == channel.Id && x.ModelName == model);
 
-                    if (!exists) {
-                        list.Add(new ChannelWithModel {
-                            LLMChannelId = channel.Id,
-                            ModelName = model
-                        });
+                        if (!exists) {
+                            list.Add(new ChannelWithModel {
+                                LLMChannelId = channel.Id,
+                                ModelName = model
+                            });
+                        }
+                    }
+
+                    if (list.Any()) {
+                        await DataContext.ChannelsWithModel.AddRangeAsync(list);
+                        count += list.Count;
+                        _logger.LogInformation("为通道 {ChannelName} 添加了 {Count} 个新模型", channel.Name, list.Count);
+                    }
+                    
+                    // 保存新模型到数据库
+                    await DataContext.SaveChangesAsync();
+                    
+                    // 刷新此通道的模型能力信息
+                    _logger.LogInformation("正在更新通道 {ChannelName} 的模型能力信息...", channel.Name);
+                    bool capabilityUpdateSuccess = await _modelCapabilityService.UpdateChannelModelCapabilities(channel.Id);
+                    
+                    if (capabilityUpdateSuccess) {
+                        _logger.LogInformation("成功更新通道 {ChannelName} 的模型能力信息", channel.Name);
+                    } else {
+                        _logger.LogWarning("更新通道 {ChannelName} 的模型能力信息失败", channel.Name);
                     }
                 }
-
-                if (list.Any()) {
-                    await DataContext.ChannelsWithModel.AddRangeAsync(list);
-                    count += list.Count;
+                catch (Exception ex) {
+                    _logger.LogError(ex, "刷新通道 {ChannelName} ({Provider}) 时出错", channel.Name, channel.Provider);
                 }
             }
 
-            await DataContext.SaveChangesAsync();
+            _logger.LogInformation("完成刷新所有通道，共添加了 {Count} 个新模型", count);
             return count;
         }
 

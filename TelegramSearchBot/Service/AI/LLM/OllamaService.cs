@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore; 
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OllamaSharp;
 using OllamaSharp.Models;
@@ -14,8 +15,10 @@ using System.Threading.Tasks;
 using System.Reflection;
 using System.IO; // For File operations
 using Newtonsoft.Json; // Using Newtonsoft
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Tools;
@@ -24,6 +27,7 @@ using SkiaSharp; // Added for DuckDuckGoSearchResult
 namespace TelegramSearchBot.Service.AI.LLM
 {
     // Standalone implementation, not using BaseLlmService
+    [Injectable(ServiceLifetime.Transient)]
     public class OllamaService : IService, ILLMService 
     {
         public string ServiceName => "OllamaService";
@@ -231,6 +235,140 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
+        /// <summary>
+        /// 获取Ollama模型及其能力信息
+        /// </summary>
+        public virtual async Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel)
+        {
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway))
+            {
+                return Enumerable.Empty<ModelWithCapabilities>();
+            }
+
+            try 
+            {
+                var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
+                httpClient.BaseAddress = new Uri(channel.Gateway);
+                var ollama = new OllamaApiClient(httpClient);
+                
+                var models = await ollama.ListLocalModelsAsync();
+                var results = new List<ModelWithCapabilities>();
+                
+                foreach (var model in models)
+                {
+                    var modelWithCaps = InferOllamaModelCapabilities(model.Name, model);
+                    results.Add(modelWithCaps);
+                }
+                
+                _logger.LogInformation("Retrieved {Count} Ollama models with inferred capabilities", results.Count);
+                return results;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting Ollama models with capabilities");
+                return Enumerable.Empty<ModelWithCapabilities>();
+            }
+        }
+
+        /// <summary>
+        /// 根据Ollama模型名称和信息推断能力
+        /// </summary>
+        private ModelWithCapabilities InferOllamaModelCapabilities(string modelName, OllamaSharp.Models.Model modelInfo)
+        {
+            var model = new ModelWithCapabilities { ModelName = modelName };
+            var lowerName = modelName.ToLower();
+            
+            // 基本能力设置
+            model.SetCapability("streaming", true); // Ollama都支持流式响应
+            
+            // 工具调用支持 - 基于已知支持工具调用的模型
+            var toolSupportedModels = new[] {
+                "llama3.1", "llama3.2", "mistral-nemo", "firefunction", "command-r", "qwen2.5", "phi3"
+            };
+            
+            bool supportsTools = toolSupportedModels.Any(supportedModel => 
+                lowerName.Contains(supportedModel.Replace(".", "").Replace("-", ""))
+            );
+            model.SetCapability("function_calling", supportsTools);
+            model.SetCapability("tool_calls", supportsTools);
+            
+            // 视觉支持 - 基于已知支持视觉的模型
+            var visionSupportedModels = new[] {
+                "llava", "moondream", "llama3.2-vision", "qwen2-vl", "minicpm-v", "cogvlm"
+            };
+            
+            bool supportsVision = visionSupportedModels.Any(visionModel => 
+                lowerName.Contains(visionModel.Replace("-", "").Replace(".", ""))
+            );
+            model.SetCapability("vision", supportsVision);
+            model.SetCapability("multimodal", supportsVision);
+            model.SetCapability("image_content", supportsVision);
+            
+            // 嵌入模型检测
+            var embeddingModels = new[] {
+                "bge-", "all-minilm", "sentence-transformer", "nomic-embed", "mxbai-embed"
+            };
+            
+            bool isEmbedding = embeddingModels.Any(embModel => lowerName.Contains(embModel)) ||
+                               lowerName.Contains("embedding") || lowerName.Contains("embed");
+            model.SetCapability("embedding", isEmbedding);
+            
+            // 如果是嵌入模型，通常不支持对话和工具调用
+            if (isEmbedding)
+            {
+                model.SetCapability("function_calling", false);
+                model.SetCapability("vision", false);
+                model.SetCapability("chat", false);
+            }
+            else
+            {
+                model.SetCapability("chat", true);
+            }
+            
+            // 基于模型大小推断能力（如果信息可用）
+            if (modelInfo != null)
+            {
+                // 从模型信息中提取更多细节
+                model.SetCapability("model_size", modelInfo.Size.ToString() ?? "unknown");
+                model.SetCapability("model_family", ExtractModelFamily(modelName));
+                model.SetCapability("last_modified", modelInfo.ModifiedAt.ToString("yyyy-MM-dd") ?? "unknown");
+            }
+            
+            // 代码生成能力 - 基于已知的代码模型
+            var codeModels = new[] {
+                "codellama", "codegemma", "starcoder", "deepseek-coder", "qwen2.5-coder"
+            };
+            
+            bool supportsCode = codeModels.Any(codeModel => 
+                lowerName.Contains(codeModel.Replace("-", ""))
+            );
+            model.SetCapability("code_generation", supportsCode);
+            
+            return model;
+        }
+
+        /// <summary>
+        /// 从模型名称中提取模型家族
+        /// </summary>
+        private string ExtractModelFamily(string modelName)
+        {
+            var lowerName = modelName.ToLower();
+            
+            if (lowerName.StartsWith("llama")) return "Llama";
+            if (lowerName.StartsWith("mistral")) return "Mistral";
+            if (lowerName.StartsWith("qwen")) return "Qwen";
+            if (lowerName.StartsWith("gemma")) return "Gemma";
+            if (lowerName.StartsWith("phi")) return "Phi";
+            if (lowerName.Contains("llava")) return "LLaVA";
+            if (lowerName.Contains("codellama")) return "CodeLlama";
+            if (lowerName.Contains("deepseek")) return "DeepSeek";
+            if (lowerName.Contains("command")) return "Command-R";
+            if (lowerName.Contains("wizardlm")) return "WizardLM";
+            if (lowerName.Contains("vicuna")) return "Vicuna";
+            
+            return "Unknown";
+        }
+
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
         {
             if (string.IsNullOrWhiteSpace(modelName))
@@ -275,7 +413,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             httpClient.BaseAddress = new Uri(channel.Gateway);
             var ollama = new OllamaApiClient(httpClient, modelName);
             ollama.SelectedModel = modelName;
-            var prompt = "请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。";
+            var prompt = "请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用'图中显示'或'这是一张图片'这类通用表达。";
             var chat = new Chat(ollama);
             chat.Options = new RequestOptions();
             chat.Options.Temperature = 0.1f;

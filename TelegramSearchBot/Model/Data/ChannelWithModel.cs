@@ -14,5 +14,10 @@ namespace TelegramSearchBot.Model.Data {
         [ForeignKey("LLMChannel")]
         public int LLMChannelId { get; set; }
         public virtual LLMChannel LLMChannel { get; set; }
+        
+        /// <summary>
+        /// 关联的模型能力信息
+        /// </summary>
+        public virtual ICollection<ModelCapability> Capabilities { get; set; } = new List<ModelCapability>();
     }
 }

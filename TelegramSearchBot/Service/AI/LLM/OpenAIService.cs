@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using OpenAI.Embeddings;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json; 
 using OpenAI;
@@ -17,6 +18,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
@@ -30,6 +32,7 @@ using CommonChat = OpenAI.Chat;
 namespace TelegramSearchBot.Service.AI.LLM 
 {
     // Standalone implementation, not inheriting from BaseLlmService
+    [Injectable(ServiceLifetime.Transient)]
     public class OpenAIService : IService, ILLMService
     {
         public string ServiceName => "OpenAIService";
@@ -42,28 +45,33 @@ namespace TelegramSearchBot.Service.AI.LLM
                 _botName = value;
             }
         }
-        private DataDbContext _dbContext;
-        private IHttpClientFactory _httpClientFactory;
-
-        private readonly MessageExtensionService _messageExtensionService;
+        private readonly DataDbContext _dbContext;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IMessageExtensionService _messageExtensionService;
 
         public OpenAIService(
             DataDbContext context,
             ILogger<OpenAIService> logger,
-            MessageExtensionService messageExtensionService,
-            IHttpClientFactory _httpClientFactory)
+            IMessageExtensionService messageExtensionService,
+            IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
+            _httpClientFactory = httpClientFactory;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
-            this._httpClientFactory = _httpClientFactory;
         }
 
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
             if (channel.Provider.Equals(LLMProvider.Ollama)) {
                 return new List<string>();
             }
+
+            // 检查是否为OpenRouter
+            if (IsOpenRouter(channel.Gateway)) {
+                return await GetOpenRouterModels(channel);
+            }
+
             var handler = new HttpClientHandler {
                 Proxy = WebRequest.DefaultWebProxy,
                 UseProxy = true
@@ -84,6 +92,470 @@ namespace TelegramSearchBot.Service.AI.LLM
             var models = await model.GetModelsAsync();
             return from s in models.Value
                    select s.Id;
+        }
+
+        /// <summary>
+        /// 检查是否为OpenRouter服务
+        /// </summary>
+        private bool IsOpenRouter(string gateway)
+        {
+            return !string.IsNullOrEmpty(gateway) && 
+                   (gateway.Contains("openrouter.ai") || gateway.Contains("openrouter"));
+        }
+
+        /// <summary>
+        /// 获取OpenRouter模型列表
+        /// </summary>
+        private async Task<IEnumerable<string>> GetOpenRouterModels(LLMChannel channel)
+        {
+            try
+            {
+                var httpClient = _httpClientFactory.CreateClient();
+                httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {channel.ApiKey}");
+                
+                var response = await httpClient.GetAsync("https://openrouter.ai/api/v1/models");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var modelsData = JsonConvert.DeserializeObject<dynamic>(content);
+                    
+                    var models = new List<string>();
+                    if (modelsData?.data != null)
+                    {
+                        foreach (var model in modelsData.data)
+                        {
+                            string modelId = model.id?.ToString();
+                            if (!string.IsNullOrEmpty(modelId))
+                            {
+                                models.Add(modelId);
+                            }
+                        }
+                    }
+                    
+                    _logger.LogInformation("获取到 {Count} 个OpenRouter模型", models.Count);
+                    return models;
+                }
+                else
+                {
+                    _logger.LogWarning("获取OpenRouter模型失败: {StatusCode}", response.StatusCode);
+                    return new List<string>();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "获取OpenRouter模型时出错");
+                return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// 获取OpenAI模型及其能力信息
+        /// </summary>
+        public virtual async Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel) 
+        {
+            if (channel.Provider.Equals(LLMProvider.Ollama)) {
+                return new List<ModelWithCapabilities>();
+            }
+
+            // 检查是否为OpenRouter
+            if (IsOpenRouter(channel.Gateway)) {
+                return await GetOpenRouterModelsWithCapabilities(channel);
+            }
+
+            var handler = new HttpClientHandler {
+                Proxy = WebRequest.DefaultWebProxy,
+                UseProxy = true
+            };
+
+            using var httpClient = new HttpClient(handler);
+
+            try 
+            {
+                // 尝试使用OpenAI内部API获取模型能力信息
+                var internalApiUrl = channel.Gateway.TrimEnd('/') + "/dashboard/onboarding/models";
+                httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {channel.ApiKey}");
+                
+                var response = await httpClient.GetAsync(internalApiUrl);
+                if (response.IsSuccessStatusCode) 
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var modelsWithCapabilities = ParseOpenAIModelsWithCapabilities(content);
+                    if (modelsWithCapabilities.Any()) 
+                    {
+                        _logger.LogInformation("Successfully retrieved {Count} OpenAI models with capabilities from internal API", modelsWithCapabilities.Count());
+                        return modelsWithCapabilities;
+                    }
+                }
+                
+                _logger.LogInformation("Internal API failed, falling back to standard models API with hardcoded capabilities");
+                
+                // 如果内部API失败，使用标准API并根据模型名称推断能力
+                var clientOptions = new OpenAIClientOptions {
+                    Endpoint = new Uri(channel.Gateway),
+                    Transport = new HttpClientPipelineTransport(httpClient),
+                };
+
+                var apikey = new ApiKeyCredential(channel.ApiKey);
+                OpenAIClient client = new(apikey, clientOptions);
+                var model = client.GetOpenAIModelClient();
+                var models = await model.GetModelsAsync();
+                
+                return models.Value.Select(m => InferOpenAIModelCapabilities(m.Id));
+            }
+            catch (Exception ex) 
+            {
+                _logger.LogError(ex, "Error getting OpenAI models with capabilities");
+                return new List<ModelWithCapabilities>();
+            }
+        }
+
+        /// <summary>
+        /// 解析OpenAI内部API返回的模型能力信息
+        /// </summary>
+        private IEnumerable<ModelWithCapabilities> ParseOpenAIModelsWithCapabilities(string jsonContent) 
+        {
+            try 
+            {
+                var modelsData = JsonConvert.DeserializeObject<dynamic>(jsonContent);
+                var results = new List<ModelWithCapabilities>();
+                
+                if (modelsData?.data != null) 
+                {
+                    foreach (var modelData in modelsData.data) 
+                    {
+                        var modelWithCaps = new ModelWithCapabilities 
+                        {
+                            ModelName = modelData.id?.ToString() ?? ""
+                        };
+                        
+                        // 解析features数组
+                        if (modelData.features != null) 
+                        {
+                            foreach (var feature in modelData.features) 
+                            {
+                                string featureName = feature?.ToString() ?? "";
+                                modelWithCaps.SetCapability(featureName, true);
+                            }
+                        }
+                        
+                        // 解析其他能力字段
+                        if (modelData.capabilities != null) 
+                        {
+                            foreach (var capability in modelData.capabilities) 
+                            {
+                                string capName = capability.Name?.ToString() ?? "";
+                                string capValue = capability.Value?.ToString() ?? "";
+                                modelWithCaps.SetCapability(capName, capValue);
+                            }
+                        }
+                        
+                        results.Add(modelWithCaps);
+                    }
+                }
+                
+                return results;
+            }
+            catch (Exception ex) 
+            {
+                _logger.LogError(ex, "Error parsing OpenAI models capabilities JSON");
+                return new List<ModelWithCapabilities>();
+            }
+        }
+
+        /// <summary>
+        /// 根据OpenAI模型名称推断能力
+        /// </summary>
+        private ModelWithCapabilities InferOpenAIModelCapabilities(string modelName) 
+        {
+            var model = new ModelWithCapabilities { ModelName = modelName };
+            
+            // 基于模型名称的能力推断
+            var lowerName = modelName.ToLower();
+            
+            // 嵌入模型
+            if (lowerName.Contains("embedding") || lowerName.Contains("ada")) 
+            {
+                model.SetCapability("embedding", true);
+                model.SetCapability("function_calling", false);
+                model.SetCapability("vision", false);
+            }
+            // GPT-4系列模型
+            else if (lowerName.StartsWith("gpt-4")) 
+            {
+                model.SetCapability("function_calling", true);
+                model.SetCapability("streaming", true);
+                model.SetCapability("response_json_object", true);
+                
+                // GPT-4 Vision模型
+                if (lowerName.Contains("vision") || lowerName.Contains("4o") || lowerName.Contains("4-turbo")) 
+                {
+                    model.SetCapability("vision", true);
+                    model.SetCapability("image_content", true);
+                    model.SetCapability("multimodal", true);
+                }
+                
+                // 较新的模型支持并行工具调用
+                if (lowerName.Contains("4o") || lowerName.Contains("4-turbo") || lowerName.Contains("1106") || lowerName.Contains("0125")) 
+                {
+                    model.SetCapability("parallel_tool_calls", true);
+                    model.SetCapability("response_json_schema", true);
+                }
+            }
+            // GPT-3.5系列模型
+            else if (lowerName.StartsWith("gpt-3.5")) 
+            {
+                model.SetCapability("function_calling", true);
+                model.SetCapability("streaming", true);
+                
+                if (lowerName.Contains("1106") || lowerName.Contains("0125")) 
+                {
+                    model.SetCapability("response_json_object", true);
+                }
+            }
+            // DALL-E模型
+            else if (lowerName.Contains("dall-e")) 
+            {
+                model.SetCapability("image_generation", true);
+                model.SetCapability("function_calling", false);
+            }
+            // Whisper模型
+            else if (lowerName.Contains("whisper")) 
+            {
+                model.SetCapability("audio_transcription", true);
+                model.SetCapability("function_calling", false);
+            }
+            // TTS模型
+            else if (lowerName.Contains("tts")) 
+            {
+                model.SetCapability("text_to_speech", true);
+                model.SetCapability("function_calling", false);
+            }
+            
+            return model;
+        }
+
+        /// <summary>
+        /// 获取OpenRouter模型及其能力信息
+        /// </summary>
+        private async Task<IEnumerable<ModelWithCapabilities>> GetOpenRouterModelsWithCapabilities(LLMChannel channel)
+        {
+            try
+            {
+                var httpClient = _httpClientFactory.CreateClient();
+                httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {channel.ApiKey}");
+                
+                var response = await httpClient.GetAsync("https://openrouter.ai/api/v1/models");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var modelsData = JsonConvert.DeserializeObject<dynamic>(content);
+                    
+                    var results = new List<ModelWithCapabilities>();
+                    if (modelsData?.data != null)
+                    {
+                        foreach (var modelData in modelsData.data)
+                        {
+                            var modelWithCaps = ParseOpenRouterModelCapabilities(modelData);
+                            if (modelWithCaps != null)
+                            {
+                                results.Add(modelWithCaps);
+                            }
+                        }
+                    }
+                    
+                    _logger.LogInformation("获取到 {Count} 个OpenRouter模型及其能力信息", results.Count);
+                    return results;
+                }
+                else
+                {
+                    _logger.LogWarning("获取OpenRouter模型能力失败: {StatusCode}", response.StatusCode);
+                    return new List<ModelWithCapabilities>();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "获取OpenRouter模型能力时出错");
+                return new List<ModelWithCapabilities>();
+            }
+        }
+
+        /// <summary>
+        /// 解析OpenRouter模型能力信息
+        /// </summary>
+        private ModelWithCapabilities ParseOpenRouterModelCapabilities(dynamic modelData)
+        {
+            try
+            {
+                string modelId = modelData.id?.ToString();
+                if (string.IsNullOrEmpty(modelId))
+                {
+                    return null;
+                }
+
+                var model = new ModelWithCapabilities { ModelName = modelId };
+                
+                // 基本信息
+                if (modelData.name != null)
+                {
+                    model.SetCapability("display_name", modelData.name.ToString());
+                }
+                
+                if (modelData.description != null)
+                {
+                    model.SetCapability("description", modelData.description.ToString());
+                }
+                
+                if (modelData.context_length != null)
+                {
+                    model.SetCapability("context_length", modelData.context_length.ToString());
+                }
+
+                // 架构信息
+                if (modelData.architecture != null)
+                {
+                    var architecture = modelData.architecture;
+                    
+                    // 输入模态
+                    if (architecture.input_modalities != null)
+                    {
+                        bool supportsText = false;
+                        bool supportsImage = false;
+                        
+                        foreach (var modality in architecture.input_modalities)
+                        {
+                            string modalityStr = modality.ToString().ToLower();
+                            if (modalityStr == "text")
+                            {
+                                supportsText = true;
+                            }
+                            else if (modalityStr == "image")
+                            {
+                                supportsImage = true;
+                            }
+                        }
+                        
+                        model.SetCapability("text_input", supportsText);
+                        model.SetCapability("vision", supportsImage);
+                        model.SetCapability("image_content", supportsImage);
+                        model.SetCapability("multimodal", supportsImage);
+                    }
+                    
+                    // 输出模态
+                    if (architecture.output_modalities != null)
+                    {
+                        foreach (var modality in architecture.output_modalities)
+                        {
+                            string modalityStr = modality.ToString().ToLower();
+                            if (modalityStr == "text")
+                            {
+                                model.SetCapability("text_output", true);
+                            }
+                        }
+                    }
+                    
+                    if (architecture.tokenizer != null)
+                    {
+                        model.SetCapability("tokenizer", architecture.tokenizer.ToString());
+                    }
+                }
+
+                // 定价信息
+                if (modelData.pricing != null)
+                {
+                    var pricing = modelData.pricing;
+                    if (pricing.prompt != null)
+                    {
+                        model.SetCapability("prompt_price", pricing.prompt.ToString());
+                    }
+                    if (pricing.completion != null)
+                    {
+                        model.SetCapability("completion_price", pricing.completion.ToString());
+                    }
+                    if (pricing.image != null)
+                    {
+                        model.SetCapability("image_price", pricing.image.ToString());
+                    }
+                }
+
+                // 支持的参数
+                if (modelData.supported_parameters != null)
+                {
+                    var supportedParams = new List<string>();
+                    foreach (var param in modelData.supported_parameters)
+                    {
+                        string paramStr = param.ToString();
+                        supportedParams.Add(paramStr);
+                        
+                        // 检查工具调用支持
+                        if (paramStr.ToLower().Contains("tool") || paramStr.ToLower().Contains("function"))
+                        {
+                            model.SetCapability("function_calling", true);
+                            model.SetCapability("tool_calls", true);
+                        }
+                        
+                        // 检查流式支持
+                        if (paramStr.ToLower().Contains("stream"))
+                        {
+                            model.SetCapability("streaming", true);
+                        }
+                        
+                        // 检查JSON格式支持
+                        if (paramStr.ToLower().Contains("response_format"))
+                        {
+                            model.SetCapability("response_json_object", true);
+                        }
+                    }
+                    
+                    model.SetCapability("supported_parameters", string.Join(", ", supportedParams));
+                }
+
+                // 基于模型名称的额外推断
+                var lowerModelId = modelId.ToLower();
+                
+                // 推断提供商
+                if (lowerModelId.Contains("openai/") || lowerModelId.Contains("gpt"))
+                {
+                    model.SetCapability("provider", "OpenAI");
+                }
+                else if (lowerModelId.Contains("anthropic/") || lowerModelId.Contains("claude"))
+                {
+                    model.SetCapability("provider", "Anthropic");
+                }
+                else if (lowerModelId.Contains("google/") || lowerModelId.Contains("gemini"))
+                {
+                    model.SetCapability("provider", "Google");
+                }
+                else if (lowerModelId.Contains("meta/") || lowerModelId.Contains("llama"))
+                {
+                    model.SetCapability("provider", "Meta");
+                }
+                else if (lowerModelId.Contains("mistral/"))
+                {
+                    model.SetCapability("provider", "Mistral");
+                }
+
+                // 默认能力设置
+                model.SetCapability("chat", true);
+                
+                // 如果没有明确的工具调用信息，基于模型名称推断
+                if (!model.GetCapabilityBool("function_calling"))
+                {
+                    if (lowerModelId.Contains("gpt-4") || lowerModelId.Contains("gpt-3.5") || 
+                        lowerModelId.Contains("claude") || lowerModelId.Contains("gemini"))
+                    {
+                        model.SetCapability("function_calling", true);
+                        model.SetCapability("tool_calls", true);
+                    }
+                }
+
+                return model;
+            }
+            catch (Exception ex)
+            {
+                string modelDataStr = modelData?.ToString() ?? "null";
+                _logger.LogError(ex, "解析OpenRouter模型能力时出错: {ModelData}", modelDataStr);
+                return null;
+            }
         }
 
         // --- Helper Methods (Defined locally again) ---
@@ -473,7 +945,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                 var tg_img_arr = tg_img_data.ToArray();
                 var base64Image = Convert.ToBase64String(tg_img_arr);
 
-                var prompt = $"请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用‘图中显示’或‘这是一张图片’这类通用表达。";
+                var prompt = $"请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用'图中显示'或'这是一张图片'这类通用表达。";
 
                 var messages = new List<ChatMessage> {
                     new UserChatMessage(new List<ChatMessageContentPart>() {
