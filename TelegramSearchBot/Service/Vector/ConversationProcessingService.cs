@@ -54,7 +54,7 @@ namespace TelegramSearchBot.Service.Vector
         {
             using var scope = _serviceProvider.CreateScope();
             var segmentationService = scope.ServiceProvider.GetRequiredService<ConversationSegmentationService>();
-            var vectorService = scope.ServiceProvider.GetRequiredService<ConversationVectorService>();
+            var vectorService = scope.ServiceProvider.GetRequiredService<FaissVectorService>();
 
             try
             {
@@ -100,7 +100,7 @@ namespace TelegramSearchBot.Service.Vector
             }
         }
 
-        private async Task VectorizeUnprocessedSegments(ConversationVectorService vectorService)
+        private async Task VectorizeUnprocessedSegments(FaissVectorService vectorService)
         {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
@@ -129,10 +129,12 @@ namespace TelegramSearchBot.Service.Vector
                         _logger.LogError(ex, $"群组 {groupSegments.Key} 向量化失败");
                     }
                 }
+
+                _logger.LogInformation("未向量化对话段处理完成");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "向量化对话段时发生错误");
+                _logger.LogError(ex, "向量化未处理对话段时发生错误");
             }
         }
 
@@ -152,7 +154,7 @@ namespace TelegramSearchBot.Service.Vector
         {
             using var scope = _serviceProvider.CreateScope();
             var segmentationService = scope.ServiceProvider.GetRequiredService<ConversationSegmentationService>();
-            var vectorService = scope.ServiceProvider.GetRequiredService<ConversationVectorService>();
+            var vectorService = scope.ServiceProvider.GetRequiredService<FaissVectorService>();
 
             try
             {

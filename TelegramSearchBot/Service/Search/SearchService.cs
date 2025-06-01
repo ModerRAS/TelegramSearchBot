@@ -17,18 +17,18 @@ namespace TelegramSearchBot.Service.Search
         private readonly LuceneManager lucene;
         private readonly DataDbContext dbContext;
         private readonly IVectorGenerationService vectorService;
-        private readonly ConversationVectorService conversationVectorService;
+        private readonly FaissVectorService faissVectorService;
         
         public SearchService(
             LuceneManager lucene, 
             DataDbContext dbContext, 
             IVectorGenerationService vectorService,
-            ConversationVectorService conversationVectorService)
+            FaissVectorService faissVectorService)
         {
             this.lucene = lucene;
             this.dbContext = dbContext;
             this.vectorService = vectorService;
-            this.conversationVectorService = conversationVectorService;
+            this.faissVectorService = faissVectorService;
         }
 
         public string ServiceName => "SearchService";
@@ -70,12 +70,12 @@ namespace TelegramSearchBot.Service.Search
         {
             if (searchOption.IsGroup)
             {
-                // 使用对话段向量搜索当前群组
-                return await conversationVectorService.Search(searchOption);
+                // 使用FAISS对话段向量搜索当前群组
+                return await faissVectorService.Search(searchOption);
             }
             else
             {
-                // 私聊搜索：在用户所在的所有群组中使用对话段搜索
+                // 私聊搜索：在用户所在的所有群组中使用FAISS对话段搜索
                 var UserInGroups = dbContext.Set<UserWithGroup>()
                     .Where(user => searchOption.ChatId.Equals(user.UserId))
                     .ToList();
@@ -97,7 +97,7 @@ namespace TelegramSearchBot.Service.Search
                         Count = -1
                     };
 
-                    var groupResult = await conversationVectorService.Search(groupSearchOption);
+                    var groupResult = await faissVectorService.Search(groupSearchOption);
                     if (groupResult.Messages.Count > 0)
                     {
                         allMessages.AddRange(groupResult.Messages);

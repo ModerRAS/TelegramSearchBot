@@ -35,6 +35,7 @@ using Grpc.Net.Client;
 using Grpc.Core.Interceptors;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Extension;
+using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
@@ -83,11 +84,13 @@ namespace TelegramSearchBot.AppBootstrap {
             TelegramSearchBot.Service.AI.LLM.McpToolHelper.EnsureInitialized(mainAssembly, service, mcpLogger);
             Log.Information("McpToolHelper has been initialized.");
 
+            // SQLite 数据库初始化
             using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
                 var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
                 //context.Database.EnsureCreated();
                 context.Database.Migrate();
             }
+
             var task = host.RunAsync(); // Changed back to Run() as Startup is now synchronous
 
             Thread.Sleep(5000);

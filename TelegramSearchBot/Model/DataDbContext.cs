@@ -45,6 +45,18 @@ namespace TelegramSearchBot.Model
                 .WithMany()
                 .HasForeignKey(csm => csm.MessageDataId);
 
+            // 配置向量索引模型
+            modelBuilder.Entity<VectorIndex>()
+                .HasIndex(vi => new { vi.GroupId, vi.VectorType, vi.EntityId })
+                .IsUnique();
+
+            modelBuilder.Entity<VectorIndex>()
+                .HasIndex(vi => new { vi.GroupId, vi.FaissIndex });
+
+            modelBuilder.Entity<FaissIndexFile>()
+                .HasIndex(fif => new { fif.GroupId, fif.IndexType })
+                .IsUnique();
+
             // You can add other configurations here if needed
         }
         public virtual DbSet<Message> Messages { get; set; }
@@ -63,5 +75,7 @@ namespace TelegramSearchBot.Model
         public virtual DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
         public virtual DbSet<ConversationSegment> ConversationSegments { get; set; } = null!;
         public virtual DbSet<ConversationSegmentMessage> ConversationSegmentMessages { get; set; } = null!;
+        public virtual DbSet<VectorIndex> VectorIndexes { get; set; } = null!;
+        public virtual DbSet<FaissIndexFile> FaissIndexFiles { get; set; } = null!;
     }
 }
