@@ -46,7 +46,7 @@ namespace TelegramSearchBot.AppBootstrap {
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
 
             Directory.SetCurrentDirectory(Env.WorkDir);
-            
+
 
             Env.SchedulerPort = Utils.GetRandomAvailablePort();
 #if DEBUG
@@ -75,8 +75,8 @@ namespace TelegramSearchBot.AppBootstrap {
             service = host.Services;
 
             var loggerFactory = service.GetRequiredService<ILoggerFactory>();
-            var mcpLogger = loggerFactory.CreateLogger("McpToolHelperInitialization"); 
-            var mainAssembly = typeof(GeneralBootstrap).Assembly; 
+            var mcpLogger = loggerFactory.CreateLogger("McpToolHelperInitialization");
+            var mainAssembly = typeof(GeneralBootstrap).Assembly;
             TelegramSearchBot.Service.AI.LLM.McpToolHelper.EnsureInitialized(mainAssembly, service, mcpLogger);
             Log.Information("McpToolHelper has been initialized.");
 
@@ -99,10 +99,12 @@ namespace TelegramSearchBot.AppBootstrap {
         }
         public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
             return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
-                _ = Task.Run(async () => {
+                _ = await Task.Run(async () => {
                     try {
-                        var exec = new ControllerExecutor(service.GetServices<IOnUpdate>());
-                        await exec.ExecuteControllers(update);
+                        using (var scope = service.CreateScope()) {
+                            var exec = new ControllerExecutor(scope.ServiceProvider.GetServices<IOnUpdate>());
+                            await exec.ExecuteControllers(update);
+                        }
                     } catch (Exception ex) {
                         //Log.Error(ex, $"Message ControllerExecutor Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Title} {update.Message.Chat.Id}/{update.Message.MessageId}");
                     }
