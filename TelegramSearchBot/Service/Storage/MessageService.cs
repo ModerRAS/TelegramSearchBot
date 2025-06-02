@@ -49,18 +49,8 @@ namespace TelegramSearchBot.Service.Storage
             }
         }
 
-        public async Task AddToQdrant(MessageOption messageOption) {
-            var message = await DataContext.Messages.FindAsync(messageOption.MessageDataId);
-            if (message != null) {
-                await _mediator.Publish(new MessageVectorGenerationNotification(message));
-            } else {
-                Logger.LogWarning($"Message not found in database: {messageOption.MessageDataId}");
-            }
-        }
-
         public async Task<long> AddToSqlite(MessageOption messageOption)
         {
-
             var UserIsInGroup = from s in DataContext.UsersWithGroup
                                 where s.UserId == messageOption.UserId &&
                                       s.GroupId == messageOption.ChatId
@@ -121,7 +111,6 @@ namespace TelegramSearchBot.Service.Storage
             }
             await DataContext.SaveChangesAsync();
             return message.Id;
-            
         }
 
         public async Task<long> ExecuteAsync(MessageOption messageOption)

@@ -41,7 +41,6 @@ namespace TelegramSearchBot.Service.Manage
                             LuceneManager lucene,
                             SendMessage Send,
                             DataDbContext context,
-                            VectorGenerationService vectorGenerationService,
                             ChatImportService chatImport,
                             IAutoASRService autoASRService,
                             MessageExtensionService messageExtensionService,

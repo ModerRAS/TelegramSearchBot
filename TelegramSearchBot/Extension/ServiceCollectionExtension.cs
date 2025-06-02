@@ -26,10 +26,6 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.View;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
-using Qdrant.Client;
-using Qdrant.Client.Grpc;
-using Grpc.Net.Client;
-using Grpc.Core.Interceptors;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.AppBootstrap;
 using TelegramSearchBot.Attributes;
@@ -42,22 +38,6 @@ namespace TelegramSearchBot.Extension {
                 new TelegramBotClient(
                     new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl), 
                     httpClient: HttpClientHelper.CreateProxyHttpClient()));
-        }
-
-        public static IServiceCollection AddQdrantClient(this IServiceCollection services) {
-            return services.AddSingleton<QdrantClient>(sp => {
-                var handler = new HttpClientHandler { UseProxy = false };
-                var channel = GrpcChannel.ForAddress($"http://localhost:{Env.QdrantGrpcPort}", 
-                    new GrpcChannelOptions { HttpHandler = handler });
-                
-                var callInvoker = channel.Intercept(metadata => {
-                    metadata.Add("api-key", Env.QdrantApiKey);
-                    return metadata;
-                });
-                
-                var grpcClient = new QdrantGrpcClient(callInvoker);
-                return new QdrantClient(grpcClient);
-            });
         }
 
         public static IServiceCollection AddRedis(this IServiceCollection services) {
@@ -86,7 +66,6 @@ namespace TelegramSearchBot.Extension {
                 .AddSingleton<LuceneManager>()
                 .AddSingleton<PaddleOCR>()
                 .AddSingleton<WhisperManager>()
-                .AddHostedService<QdrantProcessManager>()
                 .AddScheduler();
         }
 
@@ -133,7 +112,6 @@ namespace TelegramSearchBot.Extension {
             var assembly = typeof(GeneralBootstrap).Assembly;
             return services
                 .AddTelegramBotClient()
-                .AddQdrantClient()
                 .AddRedis()
                 .AddDatabase()
                 .AddHttpClients()

@@ -30,8 +30,6 @@ namespace TelegramSearchBot {
                 OLTPAuth = config.OLTPAuth;
                 OLTPAuthUrl = config.OLTPAuthUrl;
                 OLTPName = config.OLTPName;
-                QdrantHttpPort = config.QdrantHttpPort;
-                QdrantGrpcPort = config.QdrantGrpcPort;
             } catch { 
             }
             
@@ -56,9 +54,8 @@ namespace TelegramSearchBot {
         public static string OLTPAuth { get; set; }
         public static string OLTPAuthUrl { get; set; }
         public static string OLTPName { get; set; }
-        public static int QdrantHttpPort { get; set; } = 6333;
-        public static int QdrantGrpcPort { get; set; } = 6334;
-        public static string QdrantApiKey {  get; set; } = Guid.NewGuid().ToString();
+
+        public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
     }
     public class Config {
         public string BaseUrl { get; set; } = "https://api.telegram.org";
@@ -77,7 +74,5 @@ namespace TelegramSearchBot {
         public string OLTPAuth { get; set; }
         public string OLTPAuthUrl { get; set; }
         public string OLTPName { get; set; }
-        public int QdrantHttpPort { get; set; } = 6333;
-        public int QdrantGrpcPort { get; set; } = 6334;
     }
 }

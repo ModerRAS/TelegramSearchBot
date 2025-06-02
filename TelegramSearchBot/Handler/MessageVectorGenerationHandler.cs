@@ -9,16 +9,16 @@ namespace TelegramSearchBot.Handler
 {
     public class MessageVectorGenerationHandler : INotificationHandler<MessageVectorGenerationNotification>
     {
-        private readonly VectorGenerationService _vectorGenerationService;
+        private readonly FaissVectorService _faissVectorService;
 
-        public MessageVectorGenerationHandler(VectorGenerationService vectorGenerationService)
+        public MessageVectorGenerationHandler(FaissVectorService faissVectorService)
         {
-            _vectorGenerationService = vectorGenerationService;
+            _faissVectorService = faissVectorService;
         }
 
         public async Task Handle(MessageVectorGenerationNotification notification, CancellationToken cancellationToken)
         {
-            await _vectorGenerationService.StoreMessageAsync(notification.Message);
+            await _faissVectorService.StoreMessageAsync(notification.Message);
         }
     }
 }

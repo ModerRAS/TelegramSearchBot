@@ -2,7 +2,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using Qdrant.Client;
 using StackExchange.Redis;
 using Moq;
 using Nito.AsyncEx;

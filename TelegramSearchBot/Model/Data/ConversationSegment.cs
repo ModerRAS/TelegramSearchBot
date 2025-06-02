@@ -65,7 +65,7 @@ namespace TelegramSearchBot.Model.Data
         public string FullContent { get; set; }
 
         /// <summary>
-        /// 向量存储的ID（在Qdrant中的ID）
+        /// 向量存储的ID（在FAISS中的索引位置）
         /// </summary>
         public string VectorId { get; set; }
 

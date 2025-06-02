@@ -5,17 +5,18 @@
 
 ## 功能列表
 1. 群聊消息存储并支持中文分词搜索 (Lucene)
-2. 群聊消息中多媒体内容自动处理:
+2. **向量搜索功能 (FAISS)**: 基于对话段的语义搜索，无需额外服务依赖
+3. 群聊消息中多媒体内容自动处理:
    - 图片自动下载并OCR存储 (PaddleOCR)
    - 图片自动二维码识别(WeChatQR)
    - 语音/视频自动语音识别 (Whisper)
    - 发送图片附带`打印`指令时自动OCR回复
-3. 大语言模型集成:
+4. 大语言模型集成:
    - Ollama本地模型
    - OpenAI API
    - Gemini API
    - 可配置多模型通道管理
-4. 高级功能:
+5. 高级功能:
    - 短链接映射服务
    - 消息扩展存储
    - 记忆图谱功能
@@ -47,9 +48,7 @@
   "OpenAIModelName": "gpt-4o",
   "OLTPAuth": "",
   "OLTPAuthUrl": "",
-  "OLTPName": "",
-  "QdrantHttpPort": 6333,
-  "QdrantGrpcPort": 6334
+  "OLTPName": ""
 }
 ```
 
@@ -67,10 +66,17 @@
   - `OLTPAuth`: OLTP日志推送认证密钥
   - `OLTPAuthUrl`: OLTP日志推送URL
   - `OLTPName`: OLTP日志推送名称
-  - `QdrantHttpPort`: Qdrant HTTP端口(默认6333)
-  - `QdrantGrpcPort`: Qdrant gRPC端口(默认6334)
 
 完整配置参考: [Env.cs](TelegramSearchBot/Env.cs)
+
+## 向量搜索功能
+基于FAISS的向量搜索系统，提供强大的语义搜索能力：
+- ✅ **零额外服务依赖** - 不需要外部向量数据库
+- ✅ **对话段语义理解** - 基于完整对话上下文而非单条消息
+- ✅ **自动向量化** - 消息自动分组为对话段并生成向量
+- ✅ **高效检索** - 使用FAISS进行快速相似度搜索
+
+详细文档: [TelegramSearchBot/README_FaissVectorSearch.md](TelegramSearchBot/README_FaissVectorSearch.md)
 
 ## 使用方法
 
@@ -80,9 +86,9 @@
 3. 将该Bot加入群聊
 4. 输入`搜索 + 空格 + 搜索关键字`，如`搜索 食用方法`
 
-### 基础搜索
-- 群聊中: `搜索 关键词` - 返回该群聊中符合关键字的选项
-- 私聊中: 返回该Bot所在的所有群聊中发送者在的群的所有符合关键字的选项
+### 搜索类型
+- **倒排索引搜索**: `搜索 关键词` - 传统关键词搜索
+- **向量搜索**: `/vector 问题描述` - 语义搜索，理解问题含义
 
 ### AI交互
 - @机器人 + 问题: 使用配置的LLM回复
@@ -96,13 +102,17 @@ graph TD
     B --> C[消息存储]
     B --> D[多媒体处理]
     B --> E[LLM交互]
-    C --> F[(SQLite)]
-    C --> G[Lucene索引]
-    D --> H[OCR服务]
-    D --> I[ASR服务]
-    E --> J[Ollama]
-    E --> K[OpenAI]
-    E --> L[Gemini]
+    B --> F[向量搜索]
+    C --> G[(SQLite)]
+    C --> H[Lucene索引]
+    F --> I[对话段生成]
+    F --> J[FAISS向量索引]
+    I --> K[向量生成]
+    D --> L[OCR服务]
+    D --> M[ASR服务]
+    E --> N[Ollama]
+    E --> O[OpenAI]
+    E --> P[Gemini]
 ```
 
 详细架构设计: [Docs/Existing_Codebase_Overview.md](Docs/Existing_Codebase_Overview.md)
