@@ -6,20 +6,23 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.AI;
 using System.Threading; // Added for CancellationToken
+using System.Threading.Channels; // Required for ChannelReader
 
 namespace TelegramSearchBot.Interface {
     public interface ILLMService {
-        public IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, LLMChannel channel,
-                                                  [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default);
-        public Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel);
-        public Task<IEnumerable<string>> GetAllModels(LLMChannel channel);
+        Task<LLMResponse> ExecuteAsync(LLMRequest request, CancellationToken cancellationToken = default);
+
+        Task<(ChannelReader<string> StreamReader, Task<LLMResponse> ResponseTask)> ExecuteStreamAsync(LLMRequest request, CancellationToken cancellationToken = default);
+
+        Task<float[]> GenerateEmbeddingAsync(string text, string model, LLMChannelDto channel, CancellationToken cancellationToken = default);
+
+        Task<List<string>> GetAvailableModelsAsync(LLMChannelDto channel, CancellationToken cancellationToken = default);
+
+        Task<bool> IsHealthyAsync(LLMChannelDto channel, CancellationToken cancellationToken = default);
         
         /// <summary>
         /// 获取指定通道的所有模型及其能力信息
         /// </summary>
         public Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel);
-        
-        public Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel);
-        public virtual async Task<bool> IsHealthyAsync(LLMChannel channel) => (await GetAllModels(channel)).Any();
     }
 }

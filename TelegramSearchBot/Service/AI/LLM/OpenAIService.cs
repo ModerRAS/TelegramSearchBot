@@ -28,6 +28,8 @@ using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
 // Using alias for the common internal ChatMessage format
 using CommonChat = OpenAI.Chat;
+using System.Threading.Channels; // Required for ChannelReader
+using OpenAI.Embeddings; // Ensure this is present for EmbeddingClient
 
 namespace TelegramSearchBot.Service.AI.LLM 
 {
@@ -967,6 +969,345 @@ namespace TelegramSearchBot.Service.AI.LLM
             {
                 _logger.LogError(ex, "Error analyzing image with OpenAI");
                 return $"Error analyzing image: {ex.Message}";
+            }
+        }
+
+        // --- Implementation of ILLMService ---
+
+        public async Task<LLMResponse> ExecuteAsync(LLMRequest request, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Executing OpenAI request for model {Model} via Gateway {Gateway}", request.Model, request.Channel.Gateway);
+            var handler = new HttpClientHandler();
+            if (!string.IsNullOrEmpty(Env.Proxy))
+            {
+                handler.Proxy = new WebProxy(Env.Proxy);
+                handler.UseProxy = true;
+            }
+
+            using var httpClient = new HttpClient(handler);
+
+            var clientOptions = new OpenAIClientOptions
+            {
+                Endpoint = new Uri(request.Channel.Gateway),
+                Transport = new HttpClientPipelineTransport(httpClient),
+            };
+            if (!string.IsNullOrEmpty(request.Channel.OrganizationId)){
+                clientOptions.OrganizationId = request.Channel.OrganizationId;
+            }
+
+            var chatClient = new ChatClient(model: request.Model, credential: new ApiKeyCredential(request.Channel.ApiKey), clientOptions);
+            var chatMessages = ConvertToOpenAIChatMessages(request.ChatHistory, request.SystemPrompt);
+            
+            var responseBuilder = new StringBuilder();
+            // Using CompleteChatStreamingAsync as LLMCoreService did, assuming it's the intended way.
+            await foreach (var update in chatClient.CompleteChatStreamingAsync(chatMessages, cancellationToken: cancellationToken).ConfigureAwait(false))
+            {
+                foreach (var updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>())
+                {
+                    if (updatePart?.Text != null)
+                    {
+                        responseBuilder.Append(updatePart.Text);
+                    }
+                }
+            }
+
+            return new LLMResponse
+            {
+                RequestId = request.RequestId,
+                Model = request.Model,
+                IsSuccess = true,
+                Content = responseBuilder.ToString(),
+                StartTime = request.StartTime, 
+                EndTime = DateTime.UtcNow
+            };
+        }
+
+        public async Task<(ChannelReader<string> StreamReader, Task<LLMResponse> ResponseTask)> ExecuteStreamAsync(LLMRequest request, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Executing OpenAI stream request for model {Model} via Gateway {Gateway}", request.Model, request.Channel.Gateway);
+            var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
+            var responseBuilder = new StringBuilder();
+
+            var responseTask = Task.Run(async () =>
+            {
+                var llmResponse = new LLMResponse
+                {
+                    RequestId = request.RequestId,
+                    Model = request.Model,
+                    StartTime = request.StartTime,
+                    IsStreaming = true
+                };
+
+                try
+                {
+                    var handler = new HttpClientHandler();
+                    if (!string.IsNullOrEmpty(Env.Proxy))
+                    {
+                        handler.Proxy = new WebProxy(Env.Proxy);
+                        handler.UseProxy = true;
+                    }
+                    using var httpClient = new HttpClient(handler);
+                    var clientOptions = new OpenAIClientOptions
+                    {
+                        Endpoint = new Uri(request.Channel.Gateway),
+                        Transport = new HttpClientPipelineTransport(httpClient),
+                    };
+                    if (!string.IsNullOrEmpty(request.Channel.OrganizationId)){
+                         clientOptions.OrganizationId = request.Channel.OrganizationId;
+                    }
+
+                    var chatClient = new ChatClient(model: request.Model, credential: new ApiKeyCredential(request.Channel.ApiKey), clientOptions);
+                    var chatMessages = ConvertToOpenAIChatMessages(request.ChatHistory, request.SystemPrompt);
+
+                    await foreach (var update in chatClient.CompleteChatStreamingAsync(chatMessages, cancellationToken: cancellationToken).ConfigureAwait(false))
+                    {
+                        foreach (var updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>())
+                        {
+                            if (updatePart?.Text != null)
+                            {
+                                responseBuilder.Append(updatePart.Text);
+                                await channel.Writer.WriteAsync(updatePart.Text, cancellationToken).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                    llmResponse.IsSuccess = true;
+                    llmResponse.Content = responseBuilder.ToString();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "OpenAI stream execution failed for model {Model}. Details: {ErrorMessage}", request.Model, ex.Message);
+                    llmResponse.IsSuccess = false;
+                    llmResponse.ErrorMessage = ex.Message;
+                    try { await channel.Writer.WriteAsync($"Error: {ex.Message}", cancellationToken).ConfigureAwait(false); } catch { /* Ignore errors writing to a failed channel */ }
+                }
+                finally
+                {
+                    llmResponse.EndTime = DateTime.UtcNow;
+                    channel.Writer.TryComplete();
+                }
+                return llmResponse;
+            }, cancellationToken);
+
+            return (channel.Reader, responseTask);
+        }
+
+        public async Task<float[]> GenerateEmbeddingAsync(string text, string model, LLMChannelDto channelDto, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Generating OpenAI embedding for model {Model} via Gateway {Gateway}", model, channelDto.Gateway);
+            var handler = new HttpClientHandler();
+            if (!string.IsNullOrEmpty(Env.Proxy))
+            {
+                handler.Proxy = new WebProxy(Env.Proxy);
+                handler.UseProxy = true;
+            }
+            using var httpClient = new HttpClient(handler);
+            var clientOptions = new OpenAIClientOptions
+            {
+                Endpoint = new Uri(channelDto.Gateway),
+                Transport = new HttpClientPipelineTransport(httpClient),
+            };
+             if (!string.IsNullOrEmpty(channelDto.OrganizationId)){
+                clientOptions.OrganizationId = channelDto.OrganizationId;
+            }
+
+            var client = new OpenAIClient(new ApiKeyCredential(channelDto.ApiKey), clientOptions);
+            var embeddingClient = client.GetEmbeddingClient(model);
+            
+            var response = await embeddingClient.GenerateEmbeddingsAsync(new[] { text }, cancellationToken: cancellationToken).ConfigureAwait(false);
+            
+            if (response?.Value != null && response.Value.Any())
+            {
+                var embeddingObject = response.Value.First();
+                if (embeddingObject.Embedding != null) {
+                     return embeddingObject.Embedding.ToArray();
+                }
+            }
+            _logger.LogWarning("Failed to generate OpenAI embedding or empty response for model {Model}.", model);
+            return Array.Empty<float>();
+        }
+
+        public async Task<List<string>> GetAvailableModelsAsync(LLMChannelDto channelDto, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Getting available OpenAI models from gateway: {Gateway}", channelDto.Gateway);
+            if (IsOpenRouter(channelDto.Gateway))
+            {
+                // Pass cancellationToken to GetOpenRouterModels
+                return (await GetOpenRouterModels(channelDto, cancellationToken).ConfigureAwait(false)).ToList();
+            }
+
+            var handler = new HttpClientHandler();
+             if (!string.IsNullOrEmpty(Env.Proxy))
+            {
+                handler.Proxy = new WebProxy(Env.Proxy);
+                handler.UseProxy = true;
+            }
+            using var httpClient = new HttpClient(handler);
+            var clientOptions = new OpenAIClientOptions
+            {
+                Endpoint = new Uri(channelDto.Gateway),
+                Transport = new HttpClientPipelineTransport(httpClient),
+            };
+            if (!string.IsNullOrEmpty(channelDto.OrganizationId)){
+                clientOptions.OrganizationId = channelDto.OrganizationId;
+            }
+
+            var client = new OpenAIClient(new ApiKeyCredential(channelDto.ApiKey), clientOptions);
+            var modelClient = client.GetOpenAIModelClient(); 
+            
+            try
+            {
+                var modelsResponse = await modelClient.GetModelsAsync(cancellationToken).ConfigureAwait(false);
+                return modelsResponse.Value.Select(m => m.Id).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get OpenAI models from {Gateway}. Details: {ErrorMessage}", channelDto.Gateway, ex.Message);
+                return new List<string>();
+            }
+        }
+
+        public async Task<bool> IsHealthyAsync(LLMChannelDto channelDto, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Checking OpenAI health for gateway: {Gateway}", channelDto.Gateway);
+            try
+            {
+                var models = await GetAvailableModelsAsync(channelDto, cancellationToken).ConfigureAwait(false);
+                return models != null && models.Any();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "OpenAI health check failed for gateway: {Gateway}. Details: {ErrorMessage}", channelDto.Gateway, ex.Message);
+                return false;
+            }
+        }
+
+        // --- Helper Methods ---
+
+        private List<ChatMessage> ConvertToOpenAIChatMessages(List<LLMMessage> messages, string systemPrompt)
+        {
+            var chatMessages = new List<ChatMessage>();
+            
+            if (!string.IsNullOrEmpty(systemPrompt))
+            {
+                chatMessages.Add(new SystemChatMessage(systemPrompt));
+            }
+
+            foreach (var message in messages)
+            {
+                switch (message.Role)
+                {
+                    case LLMRole.User:
+                        if (message.Contents.Any(c => c.Type == LLMContentType.Image))
+                        {
+                            var contentParts = new List<ChatMessageContentPart>();
+                            if (!string.IsNullOrEmpty(message.Content))
+                            {
+                                contentParts.Add(ChatMessageContentPart.CreateTextPart(message.Content));
+                            }
+                            foreach (var content in message.Contents.Where(c => c.Type == LLMContentType.Image))
+                            {
+                                if (content.Image != null)
+                                {
+                                    byte[] imageBytes = null;
+                                    if (!string.IsNullOrEmpty(content.Image.Data)) 
+                                    {
+                                        try { imageBytes = Convert.FromBase64String(content.Image.Data); } 
+                                        catch (FormatException ex) { _logger.LogError(ex, "Invalid Base64 image data."); continue; }
+                                    }
+                                    else if (!string.IsNullOrEmpty(content.Image.Url)) 
+                                    {
+                                        try {
+                                            // Prefer async download for URLs
+                                            using var httpClient = _httpClientFactory.CreateClient(); 
+                                            imageBytes = Task.Run(() => httpClient.GetByteArrayAsync(content.Image.Url)).Result; // Still blocking, should be improved if possible
+                                        } catch (Exception ex) {
+                                            _logger.LogError(ex, "Failed to download image from URL: {Url}", content.Image.Url);
+                                            continue; 
+                                        }
+                                    }
+                                    else { continue; }
+                                    
+                                    if (imageBytes != null)
+                                    {
+                                       contentParts.Add(ChatMessageContentPart.CreateImagePart(
+                                           BinaryData.FromBytes(imageBytes), 
+                                           content.Image.MimeType ?? "image/jpeg"));
+                                    }
+                                }
+                            }
+                            if (contentParts.Any()) 
+                            {
+                                chatMessages.Add(new UserChatMessage(contentParts));
+                            }
+                            else if (!string.IsNullOrEmpty(message.Content))
+                            {
+                                chatMessages.Add(new UserChatMessage(message.Content));
+                            }
+                        }
+                        else
+                        {
+                            chatMessages.Add(new UserChatMessage(message.Content));
+                        }
+                        break;
+                    case LLMRole.Assistant:
+                        chatMessages.Add(new AssistantChatMessage(message.Content));
+                        break;
+                    case LLMRole.System:
+                        chatMessages.Add(new SystemChatMessage(message.Content));
+                        break;
+                }
+            }
+            return chatMessages;
+        }
+        
+        private bool IsOpenRouter(string gateway)
+        {
+            return !string.IsNullOrEmpty(gateway) && 
+                   (gateway.Contains("openrouter.ai", StringComparison.OrdinalIgnoreCase) || 
+                    gateway.Contains("openrouter", StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Updated GetOpenRouterModels to accept LLMChannelDto and CancellationToken
+        private async Task<IEnumerable<string>> GetOpenRouterModels(LLMChannelDto channelDto, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Getting OpenRouter models from: {Gateway}", channelDto.Gateway);
+            try
+            {
+                var httpClient = _httpClientFactory.CreateClient("OpenRouterClient"); 
+                httpClient.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", channelDto.ApiKey);
+                
+                var response = await httpClient.GetAsync("https://openrouter.ai/api/v1/models", cancellationToken).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                    var modelsData = System.Text.Json.JsonDocument.Parse(content).RootElement;
+                    var models = new List<string>();
+                    if (modelsData.TryGetProperty("data", out var dataArray))
+                    {
+                        foreach (var modelElement in dataArray.EnumerateArray())
+                        {
+                            if (modelElement.TryGetProperty("id", out var idElement) && idElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                            {
+                                models.Add(idElement.GetString());
+                            }
+                        }
+                    }
+                    _logger.LogInformation("Retrieved {Count} models from OpenRouter", models.Count);
+                    return models;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                    _logger.LogWarning("Failed to get OpenRouter models: {StatusCode} - {Reason}. Content: {ErrorContent}", 
+                                     response.StatusCode, response.ReasonPhrase, errorContent);
+                    return new List<string>();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting OpenRouter models. Details: {ErrorMessage}", ex.Message);
+                return new List<string>();
             }
         }
     }

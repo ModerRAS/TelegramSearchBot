@@ -11,44 +11,34 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
-using static GenerativeAI.VertexAIModels;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public class LLMFactory : IService, ILLMFactory {
         public string ServiceName => "LLMFactory";
 
-        protected IConnectionMultiplexer connectionMultiplexer { get; set; }
-        private readonly DataDbContext _dbContext;
-        private readonly OpenAIService _openAIService;
-        private readonly OllamaService _ollamaService;
-        private readonly GeminiService _geminiService;
         private readonly ILogger<LLMFactory> _logger;
-        private readonly Dictionary<LLMProvider, ILLMService> _services;
+        private readonly Dictionary<LLMProvider, ILLMApiFactory> _apiFactories;
+
         public LLMFactory(
-            IConnectionMultiplexer connectionMultiplexer,
-            DataDbContext dbContext,
             ILogger<LLMFactory> logger,
-            OllamaService ollamaService,
-            OpenAIService openAIService,
-            GeminiService geminiService
+            IEnumerable<ILLMApiFactory> apiFactories
             ) {
-            this.connectionMultiplexer = connectionMultiplexer;
-            _dbContext = dbContext;
             _logger = logger;
 
-            // Initialize services with default values
-            _openAIService = openAIService;
-            _ollamaService = ollamaService;
-            _geminiService = geminiService;
-            _services = new() {
-                [LLMProvider.OpenAI] = _openAIService,
-                [LLMProvider.Ollama] = _ollamaService,
-                [LLMProvider.Gemini] = _geminiService
-            };
+            _apiFactories = apiFactories.ToDictionary(factory => factory.Provider);
+            _logger.LogInformation("LLMFactory initialized with {Count} API factories.", _apiFactories.Count);
+            foreach (var factoryEntry in _apiFactories) {
+                _logger.LogInformation("Registered API Factory for Provider: {Provider}", factoryEntry.Key);
+            }
         }
 
-        public ILLMService GetLLMService(LLMProvider provider) => _services[provider];
-
+        public ILLMService GetLLMService(LLMProvider provider) {
+            if (_apiFactories.TryGetValue(provider, out var factory)) {
+                return factory.CreateLlmService();
+            }
+            _logger.LogError("No API factory found for provider: {Provider}", provider);
+            throw new ArgumentException($"No API factory found for provider: {provider}");
+        }
     }
 }
