@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using TelegramSearchBot.LLM.Application.Services;
 using TelegramSearchBot.LLM.Domain.Factories;
 using TelegramSearchBot.LLM.Domain.Services;

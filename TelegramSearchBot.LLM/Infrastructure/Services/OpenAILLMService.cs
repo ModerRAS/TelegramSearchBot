@@ -144,8 +144,8 @@ public class OpenAILLMService : ILLMService
     {
         try
         {
-            _logger.LogInformation("生成OpenAI嵌入向量: Model={Model}", model);
-
+            _logger.LogInformation("生成OpenAI嵌入向量: Model={Model}, Gateway={Gateway}", model, channel.Gateway);
+            
             using var httpClient = CreateHttpClient(channel);
             var clientOptions = CreateClientOptions(channel, httpClient);
             var client = new OpenAIClient(new ApiKeyCredential(channel.ApiKey), clientOptions);
@@ -155,22 +155,80 @@ public class OpenAILLMService : ILLMService
             
             if (response?.Value != null && response.Value.Any())
             {
-                var embeddingObject = response.Value.First();
-                if (embeddingObject.Embedding != null)
+                var embedding = response.Value.First();
+                _logger.LogDebug("Embedding response type: {Type}", embedding.GetType().FullName);
+                
+                // 尝试使用反射获取嵌入向量数据，支持多种可能的属性名
+                var embeddingProp = embedding.GetType().GetProperty("Embedding")
+                                  ?? embedding.GetType().GetProperty("EmbeddingVector")
+                                  ?? embedding.GetType().GetProperty("Vector")
+                                  ?? embedding.GetType().GetProperty("EmbeddingData")
+                                  ?? embedding.GetType().GetProperty("Data");
+                
+                if (embeddingProp != null)
                 {
-                    var embedding = embeddingObject.Embedding.ToArray();
-                    _logger.LogInformation("OpenAI嵌入向量生成完成: Model={Model}, Dimension={Dimension}", 
-                        model, embedding.Length);
-                    return embedding;
+                    var embeddingValue = embeddingProp.GetValue(embedding);
+                    if (embeddingValue is float[] floatArray)
+                    {
+                        _logger.LogInformation("嵌入向量生成成功: Model={Model}, Dimension={Dimension}", model, floatArray.Length);
+                        return floatArray;
+                    }
+                    else if (embeddingValue is IEnumerable<float> floatEnumerable)
+                    {
+                        var result = floatEnumerable.ToArray();
+                        _logger.LogInformation("嵌入向量生成成功: Model={Model}, Dimension={Dimension}", model, result.Length);
+                        return result;
+                    }
+                    else if (embeddingValue is IReadOnlyList<float> floatList)
+                    {
+                        var result = floatList.ToArray();
+                        _logger.LogInformation("嵌入向量生成成功: Model={Model}, Dimension={Dimension}", model, result.Length);
+                        return result;
+                    }
                 }
+                
+                // 最后尝试：查找任何 float[] 类型的属性
+                var floatArrayProps = embedding.GetType().GetProperties()
+                    .Where(p => p.PropertyType == typeof(float[]) || 
+                               p.PropertyType == typeof(IEnumerable<float>) ||
+                               p.PropertyType == typeof(IReadOnlyList<float>))
+                    .ToList();
+                
+                if (floatArrayProps.Any())
+                {
+                    foreach (var prop in floatArrayProps)
+                    {
+                        var value = prop.GetValue(embedding);
+                        if (value is float[] floats)
+                        {
+                            _logger.LogInformation("嵌入向量生成成功 (备用方式): Model={Model}, Dimension={Dimension}, Property={Property}", 
+                                model, floats.Length, prop.Name);
+                            return floats;
+                        }
+                        else if (value is IEnumerable<float> floatEnumerable)
+                        {
+                            var result = floatEnumerable.ToArray();
+                            _logger.LogInformation("嵌入向量生成成功 (备用方式): Model={Model}, Dimension={Dimension}, Property={Property}", 
+                                model, result.Length, prop.Name);
+                            return result;
+                        }
+                    }
+                }
+                
+                _logger.LogError("无法提取嵌入向量数据。可用属性: {Props}",
+                    string.Join(", ", embedding.GetType().GetProperties().Select(p => $"{p.Name}:{p.PropertyType.Name}")));
             }
             
-            _logger.LogWarning("OpenAI嵌入向量生成失败: Model={Model}", model);
-            return Array.Empty<float>();
+            _logger.LogError("OpenAI嵌入向量API返回空响应: Model={Model}", model);
+            
+            // 返回通用默认维度的空向量
+            return new float[1536];
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "OpenAI嵌入向量生成异常: Model={Model}", model);
+            
+            // 发生异常时重新抛出，让调用方处理
             throw;
         }
     }

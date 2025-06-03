@@ -5,8 +5,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Attributes;
 

@@ -5,6 +5,7 @@ using StackExchange.Redis;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Service.AI.LLM.Decorators
 {

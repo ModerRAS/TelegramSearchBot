@@ -41,7 +41,7 @@ public record ToolInvocation(
     Dictionary<string, object> Parameters,
     string InvocationId = "")
 {
-    public string InvocationId { get; init; } = InvocationId.IsNullOrEmpty() ? Guid.NewGuid().ToString() : InvocationId;
+    public string InvocationId { get; init; } = string.IsNullOrEmpty(InvocationId) ? Guid.NewGuid().ToString() : InvocationId;
 }
 
 /// <summary>

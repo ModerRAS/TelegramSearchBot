@@ -59,7 +59,7 @@ public record LLMRequest(
     LLMChannelConfig Channel,
     List<LLMMessage> ChatHistory,
     string? SystemPrompt = null,
-    DateTime? StartTime = null)
+    DateTime? StartTimeParam = null)
 {
-    public DateTime StartTime { get; init; } = StartTime ?? DateTime.UtcNow;
+    public DateTime StartTime { get; init; } = StartTimeParam ?? DateTime.UtcNow;
 } 

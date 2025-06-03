@@ -16,7 +16,7 @@ using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped)]
-    public class GeneralLLMService : IService, IGeneralLLMService {
+    public class GeneralLLMService : IService {
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
         private readonly DataDbContext _dbContext;
         private readonly OpenAIService _openAIService;

@@ -1260,13 +1260,6 @@ namespace TelegramSearchBot.Service.AI.LLM
             return chatMessages;
         }
         
-        private bool IsOpenRouter(string gateway)
-        {
-            return !string.IsNullOrEmpty(gateway) && 
-                   (gateway.Contains("openrouter.ai", StringComparison.OrdinalIgnoreCase) || 
-                    gateway.Contains("openrouter", StringComparison.OrdinalIgnoreCase));
-        }
-
         // Updated GetOpenRouterModels to accept LLMChannelDto and CancellationToken
         private async Task<IEnumerable<string>> GetOpenRouterModels(LLMChannelDto channelDto, CancellationToken cancellationToken = default)
         {
