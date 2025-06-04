@@ -3,9 +3,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
@@ -475,7 +477,7 @@ namespace TelegramSearchBot.Service.AI.LLM
         /// <summary>
         /// 构建LLM请求对象
         /// </summary>
-        private async Task<LLMRequest> BuildLLMRequestAsync(
+        private async Task<TelegramSearchBot.LLM.Domain.ValueObjects.LLMRequest> BuildLLMRequestAsync(
             Model.Data.Message message, 
             long ChatId, 
             string modelName, 
@@ -484,17 +486,17 @@ namespace TelegramSearchBot.Service.AI.LLM
             var requestId = Guid.NewGuid().ToString();
             var channelConfig = ConvertToChannelConfig(channel);
             
-            // 构建聊天历史
-            var chatHistory = new List<LLMMessage>();
+            var chatHistory = new List<TelegramSearchBot.LLM.Domain.ValueObjects.LLMMessage>();
             
-            // 添加系统提示（如果有）
-            var systemPrompt = await GetSystemPromptAsync(ChatId);
-            
-            // 添加用户消息
-            var userMessage = new LLMMessage(LLMRole.User, message.MessageText ?? string.Empty);
+            // 创建用户消息
+            var userMessage = new TelegramSearchBot.LLM.Domain.ValueObjects.LLMMessage(
+                TelegramSearchBot.LLM.Domain.ValueObjects.LLMRole.User, 
+                message.MessageText ?? string.Empty);
             chatHistory.Add(userMessage);
 
-            return new LLMRequest(
+            var systemPrompt = await GetSystemPromptAsync(ChatId);
+
+            return new TelegramSearchBot.LLM.Domain.ValueObjects.LLMRequest(
                 requestId,
                 modelName,
                 channelConfig,
@@ -506,7 +508,7 @@ namespace TelegramSearchBot.Service.AI.LLM
         /// <summary>
         /// 构建图片分析请求对象
         /// </summary>
-        private async Task<LLMRequest> BuildImageAnalysisRequestAsync(
+        private async Task<TelegramSearchBot.LLM.Domain.ValueObjects.LLMRequest> BuildImageAnalysisRequestAsync(
             string photoPath, 
             long ChatId, 
             string modelName, 
@@ -515,18 +517,26 @@ namespace TelegramSearchBot.Service.AI.LLM
             var requestId = Guid.NewGuid().ToString();
             var channelConfig = ConvertToChannelConfig(channel);
             
-            var chatHistory = new List<LLMMessage>();
+            var chatHistory = new List<TelegramSearchBot.LLM.Domain.ValueObjects.LLMMessage>();
             
             // 创建包含图片的消息
-            var imageContent = new LLMContent(LLMContentType.Image, null, new LLMImageContent(Data: photoPath));
-            var textContent = new LLMContent(LLMContentType.Text, "请分析这张图片的内容");
+            var imageContent = new TelegramSearchBot.LLM.Domain.ValueObjects.LLMContent(
+                TelegramSearchBot.LLM.Domain.ValueObjects.LLMContentType.Image, 
+                null, 
+                new TelegramSearchBot.LLM.Domain.ValueObjects.LLMImageContent(Data: photoPath));
+            var textContent = new TelegramSearchBot.LLM.Domain.ValueObjects.LLMContent(
+                TelegramSearchBot.LLM.Domain.ValueObjects.LLMContentType.Text, 
+                "请分析这张图片的内容");
             
-            var userMessage = new LLMMessage(LLMRole.User, "请分析图片", new List<LLMContent> { textContent, imageContent });
+            var userMessage = new TelegramSearchBot.LLM.Domain.ValueObjects.LLMMessage(
+                TelegramSearchBot.LLM.Domain.ValueObjects.LLMRole.User, 
+                "请分析图片", 
+                new List<TelegramSearchBot.LLM.Domain.ValueObjects.LLMContent> { textContent, imageContent });
             chatHistory.Add(userMessage);
 
             var systemPrompt = "你是一个专业的图片分析助手，请详细描述图片中的内容。";
 
-            return new LLMRequest(
+            return new TelegramSearchBot.LLM.Domain.ValueObjects.LLMRequest(
                 requestId,
                 modelName,
                 channelConfig,
@@ -538,9 +548,9 @@ namespace TelegramSearchBot.Service.AI.LLM
         /// <summary>
         /// 转换数据库渠道配置到新框架的渠道配置
         /// </summary>
-        private LLMChannelConfig ConvertToChannelConfig(LLMChannel channel)
+        private TelegramSearchBot.LLM.Domain.ValueObjects.LLMChannelConfig ConvertToChannelConfig(LLMChannel channel)
         {
-            return new LLMChannelConfig(
+            return new TelegramSearchBot.LLM.Domain.ValueObjects.LLMChannelConfig(
                 channel.Gateway,
                 channel.ApiKey,
                 channel.OrganizationId,
@@ -551,14 +561,14 @@ namespace TelegramSearchBot.Service.AI.LLM
         /// <summary>
         /// 映射提供商名称到枚举
         /// </summary>
-        private LLMProvider MapToProvider(string providerName)
+        private TelegramSearchBot.LLM.Domain.Entities.LLMProvider MapToProvider(string providerName)
         {
             return providerName?.ToLower() switch
             {
-                "openai" => LLMProvider.OpenAI,
-                "ollama" => LLMProvider.Ollama,
-                "gemini" => LLMProvider.Gemini,
-                _ => LLMProvider.OpenAI // 默认值
+                "openai" => TelegramSearchBot.LLM.Domain.Entities.LLMProvider.OpenAI,
+                "ollama" => TelegramSearchBot.LLM.Domain.Entities.LLMProvider.Ollama,
+                "gemini" => TelegramSearchBot.LLM.Domain.Entities.LLMProvider.Gemini,
+                _ => TelegramSearchBot.LLM.Domain.Entities.LLMProvider.OpenAI // 默认值
             };
         }
 
@@ -659,39 +669,42 @@ namespace TelegramSearchBot.Service.AI.LLM
         }
 
         // 添加缺失的ILLMService接口方法实现
-        public Task<LLMResponse> ExecuteAsync(LLMRequest request, CancellationToken cancellationToken = default)
+        public Task<Model.AI.LLMResponse> ExecuteAsync(Model.AI.LLMRequest request, CancellationToken cancellationToken = default)
         {
-            var response = new LLMResponse
+            var response = new Model.AI.LLMResponse
             {
                 RequestId = request.RequestId,
                 IsSuccess = true,
                 Content = "Mock response content",
-                Usage = new LLMUsage
+                Model = request.Model,
+                StartTime = DateTime.UtcNow,
+                EndTime = DateTime.UtcNow.AddSeconds(1),
+                TokenUsage = new Model.AI.LLMTokenUsage
                 {
                     PromptTokens = 10,
-                    CompletionTokens = 20,
-                    TotalTokens = 30
+                    CompletionTokens = 20
+                    // TotalTokens是只读属性，会自动计算，不需要设置
                 }
             };
             return Task.FromResult(response);
         }
 
-        public Task<(System.Threading.Channels.ChannelReader<string> StreamReader, Task<LLMResponse> ResponseTask)> ExecuteStreamAsync(LLMRequest request, CancellationToken cancellationToken = default)
+        public Task<(System.Threading.Channels.ChannelReader<string> StreamReader, Task<Model.AI.LLMResponse> ResponseTask)> ExecuteStreamAsync(Model.AI.LLMRequest request, CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException("Mock service不支持流式响应");
         }
 
-        public Task<float[]> GenerateEmbeddingAsync(string text, string model, LLMChannelDto channel, CancellationToken cancellationToken = default)
+        public Task<float[]> GenerateEmbeddingAsync(string text, string model, Model.AI.LLMChannelDto channel, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new float[1536]); // 返回默认维度的零向量
         }
 
-        public Task<List<string>> GetAvailableModelsAsync(LLMChannelDto channel, CancellationToken cancellationToken = default)
+        public Task<List<string>> GetAvailableModelsAsync(Model.AI.LLMChannelDto channel, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new List<string> { "mock-model" });
         }
 
-        public Task<bool> IsHealthyAsync(LLMChannelDto channel, CancellationToken cancellationToken = default)
+        public Task<bool> IsHealthyAsync(Model.AI.LLMChannelDto channel, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(true);
         }
