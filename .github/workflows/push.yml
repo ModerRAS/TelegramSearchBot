@@ -26,16 +26,6 @@ jobs:
             9.0.x
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v1.1
-    - name: Cache NuGet packages
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.nuget/packages
-          **/obj
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.sln') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
-
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
