@@ -90,13 +90,44 @@ namespace TelegramSearchBot.Service.Vector
                 // 获取对话段IDs
                 var segmentIds = vectorIndexes.Select(vi => vi.EntityId).ToList();
                 
-                // 获取对话段对应的消息
-                var messages = await dbContext.ConversationSegmentMessages
+                // 获取对话段信息和第一条消息信息
+                var segments = await dbContext.ConversationSegments
+                    .Where(cs => segmentIds.Contains(cs.Id))
+                    .ToListAsync();
+
+                // 获取每个对话段的第一条消息
+                var firstMessages = await dbContext.ConversationSegmentMessages
                     .Where(csm => segmentIds.Contains(csm.ConversationSegmentId))
                     .Include(csm => csm.Message)
-                    .OrderByDescending(csm => csm.Message.DateTime)
-                    .Select(csm => csm.Message)
+                    .GroupBy(csm => csm.ConversationSegmentId)
+                    .Select(g => g.OrderBy(csm => csm.Message.DateTime).First())
                     .ToListAsync();
+
+                // 创建搜索结果消息列表，每个对话段对应一条消息
+                var messages = new List<Message>();
+                foreach (var segment in segments)
+                {
+                    var firstMessage = firstMessages.FirstOrDefault(fm => fm.ConversationSegmentId == segment.Id)?.Message;
+                    if (firstMessage != null)
+                    {
+                        // 创建一个新的消息实例，使用TopicKeywords作为Content
+                        var resultMessage = new Message
+                        {
+                            Id = firstMessage.Id,
+                            DateTime = firstMessage.DateTime,
+                            GroupId = firstMessage.GroupId,
+                            MessageId = firstMessage.MessageId,
+                            FromUserId = firstMessage.FromUserId,
+                            ReplyToUserId = firstMessage.ReplyToUserId,
+                            ReplyToMessageId = firstMessage.ReplyToMessageId,
+                            Content = segment.TopicKeywords ?? segment.ContentSummary ?? "无话题关键词"
+                        };
+                        messages.Add(resultMessage);
+                    }
+                }
+
+                // 按时间倒序排列
+                messages = messages.OrderByDescending(m => m.DateTime).ToList();
 
                 // 应用分页
                 searchOption.Count = messages.Count;
