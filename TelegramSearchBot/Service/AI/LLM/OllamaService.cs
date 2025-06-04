@@ -998,36 +998,6 @@ namespace TelegramSearchBot.Service.AI.LLM
             }
         }
 
-        /// <summary>
-        /// 检查Ollama服务健康状况 (LLMChannel重载版本)
-        /// </summary>
-        public async Task<bool> IsHealthyAsync(LLMChannel channel)
-        {
-            _logger.LogInformation("OllamaService IsHealthyAsync checking Gateway: {Gateway}", channel?.Gateway);
-            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway))
-            {
-                _logger.LogWarning("OllamaService IsHealthyAsync: Channel or Gateway is null/empty.");
-                return false;
-            }
-
-            try
-            {
-                var httpClient = _httpClientFactory?.CreateClient("OllamaClient") ?? new HttpClient();
-                var gatewayUri = new Uri(channel.Gateway);
-                var ollamaClient = new OllamaApiClient(httpClient, "test", gatewayUri);
-                
-                // 简单的健康检查：尝试列出模型
-                await ollamaClient.ListLocalModelsAsync();
-                _logger.LogInformation("OllamaService IsHealthyAsync: Gateway {Gateway} is healthy.", channel.Gateway);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "OllamaService IsHealthyAsync failed for Gateway: {Gateway}. Error: {ErrorMessage}", channel.Gateway, ex.Message);
-                return false;
-            }
-        }
-
         private LLMChannel ConvertToLLMChannel(LLMChannelDto dto)
         {
             return new LLMChannel

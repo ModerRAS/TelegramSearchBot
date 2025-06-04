@@ -595,17 +595,13 @@ namespace TelegramSearchBot.Service.AI.LLM
             return geminiContents;
         }
         
-        private GenerativeAI.Types.Content ConvertSystemPrompt(string systemPromptText)
+        private GenerativeAI.Types.SystemInstruction ConvertSystemPrompt(string systemPromptText)
         {
             if (string.IsNullOrWhiteSpace(systemPromptText))
             {
                 return null;
             }
-            return new GenerativeAI.Types.Content 
-            { 
-                Role = "system", 
-                Parts = new[] { new Part { Text = systemPromptText } } 
-            };
+            return new GenerativeAI.Types.SystemInstruction(new Part { Text = systemPromptText });
         }
 
         public async Task<LLMResponse> ExecuteAsync(LLMRequest request, CancellationToken cancellationToken = default)
@@ -620,18 +616,11 @@ namespace TelegramSearchBot.Service.AI.LLM
                 var generationConfig = ConvertGenerationOptions(request.Options);
                 var systemInstruction = ConvertSystemPrompt(request.SystemPrompt);
 
-                // 如果有系统指令，将其添加到对话历史的开头
-                var allContents = new List<GenerativeAI.Types.Content>();
-                if (systemInstruction != null)
-                {
-                    allContents.Add(systemInstruction);
-                }
-                allContents.AddRange(geminiChatHistory);
-
                 var genRequest = new GenerateContentRequest
                 {
-                    Contents = allContents.ToArray(),
+                    Contents = geminiChatHistory.ToArray(),
                     GenerationConfig = generationConfig,
+                    SystemInstruction = systemInstruction,
                     // TODO: Convert and add Tools if request.EnableTools and request.AvailableTools are present
                 };
 
@@ -701,18 +690,11 @@ namespace TelegramSearchBot.Service.AI.LLM
                     var generationConfig = ConvertGenerationOptions(request.Options);
                     var systemInstruction = ConvertSystemPrompt(request.SystemPrompt);
 
-                    // 如果有系统指令，将其添加到对话历史的开头
-                    var allContents = new List<GenerativeAI.Types.Content>();
-                    if (systemInstruction != null)
-                    {
-                        allContents.Add(systemInstruction);
-                    }
-                    allContents.AddRange(geminiChatHistory);
-
                     var genRequest = new GenerateContentRequest
                     {
-                        Contents = allContents.ToArray(),
+                        Contents = geminiChatHistory.ToArray(),
                         GenerationConfig = generationConfig,
+                        SystemInstruction = systemInstruction,
                         // TODO: Convert and add Tools for streaming if supported/needed
                     };
 
@@ -801,24 +783,14 @@ namespace TelegramSearchBot.Service.AI.LLM
 
         public Task<bool> IsHealthyAsync(LLMChannelDto channel, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(true);
-        }
-
-        /// <summary>
-        /// 检查Gemini服务健康状况 (LLMChannel重载版本)
-        /// </summary>
-        public async Task<bool> IsHealthyAsync(LLMChannel channel)
-        {
             try
             {
-                var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
-                var modelsResponse = await googleAI.ListModelsAsync();
-                return modelsResponse?.Models?.Any() == true;
+                // 简单的健康检查，检查API密钥是否存在
+                return Task.FromResult(!string.IsNullOrEmpty(channel.ApiKey));
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogWarning(ex, "Gemini健康检查失败: {Error}", ex.Message);
-                return false;
+                return Task.FromResult(false);
             }
         }
     }
