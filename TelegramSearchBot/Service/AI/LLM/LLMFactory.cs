@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
@@ -262,6 +263,103 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 result.Add(capabilities);
             }
             return result;
+        }
+
+        // 添加缺失的ILLMService接口方法实现
+        public async IAsyncEnumerable<string> ExecAsync(
+            TelegramSearchBot.Model.Data.Message message, 
+            long chatId, 
+            string modelName, 
+            TelegramSearchBot.Model.Data.LLMChannel channel, 
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            // 构建旧版本的LLMRequest来适配新服务
+            var channelDto = LLMChannelDto.FromDataModel(channel);
+            var llmMessage = new TelegramSearchBot.Model.AI.LLMMessage
+            {
+                Role = TelegramSearchBot.Model.AI.LLMRole.User,
+                Content = message.Content ?? string.Empty
+            };
+
+            var oldRequest = new TelegramSearchBot.Model.AI.LLMRequest
+            {
+                RequestId = Guid.NewGuid().ToString(),
+                Model = modelName,
+                Channel = channelDto,
+                CurrentMessage = llmMessage,
+                ChatHistory = new List<TelegramSearchBot.Model.AI.LLMMessage>()
+            };
+
+            // 使用流式执行
+            var (streamReader, responseTask) = await ExecuteStreamAsync(oldRequest, cancellationToken);
+            
+            // 流式返回结果
+            await foreach (var chunk in streamReader.ReadAllAsync(cancellationToken))
+            {
+                yield return chunk;
+            }
+        }
+
+        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, TelegramSearchBot.Model.Data.LLMChannel channel)
+        {
+            var channelDto = LLMChannelDto.FromDataModel(channel);
+            var newChannelConfig = ConvertOldChannelToNewConfig(channelDto);
+            
+            // 这里需要调用支持图片分析的新服务方法
+            // 如果新服务没有图片分析方法，我们可以构建一个包含图片的LLMRequest
+            var imageContent = new TelegramSearchBot.Model.AI.LLMContent
+            {
+                Type = TelegramSearchBot.Model.AI.LLMContentType.Image,
+                Image = new TelegramSearchBot.Model.AI.LLMImageContent
+                {
+                    Data = photoPath, // 假设这是图片路径或base64数据
+                    MimeType = "image/jpeg"
+                }
+            };
+
+            var textContent = new TelegramSearchBot.Model.AI.LLMContent
+            {
+                Type = TelegramSearchBot.Model.AI.LLMContentType.Text,
+                Text = "请分析这张图片的内容"
+            };
+
+            var llmMessage = new TelegramSearchBot.Model.AI.LLMMessage
+            {
+                Role = TelegramSearchBot.Model.AI.LLMRole.User,
+                Content = "请分析图片",
+                Contents = new List<TelegramSearchBot.Model.AI.LLMContent> { textContent, imageContent }
+            };
+
+            var oldRequest = new TelegramSearchBot.Model.AI.LLMRequest
+            {
+                RequestId = Guid.NewGuid().ToString(),
+                Model = modelName,
+                Channel = channelDto,
+                CurrentMessage = llmMessage,
+                ChatHistory = new List<TelegramSearchBot.Model.AI.LLMMessage>()
+            };
+
+            var response = await ExecuteAsync(oldRequest);
+            return response.Content ?? "图片分析失败";
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, TelegramSearchBot.Model.Data.LLMChannel channel)
+        {
+            var channelDto = LLMChannelDto.FromDataModel(channel);
+            return await GenerateEmbeddingAsync(text, modelName, channelDto);
+        }
+
+        public async Task<bool> IsHealthyAsync(TelegramSearchBot.Model.Data.LLMChannel channel)
+        {
+            var channelDto = LLMChannelDto.FromDataModel(channel);
+            return await IsHealthyAsync(channelDto);
+        }
+
+        public async Task<IEnumerable<string>> GetAllModels(TelegramSearchBot.Model.Data.LLMChannel channel)
+        {
+            var channelDto = LLMChannelDto.FromDataModel(channel);
+            var models = await GetAvailableModelsAsync(channelDto);
+            return models;
         }
     }
 }

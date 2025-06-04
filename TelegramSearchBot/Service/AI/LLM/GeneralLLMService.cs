@@ -5,14 +5,18 @@ using System.Linq;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore; // For AnyAsync()
+using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
+using System.Runtime.CompilerServices; // 添加这个using用于EnumeratorCancellation
 
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped)]
@@ -202,7 +206,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogWarning($"未能获取 {modelName} 模型的图片分析结果");
             return $"Error:未能获取 {modelName} 模型的图片分析结果";
         }
-        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel);
             yield break;
         }
@@ -237,7 +241,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogWarning($"未能获取 {modelName} 模型的嵌入向量");
             return Array.Empty<float>();
         }
-        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             yield return await service.GenerateEmbeddingsAsync(message, modelName, channel);
             yield break;
         }
