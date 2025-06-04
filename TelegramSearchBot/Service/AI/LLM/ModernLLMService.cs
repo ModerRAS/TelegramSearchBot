@@ -139,42 +139,6 @@ namespace TelegramSearchBot.Service.AI.LLM
         }
 
         /// <summary>
-        /// 通用操作执行方法
-        /// </summary>
-        public async IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(
-            Func<ILLMService, LLMChannel, CancellationToken, IAsyncEnumerable<TResult>> operation, 
-            string modelName, 
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            var channels = await GetChannelsAsync(modelName);
-            if (!channels.Any())
-            {
-                _logger.LogWarning($"找不到模型 {modelName} 的可用渠道");
-                yield break;
-            }
-
-            foreach (var channel in channels)
-            {
-                try
-                {
-                    // 这里使用模拟的LLM服务，实际应该根据provider获取对应的服务
-                    var mockService = new MockLLMService();
-                    
-                    await foreach (var result in operation(mockService, channel, cancellationToken))
-                    {
-                        yield return result;
-                    }
-                    break; // 成功执行后退出
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, $"操作执行失败，渠道 {channel.Id} ({channel.Provider})");
-                    continue;
-                }
-            }
-        }
-
-        /// <summary>
         /// 执行LLM对话 - 带重试机制的内部方法
         /// </summary>
         private async IAsyncEnumerable<string> ExecWithRetryAsync(
@@ -491,7 +455,7 @@ namespace TelegramSearchBot.Service.AI.LLM
             // 创建用户消息
             var userMessage = new TelegramSearchBot.LLM.Domain.ValueObjects.LLMMessage(
                 TelegramSearchBot.LLM.Domain.ValueObjects.LLMRole.User, 
-                message.MessageText ?? string.Empty);
+                message.Content ?? string.Empty);
             chatHistory.Add(userMessage);
 
             var systemPrompt = await GetSystemPromptAsync(ChatId);
@@ -552,10 +516,7 @@ namespace TelegramSearchBot.Service.AI.LLM
         {
             return new TelegramSearchBot.LLM.Domain.ValueObjects.LLMChannelConfig(
                 channel.Gateway,
-                channel.ApiKey,
-                channel.OrganizationId,
-                channel.ProxyUrl,
-                channel.TimeoutSeconds);
+                channel.ApiKey);
         }
 
         /// <summary>
@@ -622,91 +583,9 @@ namespace TelegramSearchBot.Service.AI.LLM
         /// </summary>
         public async Task<float[]> GenerateEmbeddingsAsync(Model.Data.Message message, long ChatId)
         {
-            return await GenerateEmbeddingsAsync(message.MessageText ?? string.Empty);
+            return await GenerateEmbeddingsAsync(message.Content ?? string.Empty);
         }
 
         #endregion
-    }
-
-    /// <summary>
-    /// 模拟LLM服务，用于兼容性处理
-    /// </summary>
-    internal class MockLLMService : ILLMService
-    {
-        public Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel)
-        {
-            return Task.FromResult("Mock 图片分析结果");
-        }
-
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long chatId, string modelName, LLMChannel channel, CancellationToken cancellationToken)
-        {
-            yield return "Mock 响应";
-        }
-
-        public Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
-        {
-            return Task.FromResult(new float[1536]); // 返回默认维度的零向量
-        }
-
-        public Task<IEnumerable<string>> GetAllModels(LLMChannel channel)
-        {
-            return Task.FromResult(new[] { "mock-model" }.AsEnumerable());
-        }
-
-        public Task<IEnumerable<Model.AI.ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel)
-        {
-            var mockModel = new Model.AI.ModelWithCapabilities
-            {
-                ModelName = "mock-model",
-                Capabilities = new List<string> { "text", "chat" }
-            };
-            return Task.FromResult(new[] { mockModel }.AsEnumerable());
-        }
-
-        public Task<bool> IsHealthyAsync(LLMChannel channel)
-        {
-            return Task.FromResult(true);
-        }
-
-        // 添加缺失的ILLMService接口方法实现
-        public Task<Model.AI.LLMResponse> ExecuteAsync(Model.AI.LLMRequest request, CancellationToken cancellationToken = default)
-        {
-            var response = new Model.AI.LLMResponse
-            {
-                RequestId = request.RequestId,
-                IsSuccess = true,
-                Content = "Mock response content",
-                Model = request.Model,
-                StartTime = DateTime.UtcNow,
-                EndTime = DateTime.UtcNow.AddSeconds(1),
-                TokenUsage = new Model.AI.LLMTokenUsage
-                {
-                    PromptTokens = 10,
-                    CompletionTokens = 20
-                    // TotalTokens是只读属性，会自动计算，不需要设置
-                }
-            };
-            return Task.FromResult(response);
-        }
-
-        public Task<(System.Threading.Channels.ChannelReader<string> StreamReader, Task<Model.AI.LLMResponse> ResponseTask)> ExecuteStreamAsync(Model.AI.LLMRequest request, CancellationToken cancellationToken = default)
-        {
-            throw new NotImplementedException("Mock service不支持流式响应");
-        }
-
-        public Task<float[]> GenerateEmbeddingAsync(string text, string model, Model.AI.LLMChannelDto channel, CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(new float[1536]); // 返回默认维度的零向量
-        }
-
-        public Task<List<string>> GetAvailableModelsAsync(Model.AI.LLMChannelDto channel, CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(new List<string> { "mock-model" });
-        }
-
-        public Task<bool> IsHealthyAsync(Model.AI.LLMChannelDto channel, CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(true);
-        }
     }
 } 
