@@ -85,7 +85,6 @@
     <PackageReference Include="FaissNet" Version="1.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
-    <PackageReference Include="YAMP" Version="1.6.0.40202" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
