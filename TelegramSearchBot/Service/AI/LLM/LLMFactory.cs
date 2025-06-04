@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using System;
@@ -14,6 +14,7 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.LLM.Domain.Factories;
 using TelegramSearchBot.Model.Data;
 using System.Threading.Channels;
+using System.Threading;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
