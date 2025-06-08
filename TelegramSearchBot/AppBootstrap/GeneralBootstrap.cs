@@ -68,7 +68,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 .Build();
             host.Services.UseScheduler(s => {
                 s.Schedule<DailyTaskService>()
-                 .DailyAt(7, 0);
+                 .DailyAt(7, 0).Zoned(TimeZoneInfo.Local);
             });
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
