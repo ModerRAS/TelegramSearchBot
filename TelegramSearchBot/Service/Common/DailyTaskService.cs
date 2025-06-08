@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Coravel.Invocable;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Manager;
@@ -38,31 +40,53 @@ namespace TelegramSearchBot.Service.Common
             return (isWeekStart, isMonthStart, isQuarterStart, isYearStart);
         }
 
-        private readonly DataDbContext _dbContext;
-
-        public DailyTaskService(DataDbContext dbContext)
+        /// <summary>
+        /// 测试方法：手动触发任务执行（用于调试）
+        /// </summary>
+        public static async Task TestTaskExecution(IServiceProvider serviceProvider)
         {
-            _dbContext = dbContext;
+            var logger = serviceProvider.GetService<ILogger<DailyTaskService>>();
+            var service = serviceProvider.GetService(typeof(DailyTaskService)) as DailyTaskService;
+            if (service != null)
+            {
+                logger?.LogInformation("手动触发定时任务测试");
+                await service.Invoke();
+            }
+            else
+            {
+                logger?.LogError("无法获取DailyTaskService实例");
+            }
         }
 
+        private readonly DataDbContext _dbContext;
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
+        private readonly ILogger<DailyTaskService> _logger;
 
-        public DailyTaskService(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage)
+        public DailyTaskService(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<DailyTaskService> logger)
         {
             _dbContext = dbContext;
             _botClient = botClient;
             _sendMessage = sendMessage;
+            _logger = logger;
         }
 
         public async Task Invoke()
         {
-            Console.WriteLine($"[{DateTime.Now}] 每日7点任务执行");
+            _logger.LogInformation("每日7点任务执行");
             
             var (isWeekStart, isMonthStart, isQuarterStart, isYearStart) = CheckPeriodStart();
+            _logger.LogInformation("周期检查: 周一={IsWeekStart}, 月初={IsMonthStart}, 季度初={IsQuarterStart}, 年初={IsYearStart}", 
+                isWeekStart, isMonthStart, isQuarterStart, isYearStart);
+            
             if (isWeekStart || isMonthStart || isQuarterStart || isYearStart)
             {
+                _logger.LogInformation("符合条件,开始生成词云报告");
                 await SendWordCloudReportAsync();
+            }
+            else
+            {
+                _logger.LogInformation("不符合条件,跳过词云生成");
             }
         }
 
@@ -105,7 +129,7 @@ namespace TelegramSearchBot.Service.Common
                     var wordCloudBytes = WordCloudHelper.GenerateWordCloud(group.Value.ToArray());
                     if (wordCloudBytes == null || wordCloudBytes.Length == 0)
                     {
-                        Console.WriteLine($"生成群组 {group.Key} 词云失败: 图片数据为空");
+                        _logger.LogWarning("生成群组 {GroupId} 词云失败: 图片数据为空", group.Key);
                         continue;
                     }
 
@@ -117,7 +141,7 @@ namespace TelegramSearchBot.Service.Common
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"群组 {group.Key} 词云图片数据无效: {ex.Message}");
+                        _logger.LogWarning(ex, "群组 {GroupId} 词云图片数据无效", group.Key);
                         continue;
                     }
                     
@@ -159,7 +183,7 @@ namespace TelegramSearchBot.Service.Common
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"生成词云报告失败: {ex}");
+                _logger.LogError(ex, "生成词云报告失败");
             }
         }
 

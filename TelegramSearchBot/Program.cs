@@ -3,11 +3,12 @@ using Serilog.Events;
 using Serilog.Sinks.OpenTelemetry;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using TelegramSearchBot.AppBootstrap;
 
 namespace TelegramSearchBot {
     class Program {
-        static void Main(string[] args) { // Changed back to void Main
+        static async Task Main(string[] args) {
             Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information() // 设置最低日志级别
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Debug) // SQL 语句只在 Debug 级别输出
@@ -28,7 +29,7 @@ namespace TelegramSearchBot {
             .CreateLogger();
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
             if (args.Length == 0) {
-                GeneralBootstrap.Startup(args); // Call synchronous Startup
+                await GeneralBootstrap.Startup(args); // Call async Startup
             } else if (args.Length >= 1) {
                 // 调用封装好的反射分发方法
                 bool success = AppBootstrap.AppBootstrap.TryDispatchStartupByReflection(args);

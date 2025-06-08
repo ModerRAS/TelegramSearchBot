@@ -42,7 +42,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 .ConfigureServices(services => {
                     services.ConfigureAllServices();
                 });
-        public static async void Startup(string[] args) { // Changed back to void
+        public static async Task Startup(string[] args) {
             Utils.CheckExistsAndCreateDirectorys($"{Env.WorkDir}/logs");
 
             Directory.SetCurrentDirectory(Env.WorkDir);
@@ -70,6 +70,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 s.Schedule<DailyTaskService>()
                  .DailyAt(7, 0).Zoned(TimeZoneInfo.Local);
             });
+            Log.Information("调度器已配置: DailyTaskService 将在每天7:00执行");
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             service = host.Services;
@@ -87,7 +88,9 @@ namespace TelegramSearchBot.AppBootstrap {
                 context.Database.Migrate();
             }
 
-            var task = host.RunAsync(); // Changed back to Run() as Startup is now synchronous
+            // 先启动Host，确保调度器开始运行
+            await host.StartAsync();
+            Log.Information("Host已启动，调度器已开始运行");
 
             Thread.Sleep(5000);
             bot.StartReceiving(
@@ -95,7 +98,9 @@ namespace TelegramSearchBot.AppBootstrap {
                 HandleErrorAsync(service), new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
                 }, cts.Token);
-            task.Wait();
+            
+            // 保持程序运行
+            await host.WaitForShutdownAsync();
         }
         public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
             return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
