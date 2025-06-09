@@ -327,6 +327,19 @@ namespace TelegramSearchBot.Service.Manage
                     await Send.Log($"无效的群组ID: {groupIdStr}");
                 }
             }
+            if (Command.StartsWith("调试向量搜索:"))
+            {
+                var parts = Command.Replace("调试向量搜索:", "").Trim().Split('|');
+                if (parts.Length >= 2 && long.TryParse(parts[0], out var groupId))
+                {
+                    var searchQuery = parts[1];
+                    await DebugVectorSearch(groupId, searchQuery);
+                }
+                else
+                {
+                    await Send.Log("使用格式: 调试向量搜索:群组ID|搜索关键词");
+                }
+            }
         }
 
         private async Task ScanAndProcessAltImageFiles()
@@ -577,6 +590,103 @@ namespace TelegramSearchBot.Service.Manage
             {
                 _logger.LogError(ex, $"重建群组 {groupId} 向量索引时发生错误");
                 await Send.Log($"群组 {groupId} 向量索引重建失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 调试向量搜索功能
+        /// </summary>
+        private async Task DebugVectorSearch(long groupId, string searchQuery)
+        {
+            await Send.Log($"=== 调试向量搜索 群组:{groupId} 查询:{searchQuery} ===");
+
+            try
+            {
+                // 1. 检查群组的对话段数据
+                var segments = await DataContext.ConversationSegments
+                    .Where(s => s.GroupId == groupId)
+                    .OrderBy(s => s.StartTime)
+                    .ToListAsync();
+
+                await Send.Log($"群组 {groupId} 共有 {segments.Count} 个对话段");
+
+                // 2. 检查向量化状态
+                var vectorizedSegments = segments.Where(s => s.IsVectorized).ToList();
+                await Send.Log($"其中 {vectorizedSegments.Count} 个已向量化");
+
+                // 3. 检查向量索引记录
+                var vectorIndexes = await DataContext.VectorIndexes
+                    .Where(vi => vi.GroupId == groupId && vi.VectorType == "ConversationSegment")
+                    .ToListAsync();
+
+                await Send.Log($"向量索引记录数: {vectorIndexes.Count}");
+
+                // 4. 检查FaissIndex分布
+                var faissIndexes = vectorIndexes.Select(vi => vi.FaissIndex).OrderBy(x => x).ToList();
+                await Send.Log($"FAISS索引分布: {string.Join(",", faissIndexes.Take(10))}...");
+
+                // 5. 检查重复的FaissIndex
+                var duplicates = faissIndexes.GroupBy(x => x).Where(g => g.Count() > 1).ToList();
+                if (duplicates.Any())
+                {
+                    await Send.Log($"发现重复的FAISS索引: {string.Join(",", duplicates.Select(d => $"{d.Key}({d.Count()}次)"))}");
+                }
+                else
+                {
+                    await Send.Log("没有发现重复的FAISS索引");
+                }
+
+                // 6. 显示前几个对话段的内容摘要
+                await Send.Log("前5个对话段的内容摘要:");
+                foreach (var segment in segments.Take(5))
+                {
+                    var topicLength = segment.TopicKeywords?.Length ?? 0;
+                    var summaryLength = segment.ContentSummary?.Length ?? 0;
+                    var summary = segment.TopicKeywords?.Substring(0, Math.Min(50, topicLength)) ?? 
+                                 segment.ContentSummary?.Substring(0, Math.Min(50, summaryLength)) ?? "无摘要";
+                    await Send.Log($"  段{segment.Id}: {summary}... (向量化:{segment.IsVectorized})");
+                }
+
+                // 7. 执行实际搜索
+                var searchOption = new TelegramSearchBot.Model.SearchOption
+                {
+                    ChatId = groupId,
+                    Search = searchQuery,
+                    Skip = 0,
+                    Take = 5
+                };
+
+                var searchResult = await _faissVectorService.Search(searchOption);
+                await Send.Log($"搜索结果数量: {searchResult.Count}");
+
+                foreach (var message in searchResult.Messages)
+                {
+                    await Send.Log($"  结果: {message.Content}");
+                }
+
+                // 8. 检查搜索查询向量
+                try
+                {
+                    var queryVector = await _faissVectorService.GenerateVectorAsync(searchQuery);
+                    await Send.Log($"查询向量维度: {queryVector?.Length ?? 0}");
+                    
+                    if (queryVector != null && queryVector.Length > 0)
+                    {
+                        var vectorSum = queryVector.Sum();
+                        var vectorMagnitude = Math.Sqrt(queryVector.Select(x => (double)(x * x)).Sum());
+                        await Send.Log($"查询向量特征 - 和:{vectorSum:F3}, 模长:{vectorMagnitude:F3}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await Send.Log($"生成查询向量失败: {ex.Message}");
+                }
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"调试向量搜索失败");
+                await Send.Log($"调试失败: {ex.Message}");
             }
         }
 
