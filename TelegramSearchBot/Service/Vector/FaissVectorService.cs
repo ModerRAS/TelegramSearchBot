@@ -178,18 +178,12 @@ namespace TelegramSearchBot.Service.Vector
                 var indexKey = GetIndexKey(segment.GroupId, "ConversationSegment");
                 var index = await GetOrCreateIndexAsync(indexKey, segment.GroupId, "ConversationSegment", dbContext);
 
-                // 添加向量到索引
-                var faissIndex = 0; // 使用简单的递增ID
-                try
-                {
-                    // 尝试获取当前索引中的向量数量作为新ID
-                    var testResult = index.Search(new[] { new float[_vectorDimension] }, 1);
-                    faissIndex = testResult.Item2[0].Length; // 使用返回结果数量估算
-                }
-                catch
-                {
-                    faissIndex = 0; // 如果搜索失败，说明索引为空
-                }
+                // 添加向量到索引 - 从数据库获取下一个可用的索引ID
+                var maxFaissIndex = await dbContext.VectorIndexes
+                    .Where(vi => vi.GroupId == segment.GroupId && vi.VectorType == "ConversationSegment")
+                    .MaxAsync(vi => (long?)vi.FaissIndex) ?? -1;
+                
+                var faissIndex = maxFaissIndex + 1;
                 
                 await AddVectorToIndexAsync(index, vector, faissIndex);
 
@@ -245,29 +239,21 @@ namespace TelegramSearchBot.Service.Vector
             _logger.LogInformation($"开始向量化群组 {groupId} 的 {segments.Count} 个对话段");
 
             var successCount = 0;
-            var batchSize = 10; // 批量处理以提高效率
 
-            for (int i = 0; i < segments.Count; i += batchSize)
+            // 顺序处理每个对话段，确保FaissIndex的唯一性
+            foreach (var segment in segments)
             {
-                var batch = segments.Skip(i).Take(batchSize);
-                
-                foreach (var segment in batch)
+                try
                 {
-                    try
-                    {
-                        await VectorizeConversationSegment(segment);
-                        successCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, $"对话段 {segment.Id} 向量化失败");
-                    }
+                    await VectorizeConversationSegment(segment);
+                    successCount++;
+                    
+                    // 每处理完一个对话段后短暂休息
+                    await Task.Delay(50);
                 }
-
-                // 批次间短暂休息，避免过度占用资源
-                if (i + batchSize < segments.Count)
+                catch (Exception ex)
                 {
-                    await Task.Delay(100);
+                    _logger.LogError(ex, $"对话段 {segment.Id} 向量化失败");
                 }
             }
 
@@ -382,42 +368,49 @@ namespace TelegramSearchBot.Service.Vector
         {
             try
             {
+                FaissIndex index;
+                string filePath;
+                
+                // 在lock外部准备数据
                 lock (_indexLock)
                 {
-                    if (!_loadedIndexes.TryGetValue(indexKey, out var index))
+                    if (!_loadedIndexes.TryGetValue(indexKey, out index))
                     {
                         return;
                     }
-
-                    var filePath = Path.Combine(_indexDirectory, $"{groupId}_{indexType}.faiss");
-                    index.Save(filePath);
-
-                    // 更新数据库记录
-                    var indexFileInfo = dbContext.FaissIndexFiles
-                        .FirstOrDefault(f => f.GroupId == groupId && f.IndexType == indexType && f.IsValid);
-
-                    if (indexFileInfo == null)
-                    {
-                        indexFileInfo = new FaissIndexFile
-                        {
-                            GroupId = groupId,
-                            IndexType = indexType,
-                            FilePath = filePath,
-                            Dimension = _vectorDimension
-                        };
-                        dbContext.FaissIndexFiles.Add(indexFileInfo);
-                    }
-                    else
-                    {
-                        indexFileInfo.FilePath = filePath;
-                        indexFileInfo.UpdatedAt = DateTime.UtcNow;
-                    }
-
-                    indexFileInfo.VectorCount = 0; // 暂时设为0，后续可以通过其他方式获取
-                    indexFileInfo.FileSize = new FileInfo(filePath).Length;
-                    
-                    dbContext.SaveChanges();
                 }
+
+                filePath = Path.Combine(_indexDirectory, $"{groupId}_{indexType}.faiss");
+                index.Save(filePath);
+
+                // 更新数据库记录
+                var indexFileInfo = await dbContext.FaissIndexFiles
+                    .FirstOrDefaultAsync(f => f.GroupId == groupId && f.IndexType == indexType && f.IsValid);
+
+                if (indexFileInfo == null)
+                {
+                    indexFileInfo = new FaissIndexFile
+                    {
+                        GroupId = groupId,
+                        IndexType = indexType,
+                        FilePath = filePath,
+                        Dimension = _vectorDimension
+                    };
+                    dbContext.FaissIndexFiles.Add(indexFileInfo);
+                }
+                else
+                {
+                    indexFileInfo.FilePath = filePath;
+                    indexFileInfo.UpdatedAt = DateTime.UtcNow;
+                }
+
+                // 从数据库获取当前向量数量
+                var vectorCount = await dbContext.VectorIndexes
+                    .CountAsync(vi => vi.GroupId == groupId && vi.VectorType == indexType);
+                indexFileInfo.VectorCount = vectorCount;
+                indexFileInfo.FileSize = new FileInfo(filePath).Length;
+                
+                await dbContext.SaveChangesAsync();
             }
             catch (Exception ex)
             {

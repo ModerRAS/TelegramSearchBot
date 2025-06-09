@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using TelegramSearchBot.Model;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.AI.ASR;
@@ -20,6 +21,7 @@ using MediatR;
 using TelegramSearchBot.Interface.AI.OCR;
 using TelegramSearchBot.Interface.AI.ASR;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Manage
@@ -36,6 +38,8 @@ namespace TelegramSearchBot.Service.Manage
         private readonly AutoQRService _autoQRService;
         private readonly IGeneralLLMService _generalLLMService;
         private readonly IMediator _mediator;
+        private readonly FaissVectorService _faissVectorService;
+        private readonly ConversationSegmentationService _conversationSegmentationService;
 
         public RefreshService(ILogger<RefreshService> logger,
                             LuceneManager lucene,
@@ -47,7 +51,9 @@ namespace TelegramSearchBot.Service.Manage
                             IPaddleOCRService paddleOCRService,
                             AutoQRService autoQRService,
                             IGeneralLLMService generalLLMService,
-                            IMediator mediator) : base(logger, lucene, Send, context, mediator)
+                            IMediator mediator,
+                            FaissVectorService faissVectorService,
+                            ConversationSegmentationService conversationSegmentationService) : base(logger, lucene, Send, context, mediator)
         {
             _logger = logger;
             _chatImport = chatImport;
@@ -57,6 +63,8 @@ namespace TelegramSearchBot.Service.Manage
             _autoQRService = autoQRService;
             _generalLLMService = generalLLMService;
             _mediator = mediator;
+            _faissVectorService = faissVectorService;
+            _conversationSegmentationService = conversationSegmentationService;
         }
 
         private async Task RebuildIndex()
@@ -295,6 +303,30 @@ namespace TelegramSearchBot.Service.Manage
             {
                 await ScanAndProcessAltImageFiles();
             }
+            if (Command.Equals("清理向量数据"))
+            {
+                await ClearAllVectorData();
+            }
+            if (Command.Equals("重新向量化"))
+            {
+                await RegenerateAndVectorizeSegments();
+            }
+            if (Command.Equals("重建向量索引"))
+            {
+                await RebuildVectorIndex();
+            }
+            if (Command.StartsWith("重建群组向量索引:"))
+            {
+                var groupIdStr = Command.Replace("重建群组向量索引:", "").Trim();
+                if (long.TryParse(groupIdStr, out var groupId))
+                {
+                    await RebuildVectorIndexForGroup(groupId);
+                }
+                else
+                {
+                    await Send.Log($"无效的群组ID: {groupIdStr}");
+                }
+            }
         }
 
         private async Task ScanAndProcessAltImageFiles()
@@ -355,6 +387,197 @@ namespace TelegramSearchBot.Service.Manage
                 }
             }
             await Send.Log($"图片Alt处理完成: 100% ({totalFiles}/{totalFiles})");
+        }
+
+        /// <summary>
+        /// 清理所有向量数据
+        /// </summary>
+        private async Task ClearAllVectorData()
+        {
+            await Send.Log("开始清理向量数据...");
+
+            try
+            {
+                // 清理向量索引数据
+                var vectorIndexes = DataContext.VectorIndexes.ToList();
+                DataContext.VectorIndexes.RemoveRange(vectorIndexes);
+                await Send.Log($"已清理 {vectorIndexes.Count} 个向量索引记录");
+
+                // 清理FAISS索引文件记录
+                var faissIndexFiles = DataContext.FaissIndexFiles.ToList();
+                DataContext.FaissIndexFiles.RemoveRange(faissIndexFiles);
+                await Send.Log($"已清理 {faissIndexFiles.Count} 个FAISS索引文件记录");
+
+                // 清理对话段数据
+                var conversationSegmentMessages = DataContext.ConversationSegmentMessages.ToList();
+                DataContext.ConversationSegmentMessages.RemoveRange(conversationSegmentMessages);
+                await Send.Log($"已清理 {conversationSegmentMessages.Count} 个对话段消息关联记录");
+
+                var conversationSegments = DataContext.ConversationSegments.ToList();
+                DataContext.ConversationSegments.RemoveRange(conversationSegments);
+                await Send.Log($"已清理 {conversationSegments.Count} 个对话段记录");
+
+                await DataContext.SaveChangesAsync();
+
+                // 清理物理文件
+                var indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
+                if (Directory.Exists(indexDirectory))
+                {
+                    var indexFiles = Directory.GetFiles(indexDirectory, "*.faiss");
+                    foreach (var file in indexFiles)
+                    {
+                        File.Delete(file);
+                    }
+                    await Send.Log($"已删除 {indexFiles.Length} 个FAISS索引文件");
+                }
+
+                await Send.Log("向量数据清理完成");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "清理向量数据时发生错误");
+                await Send.Log($"清理向量数据失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 重新生成对话段并向量化
+        /// </summary>
+        private async Task RegenerateAndVectorizeSegments()
+        {
+            await Send.Log("开始重新生成对话段并向量化...");
+
+            try
+            {
+                // 获取当前数据库中的所有群组
+                var groupIds = await DataContext.Messages
+                    .Select(m => m.GroupId)
+                    .Distinct()
+                    .ToListAsync();
+
+                await Send.Log($"找到 {groupIds.Count} 个群组需要处理");
+
+                long totalProcessedGroups = 0;
+                long totalSegmentsGenerated = 0;
+                long totalSegmentsVectorized = 0;
+
+                foreach (var groupId in groupIds)
+                {
+                    try
+                    {
+                        await Send.Log($"正在处理群组 {groupId}...");
+
+                        // 生成对话段
+                        var segments = await _conversationSegmentationService.CreateSegmentsForGroupAsync(groupId);
+                        totalSegmentsGenerated += segments.Count;
+                        await Send.Log($"群组 {groupId} 生成了 {segments.Count} 个对话段");
+
+                        // 向量化对话段
+                        await _faissVectorService.VectorizeGroupSegments(groupId);
+                        
+                        // 统计成功向量化的对话段数量
+                        var vectorizedCount = await DataContext.ConversationSegments
+                            .Where(s => s.GroupId == groupId && s.IsVectorized)
+                            .CountAsync();
+                        totalSegmentsVectorized += vectorizedCount;
+
+                        await Send.Log($"群组 {groupId} 成功向量化了 {vectorizedCount} 个对话段");
+                        totalProcessedGroups++;
+
+                        // 处理间隔，避免过度占用资源
+                        await Task.Delay(500);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, $"处理群组 {groupId} 时发生错误");
+                        await Send.Log($"处理群组 {groupId} 失败: {ex.Message}");
+                    }
+                }
+
+                await Send.Log($"重新向量化完成！");
+                await Send.Log($"处理群组数: {totalProcessedGroups}/{groupIds.Count}");
+                await Send.Log($"生成对话段: {totalSegmentsGenerated}");
+                await Send.Log($"成功向量化: {totalSegmentsVectorized}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "重新向量化过程中发生错误");
+                await Send.Log($"重新向量化失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 重建向量索引（清理并重新向量化）
+        /// </summary>
+        private async Task RebuildVectorIndex()
+        {
+            await Send.Log("=== 开始重建向量索引 ===");
+            
+            // 第一步：清理现有数据
+            await ClearAllVectorData();
+            
+            // 短暂休息
+            await Task.Delay(1000);
+            
+            // 第二步：重新生成和向量化
+            await RegenerateAndVectorizeSegments();
+            
+            await Send.Log("=== 向量索引重建完成 ===");
+        }
+
+        /// <summary>
+        /// 为指定群组重新向量化
+        /// </summary>
+        private async Task RebuildVectorIndexForGroup(long groupId)
+        {
+            await Send.Log($"=== 开始为群组 {groupId} 重建向量索引 ===");
+
+            try
+            {
+                // 清理该群组的向量数据
+                var vectorIndexes = DataContext.VectorIndexes.Where(vi => vi.GroupId == groupId).ToList();
+                DataContext.VectorIndexes.RemoveRange(vectorIndexes);
+
+                var faissIndexFiles = DataContext.FaissIndexFiles.Where(f => f.GroupId == groupId).ToList();
+                DataContext.FaissIndexFiles.RemoveRange(faissIndexFiles);
+
+                var segments = DataContext.ConversationSegments.Where(s => s.GroupId == groupId).ToList();
+                var segmentIds = segments.Select(s => s.Id).ToList();
+                var segmentMessages = DataContext.ConversationSegmentMessages.Where(sm => segmentIds.Contains(sm.ConversationSegmentId)).ToList();
+                
+                DataContext.ConversationSegmentMessages.RemoveRange(segmentMessages);
+                DataContext.ConversationSegments.RemoveRange(segments);
+
+                await DataContext.SaveChangesAsync();
+                await Send.Log($"已清理群组 {groupId} 的向量数据");
+
+                // 清理物理文件
+                var indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
+                var groupIndexFile = Path.Combine(indexDirectory, $"{groupId}_ConversationSegment.faiss");
+                if (File.Exists(groupIndexFile))
+                {
+                    File.Delete(groupIndexFile);
+                    await Send.Log($"已删除群组 {groupId} 的索引文件");
+                }
+
+                // 重新生成对话段
+                var newSegments = await _conversationSegmentationService.CreateSegmentsForGroupAsync(groupId);
+                await Send.Log($"群组 {groupId} 生成了 {newSegments.Count} 个对话段");
+
+                // 向量化对话段
+                await _faissVectorService.VectorizeGroupSegments(groupId);
+                
+                var vectorizedCount = await DataContext.ConversationSegments
+                    .Where(s => s.GroupId == groupId && s.IsVectorized)
+                    .CountAsync();
+
+                await Send.Log($"群组 {groupId} 向量索引重建完成，成功向量化 {vectorizedCount} 个对话段");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"重建群组 {groupId} 向量索引时发生错误");
+                await Send.Log($"群组 {groupId} 向量索引重建失败: {ex.Message}");
+            }
         }
 
     }
