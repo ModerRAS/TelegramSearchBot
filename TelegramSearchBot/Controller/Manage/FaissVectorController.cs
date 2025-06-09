@@ -21,7 +21,7 @@ namespace TelegramSearchBot.Controller.Manage
     public class FaissVectorController : IOnUpdate
     {
 
-        public List<Type> Dependencies => new List<Type>() { typeof(AdminService) };
+        public List<Type> Dependencies => new List<Type>() { typeof(AdminController) };
 
         private readonly FaissVectorService _faissVectorService;
         private readonly ConversationSegmentationService _segmentationService;
