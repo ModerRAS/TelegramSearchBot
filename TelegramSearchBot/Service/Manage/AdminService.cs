@@ -132,6 +132,10 @@ namespace TelegramSearchBot.Service.Manage
                     await DataContext.SaveChangesAsync();
                     return (true, $"成功设置管理群，之前为{PreviousSetting}，现在为{true}");
                 }
+                else
+                {
+                    return (true, "抱歉，只有全局管理员才能设置管理群。");
+                }
             }
             if (Command.StartsWith("取消管理群"))
             {
@@ -156,6 +160,10 @@ namespace TelegramSearchBot.Service.Manage
                     }
                     await DataContext.SaveChangesAsync();
                     return (true, $"成功取消管理群，之前为{PreviousSetting}，现在为{false}");
+                }
+                else
+                {
+                    return (true, "抱歉，只有全局管理员才能取消管理群。");
                 }
             }
             if (Command.StartsWith("/setbilicookie ") || Command.StartsWith("设置B站Cookie "))
@@ -248,8 +256,8 @@ namespace TelegramSearchBot.Service.Manage
             {
                 if (IsGlobalAdmin(UserId))
                 {
-                                                              try
-                     {
+                    try
+                    {
                          // 通过服务提供者获取DailyTaskService实例并执行
                          Logger.LogInformation("管理员 {UserId} 手动触发定时任务测试", UserId);
                          

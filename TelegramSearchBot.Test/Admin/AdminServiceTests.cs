@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,6 +23,9 @@ namespace TelegramSearchBot.Test.Admin
 #pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
 #pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
         private Mock<IConnectionMultiplexer> _mockRedis;
+#pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
+#pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
+        private Mock<IServiceProvider> _mockServiceProvider;
 #pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
 
         /// <summary>
@@ -77,6 +81,7 @@ namespace TelegramSearchBot.Test.Admin
         {
             _mockAppConfigService = new Mock<IAppConfigurationService>();
             _mockRedis = new Mock<IConnectionMultiplexer>();
+            _mockServiceProvider = new Mock<IServiceProvider>();
             var mockDb = new Mock<IDatabase>();
             _mockRedis.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(mockDb.Object);
             
@@ -88,7 +93,7 @@ namespace TelegramSearchBot.Test.Admin
         public async Task UserIsAdmin_ShouldReturnTrue() {
             SetupMocks();
             using (var context = await GetDbContextAsync()) {
-                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object);
+                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object, _mockServiceProvider.Object);
                 var result = await service.IsNormalAdmin(1);
                 Assert.True(result);
             }
@@ -98,7 +103,7 @@ namespace TelegramSearchBot.Test.Admin
         public async Task UserIsNotAdmin_ShouldReturnFalse() {
             SetupMocks();
             using (var context = await GetDbContextAsync()) {
-                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object);
+                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object, _mockServiceProvider.Object);
                 var result = await service.IsNormalAdmin(2);
                 Assert.False(result);
             }
@@ -108,7 +113,7 @@ namespace TelegramSearchBot.Test.Admin
         public async Task UserInNonAdminGroup_ShouldReturnFalse() {
             SetupMocks();
             using (var context = await GetDbContextAsync()) {
-                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object);
+                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object, _mockServiceProvider.Object);
                 var result = await service.IsNormalAdmin(3);
                 Assert.False(result);
             }
@@ -118,7 +123,7 @@ namespace TelegramSearchBot.Test.Admin
         public async Task UserNotExists_ShouldReturnFalse() {
             SetupMocks();
             using (var context = await GetDbContextAsync()) {
-                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object);
+                var service = new AdminService(CreateLogger(), context, _mockAppConfigService.Object, _mockRedis.Object, _mockServiceProvider.Object);
                 var result = await service.IsNormalAdmin(999);
                 Assert.False(result);
             }

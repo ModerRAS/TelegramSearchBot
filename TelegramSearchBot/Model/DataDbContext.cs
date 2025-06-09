@@ -57,6 +57,13 @@ namespace TelegramSearchBot.Model
                 .HasIndex(fif => new { fif.GroupId, fif.IndexType })
                 .IsUnique();
 
+            // 配置记账相关模型
+            modelBuilder.Entity<AccountRecord>()
+                .HasOne(ar => ar.AccountBook)
+                .WithMany(ab => ab.Records)
+                .HasForeignKey(ar => ar.AccountBookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // You can add other configurations here if needed
         }
         public virtual DbSet<Message> Messages { get; set; }
@@ -77,5 +84,8 @@ namespace TelegramSearchBot.Model
         public virtual DbSet<ConversationSegmentMessage> ConversationSegmentMessages { get; set; } = null!;
         public virtual DbSet<VectorIndex> VectorIndexes { get; set; } = null!;
         public virtual DbSet<FaissIndexFile> FaissIndexFiles { get; set; } = null!;
+        public virtual DbSet<AccountBook> AccountBooks { get; set; } = null!;
+        public virtual DbSet<AccountRecord> AccountRecords { get; set; } = null!;
+        public virtual DbSet<GroupAccountSettings> GroupAccountSettings { get; set; } = null!;
     }
 }
