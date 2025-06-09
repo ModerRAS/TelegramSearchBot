@@ -172,7 +172,43 @@ namespace TelegramSearchBot.Service.Vector
             var firstMessage = messages.First();
             var lastMessage = messages.Last();
             var participants = messages.Select(m => m.FromUserId).Distinct().Count();
-            var fullContent = string.Join("\n", messages.Select(m => $"{m.FromUserId}: {m.Content}"));
+            
+            // 获取用户信息和消息扩展信息
+            var userIds = messages.Select(m => m.FromUserId).Distinct().ToList();
+            var users = await _dbContext.UserData
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u);
+            
+            var messageIds = messages.Select(m => m.Id).ToList();
+            var messageExtensions = await _dbContext.MessageExtensions
+                .Where(me => messageIds.Contains(me.MessageDataId))
+                .ToListAsync();
+            
+            var messageExtensionsByMessageId = messageExtensions
+                .GroupBy(me => me.MessageDataId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+            
+            // 构建完整的对话内容，包含用户名和扩展信息
+            var contentBuilder = new StringBuilder();
+            foreach (var message in messages)
+            {
+                var userName = users.TryGetValue(message.FromUserId, out var user) 
+                    ? $"{user.FirstName} {user.LastName}".Trim() 
+                    : $"User({message.FromUserId})";
+                
+                contentBuilder.AppendLine($"{userName}: {message.Content}");
+                
+                // 添加消息扩展信息
+                if (messageExtensionsByMessageId.TryGetValue(message.Id, out var extensions))
+                {
+                    foreach (var extension in extensions)
+                    {
+                        contentBuilder.AppendLine($"[{extension.Name}]: {extension.Value}");
+                    }
+                }
+            }
+            
+            var fullContent = contentBuilder.ToString();
             
             // 提取话题关键词
             var allKeywords = messages.SelectMany(m => ExtractKeywords(m.Content)).Distinct().ToList();
@@ -240,8 +276,12 @@ namespace TelegramSearchBot.Service.Vector
                 return new List<string>();
 
             // 简单的关键词提取，支持中英文分词
-            var words = content.Split(new char[] { ' ', '\n', '\r', '\t', '。', '，', '？', '！', '、', '：', '；', '"', '"', ''', ''', '(', ')', '[', ']', '{', '}', '|', '\\', '/', '=', '+', '-', '*', '&', '%', '$', '#', '@', '~', '`' }, 
-                StringSplitOptions.RemoveEmptyEntries);
+            var separators = new char[] {
+                ' ', '\n', '\r', '\t', '。', '，', '？', '！', '、', '：', '；', 
+                '"', '"', '\'', '\'', '(', ')', '[', ']', '{', '}', '|',
+                '\\', '/', '=', '+', '-', '*', '&', '%', '$', '#', '@', '~', '`' 
+            };
+            var words = content.Split(separators, StringSplitOptions.RemoveEmptyEntries);
             
             var keywords = words
                 .Where(w => w.Length >= 2 && w.Length < 30) // 放宽长度限制

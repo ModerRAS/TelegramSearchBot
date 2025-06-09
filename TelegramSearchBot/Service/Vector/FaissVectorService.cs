@@ -439,6 +439,7 @@ namespace TelegramSearchBot.Service.Vector
             
             // 添加参与者信息
             contentBuilder.AppendLine($"参与者数量: {segment.ParticipantCount}");
+            contentBuilder.AppendLine($"消息数量: {segment.MessageCount}");
             
             // 添加话题关键词
             if (!string.IsNullOrEmpty(segment.TopicKeywords))
@@ -452,7 +453,28 @@ namespace TelegramSearchBot.Service.Vector
                 contentBuilder.AppendLine($"内容摘要: {segment.ContentSummary}");
             }
             
-            // 添加完整对话内容
+            // 添加时间段描述
+            var duration = segment.EndTime - segment.StartTime;
+            if (duration.TotalMinutes > 0)
+            {
+                contentBuilder.AppendLine($"对话时长: {duration.TotalMinutes:F1}分钟");
+            }
+            
+            // 添加对话类型判断
+            if (segment.ParticipantCount == 1)
+            {
+                contentBuilder.AppendLine("对话类型: 单人消息");
+            }
+            else if (segment.ParticipantCount <= 3)
+            {
+                contentBuilder.AppendLine("对话类型: 小群组讨论");
+            }
+            else
+            {
+                contentBuilder.AppendLine("对话类型: 多人群组讨论");
+            }
+            
+            // 添加完整对话内容（现在已包含用户名和MessageExtension信息）
             contentBuilder.AppendLine("对话内容:");
             contentBuilder.AppendLine(segment.FullContent);
             
