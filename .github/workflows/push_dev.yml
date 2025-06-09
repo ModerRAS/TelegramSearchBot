@@ -17,12 +17,11 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: |
-          6.0.x
-          7.0.x
-          8.0.x
+        dotnet-version: 9.0.x
+    - name: Clear NuGet cache
+      run: dotnet nuget locals all --clear
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore --force --no-cache
     - name: Build
       run: dotnet build --no-restore
     - name: Test
