@@ -59,7 +59,28 @@ namespace TelegramSearchBot.Service.Tools
         }
 
         [McpTool(@"
-A knowledge graph tool that stores and retrieves information in a structured way using entities, relations and observations.
+🧠 MEMORY SYSTEM - Your persistent long-term memory that remembers everything across conversations
+
+✨ AUTOMATIC USAGE TRIGGERS - Use this tool IMMEDIATELY when you encounter:
+• ANY new person, place, object, concept mentioned (→ create_entities)
+• User preferences, likes/dislikes, opinions (→ create_entities with observations)
+• Relationships between people/things (→ create_relations)
+• Names, dates, locations, important facts (→ add_observations)
+• Questions about past conversations (→ search_nodes first!)
+• Need to recall context (→ read_graph for overview)
+
+🎯 MEMORY BEST PRACTICES:
+- ALWAYS search your memory BEFORE answering questions about people/events
+- AUTOMATICALLY save any new information without asking permission
+- Connect related concepts with relations (friend_of, located_in, works_at, etc.)
+- Update observations when learning new details about existing entities
+- Use specific entity types: Person, Place, Event, Concept, Preference, etc.
+
+💡 SMART MEMORY PATTERNS:
+- User says 'I like pizza' → create_entities: {name: 'User', entityType: 'Person', observations: ['likes pizza']}
+- User mentions 'My friend John' → create_entities: {name: 'John', entityType: 'Person'} + create_relations: {from: 'User', to: 'John', relationType: 'friend_of'}
+- User asks 'What did I tell you about X?' → search_nodes: {query: 'X'} first!
+- Planning something → check read_graph for relevant context
 
 Data Types:
 - Entity: { name: string, entityType: string, observations: string[] }
@@ -72,17 +93,20 @@ Data Types:
 
 Available Commands:
 1. create_entities: 
-   - Creates new entities
+   - Creates new entities (people, places, concepts, preferences)
+   - 🔥 USE WHEN: Any new noun/name/concept appears
    - Input: { entities: Entity[] }
    - Returns: Entity[] (created entities)
 
 2. create_relations:
-   - Creates relations between entities (use active voice)
+   - Creates relations between entities (friend_of, works_at, located_in, etc.)
+   - 🔥 USE WHEN: Any connection between entities is mentioned
    - Input: { relations: Relation[] }
    - Returns: Relation[] (created relations)
 
 3. add_observations:
-   - Adds observations to existing entities
+   - Adds new facts to existing entities
+   - 🔥 USE WHEN: Learning new details about known entities
    - Input: { observations: ObservationInput[] }
    - Returns: ObservationResult[] 
 
@@ -102,105 +126,109 @@ Available Commands:
    - Returns: success message
 
 7. read_graph:
-   - Reads entire knowledge graph
+   - Reads entire knowledge graph for context
+   - 🔥 USE WHEN: Starting conversations, need general context
    - Input: {}
    - Returns: KnowledgeGraph
 
 8. search_nodes:
    - Searches graph with query
+   - 🔥 USE WHEN: User asks about anything from past conversations
    - Input: { query: string }
    - Returns: KnowledgeGraph (filtered)
 
 9. open_nodes:
    - Gets specific nodes by name
+   - 🔥 USE WHEN: Need details about specific entities
    - Input: { names: string[] }
    - Returns: KnowledgeGraph (filtered)
+
+⚡ MEMORY RULE: Be proactive! Your memory makes you smarter and more helpful. Use it constantly!
 ")]
         public async Task<object> ProcessMemoryCommandAsync(
             [McpParameter(@"
-The memory command to execute. Must be one of:
-- create_entities
-- create_relations  
-- add_observations
-- delete_entities
-- delete_observations
-- delete_relations
-- read_graph
-- search_nodes
-- open_nodes
+The memory command to execute. Choose based on situation:
+
+🔍 INFORMATION GATHERING:
+- search_nodes: When user asks about anything from past conversations
+- read_graph: When starting conversation or need general context overview
+- open_nodes: When need specific details about known entities
+
+💾 INFORMATION STORAGE:
+- create_entities: When ANY new person/place/concept/preference is mentioned
+- create_relations: When relationships between entities are mentioned
+- add_observations: When learning new facts about existing entities
+
+🗑️ INFORMATION MANAGEMENT:
+- delete_entities: Remove entities completely
+- delete_observations: Remove specific facts
+- delete_relations: Remove relationships
+
+⚡ DEFAULT BEHAVIOR: Always search_nodes FIRST when user asks questions!
 ")] string command,
             [McpParameter(@"
-Command arguments in JSON format. Structure depends on command:
+Command arguments in JSON format. Use these patterns:
 
-For create_entities:
+💾 STORING NEW INFORMATION:
+
+For create_entities (🔥 Use when hearing ANY new name/place/thing):
 {
   entities: [
     {
-      name: string (required),
-      entityType: string (required),
-      observations: string[] (optional)
+      name: string (required) - exact name mentioned,
+      entityType: string (required) - Person/Place/Event/Concept/Preference/Object/etc,
+      observations: string[] (optional) - any facts mentioned
     }
   ]
 }
+Example: User says 'I work at Google and love coffee'
+→ [{name: 'User', entityType: 'Person', observations: ['works at Google', 'loves coffee']}, {name: 'Google', entityType: 'Company'}]
 
-For create_relations:
+For create_relations (🔥 Use when ANY connection is mentioned):
 {
   relations: [
     {
-      from: string (required),
-      to: string (required), 
-      relationType: string (required)
+      from: string (required) - source entity,
+      to: string (required) - target entity, 
+      relationType: string (required) - works_at/friend_of/located_in/likes/owns/etc
     }
   ]
 }
+Example: 'My friend John works at Microsoft'
+→ [{from: 'User', to: 'John', relationType: 'friend_of'}, {from: 'John', to: 'Microsoft', relationType: 'works_at'}]
 
-For add_observations:
+For add_observations (🔥 Use when learning MORE about existing entities):
 {
   observations: [
     {
-      entityName: string (required),
-      contents: string[] (required)
+      entityName: string (required) - existing entity name,
+      contents: string[] (required) - new facts to add
     }
   ]
 }
 
-For delete_entities:
-{
-  entityNames: string[] (required)
-}
+🔍 SEARCHING MEMORY:
 
-For delete_observations:
+For search_nodes (🔥 ALWAYS use FIRST when user asks questions):
 {
-  deletions: [
-    {
-      entityName: string (required),
-      observations: string[] (required)
-    }
-  ]
+  query: string (required) - what to search for
 }
+Example: User asks 'What did I tell you about my job?' → {query: 'job work career'}
 
-For delete_relations:
-{
-  relations: [
-    {
-      from: string (required),
-      to: string (required),
-      relationType: string (required)
-    }
-  ]
-}
-
-For read_graph: {} (no arguments)
-
-For search_nodes:
-{
-  query: string (required)
-}
+For read_graph: {} (no arguments needed - use for general context)
 
 For open_nodes:
 {
-  names: string[] (required)
+  names: string[] (required) - specific entity names
 }
+
+🗑️ CLEANING UP:
+
+For delete_entities: {entityNames: string[]}
+For delete_observations: {deletions: [{entityName: string, observations: string[]}]}
+For delete_relations: {relations: [{from: string, to: string, relationType: string}]}
+
+💡 PRO TIP: Be aggressive about saving! It's better to store too much than miss important details.
 ")] string arguments,
             ToolContext toolContext)
         {
