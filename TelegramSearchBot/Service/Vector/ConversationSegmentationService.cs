@@ -175,7 +175,34 @@ namespace TelegramSearchBot.Service.Vector
             var fullContent = string.Join("\n", messages.Select(m => $"{m.FromUserId}: {m.Content}"));
             
             // 提取话题关键词
-            var allKeywords = messages.SelectMany(m => ExtractKeywords(m.Content)).Distinct();
+            var allKeywords = messages.SelectMany(m => ExtractKeywords(m.Content)).Distinct().ToList();
+            
+            // 如果没有提取到关键词，使用备用策略
+            if (!allKeywords.Any())
+            {
+                // 使用最常见的词汇作为关键词，不过滤停用词
+                var allWords = messages.SelectMany(m => 
+                    (m.Content ?? "").Split(new char[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(w => w.Length > 1)
+                    .Select(w => w.Trim().ToLower())
+                ).Where(w => !string.IsNullOrEmpty(w));
+                
+                allKeywords = allWords.GroupBy(w => w)
+                    .OrderByDescending(g => g.Count())
+                    .Take(10)
+                    .Select(g => g.Key)
+                    .ToList();
+            }
+            
+            // 如果还是没有关键词，使用时间和参与者信息作为关键词
+            if (!allKeywords.Any())
+            {
+                var dateKeyword = firstMessage.DateTime.ToString("yyyy-MM-dd");
+                var timeKeyword = firstMessage.DateTime.ToString("HH时");
+                var participantKeyword = $"{participants}人对话";
+                allKeywords = new List<string> { dateKeyword, timeKeyword, participantKeyword };
+            }
+            
             var topicKeywords = string.Join(",", allKeywords.Take(10)); // 取前10个关键词
 
             // 生成内容摘要
@@ -212,16 +239,31 @@ namespace TelegramSearchBot.Service.Vector
             if (string.IsNullOrWhiteSpace(content))
                 return new List<string>();
 
-            // 简单的关键词提取
-            var words = content.Split(new char[] { ' ', '\n', '\r', '\t', '。', '，', '？', '！', '、' }, 
+            // 简单的关键词提取，支持中英文分词
+            var words = content.Split(new char[] { ' ', '\n', '\r', '\t', '。', '，', '？', '！', '、', '：', '；', '"', '"', ''', ''', '(', ')', '[', ']', '{', '}', '|', '\\', '/', '=', '+', '-', '*', '&', '%', '$', '#', '@', '~', '`' }, 
                 StringSplitOptions.RemoveEmptyEntries);
             
-            return words
-                .Where(w => w.Length > 2 && w.Length < 20) // 过滤长度
+            var keywords = words
+                .Where(w => w.Length >= 2 && w.Length < 30) // 放宽长度限制
                 .Where(w => !IsStopWord(w)) // 过滤停用词
-                .Select(w => w.ToLower())
+                .Select(w => w.Trim().ToLower())
+                .Where(w => !string.IsNullOrEmpty(w))
                 .Distinct()
                 .ToList();
+            
+            // 如果关键词太少，降低门槛
+            if (keywords.Count < 3)
+            {
+                keywords = words
+                    .Where(w => w.Length >= 1 && w.Length < 30) // 进一步放宽
+                    .Where(w => !IsCommonStopWord(w)) // 只过滤最常见的停用词
+                    .Select(w => w.Trim().ToLower())
+                    .Where(w => !string.IsNullOrEmpty(w))
+                    .Distinct()
+                    .ToList();
+            }
+            
+            return keywords;
         }
 
         /// <summary>
@@ -232,12 +274,29 @@ namespace TelegramSearchBot.Service.Vector
             var stopWords = new HashSet<string>
             {
                 "的", "了", "在", "是", "我", "你", "他", "她", "它", "我们", "你们", "他们",
-                "这", "那", "这个", "那个", "什么", "怎么", "为什么", "因为", "所以",
+                "这", "那", "这个", "那个", "什么", "怎么", "为什么", "因为", "所以", "然后", "但是", "而且",
+                "可以", "不是", "没有", "就是", "还是", "如果", "会", "要", "去", "来", "到", "有", "很", "也", "都",
                 "and", "the", "a", "an", "is", "are", "was", "were", "have", "has", "had",
-                "do", "does", "did", "will", "would", "could", "should", "may", "might"
+                "do", "does", "did", "will", "would", "could", "should", "may", "might",
+                "but", "or", "not", "if", "when", "where", "how", "why", "what", "who", "which",
+                "this", "that", "these", "those", "here", "there", "now", "then", "yes", "no"
             };
             
             return stopWords.Contains(word.ToLower());
+        }
+
+        /// <summary>
+        /// 检查是否为最常见的停用词（更严格的过滤）
+        /// </summary>
+        private bool IsCommonStopWord(string word)
+        {
+            var commonStopWords = new HashSet<string>
+            {
+                "的", "了", "在", "是", "我", "你", "他", "它", "这", "那", "什么",
+                "and", "the", "a", "an", "is", "are", "was", "were", "to", "for", "of", "with", "by"
+            };
+            
+            return commonStopWords.Contains(word.ToLower());
         }
 
         /// <summary>
