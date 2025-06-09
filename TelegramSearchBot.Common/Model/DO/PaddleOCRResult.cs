@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Common.Model.DO
 {

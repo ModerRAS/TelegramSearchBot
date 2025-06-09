@@ -16,6 +16,9 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Common.Model.DO;
+using System.Text;
+using Newtonsoft.Json;
 
 namespace TelegramSearchBot.Controller.AI.OCR
 {
@@ -59,16 +62,44 @@ namespace TelegramSearchBot.Controller.AI.OCR
             {
                 return;
             }
+            
             string OcrStr = string.Empty;
+            PaddleOCRResult fullOcrResult = null;
+            
             try
             {
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
-                OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
+                
+                // 统一使用带坐标的API获取完整结果
+                fullOcrResult = await paddleOCRService.ExecuteWithCoordinatesAsync(new MemoryStream(PhotoStream));
+                
+                // 从完整结果中提取文本用于存储和显示
+                if (fullOcrResult != null && fullOcrResult.Results != null) {
+                    var textList = new List<string>();
+                    foreach (var resultGroup in fullOcrResult.Results) {
+                        foreach (var result in resultGroup) {
+                            if (!string.IsNullOrWhiteSpace(result.Text)) {
+                                textList.Add(result.Text);
+                            }
+                        }
+                    }
+                    OcrStr = string.Join(" ", textList);
+                }
+                
                 if (!string.IsNullOrWhiteSpace(OcrStr)) {
                     logger.LogInformation(OcrStr);
                     await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
                     p.ProcessingResults.Add($"[OCR识别结果] {OcrStr}");
+                }
+                
+                // 将完整的OCR结果放到PipelineContext中供后续处理使用
+                if (fullOcrResult != null) {
+                    p.PipelineCache["OCR_FullResult"] = fullOcrResult;
+                    
+                    // 同时保存完整的坐标信息到扩展数据
+                    var jsonResult = JsonConvert.SerializeObject(fullOcrResult);
+                    await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Coordinates", jsonResult);
                 }
             }
             catch (Exception ex) when (
