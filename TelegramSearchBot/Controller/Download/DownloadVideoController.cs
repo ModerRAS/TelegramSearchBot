@@ -27,12 +27,12 @@ namespace TelegramSearchBot.Controller.Download
             this.botClient = botClient;
             this.logger = logger;
         }
-        static void CreateDirectoryRecursively(string path)
+        void CreateDirectoryRecursively(string path)
         {
             if (!Directory.Exists(path))
             {
                 Directory.CreateDirectory(path);
-                Console.WriteLine($"已创建文件夹：{path}");
+                logger.LogInformation("已创建文件夹：{Path}", path);
             }
 
             // 获取父文件夹路径

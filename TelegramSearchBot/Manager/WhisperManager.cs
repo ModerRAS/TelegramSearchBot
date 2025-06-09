@@ -32,13 +32,13 @@ namespace TelegramSearchBot.Manager {
             if (!Directory.Exists(targetModelsDir)) {
                 Directory.CreateDirectory(targetModelsDir);
             }
-            Console.WriteLine($"Model {modelName} not found. Downloading...");
+            logger.LogInformation("Model {ModelName} not found. Downloading...", modelName);
             using var client = HttpClientHelper.CreateProxyHttpClient();
             var downloader = new WhisperGgmlDownloader(client);
             await using var modelStream = await downloader.GetGgmlModelAsync(modelType);
             await using var fileWriter = File.OpenWrite(Path.Combine(targetModelsDir, modelName));
             await modelStream.CopyToAsync(fileWriter);
-            Console.WriteLine($"Model {modelName} downloaded to {targetModelsDir}");
+            logger.LogInformation("Model {ModelName} downloaded to {TargetDir}", modelName, targetModelsDir);
         }
 
         public async Task<string> DetectAsync(Stream wavStream) {

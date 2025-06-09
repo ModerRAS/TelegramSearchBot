@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using TelegramSearchBot.Model.Data;
+using Serilog;
 
 namespace TelegramSearchBot
 {
@@ -37,7 +38,7 @@ namespace TelegramSearchBot
                 }
                 return true;
             } catch (Exception e) {
-                Console.WriteLine(e);
+                Log.Error(e, "创建目录失败: {FolderPath}", FolderPath);
                 return false;
             }
         }

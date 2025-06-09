@@ -230,7 +230,7 @@ namespace TelegramSearchBot.AppBootstrap {
         /// <returns>如果成功找到并调用了 Startup 方法，则返回 true；否则返回 false。</returns>
         public static bool TryDispatchStartupByReflection(string[] args) {
             if (args == null || args.Length == 0) {
-                Console.WriteLine("错误：缺少启动参数。");
+                Log.Error("错误：缺少启动参数。");
                 return false;
             }
 
@@ -289,7 +289,7 @@ namespace TelegramSearchBot.AppBootstrap {
         /// </summary>
         /// <param name="assembly">要搜索的程序集。</param>
         private static void PrintUsageHint(Assembly assembly) {
-            Console.WriteLine("\n可能的启动类型 (基于命名约定 *Bootstrap 类):");
+            Log.Information("\n可能的启动类型 (基于命名约定 *Bootstrap 类):");
             try {
                 // 在传入的程序集中查找所有符合命名约定且包含 Startup(string[]) 方法的类
                 var possibleTypes = assembly.GetTypes()

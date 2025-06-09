@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class SchedulerBootstrap : AppBootstrap {
@@ -18,7 +19,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 server.Start();
                 Thread.Sleep(Timeout.Infinite);
             } catch (Exception ex) {
-                Console.WriteLine($"Unable to initialize server due to exception: {ex.Message}");
+                Log.Error(ex, "Unable to initialize server due to exception: {ErrorMessage}", ex.Message);
             }
         }
     }

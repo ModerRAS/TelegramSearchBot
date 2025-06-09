@@ -5,6 +5,7 @@ using System.Linq;
 using System.Drawing;
 using JiebaNet.Segmenter;
 using WordCloudSharp;
+using Serilog;
 
 namespace TelegramSearchBot.Helper
 {
@@ -38,7 +39,7 @@ namespace TelegramSearchBot.Helper
                         catch (Exception ex)
                         {
                             // 如果JiebaNet初始化失败，使用简单的空格分词作为后备方案
-                            Console.WriteLine($"JiebaNet初始化失败，使用简单分词: {ex.Message}");
+                            Log.Warning($"JiebaNet初始化失败，使用简单分词: {ex.Message}");
                             _segmenter = null;
                         }
                     }
@@ -74,7 +75,7 @@ namespace TelegramSearchBot.Helper
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"分词失败，使用原文: {ex.Message}");
+                        Log.Warning($"分词失败，使用原文: {ex.Message}");
                         // 分词失败时直接使用原文
                         if (text.Length > 1)
                         {
