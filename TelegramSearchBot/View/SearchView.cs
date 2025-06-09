@@ -122,18 +122,18 @@ namespace TelegramSearchBot.View
                 await _botClient.SendMessage(
                 chatId: this.ChatId,
                 text: messageText,
-                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
+                parseMode: Telegram.Bot.Types.Enums.ParseMode.Html,
                 replyParameters: replyParameters,
                 disableNotification: true,
                 replyMarkup: replyMarkup
             );
             }, ChatId < 0);
-            
+
         }
 
         private const string SearchResultTemplate = @"
 {{- search_type_text = search_option.search_type == 0 ? ""倒排索引"" : ""向量搜索"" -}}
-**搜索方式**: {{search_type_text}}
+<b>搜索方式</b>: {{search_type_text}}
 
 {{- if search_option.count > 0 -}}
 共找到 {{search_option.count}} 项结果, 当前为第{{search_option.skip + 1}}项到第{{if (search_option.skip + search_option.take) < search_option.count; search_option.skip + search_option.take; else; search_option.count; end}}项
@@ -143,7 +143,7 @@ namespace TelegramSearchBot.View
 
 {{ ""\n"" }}
 {{- for message in messages -}}
-[{{message.content | string.truncate 30 | string.replace '\n' '' | string.replace '\r' ''}}](https://t.me/c/{{message.group_id | string.slice 4}}/{{message.message_id}}){{ ""\n"" }}
+<a href=""https://t.me/c/{{message.group_id | string.slice 4}}/{{message.message_id}}"">{{message.content | string.truncate 30 | string.replace '\n' '' | string.replace '\r' '' | html.escape}}</a>{{ ""\n"" }}
 
 {{- end -}}
 ";
