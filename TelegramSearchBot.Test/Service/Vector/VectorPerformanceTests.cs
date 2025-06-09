@@ -164,7 +164,9 @@ namespace TelegramSearchBot.Test.Service.Vector
                 var result = await _faissVectorService.Search(searchOption);
                 stopwatch.Stop();
                 
-                searchTimes.Add(stopwatch.ElapsedMilliseconds);
+                // 使用Ticks并转换为毫秒，提供更精确的时间测量
+                var elapsedMs = stopwatch.ElapsedTicks * 1000.0 / Stopwatch.Frequency;
+                searchTimes.Add((long)Math.Round(elapsedMs));
                 Assert.NotNull(result);
             }
 
@@ -177,8 +179,19 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // 性能要求：平均搜索时间应该在合理范围内
             Assert.True(averageTime < 100, $"平均搜索时间过长: {averageTime:F2}ms");
-            // 调整性能一致性要求：最大时间不应该超过平均时间的20倍（考虑到测试环境的波动）
-            Assert.True(maxTime < averageTime * 20, $"性能不一致：最大时间 {maxTime} ms 超过平均时间 {averageTime:F2} ms 的20倍");
+            
+            // 性能一致性检查：只有当平均时间大于0时才进行比较
+            if (averageTime > 0)
+            {
+                // 最大时间不应该超过平均时间的20倍（考虑到测试环境的波动）
+                Assert.True(maxTime <= averageTime * 20, $"性能不一致：最大时间 {maxTime} ms 超过平均时间 {averageTime:F2} ms 的20倍");
+            }
+            else
+            {
+                // 如果平均时间为0，说明所有搜索都非常快，这是好事
+                _output.WriteLine("所有搜索操作都在1ms内完成，性能表现优秀");
+                Assert.True(maxTime <= 1, $"即使在快速执行的情况下，最大时间也不应超过1ms，实际: {maxTime}ms");
+            }
         }
 
         [Fact]
