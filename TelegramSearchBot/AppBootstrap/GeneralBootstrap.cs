@@ -91,13 +91,13 @@ namespace TelegramSearchBot.AppBootstrap {
                 HandleErrorAsync(service), new() {
                     AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
                 }, cts.Token);
-            
+
             // 保持程序运行
             await host.WaitForShutdownAsync();
         }
         public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
             return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
-                _ = await Task.Run(async () => {
+                await Task.Run(async () => {
                     try {
                         using (var scope = service.CreateScope()) {
                             var exec = new ControllerExecutor(scope.ServiceProvider.GetServices<IOnUpdate>());
