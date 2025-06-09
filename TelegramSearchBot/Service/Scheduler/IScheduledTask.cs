@@ -24,5 +24,11 @@ namespace TelegramSearchBot.Service.Scheduler
         /// </summary>
         /// <returns>返回应该执行的任务类型，如果不需要执行则返回null</returns>
         string[] GetExecutableTaskTypes();
+
+        /// <summary>
+        /// 设置心跳更新回调函数
+        /// </summary>
+        /// <param name="heartbeatCallback">心跳更新回调</param>
+        void SetHeartbeatCallback(Func<Task> heartbeatCallback);
     }
 } 

@@ -129,29 +129,30 @@ namespace TelegramSearchBot.Service.Scheduler
                     return true;
                 }
 
-                // 如果状态是Running，检查是否运行时间过长（可能已经僵死）
+                                // 如果状态是Running，检查心跳是否超时（可能已经僵死）
                 if (existingExecution.Status == TaskExecutionStatus.Running)
                 {
-                    var runningDuration = DateTime.UtcNow - existingExecution.StartTime;
-                    var maxRunningTime = TimeSpan.FromHours(2); // 假设任务最长运行2小时
-
-                    if (runningDuration > maxRunningTime)
+                    var heartbeatTimeout = TimeSpan.FromHours(2); // 心跳超时阈值
+                    var lastHeartbeat = existingExecution.LastHeartbeat ?? existingExecution.StartTime;
+                    var timeSinceLastHeartbeat = DateTime.UtcNow - lastHeartbeat;
+                    
+                    if (timeSinceLastHeartbeat > heartbeatTimeout)
                     {
-                        _logger.LogWarning("任务 {TaskName}-{TaskType} 已运行 {Duration}，可能已僵死，允许重新执行", 
-                            taskName, taskType, runningDuration);
+                        _logger.LogWarning("任务 {TaskName}-{TaskType} 心跳超时 {Duration}，可能已僵死，允许重新执行",
+                            taskName, taskType, timeSinceLastHeartbeat);
                         
                         // 将僵死的任务标记为失败
                         existingExecution.Status = TaskExecutionStatus.Failed;
                         existingExecution.CompletedTime = DateTime.UtcNow;
-                        existingExecution.ErrorMessage = $"任务运行时间过长 ({runningDuration})，被认定为僵死任务";
-                        existingExecution.ResultSummary = $"任务 {taskName}-{taskType} 僵死后被重置";
+                        existingExecution.ErrorMessage = $"任务心跳超时 ({timeSinceLastHeartbeat})，被认定为僵死任务";
+                        existingExecution.ResultSummary = $"任务 {taskName}-{taskType} 心跳超时后被重置";
                         
                         await dbContext.SaveChangesAsync();
                         return true;
                     }
                     
-                    _logger.LogDebug("任务 {TaskName}-{TaskType} 正在运行中，运行时长: {Duration}", 
-                        taskName, taskType, runningDuration);
+                    _logger.LogDebug("任务 {TaskName}-{TaskType} 正在运行中，距离上次心跳: {Duration}",
+                        taskName, taskType, timeSinceLastHeartbeat);
                     return false;
                 }
 
@@ -174,7 +175,8 @@ namespace TelegramSearchBot.Service.Scheduler
                 TaskType = taskType,
                 ExecutionDate = today,
                 Status = TaskExecutionStatus.Running,
-                StartTime = DateTime.UtcNow
+                StartTime = DateTime.UtcNow,
+                LastHeartbeat = DateTime.UtcNow
             };
 
             try
@@ -190,6 +192,7 @@ namespace TelegramSearchBot.Service.Scheduler
                     // 更新现有记录
                     existingExecution.Status = TaskExecutionStatus.Running;
                     existingExecution.StartTime = DateTime.UtcNow;
+                    existingExecution.LastHeartbeat = DateTime.UtcNow;
                     existingExecution.ErrorMessage = null;
                     execution = existingExecution;
                 }
@@ -200,6 +203,24 @@ namespace TelegramSearchBot.Service.Scheduler
                 }
 
                 await dbContext.SaveChangesAsync();
+
+                // 设置心跳回调
+                task.SetHeartbeatCallback(async () =>
+                {
+                    using var heartbeatScope = _serviceProvider.CreateScope();
+                    var heartbeatDbContext = heartbeatScope.ServiceProvider.GetRequiredService<DataDbContext>();
+                    
+                    var heartbeatExecution = await heartbeatDbContext.ScheduledTaskExecutions
+                        .FirstOrDefaultAsync(e => e.Id == execution.Id);
+                    
+                    if (heartbeatExecution != null)
+                    {
+                        heartbeatExecution.LastHeartbeat = DateTime.UtcNow;
+                        await heartbeatDbContext.SaveChangesAsync();
+                        _logger.LogDebug("任务 {TaskName}-{TaskType} 心跳更新: {HeartbeatTime}", 
+                            task.TaskName, taskType, heartbeatExecution.LastHeartbeat);
+                    }
+                });
 
                 // 执行任务
                 await task.ExecuteAsync();

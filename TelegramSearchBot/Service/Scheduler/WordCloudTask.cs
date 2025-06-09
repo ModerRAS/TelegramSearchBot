@@ -24,6 +24,7 @@ namespace TelegramSearchBot.Service.Scheduler
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
         private readonly ILogger<WordCloudTask> _logger;
+        private Func<Task> _heartbeatCallback;
 
         public WordCloudTask(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<WordCloudTask> logger)
         {
@@ -74,6 +75,11 @@ namespace TelegramSearchBot.Service.Scheduler
             return executableTypes.ToArray();
         }
 
+        public void SetHeartbeatCallback(Func<Task> heartbeatCallback)
+        {
+            _heartbeatCallback = heartbeatCallback;
+        }
+
         public async Task ExecuteAsync()
         {
             _logger.LogInformation("词云报告任务开始执行");
@@ -107,6 +113,12 @@ namespace TelegramSearchBot.Service.Scheduler
 
                 foreach (var group in messagesByGroup)
                 {
+                    // 更新心跳
+                    if (_heartbeatCallback != null)
+                    {
+                        await _heartbeatCallback();
+                    }
+
                     // 获取当前群组的统计信息
                     if (!groupStats.TryGetValue(group.Key, out var stats))
                     {

@@ -52,6 +52,11 @@ namespace TelegramSearchBot.Model.Data
         public DateTime? CompletedTime { get; set; }
 
         /// <summary>
+        /// 最后心跳时间（用于检测任务是否僵死）
+        /// </summary>
+        public DateTime? LastHeartbeat { get; set; }
+
+        /// <summary>
         /// 错误信息（如果执行失败）
         /// </summary>
         [StringLength(1000)]
