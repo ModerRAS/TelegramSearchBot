@@ -1,10 +1,6 @@
 using LiteDB;
 using Microsoft.EntityFrameworkCore;
-using Coravel;
-using Coravel.Scheduling.Schedule.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
-using Coravel.Invocable;
-using TelegramSearchBot.Service.Common;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging; // Added for ILoggerFactory
 using Serilog;
@@ -32,6 +28,7 @@ using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Service.Scheduler;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
@@ -66,11 +63,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 //    });
                 //})
                 .Build();
-            host.Services.UseScheduler(s => {
-                s.Schedule<DailyTaskService>()
-                 .DailyAt(7, 0).Zoned(TimeZoneInfo.Local);
-            });
-            Log.Information("调度器已配置: DailyTaskService 将在每天7:00执行");
+
             var bot = host.Services.GetRequiredService<ITelegramBotClient>();
             using CancellationTokenSource cts = new();
             service = host.Services;
@@ -88,9 +81,9 @@ namespace TelegramSearchBot.AppBootstrap {
                 context.Database.Migrate();
             }
 
-            // 先启动Host，确保调度器开始运行
+            // 启动Host，SchedulerService作为HostedService会自动启动
             await host.StartAsync();
-            Log.Information("Host已启动，调度器已开始运行");
+            Log.Information("Host已启动，定时任务调度器已作为后台服务启动");
 
             Thread.Sleep(5000);
             bot.StartReceiving(

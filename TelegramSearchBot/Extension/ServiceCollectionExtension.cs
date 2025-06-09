@@ -1,11 +1,7 @@
 using System.Reflection;
 using LiteDB;
 using Microsoft.EntityFrameworkCore;
-using Coravel;
-using Coravel.Scheduling.Schedule.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
-using Coravel.Invocable;
-using TelegramSearchBot.Service.Common;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -63,10 +59,10 @@ namespace TelegramSearchBot.Extension {
                 .AddSingleton<SendMessage>()
                 .AddHostedService<TelegramCommandRegistryService>()
                 .AddHostedService<SendMessage>()
+                .AddHostedService<TelegramSearchBot.Service.Scheduler.SchedulerService>()
                 .AddSingleton<LuceneManager>()
                 .AddSingleton<PaddleOCR>()
-                .AddSingleton<WhisperManager>()
-                .AddScheduler();
+                .AddSingleton<WhisperManager>();
         }
 
         public static IServiceCollection AddBilibiliServices(this IServiceCollection services) {
@@ -100,12 +96,8 @@ namespace TelegramSearchBot.Extension {
                     .FromAssemblyOf<IView>()
                     .AddClasses(classes => classes.AssignableTo<IView>())
                     .AsSelf()
-                    .WithTransientLifetime())
-                .Scan(scan => scan
-                    .FromAssemblyOf<DailyTaskService>()
-                    .AddClasses(classes => classes.AssignableTo<IInvocable>())
-                    .AsSelf()
                     .WithTransientLifetime());
+
         }
 
         public static IServiceCollection ConfigureAllServices(this IServiceCollection services) {

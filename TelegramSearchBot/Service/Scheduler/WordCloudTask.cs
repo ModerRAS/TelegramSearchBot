@@ -2,9 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Coravel.Invocable;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using TelegramSearchBot.Helper;
@@ -14,11 +12,26 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.View;
 using TelegramSearchBot.Attributes;
 
-namespace TelegramSearchBot.Service.Common
+namespace TelegramSearchBot.Service.Scheduler
 {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class DailyTaskService : IInvocable
+    public class WordCloudTask : IScheduledTask
     {
+        public string TaskName => "WordCloudReport";
+
+        private readonly DataDbContext _dbContext;
+        private readonly ITelegramBotClient _botClient;
+        private readonly SendMessage _sendMessage;
+        private readonly ILogger<WordCloudTask> _logger;
+
+        public WordCloudTask(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<WordCloudTask> logger)
+        {
+            _dbContext = dbContext;
+            _botClient = botClient;
+            _sendMessage = sendMessage;
+            _logger = logger;
+        }
+
         /// <summary>
         /// 检查当前日期是否为周期起始日
         /// </summary>
@@ -40,49 +53,43 @@ namespace TelegramSearchBot.Service.Common
             return (isWeekStart, isMonthStart, isQuarterStart, isYearStart);
         }
 
-        /// <summary>
-        /// 测试方法：手动触发任务执行（用于调试）
-        /// </summary>
-        public static async Task TestTaskExecution(IServiceProvider serviceProvider)
+        public string[] GetExecutableTaskTypes()
         {
-            var logger = serviceProvider.GetService<ILogger<DailyTaskService>>();
-            var service = serviceProvider.GetService(typeof(DailyTaskService)) as DailyTaskService;
-            if (service != null)
-            {
-                logger?.LogInformation("手动触发定时任务测试");
-                await service.Invoke();
-            }
-            else
-            {
-                logger?.LogError("无法获取DailyTaskService实例");
-            }
-        }
-
-        private readonly DataDbContext _dbContext;
-        private readonly ITelegramBotClient _botClient;
-        private readonly SendMessage _sendMessage;
-        private readonly ILogger<DailyTaskService> _logger;
-
-        public DailyTaskService(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<DailyTaskService> logger)
-        {
-            _dbContext = dbContext;
-            _botClient = botClient;
-            _sendMessage = sendMessage;
-            _logger = logger;
-        }
-
-        public async Task Invoke()
-        {
-            _logger.LogInformation("每日7点任务执行");
-            
             var (isWeekStart, isMonthStart, isQuarterStart, isYearStart) = CheckPeriodStart();
+            var executableTypes = new List<string>();
+
+            if (isYearStart)
+                executableTypes.Add(TaskType.Yearly);
+            if (isQuarterStart)
+                executableTypes.Add(TaskType.Quarterly);
+            if (isMonthStart)
+                executableTypes.Add(TaskType.Monthly);
+            if (isWeekStart)
+                executableTypes.Add(TaskType.Weekly);
+
             _logger.LogInformation("周期检查: 周一={IsWeekStart}, 月初={IsMonthStart}, 季度初={IsQuarterStart}, 年初={IsYearStart}", 
                 isWeekStart, isMonthStart, isQuarterStart, isYearStart);
+
+            return executableTypes.ToArray();
+        }
+
+        public async Task ExecuteAsync()
+        {
+            _logger.LogInformation("词云报告任务开始执行");
             
-            if (isWeekStart || isMonthStart || isQuarterStart || isYearStart)
+            var executableTypes = GetExecutableTaskTypes();
+            
+            if (executableTypes.Length > 0)
             {
                 _logger.LogInformation("符合条件,开始生成词云报告");
-                await SendWordCloudReportAsync();
+                
+                // 按优先级执行任务：年 > 季 > 月 > 周
+                var taskType = executableTypes.Contains(TaskType.Yearly) ? TimePeriod.Yearly :
+                              executableTypes.Contains(TaskType.Quarterly) ? TimePeriod.Quarterly :
+                              executableTypes.Contains(TaskType.Monthly) ? TimePeriod.Monthly :
+                              TimePeriod.Weekly;
+                
+                await SendWordCloudReportAsync(taskType);
             }
             else
             {
@@ -90,16 +97,10 @@ namespace TelegramSearchBot.Service.Common
             }
         }
 
-        private async Task SendWordCloudReportAsync()
+        private async Task SendWordCloudReportAsync(TimePeriod period)
         {
             try 
             {
-                var (isWeekStart, isMonthStart, isQuarterStart, isYearStart) = CheckPeriodStart();
-                var period = isYearStart ? TimePeriod.Yearly : 
-                            isQuarterStart ? TimePeriod.Quarterly :
-                            isMonthStart ? TimePeriod.Monthly : 
-                            TimePeriod.Weekly;
-                
                 var groupStats = await CountUserMessagesAsync(period);
                 var messagesByGroup = await GetGroupMessagesWithExtensionsAsync(period);
 
@@ -184,6 +185,7 @@ namespace TelegramSearchBot.Service.Common
             catch (Exception ex)
             {
                 _logger.LogError(ex, "生成词云报告失败");
+                throw; // 重新抛出异常，让调度器记录失败状态
             }
         }
 
@@ -195,6 +197,7 @@ namespace TelegramSearchBot.Service.Common
             Yearly
         }
 
+        /// <summary>
         /// 统计指定时间段内每个用户的发言量和总发言量
         /// </summary>
         /// <param name="period">时间周期：日、月、季度、年</param>
@@ -241,7 +244,6 @@ namespace TelegramSearchBot.Service.Common
         /// 列表包含消息内容和所有扩展值（不包含扩展名）
         /// 没有消息的群组会被自动过滤掉
         /// </returns>
-        /// <summary>
         public async Task<Dictionary<long, List<string>>> GetGroupMessagesWithExtensionsAsync(TimePeriod period)
         {
             var result = new Dictionary<long, List<string>>();
@@ -258,6 +260,7 @@ namespace TelegramSearchBot.Service.Common
             var groups = await _dbContext.GroupData
                 .Where(g => g.Id < 0) // 只处理群组(GroupId < 0)，过滤私聊
                 .ToListAsync();
+            
             foreach (var group in groups)
             {
                 var groupMessages = await _dbContext.Messages
@@ -292,4 +295,4 @@ namespace TelegramSearchBot.Service.Common
             return result;
         }
     }
-}
+} 

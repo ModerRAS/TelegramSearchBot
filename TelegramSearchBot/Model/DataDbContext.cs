@@ -87,5 +87,6 @@ namespace TelegramSearchBot.Model
         public virtual DbSet<AccountBook> AccountBooks { get; set; } = null!;
         public virtual DbSet<AccountRecord> AccountRecords { get; set; } = null!;
         public virtual DbSet<GroupAccountSettings> GroupAccountSettings { get; set; } = null!;
+        public virtual DbSet<ScheduledTaskExecution> ScheduledTaskExecutions { get; set; } = null!;
     }
 }

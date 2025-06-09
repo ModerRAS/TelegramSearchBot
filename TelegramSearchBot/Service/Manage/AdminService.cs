@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Common; // Added for IAppConfigurationService
+using TelegramSearchBot.Service.Scheduler; // Added for ISchedulerService
 
 namespace TelegramSearchBot.Service.Manage
 {
@@ -19,18 +20,18 @@ namespace TelegramSearchBot.Service.Manage
         protected readonly DataDbContext DataContext;
         protected readonly ILogger<AdminService> Logger;
         private readonly IAppConfigurationService _appConfigService; // Added
-        private readonly IServiceProvider _serviceProvider; // Added for DI access
+        private readonly ISchedulerService _schedulerService; // Added for scheduler access
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
         protected IDatabase db { get; set; }
         public string ServiceName => "AdminService";
         public AdminService(ILogger<AdminService> logger, DataDbContext context, 
             IAppConfigurationService appConfigService, IConnectionMultiplexer connectionMultiplexer,
-            IServiceProvider serviceProvider) // Added IServiceProvider
+            ISchedulerService schedulerService) // Added ISchedulerService
         {
             Logger = logger;
             DataContext = context;
             _appConfigService = appConfigService; // Store injected service
-            _serviceProvider = serviceProvider; // Store service provider
+            _schedulerService = schedulerService; // Store scheduler service
             this.connectionMultiplexer = connectionMultiplexer;
             db = connectionMultiplexer.GetDatabase();
         }
@@ -258,30 +259,21 @@ namespace TelegramSearchBot.Service.Manage
                 {
                     try
                     {
-                         // 通过服务提供者获取DailyTaskService实例并执行
+                         // 通过调度器服务执行所有任务
                          Logger.LogInformation("管理员 {UserId} 手动触发定时任务测试", UserId);
                          
-                         var dailyTaskService = _serviceProvider.GetService<DailyTaskService>();
-                         if (dailyTaskService != null)
-                         {
-                             // 异步执行任务
-                             _ = Task.Run(async () => {
-                                 try
-                                 {
-                                     await dailyTaskService.Invoke();
-                                 }
-                                 catch (Exception ex)
-                                 {
-                                     Logger.LogError(ex, "执行定时任务时发生错误");
-                                 }
-                             });
-                             return (true, "定时任务测试已触发，请查看日志以查看执行结果。");
-                         }
-                         else
-                         {
-                             Logger.LogError("无法获取DailyTaskService实例，请检查服务注册");
-                             return (true, "无法获取DailyTaskService实例，请检查服务注册。");
-                         }
+                         // 异步执行任务
+                         _ = Task.Run(async () => {
+                             try
+                             {
+                                 await _schedulerService.ExecuteAllTasksAsync();
+                             }
+                             catch (Exception ex)
+                             {
+                                 Logger.LogError(ex, "执行定时任务时发生错误");
+                             }
+                         });
+                         return (true, "定时任务测试已触发，请查看日志以查看执行结果。");
                      }
                      catch (Exception ex)
                      {
