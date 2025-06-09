@@ -103,31 +103,40 @@ namespace TelegramSearchBot.Service.Vector
                     .Select(g => g.OrderBy(csm => csm.Message.DateTime).First())
                     .ToListAsync();
 
-                // 创建搜索结果消息列表，每个对话段对应一条消息
-                var messages = new List<Message>();
-                foreach (var segment in segments)
+                // 创建搜索结果消息列表，每个对话段对应一条消息，并保持相似度顺序
+                var orderedResults = new List<(Message message, float score, long faissIndex)>();
+                
+                foreach (var searchResult in searchResults)
                 {
-                    var firstMessage = firstMessages.FirstOrDefault(fm => fm.ConversationSegmentId == segment.Id)?.Message;
-                    if (firstMessage != null)
+                    var vectorIndex = vectorIndexes.FirstOrDefault(vi => vi.FaissIndex == searchResult.Id);
+                    if (vectorIndex != null)
                     {
-                        // 创建一个新的消息实例，使用TopicKeywords作为Content
-                        var resultMessage = new Message
+                        var segment = segments.FirstOrDefault(s => s.Id == vectorIndex.EntityId);
+                        if (segment != null)
                         {
-                            Id = firstMessage.Id,
-                            DateTime = firstMessage.DateTime,
-                            GroupId = firstMessage.GroupId,
-                            MessageId = firstMessage.MessageId,
-                            FromUserId = firstMessage.FromUserId,
-                            ReplyToUserId = firstMessage.ReplyToUserId,
-                            ReplyToMessageId = firstMessage.ReplyToMessageId,
-                            Content = segment.TopicKeywords ?? segment.ContentSummary ?? "无话题关键词"
-                        };
-                        messages.Add(resultMessage);
+                            var firstMessage = firstMessages.FirstOrDefault(fm => fm.ConversationSegmentId == segment.Id)?.Message;
+                            if (firstMessage != null)
+                            {
+                                // 创建一个新的消息实例，使用TopicKeywords作为Content
+                                var resultMessage = new Message
+                                {
+                                    Id = firstMessage.Id,
+                                    DateTime = firstMessage.DateTime,
+                                    GroupId = firstMessage.GroupId,
+                                    MessageId = firstMessage.MessageId,
+                                    FromUserId = firstMessage.FromUserId,
+                                    ReplyToUserId = firstMessage.ReplyToUserId,
+                                    ReplyToMessageId = firstMessage.ReplyToMessageId,
+                                    Content = $"[相似度:{searchResult.Score:F3}] {segment.TopicKeywords ?? segment.ContentSummary ?? "无话题关键词"}"
+                                };
+                                orderedResults.Add((resultMessage, searchResult.Score, searchResult.Id));
+                            }
+                        }
                     }
                 }
 
-                // 按时间倒序排列
-                messages = messages.OrderByDescending(m => m.DateTime).ToList();
+                // 按相似度排序（L2距离越小越相似）
+                var messages = orderedResults.OrderBy(r => r.score).Select(r => r.message).ToList();
 
                 // 应用分页
                 searchOption.Count = messages.Count;
