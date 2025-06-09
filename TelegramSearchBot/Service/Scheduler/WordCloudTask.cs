@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
@@ -179,7 +180,31 @@ namespace TelegramSearchBot.Service.Scheduler
                         .WithChatId(group.Key)
                         .WithPhotoBytes(wordCloudBytes);
 
-                    await view.Render();
+                    try
+                    {
+                        await view.Render();
+                        _logger.LogInformation("成功发送群组 {GroupId} 的词云报告", group.Key);
+                    }
+                    catch (ApiRequestException apiEx) when (apiEx.ErrorCode == 403)
+                    {
+                        // 处理机器人被踢出群组的情况
+                        if (apiEx.Message?.Contains("bot was kicked") == true || 
+                            apiEx.Message?.Contains("Forbidden") == true)
+                        {
+                            _logger.LogWarning("机器人已被踢出群组 {GroupId}，跳过词云报告发送: {ErrorMessage}", 
+                                group.Key, apiEx.Message);
+                            continue;
+                        }
+                        
+                        // 其他 403 错误重新抛出
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "发送群组 {GroupId} 词云报告失败", group.Key);
+                        // 继续处理下一个群组，不中断整个任务
+                        continue;
+                    }
                 }
             }
             catch (Exception ex)
