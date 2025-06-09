@@ -199,21 +199,10 @@ namespace TelegramSearchBot.Helper
         {
             try
             {
-                // 临时设置环境变量，仅为当前进程
-                var originalDir = Environment.GetEnvironmentVariable("JiebaConfigFileDir");
-                Environment.SetEnvironmentVariable("JiebaConfigFileDir", resourceDir, EnvironmentVariableTarget.Process);
+                // 直接设置JiebaNet的配置文件目录，避免使用环境变量
+                JiebaNet.Segmenter.ConfigManager.ConfigFileBaseDir = resourceDir;
                 
                 var segmenter = new JiebaNet.Segmenter.JiebaSegmenter();
-                
-                // 恢复原来的环境变量
-                if (originalDir != null)
-                {
-                    Environment.SetEnvironmentVariable("JiebaConfigFileDir", originalDir, EnvironmentVariableTarget.Process);
-                }
-                else
-                {
-                    Environment.SetEnvironmentVariable("JiebaConfigFileDir", null, EnvironmentVariableTarget.Process);
-                }
                 
                 return segmenter;
             }
