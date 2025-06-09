@@ -117,7 +117,7 @@ namespace TelegramSearchBot.Service.Scheduler
             // 检查今天是否已经执行过这个任务
             var existingExecution = await dbContext.ScheduledTaskExecutions
                 .FirstOrDefaultAsync(e => e.TaskName == taskName 
-                                       && e.TaskType == taskType 
+                                       && e.TaskType == taskType
                                        && e.ExecutionDate == today);
 
             if (existingExecution != null)
@@ -128,8 +128,34 @@ namespace TelegramSearchBot.Service.Scheduler
                     _logger.LogInformation("任务 {TaskName}-{TaskType} 上次执行失败，允许重新执行", taskName, taskType);
                     return true;
                 }
-                
-                // 其他状态（Completed、Running、Pending）不允许重新执行
+
+                // 如果状态是Running，检查是否运行时间过长（可能已经僵死）
+                if (existingExecution.Status == TaskExecutionStatus.Running)
+                {
+                    var runningDuration = DateTime.UtcNow - existingExecution.StartTime;
+                    var maxRunningTime = TimeSpan.FromHours(2); // 假设任务最长运行2小时
+
+                    if (runningDuration > maxRunningTime)
+                    {
+                        _logger.LogWarning("任务 {TaskName}-{TaskType} 已运行 {Duration}，可能已僵死，允许重新执行", 
+                            taskName, taskType, runningDuration);
+                        
+                        // 将僵死的任务标记为失败
+                        existingExecution.Status = TaskExecutionStatus.Failed;
+                        existingExecution.CompletedTime = DateTime.UtcNow;
+                        existingExecution.ErrorMessage = $"任务运行时间过长 ({runningDuration})，被认定为僵死任务";
+                        existingExecution.ResultSummary = $"任务 {taskName}-{taskType} 僵死后被重置";
+                        
+                        await dbContext.SaveChangesAsync();
+                        return true;
+                    }
+                    
+                    _logger.LogDebug("任务 {TaskName}-{TaskType} 正在运行中，运行时长: {Duration}", 
+                        taskName, taskType, runningDuration);
+                    return false;
+                }
+
+                // 其他状态（Completed、Pending）不允许重新执行
                 return false;
             }
 
