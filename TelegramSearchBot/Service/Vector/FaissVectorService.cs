@@ -233,6 +233,95 @@ namespace TelegramSearchBot.Service.Vector
         }
 
         /// <summary>
+        /// 根据ID向量化对话段，避免实体跟踪冲突
+        /// </summary>
+        public async Task VectorizeConversationSegmentById(long segmentId)
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+
+                // 从数据库重新查询对话段，避免跟踪冲突
+                var segment = await dbContext.ConversationSegments
+                    .FirstOrDefaultAsync(s => s.Id == (int)segmentId);
+
+                if (segment == null)
+                {
+                    _logger.LogWarning($"对话段 {segmentId} 不存在");
+                    return;
+                }
+
+                // 检查是否已经向量化
+                var existingVector = await dbContext.VectorIndexes
+                    .FirstOrDefaultAsync(vi => vi.GroupId == segment.GroupId &&
+                                             vi.VectorType == "ConversationSegment" &&
+                                             vi.EntityId == segment.Id);
+
+                if (existingVector != null)
+                {
+                    _logger.LogDebug($"对话段 {segment.Id} 已经向量化，跳过");
+                    return;
+                }
+
+                // 生成向量内容
+                var vectorContent = BuildVectorContent(segment);
+                var vector = await GenerateVectorAsync(vectorContent);
+
+                // 获取或创建索引
+                var indexKey = GetIndexKey(segment.GroupId, "ConversationSegment");
+                var index = await GetOrCreateIndexAsync(indexKey, segment.GroupId, "ConversationSegment", dbContext);
+
+                // 添加向量到索引 - 从数据库获取下一个可用的索引ID
+                var maxFaissIndex = await dbContext.VectorIndexes
+                    .Where(vi => vi.GroupId == segment.GroupId && vi.VectorType == "ConversationSegment")
+                    .MaxAsync(vi => (long?)vi.FaissIndex) ?? -1;
+                
+                var faissIndex = maxFaissIndex + 1;
+                
+                await AddVectorToIndexAsync(index, vector, faissIndex);
+
+                // 保存向量元数据
+                var vectorIndex = new VectorIndex
+                {
+                    GroupId = segment.GroupId,
+                    VectorType = "ConversationSegment",
+                    EntityId = segment.Id,
+                    FaissIndex = faissIndex,
+                    ContentSummary = segment.ContentSummary?.Substring(0, Math.Min(1000, segment.ContentSummary?.Length ?? 0))
+                };
+
+                dbContext.VectorIndexes.Add(vectorIndex);
+
+                // 更新对话段状态
+                segment.IsVectorized = true;
+                dbContext.Entry(segment).State = EntityState.Modified;
+
+                await dbContext.SaveChangesAsync();
+
+                // 保存索引文件
+                await SaveIndexAsync(indexKey, segment.GroupId, "ConversationSegment", dbContext);
+
+                _logger.LogInformation($"对话段 {segment.Id} 向量化完成，索引位置: {faissIndex}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"对话段 {segmentId} 向量化失败");
+                
+                // 确保不会阻塞其他处理
+                using var scope = _serviceProvider.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+                var segment = await dbContext.ConversationSegments.FirstOrDefaultAsync(s => s.Id == (int)segmentId);
+                if (segment != null)
+                {
+                    segment.IsVectorized = false;
+                    dbContext.Entry(segment).State = EntityState.Modified;
+                    await dbContext.SaveChangesAsync();
+                }
+            }
+        }
+
+        /// <summary>
         /// 批量向量化群组的所有对话段
         /// </summary>
         public async Task VectorizeGroupSegments(long groupId)
@@ -240,21 +329,22 @@ namespace TelegramSearchBot.Service.Vector
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
-            var segments = await dbContext.ConversationSegments
+            var segmentIds = await dbContext.ConversationSegments
                 .Where(s => s.GroupId == groupId && !s.IsVectorized)
                 .OrderBy(s => s.StartTime)
+                .Select(s => s.Id)
                 .ToListAsync();
 
-            _logger.LogInformation($"开始向量化群组 {groupId} 的 {segments.Count} 个对话段");
+            _logger.LogInformation($"开始向量化群组 {groupId} 的 {segmentIds.Count} 个对话段");
 
             var successCount = 0;
 
             // 顺序处理每个对话段，确保FaissIndex的唯一性
-            foreach (var segment in segments)
+            foreach (var segmentId in segmentIds)
             {
                 try
                 {
-                    await VectorizeConversationSegment(segment);
+                    await VectorizeConversationSegmentById(segmentId);
                     successCount++;
                     
                     // 每处理完一个对话段后短暂休息
@@ -262,11 +352,11 @@ namespace TelegramSearchBot.Service.Vector
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"对话段 {segment.Id} 向量化失败");
+                    _logger.LogError(ex, $"对话段 {segmentId} 向量化失败");
                 }
             }
 
-            _logger.LogInformation($"群组 {groupId} 向量化完成，成功: {successCount}/{segments.Count}");
+            _logger.LogInformation($"群组 {groupId} 向量化完成，成功: {successCount}/{segmentIds.Count}");
         }
 
         /// <summary>
