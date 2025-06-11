@@ -57,8 +57,8 @@ TelegramSearchBot的LLM（大语言模型）模块，基于DDD（领域驱动设
 ## 支持的LLM提供商
 
 - [x] OpenAI (GPT系列)
-- [ ] Ollama (本地模型)
-- [ ] Google Gemini
+- [x] Ollama (本地模型)
+- [x] Google Gemini
 - [ ] Claude (Anthropic)
 
 ## 支持的装饰器

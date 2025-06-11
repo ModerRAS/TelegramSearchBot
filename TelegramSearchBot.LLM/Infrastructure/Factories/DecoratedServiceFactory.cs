@@ -23,7 +23,10 @@ public class DecoratedServiceFactory : ILLMServiceFactory
 {
     private readonly ILLMServiceFactory _baseFactory;
     private readonly DecoratorConfiguration _configuration;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceProvider? _serviceProvider;
+    private readonly ILogger<LoggingLLMServiceDecorator>? _loggingLogger;
+    private readonly IToolInvocationService? _toolInvocationService;
+    private readonly ILogger<ToolInvocationLLMServiceDecorator>? _toolLogger;
 
     public LLMProvider SupportedProvider => _baseFactory.SupportedProvider;
 
@@ -35,6 +38,20 @@ public class DecoratedServiceFactory : ILLMServiceFactory
         _baseFactory = baseFactory ?? throw new ArgumentNullException(nameof(baseFactory));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    }
+
+    public DecoratedServiceFactory(
+        ILLMServiceFactory baseFactory,
+        DecoratorConfiguration configuration,
+        ILogger<LoggingLLMServiceDecorator> loggingLogger,
+        IToolInvocationService toolInvocationService,
+        ILogger<ToolInvocationLLMServiceDecorator> toolLogger)
+    {
+        _baseFactory = baseFactory ?? throw new ArgumentNullException(nameof(baseFactory));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _loggingLogger = loggingLogger;
+        _toolInvocationService = toolInvocationService;
+        _toolLogger = toolLogger;
     }
 
     public ILLMService CreateService()
@@ -61,13 +78,29 @@ public class DecoratedServiceFactory : ILLMServiceFactory
 
     private ILLMService CreateToolInvocationDecorator(ILLMService service)
     {
-        var toolInvocationService = _serviceProvider.GetService(typeof(IToolInvocationService)) as IToolInvocationService;
+        IToolInvocationService? toolInvocationService;
+        ILogger<ToolInvocationLLMServiceDecorator>? logger;
+
+        if (_toolInvocationService != null && _toolLogger != null)
+        {
+            toolInvocationService = _toolInvocationService;
+            logger = _toolLogger;
+        }
+        else if (_serviceProvider != null)
+        {
+            toolInvocationService = _serviceProvider.GetService(typeof(IToolInvocationService)) as IToolInvocationService;
+            logger = _serviceProvider.GetService(typeof(ILogger<ToolInvocationLLMServiceDecorator>)) as ILogger<ToolInvocationLLMServiceDecorator>;
+        }
+        else
+        {
+            throw new InvalidOperationException("无法获取工具调用服务或日志服务。");
+        }
+
         if (toolInvocationService == null)
         {
             throw new InvalidOperationException("工具调用服务未注册。请确保已注册IToolInvocationService。");
         }
 
-        var logger = _serviceProvider.GetService(typeof(ILogger<ToolInvocationLLMServiceDecorator>)) as ILogger<ToolInvocationLLMServiceDecorator>;
         if (logger == null)
         {
             throw new InvalidOperationException("日志服务未注册。");
@@ -82,7 +115,21 @@ public class DecoratedServiceFactory : ILLMServiceFactory
 
     private ILLMService CreateLoggingDecorator(ILLMService service)
     {
-        var logger = _serviceProvider.GetService(typeof(ILogger<LoggingLLMServiceDecorator>)) as ILogger<LoggingLLMServiceDecorator>;
+        ILogger<LoggingLLMServiceDecorator>? logger;
+
+        if (_loggingLogger != null)
+        {
+            logger = _loggingLogger;
+        }
+        else if (_serviceProvider != null)
+        {
+            logger = _serviceProvider.GetService(typeof(ILogger<LoggingLLMServiceDecorator>)) as ILogger<LoggingLLMServiceDecorator>;
+        }
+        else
+        {
+            throw new InvalidOperationException("无法获取日志服务。");
+        }
+
         if (logger == null)
         {
             throw new InvalidOperationException("日志服务未注册。");
