@@ -60,7 +60,6 @@ namespace TelegramSearchBot.Extension {
                 .AddSingleton<SendMessage>()
                 .AddHostedService<TelegramCommandRegistryService>()
                 .AddHostedService<SendMessage>()
-                .AddHostedService<TelegramSearchBot.Service.Scheduler.SchedulerService>()
                 .AddSingleton<LuceneManager>()
                 .AddSingleton<PaddleOCR>()
                 .AddSingleton<WhisperManager>();
