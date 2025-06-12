@@ -302,6 +302,7 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Act
             await _faissVectorService.VectorizeConversationSegment(segment);
+            await _faissVectorService.FlushAsync();
 
             // Assert
             var vectorIndex = await _dbContext.VectorIndexes

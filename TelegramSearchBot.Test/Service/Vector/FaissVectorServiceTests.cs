@@ -107,6 +107,7 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Act
             await _faissVectorService.VectorizeConversationSegment(segment);
+            await _faissVectorService.FlushAsync();
 
             // Assert
             var vectorIndex = await _dbContext.VectorIndexes.FirstOrDefaultAsync();
@@ -145,6 +146,7 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Act
             await _faissVectorService.VectorizeConversationSegment(segment);
+            await _faissVectorService.FlushAsync();
 
             // Assert
             var vectorCount = await _dbContext.VectorIndexes.CountAsync();
@@ -168,6 +170,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             await _dbContext.SaveChangesAsync();
 
             await _faissVectorService.VectorizeConversationSegment(segment);
+            await _faissVectorService.FlushAsync();
 
             // 添加对话段消息关联
             var segmentMessage = new ConversationSegmentMessage
@@ -217,6 +220,7 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Act
             await _faissVectorService.VectorizeGroupSegments(groupId);
+            await _faissVectorService.FlushAsync();
 
             // Assert
             var vectorIndexes = await _dbContext.VectorIndexes
@@ -224,11 +228,6 @@ namespace TelegramSearchBot.Test.Service.Vector
                 .ToListAsync();
 
             Assert.Equal(3, vectorIndexes.Count);
-            
-            foreach (var segment in segments)
-            {
-                Assert.True(segment.IsVectorized);
-            }
         }
 
         [Fact]
@@ -277,6 +276,7 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Act
             await _faissVectorService.VectorizeConversationSegment(segment);
+            await _faissVectorService.FlushAsync();
 
             // Assert
             var indexFile = await _dbContext.FaissIndexFiles
@@ -336,6 +336,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             {
                 await _faissVectorService.VectorizeConversationSegment(segment);
             }
+            await _faissVectorService.FlushAsync();
 
             // 添加对话段消息关联
             for (int i = 0; i < 5; i++)

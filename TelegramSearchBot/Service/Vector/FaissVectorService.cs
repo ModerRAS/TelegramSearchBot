@@ -42,6 +42,8 @@ namespace TelegramSearchBot.Service.Vector
         private readonly HashSet<string> _dirtyIndexes = new();
         // 向量化时的最大并发度，可根据CPU或网络负载调整
         private const int MaxParallelVectorization = 4;
+        // 用于并发环境下为同一群组分配唯一 FaissIndex
+        private static readonly object _faissIdAssignLock = new();
 
         public FaissVectorService(
             ILogger<FaissVectorService> logger,
@@ -195,25 +197,29 @@ namespace TelegramSearchBot.Service.Vector
                 var index = await GetOrCreateIndexAsync(indexKey, segment.GroupId, "ConversationSegment", dbContext);
 
                 // 添加向量到索引 - 从数据库获取下一个可用的索引ID
-                var maxFaissIndex = await dbContext.VectorIndexes
-                    .Where(vi => vi.GroupId == segment.GroupId && vi.VectorType == "ConversationSegment")
-                    .MaxAsync(vi => (long?)vi.FaissIndex) ?? -1;
-                
-                var faissIndex = maxFaissIndex + 1;
-                
-                await AddVectorToIndexAsync(index, vector, faissIndex);
-
-                // 保存向量元数据
-                var vectorIndex = new VectorIndex
+                long faissIndex;
+                lock (_faissIdAssignLock)
                 {
-                    GroupId = segment.GroupId,
-                    VectorType = "ConversationSegment",
-                    EntityId = segment.Id,
-                    FaissIndex = faissIndex,
-                    ContentSummary = segment.ContentSummary?.Substring(0, Math.Min(1000, segment.ContentSummary?.Length ?? 0))
-                };
+                    var maxFaissIndex = dbContext.VectorIndexes
+                        .Where(vi => vi.GroupId == segment.GroupId && vi.VectorType == "ConversationSegment")
+                        .Max(vi => (long?)vi.FaissIndex) ?? -1;
 
-                dbContext.VectorIndexes.Add(vectorIndex);
+                    faissIndex = maxFaissIndex + 1;
+
+                    // 保存向量元数据
+                    var vectorIndex = new VectorIndex
+                    {
+                        GroupId = segment.GroupId,
+                        VectorType = "ConversationSegment",
+                        EntityId = segment.Id,
+                        FaissIndex = faissIndex,
+                        ContentSummary = segment.ContentSummary?.Substring(0, Math.Min(1000, segment.ContentSummary?.Length ?? 0))
+                    };
+
+                    dbContext.VectorIndexes.Add(vectorIndex);
+                }
+
+                await AddVectorToIndexAsync(index, vector, faissIndex);
 
                 // 更新对话段状态
                 segment.IsVectorized = true;
@@ -283,25 +289,27 @@ namespace TelegramSearchBot.Service.Vector
                 var index = await GetOrCreateIndexAsync(indexKey, segment.GroupId, "ConversationSegment", dbContext);
 
                 // 添加向量到索引 - 从数据库获取下一个可用的索引ID
-                var maxFaissIndex = await dbContext.VectorIndexes
-                    .Where(vi => vi.GroupId == segment.GroupId && vi.VectorType == "ConversationSegment")
-                    .MaxAsync(vi => (long?)vi.FaissIndex) ?? -1;
-                
-                var faissIndex = maxFaissIndex + 1;
-                
-                await AddVectorToIndexAsync(index, vector, faissIndex);
-
-                // 保存向量元数据
-                var vectorIndex = new VectorIndex
+                long faissIndex;
+                lock (_faissIdAssignLock)
                 {
-                    GroupId = segment.GroupId,
-                    VectorType = "ConversationSegment",
-                    EntityId = segment.Id,
-                    FaissIndex = faissIndex,
-                    ContentSummary = segment.ContentSummary?.Substring(0, Math.Min(1000, segment.ContentSummary?.Length ?? 0))
-                };
+                    var maxFaissIndex = dbContext.VectorIndexes
+                        .Where(vi => vi.GroupId == segment.GroupId && vi.VectorType == "ConversationSegment")
+                        .Max(vi => (long?)vi.FaissIndex) ?? -1;
 
-                dbContext.VectorIndexes.Add(vectorIndex);
+                    faissIndex = maxFaissIndex + 1;
+
+                    var vectorIndex = new VectorIndex
+                    {
+                        GroupId = segment.GroupId,
+                        VectorType = "ConversationSegment",
+                        EntityId = segment.Id,
+                        FaissIndex = faissIndex,
+                        ContentSummary = segment.ContentSummary?.Substring(0, Math.Min(1000, segment.ContentSummary?.Length ?? 0))
+                    };
+                    dbContext.VectorIndexes.Add(vectorIndex);
+                }
+
+                await AddVectorToIndexAsync(index, vector, faissIndex);
 
                 // 更新对话段状态
                 segment.IsVectorized = true;
@@ -691,6 +699,29 @@ namespace TelegramSearchBot.Service.Vector
                     index?.Dispose();
                 }
                 _loadedIndexes.Clear();
+            }
+        }
+
+        /// <summary>
+        /// 立即将所有已变更的索引写盘（主要用于测试场景或优雅关闭）
+        /// </summary>
+        public async Task FlushAsync()
+        {
+            List<(string key,long groupId)> needSave;
+            lock (_indexLock)
+            {
+                needSave = _dirtyIndexes
+                    .Select(k => (k,long.Parse(k.Split('_')[0])))
+                    .ToList();
+                _dirtyIndexes.Clear();
+            }
+
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+
+            foreach (var (key,gid) in needSave)
+            {
+                await SaveIndexAsync(key,gid,"ConversationSegment",dbContext);
             }
         }
     }
