@@ -15,6 +15,9 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Attributes;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
 using FaissIndex = FaissNet.Index;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Service.Vector
 {
@@ -37,6 +40,8 @@ namespace TelegramSearchBot.Service.Vector
         private readonly object _indexLock = new object();
         // 批量新增时暂存需要写盘的索引键
         private readonly HashSet<string> _dirtyIndexes = new();
+        // 向量化时的最大并发度，可根据CPU或网络负载调整
+        private const int MaxParallelVectorization = 4;
 
         public FaissVectorService(
             ILogger<FaissVectorService> logger,
@@ -347,22 +352,27 @@ namespace TelegramSearchBot.Service.Vector
 
             var successCount = 0;
 
-            // 顺序处理每个对话段，确保FaissIndex的唯一性
-            foreach (var segmentId in segmentIds)
+            // 并发处理对话段，受 SemaphoreSlim 控制并发度
+            var semaphore = new SemaphoreSlim(MaxParallelVectorization, MaxParallelVectorization);
+            var tasks = segmentIds.Select(async segmentId =>
             {
+                await semaphore.WaitAsync();
                 try
                 {
                     await VectorizeConversationSegmentById(segmentId);
-                    successCount++;
-                    
-                    // 每处理完一个对话段后短暂休息
-                    await Task.Delay(50);
+                    Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"对话段 {segmentId} 向量化失败");
                 }
-            }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
 
             _logger.LogInformation($"群组 {groupId} 向量化完成，成功: {successCount}/{segmentIds.Count}");
 
@@ -476,7 +486,10 @@ namespace TelegramSearchBot.Service.Vector
         {
             await Task.Run(() =>
             {
-                index.AddWithIds(new[] { vector }, new long[] { id });
+                lock (index)
+                {
+                    index.AddWithIds(new[] { vector }, new long[] { id });
+                }
                 _logger.LogDebug($"向量添加到FAISS索引");
             });
         }
