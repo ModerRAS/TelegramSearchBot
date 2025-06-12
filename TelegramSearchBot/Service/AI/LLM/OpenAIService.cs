@@ -151,7 +151,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// <summary>
         /// 获取OpenAI模型及其能力信息
         /// </summary>
-        public virtual async Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel) 
+        public virtual async Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel)
         {
             if (channel.Provider.Equals(LLMProvider.Ollama)) {
                 return new List<ModelWithCapabilities>();
@@ -162,12 +162,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return await GetOpenRouterModelsWithCapabilities(channel);
             }
 
-            var handler = new HttpClientHandler {
-                Proxy = WebRequest.DefaultWebProxy,
-                UseProxy = true
-            };
 
-            using var httpClient = new HttpClient(handler);
+            using var httpClient = _httpClientFactory.CreateClient();
 
             try 
             {
@@ -688,13 +684,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
             providerHistory = await GetChatHistory(ChatId, providerHistory, message); // Use local GetChatHistory
 
-
-            var handler = new HttpClientHandler {
-                Proxy = WebRequest.DefaultWebProxy,
-                UseProxy = true
-            };
-
-            using var client = new HttpClient(handler);
+            using var client = _httpClientFactory.CreateClient();
 
             // --- Client Setup ---
             var clientOptions = new OpenAIClientOptions { 
@@ -803,12 +793,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
         {
-            var handler = new HttpClientHandler {
-                Proxy = WebRequest.DefaultWebProxy,
-                UseProxy = true
-            };
 
-            using var httpClient = new HttpClient(handler);
+
+            using var httpClient = _httpClientFactory.CreateClient();
 
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(channel.Gateway),
