@@ -8,12 +8,11 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Exceptions;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
 using File = System.IO.File;
 
-namespace TelegramSearchBot.Controller.Download
-{
+namespace TelegramSearchBot.Controller.Download {
     public class DownloadPhotoController : IOnUpdate
     {
         public ITelegramBotClient botClient { get; private set; }

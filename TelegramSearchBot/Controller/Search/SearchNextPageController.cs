@@ -14,9 +14,9 @@ using TelegramSearchBot.Model;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using TelegramSearchBot.View;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.Search
-{
+namespace TelegramSearchBot.Controller.Search {
     public class SearchNextPageController : IOnUpdate
     {
         private readonly SendMessage Send;

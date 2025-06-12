@@ -13,9 +13,9 @@ using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.View;
 using Microsoft.Extensions.Logging;
 using Message = Telegram.Bot.Types.Message;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.Common
-{
+namespace TelegramSearchBot.Controller.Common {
     public class CommandUrlProcessingController : IOnUpdate
     {
         private readonly IShortUrlMappingService _shortUrlMappingService;

@@ -19,9 +19,9 @@ using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Common.Model.DO;
 using System.Text;
 using Newtonsoft.Json;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.AI.OCR
-{
+namespace TelegramSearchBot.Controller.AI.OCR {
     public class AutoOCRController : IOnUpdate
     {
         private readonly IPaddleOCRService paddleOCRService;

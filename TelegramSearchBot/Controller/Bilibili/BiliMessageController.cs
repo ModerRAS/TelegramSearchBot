@@ -11,8 +11,8 @@ using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller.AI.OCR;
 using TelegramSearchBot.Controller.AI.QR;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Bilibili;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Bilibili;
@@ -20,8 +20,7 @@ using TelegramSearchBot.Service.Bilibili;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.View;
 
-namespace TelegramSearchBot.Controller.Bilibili
-{ // Namespace open
+namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
     public class BiliMessageController : IOnUpdate
     { // Class open
         public List<Type> Dependencies => new List<Type>() {typeof(AutoQRController), typeof(AutoOCRController)};

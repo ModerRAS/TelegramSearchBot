@@ -9,6 +9,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums; // Added for MessageEntityType
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
@@ -16,8 +17,7 @@ using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Storage;
 
-namespace TelegramSearchBot.Controller.AI.LLM
-{
+namespace TelegramSearchBot.Controller.AI.LLM {
     public class GeneralLLMController : IOnUpdate
     {
         private readonly ILogger logger;

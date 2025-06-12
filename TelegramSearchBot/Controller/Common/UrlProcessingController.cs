@@ -10,9 +10,9 @@ using TelegramSearchBot.Service.Common;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Controller.AI.QR;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.Common
-{
+namespace TelegramSearchBot.Controller.Common {
     public class UrlProcessingController : IOnUpdate
     {
         private readonly IShortUrlMappingService _shortUrlMappingService;

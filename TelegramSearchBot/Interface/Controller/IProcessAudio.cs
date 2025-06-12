@@ -11,7 +11,7 @@ using Telegram.Bot.Types;
 using TelegramSearchBot.Exceptions;
 using File = System.IO.File;
 
-namespace TelegramSearchBot.Interface {
+namespace TelegramSearchBot.Interface.Controller {
     public interface IProcessAudio {
         public static bool IsAudio(string Name) {
             if (string.IsNullOrEmpty(Name)) {
@@ -78,7 +78,7 @@ namespace TelegramSearchBot.Interface {
                     throw new CannotGetAudioException();
                 }
                 return files.FirstOrDefault();
-            } catch(NullReferenceException) {
+            } catch (NullReferenceException) {
                 //Console.WriteLine(err.Message);
                 throw new CannotGetAudioException();
             }

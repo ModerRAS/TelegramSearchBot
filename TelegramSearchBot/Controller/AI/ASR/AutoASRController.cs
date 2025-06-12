@@ -11,13 +11,13 @@ using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.ASR;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.ASR;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 
-namespace TelegramSearchBot.Controller.AI.ASR
-{
+namespace TelegramSearchBot.Controller.AI.ASR {
     public class AutoASRController : IOnUpdate
     {
         private readonly IAutoASRService autoASRService;

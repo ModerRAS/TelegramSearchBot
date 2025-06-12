@@ -5,16 +5,15 @@ using System.Threading.Tasks;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.View;
 using System.Collections.Generic;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.Manage
-{
+namespace TelegramSearchBot.Controller.Manage {
     /// <summary>
     /// FAISS向量数据库管理控制器
     /// </summary>

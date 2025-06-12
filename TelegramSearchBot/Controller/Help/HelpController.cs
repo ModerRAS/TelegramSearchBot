@@ -7,9 +7,9 @@ using TelegramSearchBot.Service.BotAPI;
 using System.IO;
 using TelegramSearchBot.Model;
 using System.Text;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.Help
-{
+namespace TelegramSearchBot.Controller.Help {
     public class HelpController : IOnUpdate
     {
         private readonly ISendMessageService sendMessageService;

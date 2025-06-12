@@ -7,9 +7,9 @@ using System;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.View;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.Search
-{
+namespace TelegramSearchBot.Controller.Search {
     public class SearchController : IOnUpdate
     {
         private readonly ISearchService searchService;

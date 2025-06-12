@@ -26,6 +26,7 @@ using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.AppBootstrap;
 using TelegramSearchBot.Attributes;
 using System.Linq;
+using TelegramSearchBot.Interface.Controller;
 
 namespace TelegramSearchBot.Extension {
     public static class ServiceCollectionExtension {

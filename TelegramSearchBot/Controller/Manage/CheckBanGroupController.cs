@@ -5,13 +5,12 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Manage;
 
-namespace TelegramSearchBot.Controller.Manage
-{
+namespace TelegramSearchBot.Controller.Manage {
     public class CheckBanGroupController : IOnUpdate
     {
         protected CheckBanGroupService service;

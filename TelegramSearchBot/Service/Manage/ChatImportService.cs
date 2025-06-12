@@ -13,9 +13,9 @@ using System.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Service.Manage
-{
+namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class ChatImportService : IService
     {

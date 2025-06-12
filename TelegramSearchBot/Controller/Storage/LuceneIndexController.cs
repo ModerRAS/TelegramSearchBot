@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Controller.AI.ASR;
@@ -14,9 +13,9 @@ using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Help;
 using TelegramSearchBot.Controller.Manage;
 using TelegramSearchBot.Controller.Search;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.Storage
-{
+namespace TelegramSearchBot.Controller.Storage {
     public class LuceneIndexController : IOnUpdate
     {
         private readonly MessageService _messageService;

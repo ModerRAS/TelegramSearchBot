@@ -4,15 +4,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Scheduler;
 using TgMessage = Telegram.Bot.Types.Message;
 
-namespace TelegramSearchBot.Controller.Manage
-{
+namespace TelegramSearchBot.Controller.Manage {
     public class ScheduledTaskController : IOnUpdate
     {
         private readonly ITelegramBotClient _botClient;

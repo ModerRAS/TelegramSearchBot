@@ -1,65 +1,73 @@
-﻿using FFMpegCore.Pipes;
-using FFMpegCore;
+﻿using ImageMagick;
 using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Exceptions;
 using File = System.IO.File;
 
-namespace TelegramSearchBot.Interface {
-    public interface IProcessVideo {
-        public static bool IsVideo(string Name) {
+namespace TelegramSearchBot.Interface.Controller {
+    public interface IProcessPhoto {
+        public static bool IsPhoto(string Name) {
             if (string.IsNullOrEmpty(Name)) {
                 return false;
             } else if (
-                Name.ToLower().EndsWith(".mp4") ||
-                Name.ToLower().EndsWith(".mov") ||
-                Name.ToLower().EndsWith(".mkv") ||
-                Name.ToLower().EndsWith(".flv") ||
-                Name.ToLower().EndsWith(".m4v") ||
-                Name.ToLower().EndsWith(".avi") ||
-                Name.ToLower().EndsWith(".webm") ||
-                Name.ToLower().EndsWith(".3gp") ||
-                Name.ToLower().EndsWith(".mpg")) {
+                Name.ToLower().EndsWith(".jpg") ||
+                Name.ToLower().EndsWith(".jpeg") ||
+                Name.ToLower().EndsWith(".png") ||
+                Name.ToLower().EndsWith(".webp") ||
+                Name.ToLower().EndsWith(".heic")) {
                 return true;
             } else {
                 return false;
             }
         }
-        public static string GetVideoPath(Update e) {
+        public static byte[] ConvertToJpeg(byte[] source) {
+            // Read first frame of gif image
+            using var image = new MagickImage(source);
+
+            using var memStream = new MemoryStream();
+
+            // Sets the output format to png
+            image.Format = MagickFormat.Jpeg;
+
+            // Write the image to the memorystream
+            return image.ToByteArray();
+        }
+        public static string GetPhotoPath(Update e) {
             try {
-                var DirPath = Path.Combine(Env.WorkDir, "Videos", $"{e.Message.Chat.Id}");
-                var files = Directory.GetFiles(DirPath, $"{e.Message.MessageId}.*");
+                var DirPath = Path.Combine(Env.WorkDir, "Photos", $"{e?.Message?.Chat.Id}");
+                var files = Directory.GetFiles(DirPath, $"{e?.Message?.MessageId}.*");
                 if (files.Length == 0) {
-                    throw new CannotGetVideoException();
+                    throw new CannotGetPhotoException();
                 }
                 return files.FirstOrDefault();
-            } catch(NullReferenceException) {
+            } catch (NullReferenceException) {
                 //Console.WriteLine(err.Message);
-                throw new CannotGetVideoException();
+                throw new CannotGetPhotoException();
             }
         }
-        public static async Task<byte[]> GetVideo(Update e) {
-            var FilePath = GetVideoPath(e);
-            return await File.ReadAllBytesAsync(FilePath);
+        public static async Task<byte[]> GetPhoto(Update e) {
+            var FilePath = GetPhotoPath(e);
+            var file = await File.ReadAllBytesAsync(FilePath);
+            return ConvertToJpeg(file);
 
         }
-        public static async Task<(string, byte[])> DownloadVideo(ITelegramBotClient botClient, Update e) {
+        public static async Task<(string, byte[])> DownloadPhoto(ITelegramBotClient botClient, Update e) {
             string FileId = string.Empty;
             string FileName = string.Empty;
-            if (e?.Message?.Video is not null) {
-                FileId = e.Message.Video.FileId;
-                FileName = $"{e.Message.MessageId}.mp4";
-            } else if (e?.Message?.Document is not null && IsVideo(e?.Message?.Document.FileName)) {
+            if (e?.Message?.Photo?.Length is not null && e?.Message?.Photo?.Length > 0) {
+                FileId = e.Message.Photo.Last().FileId;
+                FileName = $"{e.Message.MessageId}.jpg";
+            } else if (e?.Message?.Document is not null && IsPhoto(e?.Message?.Document.FileName)) {
                 FileId = e?.Message?.Document.FileId;
+
                 FileName = $"{e.Message.MessageId}{Path.GetExtension(e?.Message?.Document.FileName)}";
             } else {
-                throw new CannotGetVideoException();
+                throw new CannotGetPhotoException();
             }
             using (var stream = new MemoryStream()) {
                 if (Env.IsLocalAPI) {

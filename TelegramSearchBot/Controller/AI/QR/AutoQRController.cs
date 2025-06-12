@@ -15,15 +15,14 @@ using TelegramSearchBot.Interface; // Added for IOnUpdate, IProcessPhoto
 using TelegramSearchBot.Service.AI.QR; // Added for AutoQRService
 using TelegramSearchBot.Service.Storage; // Added for MessageService
 using TelegramSearchBot.Model; // Added for MessageOption
-using TelegramSearchBot.Controller.Download; 
-using TelegramSearchBot.Exceptions; 
-using TelegramSearchBot.Manager; 
+using TelegramSearchBot.Controller.Download;
+using TelegramSearchBot.Exceptions;
+using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Controller.Storage; // Added for SendMessageService
-using TelegramSearchBot.Interface; // Added for ISendMessageService
+using TelegramSearchBot.Interface.Controller; // Added for ISendMessageService
 
-namespace TelegramSearchBot.Controller.AI.QR
-{
+namespace TelegramSearchBot.Controller.AI.QR {
     public class AutoQRController : IOnUpdate, IProcessPhoto
     {
         private readonly AutoQRService _autoQRService;

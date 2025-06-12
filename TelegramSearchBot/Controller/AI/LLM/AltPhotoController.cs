@@ -12,6 +12,7 @@ using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;

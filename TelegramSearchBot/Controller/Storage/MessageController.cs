@@ -1,5 +1,4 @@
-﻿using TelegramSearchBot.Interface;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Model;
 using System;
@@ -8,10 +7,10 @@ using System.Linq; // Added for Enumerable.Any
 using TelegramSearchBot.Service.Storage;
 using MediatR; // Added for IMediator
 using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
-using Telegram.Bot.Types.Enums; 
+using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Controller.Storage
-{
+namespace TelegramSearchBot.Controller.Storage {
     public class MessageController : IOnUpdate
     {
         private readonly MessageService _messageService;

@@ -5,14 +5,14 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.View;
 
-namespace TelegramSearchBot.Controller.Manage
-{
-    public class AccountController : IOnUpdate, IOnCallbackQuery
+namespace TelegramSearchBot.Controller.Manage {
+    public class AccountController : IOnUpdate
     {
         public List<Type> Dependencies => new List<Type>();
 
@@ -36,6 +36,7 @@ namespace TelegramSearchBot.Controller.Manage
         public async Task ExecuteAsync(PipelineContext p)
         {
             var update = p.Update;
+            await ExecuteAsync(update);
             if (update?.Message == null || update.Message.Chat.Id > 0)
             {
                 return; // 只处理群组消息

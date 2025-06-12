@@ -20,7 +20,6 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.View;
 using TelegramSearchBot.Model;
@@ -29,6 +28,7 @@ using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.Service.Scheduler;
+using TelegramSearchBot.Interface.Controller;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
