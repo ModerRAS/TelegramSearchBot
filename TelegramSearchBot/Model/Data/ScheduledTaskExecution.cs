@@ -8,7 +8,7 @@ namespace TelegramSearchBot.Model.Data
     /// 定时任务执行记录表
     /// 用于跟踪定时任务的执行状态，防止重复执行
     /// </summary>
-    [Index(nameof(TaskName), nameof(TaskType), nameof(ExecutionDate), IsUnique = true)]
+    [Index(nameof(TaskName), IsUnique = true)]
     public class ScheduledTaskExecution
     {
         [Key]
@@ -20,19 +20,6 @@ namespace TelegramSearchBot.Model.Data
         [Required]
         [StringLength(100)]
         public string TaskName { get; set; }
-
-        /// <summary>
-        /// 执行日期（只精确到日期，不包含时间）
-        /// </summary>
-        [Required]
-        public DateTime ExecutionDate { get; set; }
-
-        /// <summary>
-        /// 任务类型（Weekly、Monthly、Quarterly、Yearly）
-        /// </summary>
-        [Required]
-        [StringLength(20)]
-        public string TaskType { get; set; }
 
         /// <summary>
         /// 执行状态（Pending、Running、Completed、Failed）
@@ -83,16 +70,5 @@ namespace TelegramSearchBot.Model.Data
         public const string Running = "Running";
         public const string Completed = "Completed";
         public const string Failed = "Failed";
-    }
-
-    /// <summary>
-    /// 任务类型枚举
-    /// </summary>
-    public static class TaskType
-    {
-        public const string Weekly = "Weekly";
-        public const string Monthly = "Monthly";
-        public const string Quarterly = "Quarterly";
-        public const string Yearly = "Yearly";
     }
 } 

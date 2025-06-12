@@ -14,16 +14,15 @@ namespace TelegramSearchBot.Service.Scheduler
         string TaskName { get; }
 
         /// <summary>
+        /// Cron表达式
+        /// </summary>
+        string CronExpression { get; }
+
+        /// <summary>
         /// 执行任务
         /// </summary>
         /// <returns></returns>
         Task ExecuteAsync();
-
-        /// <summary>
-        /// 检查是否应该执行任务
-        /// </summary>
-        /// <returns>返回应该执行的任务类型，如果不需要执行则返回null</returns>
-        string[] GetExecutableTaskTypes();
 
         /// <summary>
         /// 设置心跳更新回调函数

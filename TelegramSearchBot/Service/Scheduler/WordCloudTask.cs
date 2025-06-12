@@ -20,6 +20,8 @@ namespace TelegramSearchBot.Service.Scheduler
     {
         public string TaskName => "WordCloudReport";
 
+        public string CronExpression => "0 5 * * *"; // 每天早上5点执行
+
         private readonly DataDbContext _dbContext;
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
@@ -34,47 +36,6 @@ namespace TelegramSearchBot.Service.Scheduler
             _logger = logger;
         }
 
-        /// <summary>
-        /// 检查当前日期是否为周期起始日
-        /// </summary>
-        /// <returns>
-        /// 返回包含四个布尔值的元组：
-        /// - IsWeekStart: 是否为周一
-        /// - IsMonthStart: 是否为月初
-        /// - IsQuarterStart: 是否为季度初
-        /// - IsYearStart: 是否为年初
-        /// </returns>
-        public static (bool IsWeekStart, bool IsMonthStart, bool IsQuarterStart, bool IsYearStart) CheckPeriodStart()
-        {
-            var today = DateTime.Today;
-            var isWeekStart = today.DayOfWeek == DayOfWeek.Monday;
-            var isMonthStart = today.Day == 1;
-            var isQuarterStart = isMonthStart && (today.Month % 3 == 1);
-            var isYearStart = isMonthStart && today.Month == 1;
-            
-            return (isWeekStart, isMonthStart, isQuarterStart, isYearStart);
-        }
-
-        public string[] GetExecutableTaskTypes()
-        {
-            var (isWeekStart, isMonthStart, isQuarterStart, isYearStart) = CheckPeriodStart();
-            var executableTypes = new List<string>();
-
-            if (isYearStart)
-                executableTypes.Add(TaskType.Yearly);
-            if (isQuarterStart)
-                executableTypes.Add(TaskType.Quarterly);
-            if (isMonthStart)
-                executableTypes.Add(TaskType.Monthly);
-            if (isWeekStart)
-                executableTypes.Add(TaskType.Weekly);
-
-            _logger.LogInformation("周期检查: 周一={IsWeekStart}, 月初={IsMonthStart}, 季度初={IsQuarterStart}, 年初={IsYearStart}", 
-                isWeekStart, isMonthStart, isQuarterStart, isYearStart);
-
-            return executableTypes.ToArray();
-        }
-
         public void SetHeartbeatCallback(Func<Task> heartbeatCallback)
         {
             _heartbeatCallback = heartbeatCallback;
@@ -83,24 +44,32 @@ namespace TelegramSearchBot.Service.Scheduler
         public async Task ExecuteAsync()
         {
             _logger.LogInformation("词云报告任务开始执行");
-            
-            var executableTypes = GetExecutableTaskTypes();
-            
-            if (executableTypes.Length > 0)
+
+            var today = DateTime.Today;
+            var isWeekStart = today.DayOfWeek == DayOfWeek.Monday;
+            var isMonthStart = today.Day == 1;
+            var isQuarterStart = isMonthStart && (today.Month % 3 == 1);
+            var isYearStart = isMonthStart && today.Month == 1;
+
+            // 按优先级选择报告类型：年 > 季 > 月 > 周
+            TimePeriod? period = null;
+            if (isYearStart)
+                period = TimePeriod.Yearly;
+            else if (isQuarterStart)
+                period = TimePeriod.Quarterly;
+            else if (isMonthStart)
+                period = TimePeriod.Monthly;
+            else if (isWeekStart)
+                period = TimePeriod.Weekly;
+
+            if (period.HasValue)
             {
-                _logger.LogInformation("符合条件,开始生成词云报告");
-                
-                // 按优先级执行任务：年 > 季 > 月 > 周
-                var taskType = executableTypes.Contains(TaskType.Yearly) ? TimePeriod.Yearly :
-                              executableTypes.Contains(TaskType.Quarterly) ? TimePeriod.Quarterly :
-                              executableTypes.Contains(TaskType.Monthly) ? TimePeriod.Monthly :
-                              TimePeriod.Weekly;
-                
-                await SendWordCloudReportAsync(taskType);
+                _logger.LogInformation("符合条件, 开始生成 {Period} 词云报告", period.Value);
+                await SendWordCloudReportAsync(period.Value);
             }
             else
             {
-                _logger.LogInformation("不符合条件,跳过词云生成");
+                _logger.LogInformation("今天不符合任何报告生成条件, 跳过执行");
             }
         }
 

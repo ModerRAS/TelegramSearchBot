@@ -108,10 +108,8 @@ namespace TelegramSearchBot.Controller.Manage {
 
         private async Task ShowTaskStatus(TgMessage message)
         {
-            var today = DateTime.Today;
             var executions = await _dbContext.ScheduledTaskExecutions
-                .Where(e => e.ExecutionDate == today)
-                .OrderByDescending(e => e.CreatedAt)
+                .OrderByDescending(e => e.StartTime)
                 .ToListAsync();
 
             if (!executions.Any())
@@ -120,43 +118,38 @@ namespace TelegramSearchBot.Controller.Manage {
                 {
                     await _botClient.SendMessage(
                         chatId: message.Chat.Id,
-                        text: "今天还没有任务执行记录。",
+                        text: "没有找到任何任务执行记录。",
                         replyParameters: new Telegram.Bot.Types.ReplyParameters() { MessageId = message.MessageId }
                     );
                 }, message.Chat.Id < 0);
                 return;
             }
 
-            var statusText = "**今日任务状态**\n\n";
+            var statusText = "**任务状态**\n\n";
             
-            foreach (var group in executions.GroupBy(e => e.TaskName))
+            foreach (var execution in executions)
             {
-                statusText += $"**{group.Key}**\n";
-                foreach (var execution in group)
+                var status = execution.Status switch
                 {
-                    var status = execution.Status switch
-                    {
-                        TaskExecutionStatus.Pending => "⏳ 等待中",
-                        TaskExecutionStatus.Running => "🔄 运行中",
-                        TaskExecutionStatus.Completed => "✅ 已完成",
-                        TaskExecutionStatus.Failed => "❌ 失败",
-                        _ => "❓ 未知状态"
-                    };
-                    
-                    statusText += $"  • {execution.TaskType}: {status}";
-                    
-                    if (execution.StartTime.HasValue)
-                    {
-                        statusText += $" ({execution.StartTime:HH:mm})";
-                    }
-                    
-                    if (!string.IsNullOrEmpty(execution.ErrorMessage))
-                    {
-                        statusText += $"\n    错误: {execution.ErrorMessage[..Math.Min(execution.ErrorMessage.Length, 50)]}...";
-                    }
-                    
-                    statusText += "\n";
+                    TaskExecutionStatus.Pending => "⏳ 等待中",
+                    TaskExecutionStatus.Running => "🔄 运行中",
+                    TaskExecutionStatus.Completed => "✅ 已完成",
+                    TaskExecutionStatus.Failed => "❌ 失败",
+                    _ => "❓ 未知状态"
+                };
+                
+                statusText += $"**{execution.TaskName}**: {status}";
+                
+                if (execution.StartTime.HasValue)
+                {
+                    statusText += $" (上次运行: {execution.StartTime:yyyy-MM-dd HH:mm})";
                 }
+                
+                if (!string.IsNullOrEmpty(execution.ErrorMessage))
+                {
+                    statusText += $"\n    错误: {execution.ErrorMessage[..Math.Min(execution.ErrorMessage.Length, 50)]}...";
+                }
+                
                 statusText += "\n";
             }
 
@@ -247,7 +240,7 @@ namespace TelegramSearchBot.Controller.Manage {
         private async Task ShowTaskHistory(TgMessage message)
         {
             var recentExecutions = await _dbContext.ScheduledTaskExecutions
-                .OrderByDescending(e => e.CreatedAt)
+                .OrderByDescending(e => e.StartTime)
                 .Take(20)
                 .ToListAsync();
 
@@ -257,14 +250,14 @@ namespace TelegramSearchBot.Controller.Manage {
                 {
                     await _botClient.SendMessage(
                         chatId: message.Chat.Id,
-                        text: "没有找到任务执行历史。",
+                        text: "没有任务执行历史记录。",
                         replyParameters: new Telegram.Bot.Types.ReplyParameters() { MessageId = message.MessageId }
                     );
                 }, message.Chat.Id < 0);
                 return;
             }
 
-            var historyText = "**任务执行历史 (最近20条)**\n\n";
+            var historyText = "**最近20条任务执行历史**\n\n";
             
             foreach (var execution in recentExecutions)
             {
@@ -272,25 +265,15 @@ namespace TelegramSearchBot.Controller.Manage {
                 {
                     TaskExecutionStatus.Completed => "✅",
                     TaskExecutionStatus.Failed => "❌",
-                    TaskExecutionStatus.Running => "🔄",
-                    TaskExecutionStatus.Pending => "⏳",
-                    _ => "❓"
+                    _ => "🔄" 
                 };
                 
-                historyText += $"{status} {execution.TaskName}-{execution.TaskType}\n";
-                historyText += $"   📅 {execution.ExecutionDate:yyyy-MM-dd}";
-                
-                if (execution.StartTime.HasValue)
+                historyText += $"{status} {execution.TaskName}\n";
+                historyText += $"    时间: {execution.StartTime:yyyy-MM-dd HH:mm}\n";
+                if (!string.IsNullOrEmpty(execution.ErrorMessage))
                 {
-                    historyText += $" ⏰ {execution.StartTime:HH:mm}";
+                    historyText += $"    错误: {execution.ErrorMessage[..Math.Min(execution.ErrorMessage.Length, 100)]}\n";
                 }
-                
-                if (!string.IsNullOrEmpty(execution.ResultSummary))
-                {
-                    historyText += $"\n   📄 {execution.ResultSummary}";
-                }
-                
-                historyText += "\n\n";
             }
 
             await _sendMessage.AddTask(async () =>
