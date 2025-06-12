@@ -85,42 +85,11 @@ namespace TelegramSearchBot.AppBootstrap {
             await host.StartAsync();
             Log.Information("Host已启动，定时任务调度器已作为后台服务启动");
 
-            Thread.Sleep(5000);
-            bot.StartReceiving(
-                HandleUpdateAsync(service),
-                HandleErrorAsync(service), new() {
-                    AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
-                }, cts.Token);
+            // 接收消息的逻辑已迁移到 TelegramBotReceiverService (IHostedService)
+            // 机器人信息将在该服务启动时打印
 
             // 保持程序运行
             await host.WaitForShutdownAsync();
-        }
-        public static Func<ITelegramBotClient, Update, CancellationToken, Task> HandleUpdateAsync(IServiceProvider service) {
-            return async (ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) => {
-                await Task.Run(async () => {
-                    try {
-                        using (var scope = service.CreateScope()) {
-                            var exec = new ControllerExecutor(scope.ServiceProvider.GetServices<IOnUpdate>());
-                            await exec.ExecuteControllers(update);
-                        }
-                    } catch (Exception ex) {
-                        //Log.Error(ex, $"Message ControllerExecutor Error: {update.Message.Chat.FirstName} {update.Message.Chat.LastName} {update.Message.Chat.Title} {update.Message.Chat.Id}/{update.Message.MessageId}");
-                    }
-
-                });
-
-            };
-        }
-#pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
-        public static Func<ITelegramBotClient, Exception, CancellationToken, Task> HandleErrorAsync(IServiceProvider service) {
-            return async (ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) => {
-                if (exception is ApiRequestException apiRequestException) {
-                    //await botClient.SendTextMessageAsync(123, apiRequestException.ToString());
-                    Log.Error(apiRequestException, "ApiRequestException");
-                    //Console.WriteLine($"ApiRequestException: {apiRequestException.Message}");
-                    //Console.WriteLine(apiRequestException.ToString());
-                }
-            };
         }
     }
 }
