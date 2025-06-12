@@ -61,7 +61,7 @@ namespace TelegramSearchBot.Service.Vector
             }
 
             _logger.LogInformation($"开始为群组 {groupId} 分段，消息数量: {messages.Count}");
-            
+
             var segments = await SegmentMessages(messages);
             
             // 保存分段到数据库
@@ -416,17 +416,50 @@ namespace TelegramSearchBot.Service.Vector
         /// </summary>
         public async Task<List<long>> GetGroupsNeedingResegmentation()
         {
-            // 找出有新消息但没有对应对话段的群组
-            var groupsWithNewMessages = await _dbContext.Messages
-                .Where(m => !_dbContext.ConversationSegments
-                    .Any(s => s.GroupId == m.GroupId && 
-                             m.DateTime >= s.StartTime && 
-                             m.DateTime <= s.EndTime))
-                .Select(m => m.GroupId)
-                .Distinct()
+            /*
+             * 旧实现使用 Any 子查询逐条比对，SQLite/SQL Server 都会做嵌套循环，
+             * 在百万级 Messages 表上极慢且可能长时间持有锁。
+             * 新实现的思路：
+             *   1. 先按 GroupId 聚合出各群组最后一条消息时间；
+             *   2. 先按 GroupId 聚合出各群组现有对话段的最后 EndTime；
+             *   3. 在内存里比较 LastMessageTime 与 LastEndTime。
+             *      – 若无对话段，或 LastMessageTime > LastEndTime，则需要重新分段。
+             */
+
+            // STEP 1：各群组最后一条消息时间
+            var lastMsgTimes = await _dbContext.Messages
+                .GroupBy(m => m.GroupId)
+                .Select(g => new { GroupId = g.Key, LastMsgTime = g.Max(m => m.DateTime) })
                 .ToListAsync();
 
-            return groupsWithNewMessages;
+            // STEP 2：各群组最后一个对话段结束时间
+            var lastSegTimes = await _dbContext.ConversationSegments
+                .GroupBy(s => s.GroupId)
+                .Select(g => new { GroupId = g.Key, LastEndTime = g.Max(s => s.EndTime) })
+                .ToListAsync();
+
+            var segDict = lastSegTimes.ToDictionary(x => x.GroupId, x => x.LastEndTime);
+
+            // STEP 3：比对
+            var needResegmentation = new List<long>();
+
+            foreach (var msg in lastMsgTimes)
+            {
+                if (!segDict.TryGetValue(msg.GroupId, out var lastEnd))
+                {
+                    // 该群组没有任何分段
+                    needResegmentation.Add(msg.GroupId);
+                    continue;
+                }
+
+                if (msg.LastMsgTime > lastEnd)
+                {
+                    // 有新消息超出最后一个段的范围
+                    needResegmentation.Add(msg.GroupId);
+                }
+            }
+
+            return needResegmentation;
         }
     }
 } 

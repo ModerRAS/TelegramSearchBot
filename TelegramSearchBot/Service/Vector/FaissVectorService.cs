@@ -35,6 +35,8 @@ namespace TelegramSearchBot.Service.Vector
         private readonly int _vectorDimension = 1024;
         private readonly Dictionary<string, FaissIndex> _loadedIndexes = new();
         private readonly object _indexLock = new object();
+        // 批量新增时暂存需要写盘的索引键
+        private readonly HashSet<string> _dirtyIndexes = new();
 
         public FaissVectorService(
             ILogger<FaissVectorService> logger,
@@ -214,8 +216,11 @@ namespace TelegramSearchBot.Service.Vector
 
                 await dbContext.SaveChangesAsync();
 
-                // 保存索引文件
-                await SaveIndexAsync(indexKey, segment.GroupId, "ConversationSegment", dbContext);
+                // 标记索引已变更，稍后批量保存
+                lock (_indexLock)
+                {
+                    _dirtyIndexes.Add(indexKey);
+                }
 
                 _logger.LogInformation($"对话段 {segment.Id} 向量化完成，索引位置: {faissIndex}");
             }
@@ -299,8 +304,11 @@ namespace TelegramSearchBot.Service.Vector
 
                 await dbContext.SaveChangesAsync();
 
-                // 保存索引文件
-                await SaveIndexAsync(indexKey, segment.GroupId, "ConversationSegment", dbContext);
+                // 标记索引已变更，稍后批量保存
+                lock (_indexLock)
+                {
+                    _dirtyIndexes.Add(indexKey);
+                }
 
                 _logger.LogInformation($"对话段 {segment.Id} 向量化完成，索引位置: {faissIndex}");
             }
@@ -357,6 +365,19 @@ namespace TelegramSearchBot.Service.Vector
             }
 
             _logger.LogInformation($"群组 {groupId} 向量化完成，成功: {successCount}/{segmentIds.Count}");
+
+            // 统一保存索引文件（仅当有变更时）
+            var indexKey = GetIndexKey(groupId, "ConversationSegment");
+            bool needSave;
+            lock (_indexLock)
+            {
+                needSave = _dirtyIndexes.Remove(indexKey);
+            }
+
+            if (needSave)
+            {
+                await SaveIndexAsync(indexKey, groupId, "ConversationSegment", dbContext);
+            }
         }
 
         /// <summary>
