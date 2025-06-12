@@ -184,26 +184,8 @@ namespace TelegramSearchBot.Service.Manage
                             // 处理OCR
                             if (!extensions.Any(x => x.Name == "OCR_Result")) {
                                 try {
-                                    // 使用带坐标的API获取完整结果
-                                    var fullOcrResult = await _paddleOCRService.ExecuteWithCoordinatesAsync(new MemoryStream(await File.ReadAllBytesAsync(imageFile)));
-                                    
-                                    // 提取文本并保存
-                                    if (fullOcrResult?.Results != null) {
-                                        var textList = new List<string>();
-                                        foreach (var resultGroup in fullOcrResult.Results) {
-                                            foreach (var result in resultGroup) {
-                                                if (!string.IsNullOrWhiteSpace(result.Text)) {
-                                                    textList.Add(result.Text);
-                                                }
-                                            }
-                                        }
-                                        var ocrText = string.Join(" ", textList);
-                                        await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "OCR_Result", ocrText);
-
-                                        // 同时保存完整的坐标信息
-                                        var jsonResult = JsonConvert.SerializeObject(fullOcrResult);
-                                        await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "OCR_Coordinates", jsonResult);
-                                    }
+                                    var ocrResult = await _paddleOCRService.ExecuteAsync(new MemoryStream(await File.ReadAllBytesAsync(imageFile)));
+                                    await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "OCR_Result", ocrResult);
                                 } catch (Exception ex) {
                                     _logger.LogError(ex, $"处理图片OCR失败: {chatId}/{messageId}");
                                 }
