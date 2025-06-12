@@ -11,17 +11,19 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Service.Scheduler;
 
 namespace TelegramSearchBot.Service.Vector
 {
-    // [Injectable(ServiceLifetime.Singleton)] // 已禁用，避免资源过度消耗
-    public class ConversationProcessingService : BackgroundService, IService
+    [Injectable(ServiceLifetime.Transient)]
+    public class ConversationProcessingService : IScheduledTask
     {
-        public string ServiceName => "ConversationProcessingService";
+        public string TaskName => "ConversationProcessing";
+        public string CronExpression => "*/30 * * * *"; // 每30分钟执行一次
 
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<ConversationProcessingService> _logger;
-        private readonly TimeSpan _processingInterval = TimeSpan.FromMinutes(30); // 每30分钟检查一次
+        private Func<Task> _heartbeatCallback;
 
         public ConversationProcessingService(
             IServiceProvider serviceProvider,
@@ -31,23 +33,14 @@ namespace TelegramSearchBot.Service.Vector
             _logger = logger;
         }
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        public void SetHeartbeatCallback(Func<Task> heartbeatCallback)
         {
-            _logger.LogInformation("对话处理服务启动");
-
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await ProcessConversations();
-                    await Task.Delay(_processingInterval, stoppingToken);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "对话处理服务发生错误");
-                    await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken); // 出错后等待5分钟再重试
-                }
-            }
+            _heartbeatCallback = heartbeatCallback;
+        }
+        
+        public async Task ExecuteAsync()
+        {
+            await ProcessConversations();
         }
 
         private async Task ProcessConversations()
@@ -67,6 +60,9 @@ namespace TelegramSearchBot.Service.Vector
                 // 2. 为每个群组创建对话段
                 foreach (var groupId in groupsNeedingSegmentation)
                 {
+                    // 更新心跳
+                    if (_heartbeatCallback != null) await _heartbeatCallback();
+                    
                     try
                     {
                         // 获取该群组最后一个对话段的结束时间
@@ -97,6 +93,7 @@ namespace TelegramSearchBot.Service.Vector
             catch (Exception ex)
             {
                 _logger.LogError(ex, "处理对话段时发生错误");
+                throw; // 抛出异常以标记任务失败
             }
         }
 
@@ -119,6 +116,9 @@ namespace TelegramSearchBot.Service.Vector
                 // 按群组处理
                 foreach (var groupSegments in unvectorizedSegments)
                 {
+                    // 更新心跳
+                    if (_heartbeatCallback != null) await _heartbeatCallback();
+
                     try
                     {
                         await vectorService.VectorizeGroupSegments(groupSegments.Key);
@@ -135,6 +135,7 @@ namespace TelegramSearchBot.Service.Vector
             catch (Exception ex)
             {
                 _logger.LogError(ex, "向量化未处理对话段时发生错误");
+                throw; // 抛出异常以标记任务失败
             }
         }
 
@@ -144,7 +145,7 @@ namespace TelegramSearchBot.Service.Vector
         public async Task TriggerProcessing()
         {
             _logger.LogInformation("手动触发对话处理");
-            await ProcessConversations();
+            await ExecuteAsync();
         }
 
         /// <summary>

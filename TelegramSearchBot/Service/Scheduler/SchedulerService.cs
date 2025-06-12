@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.Service.Scheduler
 {
@@ -22,11 +23,11 @@ namespace TelegramSearchBot.Service.Scheduler
         private readonly List<IScheduledTask> _tasks;
         private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1); // 每分钟检查一次
 
-        public SchedulerService(IServiceProvider serviceProvider, ILogger<SchedulerService> logger)
+        public SchedulerService(IServiceProvider serviceProvider, ILogger<SchedulerService> logger, IEnumerable<IScheduledTask> scheduledTasks)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
-            _tasks = new List<IScheduledTask>();
+            _tasks = scheduledTasks.ToList();
         }
 
         public override async Task StartAsync(CancellationToken cancellationToken)
@@ -70,15 +71,18 @@ namespace TelegramSearchBot.Service.Scheduler
 
         private void RegisterTasks()
         {
-            // 注册词云任务
-            var wordCloudTask = _serviceProvider.GetService<WordCloudTask>();
-            if (wordCloudTask != null)
+            if (_tasks.Any())
             {
-                _tasks.Add(wordCloudTask);
-                _logger.LogInformation("已注册任务: {TaskName}", wordCloudTask.TaskName);
+                _logger.LogInformation("通过依赖注入自动注册了 {Count} 个定时任务:", _tasks.Count);
+                foreach (var task in _tasks)
+                {
+                    _logger.LogInformation("- {TaskName}", task.TaskName);
+                }
             }
-
-            _logger.LogInformation("总共注册了 {Count} 个定时任务", _tasks.Count);
+            else
+            {
+                _logger.LogWarning("未找到任何可执行的定时任务。");
+            }
         }
 
         private async Task CheckAndExecuteTasksAsync()
