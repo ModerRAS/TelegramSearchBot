@@ -14,12 +14,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service.AI.LLM
-{
+namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(ServiceLifetime.Transient)]
     public class GeminiService : ILLMService, IService
     {

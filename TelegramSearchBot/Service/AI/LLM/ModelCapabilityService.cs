@@ -7,12 +7,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service.AI.LLM
-{
+namespace TelegramSearchBot.Service.AI.LLM {
     /// <summary>
     /// 模型能力管理服务，负责获取、存储和查询模型能力信息
     /// </summary>

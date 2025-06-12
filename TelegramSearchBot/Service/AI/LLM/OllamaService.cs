@@ -1,9 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore; 
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OllamaSharp;
 using OllamaSharp.Models;
-using OllamaSharp.Models.Chat; 
+using OllamaSharp.Models.Chat;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,10 +22,10 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Tools;
-using SkiaSharp; // Added for DuckDuckGoSearchResult
+using SkiaSharp;
+using TelegramSearchBot.Interface.AI.LLM; // Added for DuckDuckGoSearchResult
 
-namespace TelegramSearchBot.Service.AI.LLM
-{
+namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
     public class OllamaService : IService, ILLMService 

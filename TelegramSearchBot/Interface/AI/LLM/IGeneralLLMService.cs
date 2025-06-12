@@ -5,8 +5,7 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.AI;
 
-namespace TelegramSearchBot.Interface.AI.LLM
-{
+namespace TelegramSearchBot.Interface.AI.LLM {
     public interface IGeneralLLMService
     {
         string ServiceName { get; }

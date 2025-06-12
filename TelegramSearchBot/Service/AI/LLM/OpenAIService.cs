@@ -2,7 +2,7 @@
 using OpenAI.Embeddings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json; 
+using Newtonsoft.Json;
 using OpenAI;
 using OpenAI.Chat;
 using SkiaSharp; // Added for image processing
@@ -23,14 +23,14 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Service.Common; 
+using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
 // Using alias for the common internal ChatMessage format
 using CommonChat = OpenAI.Chat;
+using TelegramSearchBot.Interface.AI.LLM;
 
-namespace TelegramSearchBot.Service.AI.LLM 
-{
+namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not inheriting from BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
     public class OpenAIService : IService, ILLMService
