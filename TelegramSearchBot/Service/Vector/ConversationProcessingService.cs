@@ -14,7 +14,7 @@ using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Vector
 {
-    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
+    // [Injectable(ServiceLifetime.Singleton)] // 已禁用，避免资源过度消耗
     public class ConversationProcessingService : BackgroundService, IService
     {
         public string ServiceName => "ConversationProcessingService";
