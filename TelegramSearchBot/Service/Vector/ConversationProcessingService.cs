@@ -33,6 +33,7 @@ namespace TelegramSearchBot.Service.Vector
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            return;
             _logger.LogInformation("对话处理服务启动");
             
             while (!stoppingToken.IsCancellationRequested)
