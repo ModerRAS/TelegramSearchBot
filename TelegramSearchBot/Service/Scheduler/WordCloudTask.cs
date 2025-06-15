@@ -52,7 +52,7 @@ namespace TelegramSearchBot.Service.Scheduler
                 .OrderByDescending(e => e.CompletedTime)
                 .FirstOrDefaultAsync();
 
-            if (lastSuccessfulExecution != null && lastSuccessfulExecution.CompletedTime.HasValue && lastSuccessfulExecution.CompletedTime.Value.Date == todayUtc)
+            if (lastSuccessfulExecution != null && lastSuccessfulExecution.CompletedTime.HasValue && lastSuccessfulExecution.CompletedTime.Value.ToUniversalTime().Date == todayUtc)
             {
                 _logger.LogInformation("任务 {TaskName} 在 {CompletedTime} 已成功执行过，今天不再执行。", TaskName, lastSuccessfulExecution.CompletedTime.Value);
                 return;
