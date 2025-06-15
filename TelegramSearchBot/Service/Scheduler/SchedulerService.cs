@@ -108,7 +108,7 @@ namespace TelegramSearchBot.Service.Scheduler
             }
         }
 
-        private async Task<bool> ShouldExecuteTaskAsync(IScheduledTask task)
+        public async Task<bool> ShouldExecuteTaskAsync(IScheduledTask task)
         {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
@@ -192,7 +192,7 @@ namespace TelegramSearchBot.Service.Scheduler
             return false;
         }
 
-        private async Task ExecuteTaskWithTrackingAsync(IScheduledTask task)
+        public async Task ExecuteTaskWithTrackingAsync(IScheduledTask task)
         {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();

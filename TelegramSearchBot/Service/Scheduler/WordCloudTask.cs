@@ -45,7 +45,20 @@ namespace TelegramSearchBot.Service.Scheduler
         {
             _logger.LogInformation("词云报告任务开始执行");
 
-            var today = DateTime.Today;
+            // 检查今天是否已经成功执行过
+            var todayUtc = DateTime.UtcNow.Date;
+            var lastSuccessfulExecution = await _dbContext.ScheduledTaskExecutions
+                .Where(e => e.TaskName == TaskName && e.Status == TaskExecutionStatus.Completed)
+                .OrderByDescending(e => e.CompletedTime)
+                .FirstOrDefaultAsync();
+
+            if (lastSuccessfulExecution != null && lastSuccessfulExecution.CompletedTime.HasValue && lastSuccessfulExecution.CompletedTime.Value.Date == todayUtc)
+            {
+                _logger.LogInformation("任务 {TaskName} 在 {CompletedTime} 已成功执行过，今天不再执行。", TaskName, lastSuccessfulExecution.CompletedTime.Value);
+                return;
+            }
+
+            var today = GetCurrentDate();
             var isWeekStart = today.DayOfWeek == DayOfWeek.Monday;
             var isMonthStart = today.Day == 1;
             var isQuarterStart = isMonthStart && (today.Month % 3 == 1);
@@ -71,6 +84,11 @@ namespace TelegramSearchBot.Service.Scheduler
             {
                 _logger.LogInformation("今天不符合任何报告生成条件, 跳过执行");
             }
+        }
+
+        protected virtual DateTime GetCurrentDate()
+        {
+            return DateTime.Today;
         }
 
         private async Task SendWordCloudReportAsync(TimePeriod period)
