@@ -260,7 +260,7 @@ namespace TelegramSearchBot.Service.Vector
 
                 // 从数据库重新查询对话段，避免跟踪冲突
                 var segment = await dbContext.ConversationSegments
-                    .FirstOrDefaultAsync(s => s.Id == (int)segmentId);
+                    .FirstOrDefaultAsync(s => s.Id == segmentId);
 
                 if (segment == null)
                 {
@@ -332,7 +332,7 @@ namespace TelegramSearchBot.Service.Vector
                 // 确保不会阻塞其他处理
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
-                var segment = await dbContext.ConversationSegments.FirstOrDefaultAsync(s => s.Id == (int)segmentId);
+                var segment = await dbContext.ConversationSegments.FirstOrDefaultAsync(s => s.Id == segmentId);
                 if (segment != null)
                 {
                     segment.IsVectorized = false;
