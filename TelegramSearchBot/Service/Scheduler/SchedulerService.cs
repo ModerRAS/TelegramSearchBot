@@ -152,8 +152,18 @@ namespace TelegramSearchBot.Service.Scheduler
                 // 如果上次执行失败，允许立即重试一次。
                 if (lastExecution.Status == TaskExecutionStatus.Failed)
                 {
-                    _logger.LogInformation("任务 {TaskName} 上次执行失败，允许重新执行", taskName);
-                    return true;
+                    // 检查上次失败时间，如果超过5分钟，则按照Cron表达式执行
+                    var timeSinceLastFailure = DateTime.UtcNow - lastExecution.CompletedTime.Value;
+                    if (timeSinceLastFailure > TimeSpan.FromMinutes(5))
+                    {
+                        _logger.LogInformation("任务 {TaskName} 上次执行失败已超过5分钟，将按照Cron表达式执行", taskName);
+                        // 继续执行下面的Cron表达式检查
+                    }
+                    else
+                    {
+                        _logger.LogInformation("任务 {TaskName} 上次执行失败，允许立即重试", taskName);
+                        return true;
+                    }
                 }
             }
             
@@ -165,31 +175,25 @@ namespace TelegramSearchBot.Service.Scheduler
                     ? lastExecution.CompletedTime?.ToUniversalTime() ?? DateTime.MinValue 
                     : DateTime.MinValue;
 
-                // 如果没有执行过，或者上次执行成功了，就按cron表达式来
-                if (lastExecution == null || lastExecution.Status == TaskExecutionStatus.Completed)
+                // 如果从未执行过，将上次执行时间设为一个较早的值，以确保第一次能正确触发
+                var lastRunTime = lastCompletedTimeUtc == DateTime.MinValue ? DateTime.UtcNow.AddMinutes(-2) : lastCompletedTimeUtc;
+
+                var nextOccurrence = cronExpression.GetNextOccurrence(lastRunTime, TimeZoneInfo.Local);
+
+                if (nextOccurrence.HasValue && DateTime.Now >= nextOccurrence.Value)
                 {
-                    // 如果从未执行过，将上次执行时间设为一个较早的值，以确保第一次能正确触发
-                    var lastRunTime = lastCompletedTimeUtc == DateTime.MinValue ? DateTime.UtcNow.AddMinutes(-2) : lastCompletedTimeUtc;
-
-                    var nextOccurrence = cronExpression.GetNextOccurrence(lastRunTime, TimeZoneInfo.Local);
-
-                    if (nextOccurrence.HasValue && DateTime.Now >= nextOccurrence.Value)
-                    {
-                        _logger.LogInformation("任务 {TaskName} 已到执行时间: {NextOccurrence}", taskName, nextOccurrence.Value);
-                        return true;
-                    }
-
-                    _logger.LogDebug("任务 {TaskName} 未到执行时间，下一次执行时间: {NextOccurrence}", taskName, nextOccurrence);
-                    return false;
+                    _logger.LogInformation("任务 {TaskName} 已到执行时间: {NextOccurrence}", taskName, nextOccurrence.Value);
+                    return true;
                 }
+
+                _logger.LogDebug("任务 {TaskName} 未到执行时间，下一次执行时间: {NextOccurrence}", taskName, nextOccurrence);
+                return false;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "解析任务 {TaskName} 的Cron表达式 '{CronExpression}' 时出错", task.TaskName, task.CronExpression);
                 return false; // Cron表达式错误，不执行
             }
-
-            return false;
         }
 
         public async Task ExecuteTaskWithTrackingAsync(IScheduledTask task)
