@@ -171,23 +171,57 @@ namespace TelegramSearchBot.Service.Scheduler
             try
             {
                 var cronExpression = CronExpression.Parse(task.CronExpression);
-                var lastCompletedTimeUtc = lastExecution?.Status == TaskExecutionStatus.Completed 
-                    ? lastExecution.CompletedTime?.ToUniversalTime() ?? DateTime.MinValue 
-                    : DateTime.MinValue;
-
-                // 如果从未执行过，将上次执行时间设为一个较早的值，以确保第一次能正确触发
-                var lastRunTime = lastCompletedTimeUtc == DateTime.MinValue ? DateTime.UtcNow.AddMinutes(-2) : lastCompletedTimeUtc;
-
-                var nextOccurrence = cronExpression.GetNextOccurrence(lastRunTime, TimeZoneInfo.Local);
-
-                if (nextOccurrence.HasValue && DateTime.Now >= nextOccurrence.Value)
+                
+                // 确定上次执行的基准时间
+                DateTime lastRunTime;
+                if (lastExecution == null)
                 {
-                    _logger.LogInformation("任务 {TaskName} 已到执行时间: {NextOccurrence}", taskName, nextOccurrence.Value);
-                    return true;
+                    // 如果从未执行过，使用当前时间作为基准来计算下一次执行时间
+                    lastRunTime = DateTime.Now;
+                }
+                else if (lastExecution.CompletedTime.HasValue)
+                {
+                    // 如果有完成时间（无论当前状态如何），优先使用完成时间作为基准
+                    // 这样可以确保基于上次真正完成的时间来计算下一次执行时间
+                    lastRunTime = lastExecution.CompletedTime.Value;
+                }
+                else if (lastExecution.StartTime.HasValue)
+                {
+                    // 如果没有完成时间但有开始时间，使用开始时间作为基准
+                    lastRunTime = lastExecution.StartTime.Value;
+                }
+                else
+                {
+                    // 如果连开始时间都没有，使用当前时间
+                    lastRunTime = DateTime.Now;
                 }
 
-                _logger.LogDebug("任务 {TaskName} 未到执行时间，下一次执行时间: {NextOccurrence}", taskName, nextOccurrence);
-                return false;
+                // 计算下一次执行时间
+                var nextOccurrence = cronExpression.GetNextOccurrence(lastRunTime, TimeZoneInfo.Local);
+
+                if (nextOccurrence.HasValue)
+                {
+                    var shouldExecute = DateTime.Now >= nextOccurrence.Value;
+                    
+                    if (shouldExecute)
+                    {
+                        _logger.LogInformation("任务 {TaskName} 已到执行时间: {NextOccurrence} (基准时间: {LastRunTime})", 
+                            task.TaskName, nextOccurrence.Value, lastRunTime);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("任务 {TaskName} 未到执行时间，下一次执行时间: {NextOccurrence} (基准时间: {LastRunTime})", 
+                            task.TaskName, nextOccurrence.Value, lastRunTime);
+                    }
+                    
+                    return shouldExecute;
+                }
+                else
+                {
+                    _logger.LogWarning("任务 {TaskName} 的Cron表达式 '{CronExpression}' 无法计算出下一次执行时间", 
+                        task.TaskName, task.CronExpression);
+                    return false;
+                }
             }
             catch (Exception ex)
             {
@@ -216,7 +250,6 @@ namespace TelegramSearchBot.Service.Scheduler
             execution.LastHeartbeat = DateTime.UtcNow;
             execution.ErrorMessage = null;
             execution.ResultSummary = null;
-            execution.CompletedTime = null;
 
             await dbContext.SaveChangesAsync();
 
