@@ -86,9 +86,13 @@ namespace TelegramSearchBot.Service.Scheduler
             }
         }
 
-        protected virtual DateTime GetCurrentDate()
+        /// <summary>
+        /// 获取当前日期（本地时间）
+        /// </summary>
+        /// <returns></returns>
+        private DateTime GetCurrentDate()
         {
-            return DateTime.Today;
+            return DateTime.Now.Date;
         }
 
         private async Task SendWordCloudReportAsync(TimePeriod period)
@@ -234,12 +238,12 @@ namespace TelegramSearchBot.Service.Scheduler
         {
             var startDate = period switch
             {
-                TimePeriod.Daily => DateTime.Now.AddDays(-1),
-                TimePeriod.Weekly => DateTime.Now.AddDays(-7),
-                TimePeriod.Monthly => DateTime.Now.AddMonths(-1),
-                TimePeriod.Quarterly => DateTime.Now.AddMonths(-3),
-                TimePeriod.Yearly => DateTime.Now.AddYears(-1),
-                _ => DateTime.Now.AddDays(-1)
+                TimePeriod.Daily => DateTime.UtcNow.AddDays(-1),
+                TimePeriod.Weekly => DateTime.UtcNow.AddDays(-7),
+                TimePeriod.Monthly => DateTime.UtcNow.AddMonths(-1),
+                TimePeriod.Quarterly => DateTime.UtcNow.AddMonths(-3),
+                TimePeriod.Yearly => DateTime.UtcNow.AddYears(-1),
+                _ => DateTime.UtcNow.AddDays(-1)
             };
 
             var messages = await _dbContext.Messages
@@ -273,12 +277,12 @@ namespace TelegramSearchBot.Service.Scheduler
             var result = new Dictionary<long, List<string>>();
             var startDate = period switch
             {
-                TimePeriod.Daily => DateTime.Now.AddDays(-1),
-                TimePeriod.Weekly => DateTime.Now.AddDays(-7),
-                TimePeriod.Monthly => DateTime.Now.AddMonths(-1),
-                TimePeriod.Quarterly => DateTime.Now.AddMonths(-3),
-                TimePeriod.Yearly => DateTime.Now.AddYears(-1),
-                _ => DateTime.Now.AddDays(-1)
+                TimePeriod.Daily => DateTime.UtcNow.AddDays(-1),
+                TimePeriod.Weekly => DateTime.UtcNow.AddDays(-7),
+                TimePeriod.Monthly => DateTime.UtcNow.AddMonths(-1),
+                TimePeriod.Quarterly => DateTime.UtcNow.AddMonths(-3),
+                TimePeriod.Yearly => DateTime.UtcNow.AddYears(-1),
+                _ => DateTime.UtcNow.AddDays(-1)
             };
 
             var groups = await _dbContext.GroupData

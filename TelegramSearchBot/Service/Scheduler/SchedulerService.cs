@@ -87,7 +87,7 @@ namespace TelegramSearchBot.Service.Scheduler
 
         private async Task CheckAndExecuteTasksAsync()
         {
-            var now = DateTime.Now;
+            var now = DateTime.UtcNow;
             _logger.LogDebug("开始检查定时任务 - {Time}", now);
 
             foreach (var task in _tasks)
@@ -176,8 +176,8 @@ namespace TelegramSearchBot.Service.Scheduler
                 DateTime lastRunTime;
                 if (lastExecution == null)
                 {
-                    // 如果从未执行过，使用当前时间作为基准来计算下一次执行时间
-                    lastRunTime = DateTime.Now;
+                    // 如果从未执行过，使用当前UTC时间作为基准来计算下一次执行时间
+                    lastRunTime = DateTime.UtcNow;
                 }
                 else if (lastExecution.CompletedTime.HasValue)
                 {
@@ -192,26 +192,28 @@ namespace TelegramSearchBot.Service.Scheduler
                 }
                 else
                 {
-                    // 如果连开始时间都没有，使用当前时间
-                    lastRunTime = DateTime.Now;
+                    // 如果连开始时间都没有，使用当前UTC时间
+                    lastRunTime = DateTime.UtcNow;
                 }
 
-                // 计算下一次执行时间
+                // 计算下一次执行时间（使用本地时区）
                 var nextOccurrence = cronExpression.GetNextOccurrence(lastRunTime, TimeZoneInfo.Local);
 
                 if (nextOccurrence.HasValue)
                 {
-                    var shouldExecute = DateTime.Now >= nextOccurrence.Value;
+                    // 将下一次执行时间转换为UTC进行比较
+                    var nextOccurrenceUtc = nextOccurrence.Value.ToUniversalTime();
+                    var shouldExecute = DateTime.UtcNow >= nextOccurrenceUtc;
                     
                     if (shouldExecute)
                     {
-                        _logger.LogInformation("任务 {TaskName} 已到执行时间: {NextOccurrence} (基准时间: {LastRunTime})", 
-                            task.TaskName, nextOccurrence.Value, lastRunTime);
+                        _logger.LogInformation("任务 {TaskName} 已到执行时间: {NextOccurrence} UTC (基准时间: {LastRunTime} UTC)", 
+                            task.TaskName, nextOccurrenceUtc, lastRunTime);
                     }
                     else
                     {
-                        _logger.LogDebug("任务 {TaskName} 未到执行时间，下一次执行时间: {NextOccurrence} (基准时间: {LastRunTime})", 
-                            task.TaskName, nextOccurrence.Value, lastRunTime);
+                        _logger.LogDebug("任务 {TaskName} 未到执行时间，下一次执行时间: {NextOccurrence} UTC (基准时间: {LastRunTime} UTC)", 
+                            task.TaskName, nextOccurrenceUtc, lastRunTime);
                     }
                     
                     return shouldExecute;
