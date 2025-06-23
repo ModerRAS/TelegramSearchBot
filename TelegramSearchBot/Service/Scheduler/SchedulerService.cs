@@ -176,19 +176,20 @@ namespace TelegramSearchBot.Service.Scheduler
                 DateTime lastRunTime;
                 if (lastExecution == null)
                 {
-                    // 如果从未执行过，使用当前UTC时间作为基准来计算下一次执行时间
+                    // 如果从未执行过，使用当前UTC时间作为基准
                     lastRunTime = DateTime.UtcNow;
                 }
                 else if (lastExecution.CompletedTime.HasValue)
                 {
-                    // 如果有完成时间（无论当前状态如何），优先使用完成时间作为基准
-                    // 这样可以确保基于上次真正完成的时间来计算下一次执行时间
-                    lastRunTime = lastExecution.CompletedTime.Value;
+                    // 如果有完成时间，使用完成时间作为基准
+                    // 从数据库读取的时间 Kind 可能是 Unspecified，需要指定为 Utc
+                    lastRunTime = DateTime.SpecifyKind(lastExecution.CompletedTime.Value, DateTimeKind.Utc);
                 }
                 else if (lastExecution.StartTime.HasValue)
                 {
                     // 如果没有完成时间但有开始时间，使用开始时间作为基准
-                    lastRunTime = lastExecution.StartTime.Value;
+                    // 从数据库读取的时间 Kind 可能是 Unspecified，需要指定为 Utc
+                    lastRunTime = DateTime.SpecifyKind(lastExecution.StartTime.Value, DateTimeKind.Utc);
                 }
                 else
                 {
@@ -201,19 +202,18 @@ namespace TelegramSearchBot.Service.Scheduler
 
                 if (nextOccurrence.HasValue)
                 {
-                    // 将下一次执行时间转换为UTC进行比较
                     var nextOccurrenceUtc = nextOccurrence.Value.ToUniversalTime();
                     var shouldExecute = DateTime.UtcNow >= nextOccurrenceUtc;
                     
                     if (shouldExecute)
                     {
                         _logger.LogInformation("任务 {TaskName} 已到执行时间: {NextOccurrence} UTC (基准时间: {LastRunTime} UTC)", 
-                            task.TaskName, nextOccurrenceUtc, lastRunTime);
+                            taskName, nextOccurrenceUtc, lastRunTime);
                     }
                     else
                     {
                         _logger.LogDebug("任务 {TaskName} 未到执行时间，下一次执行时间: {NextOccurrence} UTC (基准时间: {LastRunTime} UTC)", 
-                            task.TaskName, nextOccurrenceUtc, lastRunTime);
+                            taskName, nextOccurrenceUtc, lastRunTime);
                     }
                     
                     return shouldExecute;
@@ -221,13 +221,13 @@ namespace TelegramSearchBot.Service.Scheduler
                 else
                 {
                     _logger.LogWarning("任务 {TaskName} 的Cron表达式 '{CronExpression}' 无法计算出下一次执行时间", 
-                        task.TaskName, task.CronExpression);
+                        taskName, task.CronExpression);
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "解析任务 {TaskName} 的Cron表达式 '{CronExpression}' 时出错", task.TaskName, task.CronExpression);
+                _logger.LogError(ex, "解析任务 {TaskName} 的Cron表达式 '{CronExpression}' 时出错", taskName, task.CronExpression);
                 return false; // Cron表达式错误，不执行
             }
         }
