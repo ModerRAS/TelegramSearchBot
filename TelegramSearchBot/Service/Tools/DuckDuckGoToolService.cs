@@ -31,15 +31,9 @@ namespace TelegramSearchBot.Service.Tools
 
         private readonly HttpClient _httpClient;
 
-        public DuckDuckGoToolService()
+        public DuckDuckGoToolService(IHttpClientFactory httpClientFactory)
         {
-            // 创建新的HttpClient并配置系统代理
-            var handler = new HttpClientHandler
-            {
-                UseProxy = true,
-                Proxy = HttpClient.DefaultProxy
-            };
-            _httpClient = new HttpClient(handler);
+            _httpClient = httpClientFactory.CreateClient();
         }
 
         [McpTool("使用DuckDuckGo搜索引擎进行网页搜索")]
