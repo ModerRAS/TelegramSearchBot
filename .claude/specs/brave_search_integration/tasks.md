@@ -49,21 +49,21 @@
 - 处理身份验证错误（401）
 - 引用需求4.1：系统应为瞬时API故障实现重试逻辑
 
-## 4. [ ] 更新AI服务集成
-### 4.1. [ ] 更新McpToolHelper
-- 修改`ConvertToolResultToString`方法以处理`BraveSearchResult`
-- 格式化结果以供Telegram消息显示
-- 限制显示的结果数量（最多5个）
+## 4. [ ] 检查AI服务兼容性
+### 4.1. [ ] 验证McpToolHelper兼容性
+- 检查`ConvertToolResultToString`方法是否能正确处理`BraveSearchResult`
+- 必要时更新结果格式化逻辑以适配Brave Search结果结构
+- 确保结果格式化符合Telegram消息显示要求
 - 引用需求2.3：系统应格式化搜索结果以供Telegram消息显示
 
-### 4.2. [ ] 更新OllamaService
-- 将`DuckDuckGoSearchResult`的引用替换为`BraveSearchResult`
-- 更新结果处理逻辑
+### 4.2. [ ] 验证OllamaService兼容性
+- 验证通过反射自动连接的Brave Search服务能被正确调用
+- 检查结果处理逻辑是否与新的数据结构兼容
 - 引用需求3.2：系统应将DuckDuckGo服务实现替换为Brave Search实现
 
-### 4.3. [ ] 更新OpenAIService
-- 将`DuckDuckGoSearchResult`的引用替换为`BraveSearchResult`
-- 更新结果处理逻辑
+### 4.3. [ ] 验证OpenAIService兼容性
+- 验证通过反射自动连接的Brave Search服务能被正确调用
+- 检查结果处理逻辑是否与新的数据结构兼容
 - 引用需求3.2：系统应将DuckDuckGo服务实现替换为Brave Search实现
 
 ## 5. [ ] 添加配置验证
@@ -95,7 +95,7 @@
 ## 8. [ ] 创建单元测试
 ### 8.1. [ ] 创建BraveSearchService测试
 - 在测试项目中创建`BraveSearchServiceTest.cs`
-- 测试成功的API响应
-- 测试错误条件（网络错误、无效响应）
-- 测试结果格式化
+- 使用mock数据测试JSON响应解析流程
+- 验证结果对象正确构建
+- 测试错误处理逻辑（无效JSON、缺失字段等）
 - 引用需求4.3：系统应记录API交互以用于调试目的
