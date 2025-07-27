@@ -7,6 +7,8 @@
 
 ### 1.2. [ ] 在Env静态类中添加Brave API密钥
 - 在`Env`静态类中添加`BraveApiKey`属性
+- 在静态构造函数中添加从Config.json加载BraveApiKey的代码
+- 引用需求1.1：系统应从Config.json文件读取Brave Search API密钥
 - 引用需求1.2：系统应支持通过Env.cs配置的环境变量覆盖API密钥
 
 ## 2. [ ] 创建Brave Search数据模型
