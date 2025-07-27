@@ -45,6 +45,8 @@ BraveSearchRequest {
   string Query     // 搜索查询文本
   int Page         // 结果页码（默认：1）
   int Count        // 要返回的结果数（默认：5）
+  string Country   // 国家代码（可选，默认："us"）
+  string SearchLang // 搜索语言（可选，默认："en"）
 }
 ```
 
@@ -64,6 +66,8 @@ BraveResultItem {
   string Title         // 结果页面标题
   string Url           // 结果页面URL
   string Description   // 描述结果的片段
+  bool IsSourceLocal   // 是否为本地来源
+  bool IsSourceBoth    // 是否为本地和网络来源
   BraveProfile Profile // 来源信息（可选）
 }
 
@@ -74,6 +78,25 @@ BraveProfile {
   string Img       // 来源favicon URL
 }
 ```
+
+## API调用规范
+
+### 请求端点
+- URL: `https://api.search.brave.com/res/v1/web/search`
+- 方法: GET
+
+### 请求头
+```
+Accept: application/json
+Accept-Encoding: gzip
+X-Subscription-Token: [API密钥]
+```
+
+### 查询参数
+- q: 搜索查询文本（必需）
+- count: 返回结果数（可选，默认：5，最大：20）
+- country: 国家代码（可选，默认："us"）
+- search_lang: 搜索语言（可选，默认："en"）
 
 ## 错误处理
 1. **配置错误**：在启动时验证API密钥并提供清晰的错误消息
