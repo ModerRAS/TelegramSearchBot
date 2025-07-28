@@ -132,6 +132,8 @@ namespace TelegramSearchBot.Test.Service.Vector
             Assert.True(averageTime < 500, $"平均向量化时间过长: {averageTime:F2}ms");
             
             // 验证所有对话段都被向量化
+            // 等待一段时间确保向量化完成
+            await Task.Delay(100);
             var vectorizedCount = await _dbContext.VectorIndexes.CountAsync(vi => vi.GroupId == groupId);
             Assert.Equal(segmentCount, vectorizedCount);
         }
@@ -252,6 +254,8 @@ namespace TelegramSearchBot.Test.Service.Vector
             _output.WriteLine($"向量化总耗时: {stopwatch.ElapsedMilliseconds} ms");
             
             // 验证大部分对话段都被向量化（允许一些失败）
+            // 等待一段时间确保向量化完成
+            await Task.Delay(100);
             var vectorizedCount = await _dbContext.VectorIndexes.CountAsync(vi => vi.GroupId == groupId);
             Assert.True(vectorizedCount >= concurrentCount - 2, $"向量化失败，期望至少 {concurrentCount - 2} 个，实际 {vectorizedCount} 个");
             
@@ -300,6 +304,8 @@ namespace TelegramSearchBot.Test.Service.Vector
             Assert.True(averageTime < 200, $"大数据集平均向量化时间过长: {averageTime:F2}ms");
             
             // 验证所有对话段都被向量化
+            // 等待一段时间确保向量化完成
+            await Task.Delay(100);
             var vectorizedCount = await _dbContext.VectorIndexes.CountAsync(vi => vi.GroupId == groupId);
             Assert.True(vectorizedCount >= largeCount * 0.6, $"向量化数量不足，期望至少 {largeCount*0.6} 实际 {vectorizedCount}");
         }
