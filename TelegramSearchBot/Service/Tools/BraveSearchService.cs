@@ -7,6 +7,8 @@ using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model.Tools;
 using System.Net.Http.Headers;
 using System.Net;
+using TelegramSearchBot.Service.AI.LLM; // 添加MCP工具支持
+using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Tools {
     public class BraveSearchService : IBraveSearchService {
@@ -20,7 +22,13 @@ namespace TelegramSearchBot.Service.Tools {
             _apiKey = Env.BraveApiKey ?? string.Empty;
         }
 
-        public async Task<BraveSearchResult> SearchWeb(string query, int page = 1, int count = 5, string country = "us", string searchLang = "en") {
+        [McpTool("Searches the web using Brave Search API. Returns web search results with titles, descriptions, and URLs.")]
+        public async Task<BraveSearchResult> SearchWeb(
+            [McpParameter("The search query string (e.g., 'weather in Tokyo', 'best restaurants near me').")] string query,
+            [McpParameter("Page number for pagination (e.g., 1, 2, 3...). Defaults to 1.", IsRequired = false)] int page = 1,
+            [McpParameter("Number of search results per page (e.g., 5, 10). Defaults to 5, maximum is 20.", IsRequired = false)] int count = 5,
+            [McpParameter("Country code for localized search results (e.g., 'us', 'cn', 'jp'). Defaults to 'us'.", IsRequired = false)] string country = "us",
+            [McpParameter("Search language code (e.g., 'en', 'zh', 'ja'). Defaults to 'en'.", IsRequired = false)] string searchLang = "en") {
             const int maxRetries = 3;
             const int delayMs = 1000;
             
