@@ -6,18 +6,24 @@ using Newtonsoft.Json;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model.Tools;
 using System.Net.Http.Headers;
+using System.Net;
 
 namespace TelegramSearchBot.Service.Tools {
     public class BraveSearchService : IBraveSearchService {
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
+        private const int DefaultTimeoutSeconds = 10;
 
         public BraveSearchService(IHttpClientFactory httpClientFactory) {
             _httpClient = httpClientFactory.CreateClient();
+            _httpClient.Timeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds);
             _apiKey = Env.BraveApiKey;
         }
 
         public async Task<BraveSearchResult> SearchWeb(string query, int page = 1, int count = 5, string country = "us", string searchLang = "en") {
+            const int maxRetries = 3;
+            const int delayMs = 1000;
+            
             // 验证API密钥
             if (string.IsNullOrEmpty(_apiKey)) {
                 throw new InvalidOperationException("Brave Search API key is not configured");
@@ -39,15 +45,54 @@ namespace TelegramSearchBot.Service.Tools {
             _httpClient.DefaultRequestHeaders.Add("Accept-Encoding", "gzip");
             _httpClient.DefaultRequestHeaders.Add("X-Subscription-Token", _apiKey);
 
-            // 发送请求
-            var response = await _httpClient.GetAsync(requestUrl);
-            response.EnsureSuccessStatusCode();
-
-            // 解析响应
-            var json = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<BraveSearchResult>(json);
-
-            return result;
+            for (int retry = 0; retry <= maxRetries; retry++) {
+                try {
+                    // 发送请求
+                    var response = await _httpClient.GetAsync(requestUrl);
+                    
+                    // 处理不同的HTTP状态码
+                    switch (response.StatusCode) {
+                        case HttpStatusCode.OK:
+                            // 解析响应
+                            var json = await response.Content.ReadAsStringAsync();
+                            var result = JsonConvert.DeserializeObject<BraveSearchResult>(json);
+                            return result;
+                        case HttpStatusCode.Unauthorized:
+                            throw new InvalidOperationException("Brave Search API key is invalid or missing");
+                        case HttpStatusCode.TooManyRequests:
+                            if (retry < maxRetries) {
+                                // 等待后重试
+                                await Task.Delay(delayMs * (retry + 1)); // 指数退避
+                                continue;
+                            }
+                            throw new InvalidOperationException("Brave Search API rate limit exceeded");
+                        case HttpStatusCode.BadRequest:
+                            throw new InvalidOperationException("Brave Search API bad request - invalid parameters");
+                        default:
+                            response.EnsureSuccessStatusCode();
+                            return null; // 这行不会执行，因为EnsureSuccessStatusCode会抛出异常
+                    }
+                } catch (HttpRequestException ex) {
+                    if (retry < maxRetries) {
+                        // 等待后重试
+                        await Task.Delay(delayMs * (retry + 1)); // 指数退避
+                        continue;
+                    }
+                    throw new InvalidOperationException($"Network error while calling Brave Search API: {ex.Message}", ex);
+                } catch (TaskCanceledException ex) {
+                    if (retry < maxRetries) {
+                        // 等待后重试
+                        await Task.Delay(delayMs * (retry + 1)); // 指数退避
+                        continue;
+                    }
+                    throw new InvalidOperationException("Request timeout while calling Brave Search API", ex);
+                } catch (JsonException ex) {
+                    // JSON解析错误不重试
+                    throw new InvalidOperationException($"Error parsing Brave Search API response: {ex.Message}", ex);
+                }
+            }
+            
+            return null; // 这行不会执行，仅为编译器满意
         }
     }
 }
