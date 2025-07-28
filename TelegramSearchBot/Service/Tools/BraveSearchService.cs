@@ -11,6 +11,7 @@ using TelegramSearchBot.Service.AI.LLM; // 添加MCP工具支持
 using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Tools {
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class BraveSearchService : IBraveSearchService {
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
