@@ -39,13 +39,32 @@ namespace TelegramSearchBot.Service.Tools {
                 throw new InvalidOperationException("Brave Search API key is not configured");
             }
 
-            // 构建请求URL
+            // 验证参数
+            if (string.IsNullOrWhiteSpace(query)) {
+                throw new ArgumentException("Query cannot be null or empty", nameof(query));
+            }
+            
+            if (count <= 0 || count > 20) {
+                throw new ArgumentException("Count must be between 1 and 20", nameof(count));
+            }
+
+// 构建请求URL
             var url = $"https://api.search.brave.com/res/v1/web/search";
             var queryParams = new StringBuilder();
-            queryParams.Append($"?q={Uri.EscapeDataString(query)}");
-            queryParams.Append($"&count={count}");
-            queryParams.Append($"&country={country}");
-            queryParams.Append($"&search_lang={searchLang}");
+            queryParams.Append($"?q={Uri.EscapeDataString(query.Trim())}");
+            queryParams.Append($"&count={Math.Min(count, 20)}"); // 确保count不超过20
+            
+            // 只在page > 1时添加offset，避免page=1时出现offset=0
+            if (page > 1) {
+                queryParams.Append($"&offset={(page - 1) * count}");
+            }
+            
+            // 确保country和search_lang是有效格式
+            var validCountry = string.IsNullOrWhiteSpace(country) ? "us" : country.ToLowerInvariant().Trim();
+            var validSearchLang = string.IsNullOrWhiteSpace(searchLang) ? "en" : searchLang.ToLowerInvariant().Trim();
+            
+            queryParams.Append($"&country={validCountry}");
+            queryParams.Append($"&search_lang={validSearchLang}");
 
             var requestUrl = url + queryParams.ToString();
 
@@ -77,10 +96,14 @@ namespace TelegramSearchBot.Service.Tools {
                             }
                             throw new InvalidOperationException("Brave Search API rate limit exceeded");
                         case HttpStatusCode.BadRequest:
-                            throw new InvalidOperationException("Brave Search API bad request - invalid parameters");
+                            var badRequestContent = await response.Content.ReadAsStringAsync();
+                            throw new InvalidOperationException($"Brave Search API bad request - invalid parameters: {badRequestContent}");
+                        case (HttpStatusCode)422:
+                            var content422 = await response.Content.ReadAsStringAsync();
+                            throw new InvalidOperationException($"Brave Search API validation error (422): {content422}. Request URL: {requestUrl}");
                         default:
-                            response.EnsureSuccessStatusCode();
-                            return null; // 这行不会执行，因为EnsureSuccessStatusCode会抛出异常
+                            var errorContent = await response.Content.ReadAsStringAsync();
+                            throw new InvalidOperationException($"Brave Search API error: {response.StatusCode} - {errorContent}");
                     }
                 } catch (HttpRequestException ex) {
                     if (retry < maxRetries) {
