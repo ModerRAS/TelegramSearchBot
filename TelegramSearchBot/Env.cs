@@ -30,6 +30,7 @@ namespace TelegramSearchBot {
                 OLTPAuth = config.OLTPAuth;
                 OLTPAuthUrl = config.OLTPAuthUrl;
                 OLTPName = config.OLTPName;
+                BraveApiKey = config.BraveApiKey;
             } catch { 
             }
             
@@ -54,6 +55,7 @@ namespace TelegramSearchBot {
         public static string OLTPAuth { get; set; }
         public static string OLTPAuthUrl { get; set; }
         public static string OLTPName { get; set; }
+        public static string BraveApiKey { get; set; }
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
     }
@@ -74,5 +76,6 @@ namespace TelegramSearchBot {
         public string OLTPAuth { get; set; }
         public string OLTPAuthUrl { get; set; }
         public string OLTPName { get; set; }
+        public string BraveApiKey { get; set; }
     }
 }
