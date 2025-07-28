@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Text;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model.Tools;
@@ -17,6 +18,39 @@ namespace TelegramSearchBot.Service.Tools {
         private readonly string _apiKey;
         private const int DefaultTimeoutSeconds = 10;
 
+        // Brave Search API支持的语言代码映射
+        private static readonly Dictionary<string, string> LanguageCodeMap = new() {
+            {"ar", "ar"}, {"eu", "eu"}, {"bn", "bn"}, {"bg", "bg"}, {"ca", "ca"},
+            {"zh", "zh-hans"}, {"zh-cn", "zh-hans"}, {"zh-hans", "zh-hans"}, {"zh-tw", "zh-hant"}, {"zh-hant", "zh-hant"},
+            {"hr", "hr"}, {"cs", "cs"}, {"da", "da"}, {"nl", "nl"}, {"en", "en"}, {"en-gb", "en-gb"},
+            {"et", "et"}, {"fi", "fi"}, {"fr", "fr"}, {"gl", "gl"}, {"de", "de"}, {"gu", "gu"},
+            {"he", "he"}, {"hi", "hi"}, {"hu", "hu"}, {"is", "is"}, {"it", "it"}, {"ja", "jp"},
+            {"jp", "jp"}, {"kn", "kn"}, {"ko", "ko"}, {"lv", "lv"}, {"lt", "lt"}, {"ms", "ms"},
+            {"ml", "ml"}, {"mr", "mr"}, {"nb", "nb"}, {"pl", "pl"}, {"pt", "pt-br"}, {"pt-br", "pt-br"},
+            {"pt-pt", "pt-pt"}, {"pa", "pa"}, {"ro", "ro"}, {"ru", "ru"}, {"sr", "sr"}, {"sk", "sk"},
+            {"sl", "sl"}, {"es", "es"}, {"sv", "sv"}, {"ta", "ta"}, {"te", "te"}, {"th", "th"},
+            {"tr", "tr"}, {"uk", "uk"}, {"vi", "vi"}
+        };
+
+        /// <summary>
+        /// 将用户友好的语言代码映射到Brave Search API要求的精确格式
+        /// </summary>
+        /// <param name="inputCode">用户输入的语言代码</param>
+        /// <returns>Brave Search API要求的语言代码</returns>
+        private static string MapLanguageCode(string inputCode) {
+            if (LanguageCodeMap.TryGetValue(inputCode, out var mappedCode)) {
+                return mappedCode;
+            }
+            
+            // 处理一些常见的别名
+            return inputCode switch {
+                "chs" or "zh-cn" or "zh_cn" or "cn" => "zh-hans",
+                "cht" or "zh-tw" or "zh_tw" or "tw" => "zh-hant",
+                "ja" or "jpn" => "jp",
+                _ => "en" // 默认回退到英语
+            };
+        }
+
         public BraveSearchService(IHttpClientFactory httpClientFactory) {
             _httpClient = httpClientFactory.CreateClient();
             _httpClient.Timeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds);
@@ -28,8 +62,8 @@ namespace TelegramSearchBot.Service.Tools {
             [McpParameter("The search query string (e.g., 'weather in Tokyo', 'best restaurants near me').")] string query,
             [McpParameter("Page number for pagination (e.g., 1, 2, 3...). Defaults to 1.", IsRequired = false)] int page = 1,
             [McpParameter("Number of search results per page (e.g., 5, 10). Defaults to 5, maximum is 20.", IsRequired = false)] int count = 5,
-            [McpParameter("Country code for localized search results (e.g., 'us', 'cn', 'jp'). Defaults to 'us'.", IsRequired = false)] string country = "us",
-            [McpParameter("Search language code (e.g., 'en', 'zh', 'ja'). Defaults to 'en'.", IsRequired = false)] string searchLang = "en") {
+            [McpParameter("Country code for localized search results. Must be one of: us, cn, jp, gb, de, fr, etc. Defaults to 'us'.", IsRequired = false)] string country = "us",
+            [McpParameter("Search language code. Must be exact: en, zh-hans, zh-hant, ja, ko, fr, de, es, ru, etc. Use 'zh-hans' for Simplified Chinese, 'zh-hant' for Traditional Chinese. Defaults to 'en'.", IsRequired = false)] string searchLang = "en") {
             const int maxRetries = 3;
             const int delayMs = 1000;
             
@@ -61,7 +95,7 @@ namespace TelegramSearchBot.Service.Tools {
             
             // 确保country和search_lang是有效格式
             var validCountry = string.IsNullOrWhiteSpace(country) ? "us" : country.ToLowerInvariant().Trim();
-            var validSearchLang = string.IsNullOrWhiteSpace(searchLang) ? "en" : searchLang.ToLowerInvariant().Trim();
+            var validSearchLang = MapLanguageCode(string.IsNullOrWhiteSpace(searchLang) ? "en" : searchLang.ToLowerInvariant().Trim());
             
             queryParams.Append($"&country={validCountry}");
             queryParams.Append($"&search_lang={validSearchLang}");
