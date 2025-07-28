@@ -23,7 +23,7 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Tools;
 using SkiaSharp;
-using TelegramSearchBot.Interface.AI.LLM; // Added for DuckDuckGoSearchResult
+using TelegramSearchBot.Model.Tools; // For BraveSearchResult
 
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService

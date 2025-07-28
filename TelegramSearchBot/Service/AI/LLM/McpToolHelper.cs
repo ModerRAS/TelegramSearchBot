@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json; // Added for Json.NET
 using System.Text.RegularExpressions; // Added for Regex cleaning
 using TelegramSearchBot.Attributes; // Added to reference McpToolAttribute and McpParameterAttribute
-using TelegramSearchBot.Service.Tools; // For DuckDuckGoSearchResult
+using TelegramSearchBot.Model.Tools; // For BraveSearchResult
 
 namespace TelegramSearchBot.Service.AI.LLM
 {
@@ -709,18 +709,18 @@ namespace TelegramSearchBot.Service.AI.LLM
             } else if (toolResultObject is string s) {
                 return s;
             }
-            else if (toolResultObject is DuckDuckGoSearchResult ddgResult)
+            else if (toolResultObject is BraveSearchResult braveResult)
             {
                 var sb = new StringBuilder();
-                sb.AppendLine($"Search Results for \"{ddgResult.Query}\" (Page {ddgResult.CurrentPage}):");
-                if (ddgResult.Results == null || !ddgResult.Results.Any())
+                sb.AppendLine("Search Results:");
+                if (braveResult.Web?.Results == null || !braveResult.Web.Results.Any())
                 {
                     sb.AppendLine("No results found.");
                 }
                 else
                 {
                     int count = 1;
-                    foreach (var item in ddgResult.Results)
+                    foreach (var item in braveResult.Web.Results.Take(5)) // Limit to 5 results
                     {
                         sb.AppendLine($"{count}. Title: {item.Title}");
                         if (!string.IsNullOrWhiteSpace(item.Description))
@@ -730,7 +730,7 @@ namespace TelegramSearchBot.Service.AI.LLM
                         sb.AppendLine($"   Source: {item.Url}");
                         count++;
                     }
-                    sb.AppendLine($"--- End of {ddgResult.Results.Count} results ---");
+                    sb.AppendLine($"--- End of {Math.Min(braveResult.Web.Results.Count, 5)} results ---");
                 }
                 return sb.ToString();
             }

@@ -25,7 +25,7 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Storage;
-using TelegramSearchBot.Service.Tools; // Added for DuckDuckGoSearchResult
+using TelegramSearchBot.Model.Tools; // For BraveSearchResult
 // Using alias for the common internal ChatMessage format
 using CommonChat = OpenAI.Chat;
 using TelegramSearchBot.Interface.AI.LLM;
