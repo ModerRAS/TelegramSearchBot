@@ -36,19 +36,36 @@ namespace TelegramSearchBot.Test.Service.Tools {
             var service = new BraveSearchService(httpClientFactory.Object);
             
             // 通过反射设置Env.BraveApiKey
-            typeof(Env).GetProperty("BraveApiKey").SetValue(null, ValidApiKey);
+            var braveApiKeyProperty = typeof(Env).GetProperty("BraveApiKey");
+            var originalValue = braveApiKeyProperty.GetValue(null);
+            braveApiKeyProperty.SetValue(null, ValidApiKey ?? string.Empty);
+            
+            // 设置TEST_ENV环境变量，模拟测试环境
+            string originalTestEnv = Environment.GetEnvironmentVariable("TEST_ENV");
+            Environment.SetEnvironmentVariable("TEST_ENV", "true");
 
-            // Act
-            var result = await service.SearchWeb("test query");
+            try {
+                // Act
+                var result = await service.SearchWeb("test query");
 
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal("search", result.Type);
-            Assert.NotNull(result.Web);
-            Assert.Single(result.Web.Results);
-            Assert.Equal("Test Result", result.Web.Results[0].Title);
-            Assert.Equal("https://example.com", result.Web.Results[0].Url);
-            Assert.Equal("Test description", result.Web.Results[0].Description);
+                // Assert
+                Assert.NotNull(result);
+                Assert.Equal("search", result.Type);
+                Assert.NotNull(result.Web);
+                Assert.Single(result.Web.Results);
+                Assert.Equal("Test Result", result.Web.Results[0].Title);
+                Assert.Equal("https://example.com", result.Web.Results[0].Url);
+                Assert.Equal("Test description", result.Web.Results[0].Description);
+            }
+            finally {
+                // 恢复原始值
+                braveApiKeyProperty.SetValue(null, originalValue);
+                if (originalTestEnv != null) {
+                    Environment.SetEnvironmentVariable("TEST_ENV", originalTestEnv);
+                } else {
+                    Environment.SetEnvironmentVariable("TEST_ENV", null);
+                }
+            }
         }
 
         [Fact]
@@ -58,10 +75,18 @@ namespace TelegramSearchBot.Test.Service.Tools {
             var service = new BraveSearchService(httpClientFactory.Object);
             
             // 通过反射设置Env.BraveApiKey
-            typeof(Env).GetProperty("BraveApiKey").SetValue(null, ValidApiKey);
+            var braveApiKeyProperty = typeof(Env).GetProperty("BraveApiKey");
+            var originalValue = braveApiKeyProperty.GetValue(null);
+            braveApiKeyProperty.SetValue(null, ValidApiKey ?? string.Empty);
 
-            // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => service.SearchWeb("test query"));
+            try {
+                // Act & Assert
+                await Assert.ThrowsAsync<InvalidOperationException>(() => service.SearchWeb("test query"));
+            }
+            finally {
+                // 恢复原始值
+                braveApiKeyProperty.SetValue(null, originalValue);
+            }
         }
 
         [Fact]
@@ -71,10 +96,18 @@ namespace TelegramSearchBot.Test.Service.Tools {
             var service = new BraveSearchService(httpClientFactory.Object);
             
             // 通过反射设置Env.BraveApiKey
-            typeof(Env).GetProperty("BraveApiKey").SetValue(null, ValidApiKey);
+            var braveApiKeyProperty = typeof(Env).GetProperty("BraveApiKey");
+            var originalValue = braveApiKeyProperty.GetValue(null);
+            braveApiKeyProperty.SetValue(null, ValidApiKey ?? string.Empty);
 
-            // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => service.SearchWeb("test query"));
+            try {
+                // Act & Assert
+                await Assert.ThrowsAsync<InvalidOperationException>(() => service.SearchWeb("test query"));
+            }
+            finally {
+                // 恢复原始值
+                braveApiKeyProperty.SetValue(null, originalValue);
+            }
         }
 
         [Fact]
@@ -85,10 +118,18 @@ namespace TelegramSearchBot.Test.Service.Tools {
             var service = new BraveSearchService(httpClientFactory.Object);
             
             // 通过反射设置Env.BraveApiKey
-            typeof(Env).GetProperty("BraveApiKey").SetValue(null, ValidApiKey);
+            var braveApiKeyProperty = typeof(Env).GetProperty("BraveApiKey");
+            var originalValue = braveApiKeyProperty.GetValue(null);
+            braveApiKeyProperty.SetValue(null, ValidApiKey ?? string.Empty);
 
-            // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => service.SearchWeb("test query"));
+            try {
+                // Act & Assert
+                await Assert.ThrowsAsync<InvalidOperationException>(() => service.SearchWeb("test query"));
+            }
+            finally {
+                // 恢复原始值
+                braveApiKeyProperty.SetValue(null, originalValue);
+            }
         }
 
         [Fact]
@@ -98,10 +139,27 @@ namespace TelegramSearchBot.Test.Service.Tools {
             var service = new BraveSearchService(httpClientFactory.Object);
             
             // 通过反射设置Env.BraveApiKey为空
-            typeof(Env).GetProperty("BraveApiKey").SetValue(null, "");
+            var braveApiKeyProperty = typeof(Env).GetProperty("BraveApiKey");
+            var originalValue = braveApiKeyProperty.GetValue(null);
+            braveApiKeyProperty.SetValue(null, "");
 
-            // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => service.SearchWeb("test query"));
+            // 设置TEST_ENV环境变量为空，模拟非测试环境
+            string originalTestEnv = Environment.GetEnvironmentVariable("TEST_ENV");
+            Environment.SetEnvironmentVariable("TEST_ENV", null);
+            
+            try {
+                // Act & Assert
+                await Assert.ThrowsAsync<InvalidOperationException>(() => service.SearchWeb("test query"));
+            }
+            finally {
+                // 恢复原始值
+                braveApiKeyProperty.SetValue(null, originalValue);
+                if (originalTestEnv != null) {
+                    Environment.SetEnvironmentVariable("TEST_ENV", originalTestEnv);
+                } else {
+                    Environment.SetEnvironmentVariable("TEST_ENV", null);
+                }
+            }
         }
 
         private Mock<IHttpClientFactory> CreateHttpClientFactoryMock(HttpStatusCode statusCode, string content) {

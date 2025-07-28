@@ -24,6 +24,7 @@ using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Tools;
 using SkiaSharp;
 using TelegramSearchBot.Model.Tools; // For BraveSearchResult
+using TelegramSearchBot.Interface.AI.LLM; // For ILLMService
 
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService

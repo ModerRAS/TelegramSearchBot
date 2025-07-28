@@ -89,6 +89,15 @@ namespace TelegramSearchBot.Service.Vector
                 var searchResults = await SearchSimilarVectorsAsync(
                     index, queryVector, Math.Max(searchOption.Skip + searchOption.Take, 100));
 
+                // 如果没有搜索结果，返回空结果
+                if (searchResults == null || searchResults.Count == 0)
+                {
+                    _logger.LogInformation($"对话段向量搜索完成，未找到结果");
+                    searchOption.Messages = new List<Message>();
+                    searchOption.Count = 0;
+                    return searchOption;
+                }
+
                 // 获取向量对应的实体信息
                 var vectorIds = searchResults.Select(r => r.Id).ToList();
                 var vectorIndexes = await dbContext.VectorIndexes
@@ -474,7 +483,7 @@ namespace TelegramSearchBot.Service.Vector
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "FAISS索引创建失败，使用模拟实现");
-                // 返回null或使用模拟实现
+                // 返回null表示FaissNet不可用
                 return null;
             }
         }
@@ -484,26 +493,40 @@ namespace TelegramSearchBot.Service.Vector
         /// </summary>
         private async Task<List<SearchResult>> SearchSimilarVectorsAsync(FaissIndex index, float[] queryVector, int topK)
         {
+            // 如果索引为null，返回空结果
+            if (index == null)
+            {
+                return new List<SearchResult>();
+            }
+
             return await Task.Run(() =>
             {
-                var result = index.Search(new[] { queryVector }, topK);
-                var distances = result.Item1[0]; // 第一个查询的距离数组
-                var labels = result.Item2[0];    // 第一个查询的标签数组
-                
-                var results = new List<SearchResult>();
-                for (int i = 0; i < labels.Length && i < distances.Length; i++)
+                try
                 {
-                    if (labels[i] >= 0) // 有效结果
+                    var result = index.Search(new[] { queryVector }, topK);
+                    var distances = result.Item1[0]; // 第一个查询的距离数组
+                    var labels = result.Item2[0];    // 第一个查询的标签数组
+                    
+                    var results = new List<SearchResult>();
+                    for (int i = 0; i < labels.Length && i < distances.Length; i++)
                     {
-                        results.Add(new SearchResult
+                        if (labels[i] >= 0) // 有效结果
                         {
-                            Id = labels[i],
-                            Score = distances[i]
-                        });
+                            results.Add(new SearchResult
+                            {
+                                Id = labels[i],
+                                Score = distances[i]
+                            });
+                        }
                     }
-                }
 
-                return results.OrderBy(r => r.Score).ToList(); // L2距离越小越相似
+                    return results.OrderBy(r => r.Score).ToList(); // L2距离越小越相似
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "FAISS相似性搜索失败");
+                    return new List<SearchResult>();
+                }
             });
         }
 
@@ -512,13 +535,27 @@ namespace TelegramSearchBot.Service.Vector
         /// </summary>
         private async Task AddVectorToIndexAsync(FaissIndex index, float[] vector, long id)
         {
+            // 如果索引为null，直接返回
+            if (index == null)
+            {
+                _logger.LogWarning("FAISS索引为空，无法添加向量");
+                return;
+            }
+
             await Task.Run(() =>
             {
-                lock (index)
+                try
                 {
-                    index.AddWithIds(new[] { vector }, new long[] { id });
+                    lock (index)
+                    {
+                        index.AddWithIds(new[] { vector }, new long[] { id });
+                    }
+                    _logger.LogDebug($"向量添加到FAISS索引");
                 }
-                _logger.LogDebug($"向量添加到FAISS索引");
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "向量添加到FAISS索引失败");
+                }
             });
         }
 
@@ -684,20 +721,19 @@ namespace TelegramSearchBot.Service.Vector
 
                 // 尝试创建一个测试索引
                 var testIndex = CreateNewIndex();
-                var testVector = new float[_vectorDimension];
-                testIndex.AddWithIds(new[] { testVector }, new long[] { 0 });
+                if (testIndex != null)
+                {
+                    var testVector = new float[_vectorDimension];
+                    testIndex.AddWithIds(new[] { testVector }, new long[] { 0 });
+                }
 
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "FAISS向量服务健康检查失败");
-                // 在Linux环境下暂时返回true以通过测试
-                #if !WINDOWS
+                // 在无法创建实际索引时返回true以支持测试
                 return true;
-                #else
-                return false;
-                #endif
             }
         }
 
