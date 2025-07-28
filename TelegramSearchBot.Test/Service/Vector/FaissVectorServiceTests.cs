@@ -56,8 +56,12 @@ namespace TelegramSearchBot.Test.Service.Vector
             _mockServiceScopeFactory.Setup(x => x.CreateScope()).Returns(_mockServiceScope.Object);
             _mockServiceProvider.Setup(x => x.GetService(typeof(IServiceScopeFactory)))
                 .Returns(_mockServiceScopeFactory.Object);
+            _mockServiceProvider.Setup(x => x.GetService(typeof(IGeneralLLMService)))
+                .Returns(_mockLLMService.Object);
             _mockScopeServiceProvider.Setup(x => x.GetService(typeof(DataDbContext)))
                 .Returns(_dbContext);
+            _mockScopeServiceProvider.Setup(x => x.GetService(typeof(IGeneralLLMService)))
+                .Returns(_mockLLMService.Object);
 
             SetupDefaultVectorMock();
 
