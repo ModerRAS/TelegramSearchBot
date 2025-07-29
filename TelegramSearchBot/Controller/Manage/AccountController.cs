@@ -10,6 +10,7 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.View;
+using TelegramSearchBot;
 
 namespace TelegramSearchBot.Controller.Manage {
     public class AccountController : IOnUpdate
@@ -35,6 +36,12 @@ namespace TelegramSearchBot.Controller.Manage {
 
         public async Task ExecuteAsync(PipelineContext p)
         {
+            // 检查账本功能是否启用
+            if (!Env.EnableAccounting)
+            {
+                return; // 功能未启用，直接返回
+            }
+
             var update = p.Update;
             await ExecuteAsync(update);
             if (update?.Message == null || update.Message.Chat.Id > 0)
@@ -134,6 +141,12 @@ namespace TelegramSearchBot.Controller.Manage {
 
         public async Task ExecuteAsync(Update update)
         {
+            // 检查账本功能是否启用
+            if (!Env.EnableAccounting)
+            {
+                return; // 功能未启用，直接返回
+            }
+
             if (update.CallbackQuery == null) return;
             
             var callbackQuery = update.CallbackQuery;
