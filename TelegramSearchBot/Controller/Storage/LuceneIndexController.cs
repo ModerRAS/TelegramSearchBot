@@ -14,8 +14,11 @@ using TelegramSearchBot.Controller.Help;
 using TelegramSearchBot.Controller.Manage;
 using TelegramSearchBot.Controller.Search;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Attributes;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TelegramSearchBot.Controller.Storage {
+    [Injectable(ServiceLifetime.Transient)]
     public class LuceneIndexController : IOnUpdate
     {
         private readonly MessageService _messageService;

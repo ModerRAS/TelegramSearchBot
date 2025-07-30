@@ -13,6 +13,7 @@ using MediatR;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Notifications;
 using TelegramSearchBot.Attributes;
+using Microsoft.EntityFrameworkCore;
 
 namespace TelegramSearchBot.Service.Storage
 {
@@ -38,7 +39,10 @@ namespace TelegramSearchBot.Service.Storage
 
         public async Task AddToLucene(MessageOption messageOption)
         {
-            var message = await DataContext.Messages.FindAsync(messageOption.MessageDataId);
+            var message = await DataContext.Messages
+                .Include(m => m.MessageExtensions)
+                .FirstOrDefaultAsync(m => m.Id == messageOption.MessageDataId);
+            
             if (message != null)
             {
                 await lucene.WriteDocumentAsync(message);
