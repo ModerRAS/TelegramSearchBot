@@ -45,6 +45,10 @@ namespace TelegramSearchBot.Controller.Search {
                 {
                     await HandleVectorSearch(e.Message);
                 }
+                else if (e.Message.Text.Length >= 6 && e.Message.Text.Substring(0, 5).Equals("语法搜索 "))
+                {
+                    await HandleSyntaxSearch(e.Message);
+                }
             }
         }
 
@@ -56,6 +60,11 @@ namespace TelegramSearchBot.Controller.Search {
         private async Task HandleVectorSearch(Message message)
         {
             await HandleSearchInternal(message, SearchType.Vector, 5);
+        }
+        
+        private async Task HandleSyntaxSearch(Message message)
+        {
+            await HandleSearchInternal(message, SearchType.SyntaxSearch, 5);
         }
 
         private async Task HandleSearchInternal(Message message, SearchType searchType, int prefixLength)
@@ -95,8 +104,21 @@ namespace TelegramSearchBot.Controller.Search {
             }
 
             // 添加切换搜索方式按钮
-            var alternativeSearchType = searchType == SearchType.InvertedIndex ? SearchType.Vector : SearchType.InvertedIndex;
-            var searchTypeText = alternativeSearchType == SearchType.Vector ? "向量搜索" : "倒排索引";
+            var alternativeSearchType = searchType switch
+            {
+                SearchType.InvertedIndex => SearchType.Vector,
+                SearchType.Vector => SearchType.SyntaxSearch,
+                SearchType.SyntaxSearch => SearchType.InvertedIndex,
+                _ => SearchType.InvertedIndex
+            };
+            
+            var searchTypeText = alternativeSearchType switch
+            {
+                SearchType.Vector => "向量搜索",
+                SearchType.SyntaxSearch => "语法搜索",
+                _ => "倒排索引"
+            };
+            
             var changeSearchTypeCallback = await callbackDataService.GenerateChangeSearchTypeCallbackAsync(searchOption, alternativeSearchType);
             searchView.AddButton($"切换到{searchTypeText}", changeSearchTypeCallback);
 

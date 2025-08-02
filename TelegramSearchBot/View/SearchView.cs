@@ -132,7 +132,7 @@ namespace TelegramSearchBot.View
         }
 
         private const string SearchResultTemplate = @"
-{{- search_type_text = search_option.search_type == 0 ? ""倒排索引"" : ""向量搜索"" -}}
+{{- search_type_text = search_option.search_type == 0 ? ""倒排索引"" : search_option.search_type == 1 ? ""向量搜索"" : ""语法搜索"" -}}
 <b>搜索方式</b>: {{search_type_text}}
 
 {{- if search_option.count > 0 -}}

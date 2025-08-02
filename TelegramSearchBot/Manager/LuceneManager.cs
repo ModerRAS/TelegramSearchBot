@@ -117,6 +117,24 @@ namespace TelegramSearchBot.Manager
             return writer;
         }
 
+        // 简单搜索方法 - 旧实现，只搜索Content字段
+        private (Query, string[]) ParseSimpleQuery(string q, IndexReader reader) {
+            var analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
+            var query = new BooleanQuery();
+            
+            // 处理搜索词
+            var terms = q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var term in terms) {
+                if (string.IsNullOrWhiteSpace(term)) continue;
+                
+                var termQuery = new TermQuery(new Term("Content", term));
+                query.Add(termQuery, Occur.SHOULD);
+            }
+
+            return (query, terms);
+        }
+        
+        // 语法搜索方法 - 新实现，支持字段指定、排除词等语法
         private (BooleanQuery, string[]) ParseQuery(string q, IndexReader reader) {
             var query = new BooleanQuery();
             var analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
@@ -170,7 +188,90 @@ namespace TelegramSearchBot.Manager
 
             return (query, remainingTerms);
         }
-        public (int, List<Message>) Search(string q, long GroupId, int Skip, int Take) {
+        // 简单搜索方法 - 使用旧实现，只搜索Content字段，不支持语法
+        public (int, List<Message>) SimpleSearch(string q, long GroupId, int Skip, int Take) {
+            IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
+            var searcher = new IndexSearcher(reader);
+
+            var (query, searchTerms) = ParseSimpleQuery(q, reader);
+            
+            // 添加扩展字段搜索（简单版本）
+            var fields = MultiFields.GetIndexedFields(reader);
+            foreach (var field in fields) {
+                if (field.StartsWith("Ext_")) {
+                    // 检查searchTerms是否有内容
+                    if (searchTerms != null && searchTerms.Length > 0) {
+                        var extQuery = new BooleanQuery();
+                        foreach (var term in searchTerms) {
+                            if (!string.IsNullOrWhiteSpace(term)) {
+                                extQuery.Add(new TermQuery(new Term(field, term)), Occur.SHOULD);
+                            }
+                        }
+                        // 将扩展字段查询添加到主查询中
+                        if (query is BooleanQuery booleanQuery) {
+                            booleanQuery.Add(extQuery, Occur.SHOULD);
+                        } else {
+                            // 如果不是BooleanQuery，创建一个新的BooleanQuery
+                            var newQuery = new BooleanQuery();
+                            newQuery.Add(query, Occur.SHOULD);
+                            newQuery.Add(extQuery, Occur.SHOULD);
+                            query = newQuery;
+                        }
+                    }
+                }
+            }
+
+            var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
+            var total = top.TotalHits;
+            var hits = top.ScoreDocs;
+
+            var messages = new List<Message>();
+            var id = 0;
+            foreach (var hit in hits) {
+                if (id++ < Skip) continue;
+                var document = searcher.Doc(hit.Doc);
+                var message = new Message() {
+                    Id = id,
+                    MessageId = long.Parse(document.Get("MessageId")),
+                    GroupId = long.Parse(document.Get("GroupId")),
+                    Content = document.Get("Content")
+                };
+
+                // 安全解析可能缺失的字段
+                if (document.Get("DateTime") != null) {
+                    message.DateTime = DateTime.Parse(document.Get("DateTime"));
+                }
+                if (document.Get("FromUserId") != null) {
+                    message.FromUserId = long.Parse(document.Get("FromUserId"));
+                }
+                if (document.Get("ReplyToUserId") != null) {
+                    message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
+                }
+                if (document.Get("ReplyToMessageId") != null) {
+                    message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
+                }
+
+                // 获取扩展字段
+                var extensions = new List<MessageExtension>();
+                foreach (var field in document.Fields) {
+                    if (field.Name.StartsWith("Ext_")) {
+                        extensions.Add(new MessageExtension {
+                            Name = field.Name.Substring(4),
+                            Value = field.GetStringValue()
+                        });
+                    }
+                }
+                if (extensions.Any()) {
+                    message.MessageExtensions = extensions;
+                }
+
+                messages.Add(message);
+            }
+            return (total, messages);
+        }
+        
+        // 语法搜索方法 - 保留当前实现，支持字段指定、排除词等语法
+        public (int, List<Message>) SyntaxSearch(string q, long GroupId, int Skip, int Take) {
             IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
             var searcher = new IndexSearcher(reader);
 
@@ -240,6 +341,11 @@ namespace TelegramSearchBot.Manager
                 messages.Add(message);
             }
             return (total, messages);
+        }
+        
+        // 默认搜索方法 - 保持向后兼容，实际调用简单搜索
+        public (int, List<Message>) Search(string q, long GroupId, int Skip, int Take) {
+            return SimpleSearch(q, GroupId, Skip, Take);
         }
     }
 }

@@ -38,8 +38,9 @@ namespace TelegramSearchBot.Service.Search
             return searchOption.SearchType switch
             {
                 SearchType.Vector => await VectorSearch(searchOption),
-                SearchType.InvertedIndex => await LuceneSearch(searchOption),
-                _ => await LuceneSearch(searchOption) // 默认使用倒排索引搜索
+                SearchType.InvertedIndex => await LuceneSearch(searchOption), // 默认使用简单搜索
+                SearchType.SyntaxSearch => await LuceneSyntaxSearch(searchOption), // 语法搜索
+                _ => await LuceneSearch(searchOption) // 默认使用简单搜索
             };
         }
 
@@ -59,6 +60,30 @@ namespace TelegramSearchBot.Service.Search
                 foreach (var Group in UserInGroups)
                 {
                     var (count, messages) = lucene.Search(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
+                    searchOption.Messages.AddRange(messages);
+                    searchOption.Count += count;
+                }
+            }
+            return searchOption;
+        }
+        
+        // 语法搜索方法 - 使用支持语法的新搜索实现
+        private async Task<SearchOption> LuceneSyntaxSearch(SearchOption searchOption)
+        {
+            if (searchOption.IsGroup)
+            {
+                (searchOption.Count, searchOption.Messages) = lucene.SyntaxSearch(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+            }
+            else
+            {
+                var UserInGroups = dbContext.Set<UserWithGroup>()
+                    .Where(user => searchOption.ChatId.Equals(user.UserId))
+                    .ToList();
+                var GroupsLength = UserInGroups.Count;
+                searchOption.Messages = new List<Message>();
+                foreach (var Group in UserInGroups)
+                {
+                    var (count, messages) = lucene.SyntaxSearch(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
                     searchOption.Messages.AddRange(messages);
                     searchOption.Count += count;
                 }
