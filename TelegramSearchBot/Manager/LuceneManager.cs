@@ -117,13 +117,34 @@ namespace TelegramSearchBot.Manager
             return writer;
         }
 
+        private List<string> GetKeyWords(string q) {
+            List<string> keywords = new List<string>();
+            Analyzer analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
+            using (var ts = analyzer.GetTokenStream(null, q)) {
+                ts.Reset();
+                var ct = ts.GetAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
+
+                while (ts.IncrementToken()) {
+                    StringBuilder keyword = new StringBuilder();
+                    for (int i = 0; i < ct.Length; i++) {
+                        keyword.Append(ct.Buffer[i]);
+                    }
+                    string item = keyword.ToString();
+                    if (!keywords.Contains(item)) {
+                        keywords.Add(item);
+                    }
+                }
+            }
+            return keywords;
+        }
+
         // 简单搜索方法 - 旧实现，只搜索Content字段
         private (Query, string[]) ParseSimpleQuery(string q, IndexReader reader) {
             var analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
             var query = new BooleanQuery();
             
-            // 处理搜索词
-            var terms = q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            // 处理搜索词，使用分词后的关键词
+            var terms = GetKeyWords(q).ToArray();
             foreach (var term in terms) {
                 if (string.IsNullOrWhiteSpace(term)) continue;
                 
@@ -165,20 +186,37 @@ namespace TelegramSearchBot.Manager
                     field = "Content";
                 }
                 
-                query.Add(new TermQuery(new Term(field, value)), Occur.MUST);
+                // 对字段值也进行分词处理
+                var valueTerms = GetKeyWords(value);
+                if (valueTerms.Count == 1) {
+                    // 如果分词后只有一个词，直接使用
+                    query.Add(new TermQuery(new Term(field, valueTerms[0])), Occur.MUST);
+                } else if (valueTerms.Count > 1) {
+                    // 如果分词后有多个词，使用BooleanQuery组合
+                    var valueQuery = new BooleanQuery();
+                    foreach (var term in valueTerms) {
+                        valueQuery.Add(new TermQuery(new Term(field, term)), Occur.SHOULD);
+                    }
+                    query.Add(valueQuery, Occur.MUST);
+                }
                 q = q.Replace(match.Value, ""); // 移除已处理的字段搜索
             }
 
             // 处理排除关键词 -keyword
             var excludeMatches = System.Text.RegularExpressions.Regex.Matches(q, @"-([^\s]+)");
             foreach (System.Text.RegularExpressions.Match match in excludeMatches) {
-                var term = new Term("Content", match.Groups[1].Value);
-                query.Add(new TermQuery(term), Occur.MUST_NOT);
+                var excludeValue = match.Groups[1].Value;
+                // 对排除关键词也进行分词处理
+                var excludeTerms = GetKeyWords(excludeValue);
+                foreach (var term in excludeTerms) {
+                    var termQuery = new TermQuery(new Term("Content", term));
+                    query.Add(termQuery, Occur.MUST_NOT);
+                }
                 q = q.Replace(match.Value, ""); // 移除已处理的排除词
             }
 
-            // 处理剩余的关键词
-            var remainingTerms = q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            // 处理剩余的关键词，使用分词后的关键词
+            var remainingTerms = GetKeyWords(q).ToArray();
             foreach (var term in remainingTerms) {
                 if (string.IsNullOrWhiteSpace(term)) continue;
                 
