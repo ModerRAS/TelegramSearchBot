@@ -45,6 +45,10 @@ namespace TelegramSearchBot.Controller.Search {
                 {
                     await HandleVectorSearch(e.Message);
                 }
+                else if (e.Message.Text.Length >= 7 && e.Message.Text.Substring(0, 6).Equals("语法搜索 "))
+                {
+                    await HandleSyntaxSearch(e.Message);
+                }
             }
         }
 
@@ -56,6 +60,11 @@ namespace TelegramSearchBot.Controller.Search {
         private async Task HandleVectorSearch(Message message)
         {
             await HandleSearchInternal(message, SearchType.Vector, 5);
+        }
+        
+        private async Task HandleSyntaxSearch(Message message)
+        {
+            await HandleSearchInternal(message, SearchType.SyntaxSearch, 6);
         }
 
         private async Task HandleSearchInternal(Message message, SearchType searchType, int prefixLength)
