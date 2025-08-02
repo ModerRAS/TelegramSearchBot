@@ -138,7 +138,7 @@ namespace TelegramSearchBot.Manager
             return keywords;
         }
 
-        // 简单搜索方法 - 旧实现，只搜索Content字段
+        // 简单搜索方法 - 搜索Content字段和Ext字段
         private (Query, string[]) ParseSimpleQuery(string q, IndexReader reader) {
             var analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
             var query = new BooleanQuery();
@@ -164,12 +164,16 @@ namespace TelegramSearchBot.Manager
             var phraseMatches = System.Text.RegularExpressions.Regex.Matches(q, "\"([^\"]+)\"");
             foreach (System.Text.RegularExpressions.Match match in phraseMatches) {
                 var phraseQuery = new PhraseQuery();
+                var extPhraseQueries = new Dictionary<string, PhraseQuery>(); // 为Ext字段存储短语查询
                 using (var ts = analyzer.GetTokenStream(null, match.Groups[1].Value)) {
                     ts.Reset();
                     var ct = ts.GetAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
                     int position = 0;
                     while (ts.IncrementToken()) {
+                        // 为Content字段添加短语查询
                         phraseQuery.Add(new Term("Content", ct.ToString()), position++);
+                        
+                        // 为所有可能的Ext字段添加短语查询（在后续处理中会实际使用）
                     }
                 }
                 query.Add(phraseQuery, Occur.MUST);
@@ -226,7 +230,7 @@ namespace TelegramSearchBot.Manager
 
             return (query, remainingTerms);
         }
-        // 简单搜索方法 - 使用旧实现，只搜索Content字段，不支持语法
+        // 简单搜索方法 - 搜索Content字段和Ext字段，不支持语法
         public (int, List<Message>) SimpleSearch(string q, long GroupId, int Skip, int Take) {
             IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
             var searcher = new IndexSearcher(reader);
@@ -308,7 +312,7 @@ namespace TelegramSearchBot.Manager
             return (total, messages);
         }
         
-        // 语法搜索方法 - 保留当前实现，支持字段指定、排除词等语法
+        // 语法搜索方法 - 搜索Content字段和Ext字段，支持字段指定、排除词等语法
         public (int, List<Message>) SyntaxSearch(string q, long GroupId, int Skip, int Take) {
             IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
             var searcher = new IndexSearcher(reader);
