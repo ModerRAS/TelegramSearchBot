@@ -21,12 +21,24 @@ namespace TelegramSearchBot.Manager
         private readonly UnifiedTokenizer _tokenizer;
         private readonly ExtFieldQueryOptimizer _extOptimizer;
         private readonly PhraseQueryProcessor _phraseProcessor;
+        private readonly ContentQueryBuilder _contentBuilder;
+        private readonly ExtQueryBuilder _extBuilder;
+        private readonly UnifiedQueryBuilder _unifiedBuilder;
+        private readonly FieldSpecificationParser _fieldParser;
         
         public LuceneManager(SendMessage Send) {
             this.Send = Send;
             _tokenizer = new UnifiedTokenizer(msg => Send?.Log(msg));
             _extOptimizer = new ExtFieldQueryOptimizer(msg => Send?.Log(msg));
             _phraseProcessor = new PhraseQueryProcessor(_tokenizer, _extOptimizer, msg => Send?.Log(msg));
+            
+            // 初始化查询构建器
+            _contentBuilder = new ContentQueryBuilder(_tokenizer, msg => Send?.Log(msg));
+            _extBuilder = new ExtQueryBuilder(_tokenizer, _extOptimizer, msg => Send?.Log(msg));
+            _unifiedBuilder = new UnifiedQueryBuilder(_contentBuilder, _extBuilder, _extOptimizer, msg => Send?.Log(msg));
+            
+            // 初始化字段解析器
+            _fieldParser = new FieldSpecificationParser(msg => Send?.Log(msg));
         }
         public async Task WriteDocumentAsync(Message message) {
             using (var writer = GetIndexWriter(message.GroupId)) {
@@ -123,6 +135,135 @@ namespace TelegramSearchBot.Manager
             var indexConfig = new IndexWriterConfig(LuceneVersion.LUCENE_48, analyzer);
             IndexWriter writer = new IndexWriter(dir, indexConfig);
             return writer;
+        }
+
+        // 统一的查询构建接口 - 为Content字段和Ext字段提供一致的查询处理逻辑
+        private interface IQueryBuilder
+        {
+            BooleanQuery BuildQuery(string query, long groupId, IndexReader reader);
+            List<string> TokenizeQuery(string query);
+        }
+
+        // Content字段查询构建器 - 处理Content字段的查询构建
+        private class ContentQueryBuilder : IQueryBuilder
+        {
+            private readonly UnifiedTokenizer _tokenizer;
+            private readonly Action<string> _logAction;
+
+            public ContentQueryBuilder(UnifiedTokenizer tokenizer, Action<string> logAction = null)
+            {
+                _tokenizer = tokenizer;
+                _logAction = logAction;
+            }
+
+            public BooleanQuery BuildQuery(string query, long groupId, IndexReader reader)
+            {
+                var booleanQuery = new BooleanQuery();
+                var keywords = TokenizeQuery(query);
+
+                foreach (var keyword in keywords)
+                {
+                    if (!string.IsNullOrWhiteSpace(keyword))
+                    {
+                        var termQuery = new TermQuery(new Term("Content", keyword));
+                        booleanQuery.Add(termQuery, Occur.SHOULD);
+                    }
+                }
+
+                return booleanQuery;
+            }
+
+            public List<string> TokenizeQuery(string query)
+            {
+                return _tokenizer.SafeTokenize(query);
+            }
+        }
+
+        // Ext字段查询构建器 - 处理Ext字段的查询构建
+        private class ExtQueryBuilder : IQueryBuilder
+        {
+            private readonly UnifiedTokenizer _tokenizer;
+            private readonly ExtFieldQueryOptimizer _extOptimizer;
+            private readonly Action<string> _logAction;
+
+            public ExtQueryBuilder(UnifiedTokenizer tokenizer, ExtFieldQueryOptimizer extOptimizer, Action<string> logAction = null)
+            {
+                _tokenizer = tokenizer;
+                _extOptimizer = extOptimizer;
+                _logAction = logAction;
+            }
+
+            public BooleanQuery BuildQuery(string query, long groupId, IndexReader reader)
+            {
+                var keywords = TokenizeQuery(query);
+                return _extOptimizer.BuildOptimizedExtQuery(keywords, reader, groupId);
+            }
+
+            public List<string> TokenizeQuery(string query)
+            {
+                return _tokenizer.SafeTokenize(query);
+            }
+        }
+
+        // 统一查询构建器 - 协调Content和Ext字段的查询构建
+        private class UnifiedQueryBuilder
+        {
+            private readonly ContentQueryBuilder _contentBuilder;
+            private readonly ExtQueryBuilder _extBuilder;
+            private readonly ExtFieldQueryOptimizer _extOptimizer;
+            private readonly Action<string> _logAction;
+
+            public UnifiedQueryBuilder(ContentQueryBuilder contentBuilder, ExtQueryBuilder extBuilder, ExtFieldQueryOptimizer extOptimizer, Action<string> logAction = null)
+            {
+                _contentBuilder = contentBuilder;
+                _extBuilder = extBuilder;
+                _extOptimizer = extOptimizer;
+                _logAction = logAction;
+            }
+
+            // 构建统一的查询（Content + Ext字段）
+            public BooleanQuery BuildUnifiedQuery(List<string> keywords, IndexReader reader, long groupId, bool requireAllFields = false)
+            {
+                var combinedQuery = new BooleanQuery();
+
+                // Content字段查询
+                var contentQuery = new BooleanQuery();
+                foreach (var keyword in keywords)
+                {
+                    if (!string.IsNullOrWhiteSpace(keyword))
+                    {
+                        var termQuery = new TermQuery(new Term("Content", keyword));
+                        contentQuery.Add(termQuery, Occur.SHOULD);
+                    }
+                }
+                combinedQuery.Add(contentQuery, Occur.SHOULD);
+
+                // Ext字段查询
+                var extQuery = _extBuilder.BuildQuery(string.Join(" ", keywords), groupId, reader);
+                combinedQuery.Add(extQuery, Occur.SHOULD);
+
+                return combinedQuery;
+            }
+
+            // 构建短语查询的统一版本
+            public BooleanQuery BuildUnifiedPhraseQuery(List<string> terms, IndexReader reader, long groupId)
+            {
+                var combinedQuery = new BooleanQuery();
+
+                // Content字段短语查询
+                var contentPhraseQuery = new PhraseQuery();
+                for (int i = 0; i < terms.Count; i++)
+                {
+                    contentPhraseQuery.Add(new Term("Content", terms[i]), i);
+                }
+                combinedQuery.Add(contentPhraseQuery, Occur.SHOULD);
+
+                // Ext字段短语查询
+                var extPhraseQuery = _extOptimizer.BuildOptimizedExtPhraseQuery(terms, reader, groupId);
+                combinedQuery.Add(extPhraseQuery, Occur.SHOULD);
+
+                return combinedQuery;
+            }
         }
 
         // Ext字段查询优化器 - 优化Ext字段搜索性能，避免每次遍历所有字段
@@ -249,6 +390,114 @@ namespace TelegramSearchBot.Manager
                 {
                     _fieldCache.TryRemove(groupId, out _);
                 }
+            }
+        }
+
+        // 字段解析器 - 支持字段指定搜索和字段别名机制
+        private class FieldSpecificationParser
+        {
+            private readonly Action<string> _logAction;
+
+            public FieldSpecificationParser(Action<string> logAction = null)
+            {
+                _logAction = logAction;
+            }
+
+            // 解析字段指定语法
+            public FieldSpec ParseFieldSpecification(string fieldSpec)
+            {
+                if (string.IsNullOrWhiteSpace(fieldSpec))
+                    return null;
+
+                var parts = fieldSpec.Split(':', 2);
+                if (parts.Length != 2)
+                    return null;
+
+                var fieldName = parts[0].Trim();
+                var fieldValue = parts[1].Trim();
+
+                // 处理字段别名
+                var actualFieldName = ResolveFieldAlias(fieldName);
+
+                return new FieldSpec(actualFieldName, fieldValue);
+            }
+
+            // 批量解析字段指定语法
+            public List<FieldSpec> ParseFieldSpecifications(string query)
+            {
+                var fieldSpecs = new List<FieldSpec>();
+                var fieldMatches = System.Text.RegularExpressions.Regex.Matches(query, @"(\w+):([^\s]+)");
+
+                foreach (System.Text.RegularExpressions.Match match in fieldMatches)
+                {
+                    var fieldSpec = ParseFieldSpecification(match.Value);
+                    if (fieldSpec != null)
+                    {
+                        fieldSpecs.Add(fieldSpec);
+                    }
+                }
+
+                return fieldSpecs;
+            }
+
+            // 从查询中提取字段指定部分，返回处理后的查询
+            public (List<FieldSpec> FieldSpecs, string RemainingQuery) ExtractFieldSpecifications(string query)
+            {
+                var fieldSpecs = ParseFieldSpecifications(query);
+                var remainingQuery = query;
+
+                foreach (var fieldSpec in fieldSpecs)
+                {
+                    remainingQuery = remainingQuery.Replace($"{fieldSpec.FieldName}:{fieldSpec.FieldValue}", "");
+                }
+
+                return (fieldSpecs, remainingQuery.Trim());
+            }
+
+            // 字段别名映射
+            private string ResolveFieldAlias(string fieldName)
+            {
+                return fieldName.ToLowerInvariant() switch
+                {
+                    "content" => "Content",
+                    "ocr" => "Ext_OCR_Result",
+                    "asr" => "Ext_ASR_Result",
+                    "qr" => "Ext_QR_Result",
+                    _ => fieldName // 保持原样，可能是直接指定的字段名
+                };
+            }
+
+            // 验证字段规范的有效性
+            public bool IsValidFieldSpec(FieldSpec fieldSpec)
+            {
+                if (fieldSpec == null || string.IsNullOrWhiteSpace(fieldSpec.FieldName) || string.IsNullOrWhiteSpace(fieldSpec.FieldValue))
+                    return false;
+
+                // 检查字段名是否合法
+                if (fieldSpec.FieldName.StartsWith("Ext_") || fieldSpec.FieldName.Equals("Content", StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                return false;
+            }
+        }
+
+        // 字段规范数据模型
+        private class FieldSpec
+        {
+            public string FieldName { get; set; }
+            public string FieldValue { get; set; }
+            public bool IsExtField => FieldName.StartsWith("Ext_");
+            public bool IsContentField => FieldName.Equals("Content", StringComparison.OrdinalIgnoreCase);
+
+            public FieldSpec(string fieldName, string fieldValue)
+            {
+                FieldName = fieldName;
+                FieldValue = fieldValue;
+            }
+
+            public override string ToString()
+            {
+                return $"{FieldName}:{FieldValue}";
             }
         }
 
@@ -436,6 +685,7 @@ namespace TelegramSearchBot.Manager
         // 简化实现的相关函数方法：ParseQuery方法
         private (BooleanQuery, string[]) ParseQuery(string q, IndexReader reader, long groupId) {
             var query = new BooleanQuery();
+            Action<string> _logAction = msg => Send?.Log(msg);
             
             // 使用短语查询处理器提取和处理短语查询
             var (phraseQueries, remainingQuery) = _phraseProcessor.ExtractPhraseQueries(q);
@@ -449,41 +699,33 @@ namespace TelegramSearchBot.Manager
             // 更新q为剩余的查询字符串
             q = remainingQuery;
 
-            // 处理字段指定搜索 field:value
-            var fieldMatches = System.Text.RegularExpressions.Regex.Matches(q, @"(\w+):([^\s]+)");
-            foreach (System.Text.RegularExpressions.Match match in fieldMatches) {
-                var field = match.Groups[1].Value;
-                var value = match.Groups[2].Value;
-                
-                // 支持字段别名
-                if (field.Equals("content", StringComparison.OrdinalIgnoreCase)) {
-                    field = "Content";
-                }
-                else if (field.Equals("ocr", StringComparison.OrdinalIgnoreCase)) {
-                    field = "Ext_OCR_Result";
-                }
-                else if (field.Equals("asr", StringComparison.OrdinalIgnoreCase)) {
-                    field = "Ext_ASR_Result";
-                }
-                else if (field.Equals("qr", StringComparison.OrdinalIgnoreCase)) {
-                    field = "Ext_QR_Result";
-                }
-                
-                // 对字段值也进行分词处理
-                var valueTerms = GetKeyWords(value);
-                if (valueTerms.Count == 1) {
-                    // 如果分词后只有一个词，直接使用
-                    query.Add(new TermQuery(new Term(field, valueTerms[0])), Occur.MUST);
-                } else if (valueTerms.Count > 1) {
-                    // 如果分词后有多个词，使用BooleanQuery组合
-                    var valueQuery = new BooleanQuery();
-                    foreach (var term in valueTerms) {
-                        valueQuery.Add(new TermQuery(new Term(field, term)), Occur.SHOULD);
+            // 使用字段解析器处理字段指定搜索
+            var (fieldSpecs, remainingQueryAfterFields) = _fieldParser.ExtractFieldSpecifications(q);
+            
+            foreach (var fieldSpec in fieldSpecs)
+            {
+                if (_fieldParser.IsValidFieldSpec(fieldSpec))
+                {
+                    // 对字段值也进行分词处理
+                    var valueTerms = GetKeyWords(fieldSpec.FieldValue);
+                    if (valueTerms.Count == 1) {
+                        // 如果分词后只有一个词，直接使用
+                        query.Add(new TermQuery(new Term(fieldSpec.FieldName, valueTerms[0])), Occur.MUST);
+                    } else if (valueTerms.Count > 1) {
+                        // 如果分词后有多个词，使用BooleanQuery组合
+                        var valueQuery = new BooleanQuery();
+                        foreach (var term in valueTerms) {
+                            valueQuery.Add(new TermQuery(new Term(fieldSpec.FieldName, term)), Occur.SHOULD);
+                        }
+                        query.Add(valueQuery, Occur.MUST);
                     }
-                    query.Add(valueQuery, Occur.MUST);
+                    
+                    _logAction?.Invoke($"字段指定搜索: {fieldSpec.FieldName}={fieldSpec.FieldValue}");
                 }
-                q = q.Replace(match.Value, ""); // 移除已处理的字段搜索
             }
+            
+            // 更新q为剩余的查询字符串
+            q = remainingQueryAfterFields;
 
             // 处理排除关键词 -keyword
             var excludeMatches = System.Text.RegularExpressions.Regex.Matches(q, @"-([^\s]+)");
