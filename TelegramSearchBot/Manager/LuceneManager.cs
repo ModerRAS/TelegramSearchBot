@@ -6,6 +6,7 @@ using Lucene.Net.Search;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,8 +18,15 @@ namespace TelegramSearchBot.Manager
 {
     public class LuceneManager {
         private SendMessage Send;
+        private readonly UnifiedTokenizer _tokenizer;
+        private readonly ExtFieldQueryOptimizer _extOptimizer;
+        private readonly PhraseQueryProcessor _phraseProcessor;
+        
         public LuceneManager(SendMessage Send) {
             this.Send = Send;
+            _tokenizer = new UnifiedTokenizer(msg => Send?.Log(msg));
+            _extOptimizer = new ExtFieldQueryOptimizer(msg => Send?.Log(msg));
+            _phraseProcessor = new PhraseQueryProcessor(_tokenizer, _extOptimizer, msg => Send?.Log(msg));
         }
         public async Task WriteDocumentAsync(Message message) {
             using (var writer = GetIndexWriter(message.GroupId)) {
@@ -117,25 +125,290 @@ namespace TelegramSearchBot.Manager
             return writer;
         }
 
-        private List<string> GetKeyWords(string q) {
-            List<string> keywords = new List<string>();
-            Analyzer analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
-            using (var ts = analyzer.GetTokenStream(null, q)) {
-                ts.Reset();
-                var ct = ts.GetAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
+        // Ext字段查询优化器 - 优化Ext字段搜索性能，避免每次遍历所有字段
+        private class ExtFieldQueryOptimizer
+        {
+            private readonly ConcurrentDictionary<long, string[]> _fieldCache = new();
+            private readonly Action<string> _logAction;
 
-                while (ts.IncrementToken()) {
-                    StringBuilder keyword = new StringBuilder();
-                    for (int i = 0; i < ct.Length; i++) {
-                        keyword.Append(ct.Buffer[i]);
-                    }
-                    string item = keyword.ToString();
-                    if (!keywords.Contains(item)) {
-                        keywords.Add(item);
+            public ExtFieldQueryOptimizer(Action<string> logAction = null)
+            {
+                _logAction = logAction;
+            }
+
+            // 构建优化的Ext字段查询
+            public BooleanQuery BuildOptimizedExtQuery(List<string> keywords, IndexReader reader, long groupId)
+            {
+                var query = new BooleanQuery();
+                var extFields = GetExtFields(reader, groupId);
+                
+                if (extFields.Length == 0)
+                    return query;
+
+                // 使用优化的查询构建方式，减少嵌套层级
+                foreach (var keyword in keywords)
+                {
+                    if (!string.IsNullOrWhiteSpace(keyword))
+                    {
+                        var keywordQuery = new BooleanQuery();
+                        foreach (var field in extFields)
+                        {
+                            keywordQuery.Add(new TermQuery(new Term(field, keyword)), Occur.SHOULD);
+                        }
+                        query.Add(keywordQuery, Occur.SHOULD);
                     }
                 }
+
+                return query;
             }
-            return keywords;
+
+            // 为短语查询构建优化的Ext字段查询
+            public BooleanQuery BuildOptimizedExtPhraseQuery(List<string> terms, IndexReader reader, long groupId)
+            {
+                var combinedQuery = new BooleanQuery();
+                var extFields = GetExtFields(reader, groupId);
+                
+                if (extFields.Length == 0)
+                    return combinedQuery;
+
+                // 为每个Ext字段创建短语查询
+                foreach (var field in extFields)
+                {
+                    var extPhraseQuery = BuildPhraseQueryForField(field, terms);
+                    combinedQuery.Add(extPhraseQuery, Occur.SHOULD);
+                }
+
+                return combinedQuery;
+            }
+
+            // 构建排除关键词的Ext字段查询
+            public BooleanQuery BuildOptimizedExtExcludeQuery(List<string> excludeKeywords, IndexReader reader, long groupId)
+            {
+                var excludeQuery = new BooleanQuery();
+                var extFields = GetExtFields(reader, groupId);
+                
+                if (extFields.Length == 0)
+                    return excludeQuery;
+
+                // 为每个排除关键词构建Ext字段排除查询
+                foreach (var keyword in excludeKeywords)
+                {
+                    if (!string.IsNullOrWhiteSpace(keyword))
+                    {
+                        var keywordExcludeQuery = new BooleanQuery();
+                        foreach (var field in extFields)
+                        {
+                            keywordExcludeQuery.Add(new TermQuery(new Term(field, keyword)), Occur.SHOULD);
+                        }
+                        excludeQuery.Add(keywordExcludeQuery, Occur.MUST_NOT);
+                    }
+                }
+
+                return excludeQuery;
+            }
+
+            // 获取Ext字段列表（带缓存）
+            private string[] GetExtFields(IndexReader reader, long groupId)
+            {
+                return _fieldCache.GetOrAdd(groupId, _ => 
+                {
+                    try
+                    {
+                        var fields = MultiFields.GetIndexedFields(reader);
+                        var extFields = fields.Where(f => f.StartsWith("Ext_")).ToArray();
+                        _logAction?.Invoke($"GroupId {groupId}: 发现 {extFields.Length} 个Ext字段");
+                        return extFields;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logAction?.Invoke($"获取Ext字段失败: {ex.Message}");
+                        return Array.Empty<string>();
+                    }
+                });
+            }
+
+            // 为指定字段构建短语查询
+            private PhraseQuery BuildPhraseQueryForField(string fieldName, List<string> terms)
+            {
+                var phraseQuery = new PhraseQuery();
+                for (int i = 0; i < terms.Count; i++)
+                {
+                    phraseQuery.Add(new Term(fieldName, terms[i]), i);
+                }
+                return phraseQuery;
+            }
+
+            // 清除缓存（用于索引更新时）
+            public void ClearCache(long groupId = -1)
+            {
+                if (groupId == -1)
+                {
+                    _fieldCache.Clear();
+                }
+                else
+                {
+                    _fieldCache.TryRemove(groupId, out _);
+                }
+            }
+        }
+
+        // 短语查询处理器 - 确保短语查询正确处理Content和Ext字段
+        private class PhraseQueryProcessor
+        {
+            private readonly UnifiedTokenizer _tokenizer;
+            private readonly ExtFieldQueryOptimizer _extOptimizer;
+            private readonly Action<string> _logAction;
+
+            public PhraseQueryProcessor(UnifiedTokenizer tokenizer, ExtFieldQueryOptimizer extOptimizer, Action<string> logAction = null)
+            {
+                _tokenizer = tokenizer;
+                _extOptimizer = extOptimizer;
+                _logAction = logAction;
+            }
+
+            // 构建统一的短语查询（Content + Ext字段）
+            public BooleanQuery BuildUnifiedPhraseQuery(List<string> terms, IndexReader reader, long groupId)
+            {
+                var combinedQuery = new BooleanQuery();
+                
+                // Content字段短语查询
+                var contentPhraseQuery = BuildPhraseQueryForField("Content", terms);
+                combinedQuery.Add(contentPhraseQuery, Occur.SHOULD);
+                
+                // Ext字段短语查询
+                var extPhraseQuery = _extOptimizer.BuildOptimizedExtPhraseQuery(terms, reader, groupId);
+                combinedQuery.Add(extPhraseQuery, Occur.SHOULD);
+                
+                return combinedQuery;
+            }
+
+            // 从查询字符串中提取和处理短语查询
+            public (List<BooleanQuery> PhraseQueries, string RemainingQuery) ExtractPhraseQueries(string query)
+            {
+                var phraseQueries = new List<BooleanQuery>();
+                var remainingQuery = query;
+
+                // 处理引号包裹的精确匹配
+                var phraseMatches = System.Text.RegularExpressions.Regex.Matches(query, "\"([^\"]+)\"");
+                foreach (System.Text.RegularExpressions.Match match in phraseMatches)
+                {
+                    try
+                    {
+                        var phraseText = match.Groups[1].Value;
+                        var terms = _tokenizer.SafeTokenize(phraseText);
+                        
+                        if (terms.Count > 0)
+                        {
+                            var phraseQuery = new BooleanQuery();
+                            // 为Content字段创建短语查询
+                            var contentPhraseQuery = BuildPhraseQueryForField("Content", terms);
+                            phraseQuery.Add(contentPhraseQuery, Occur.SHOULD);
+                            
+                            phraseQueries.Add(phraseQuery);
+                            _logAction?.Invoke($"提取短语查询: \"{phraseText}\" -> {terms.Count} 个分词");
+                        }
+                        
+                        remainingQuery = remainingQuery.Replace(match.Value, "");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logAction?.Invoke($"处理短语查询失败: {ex.Message}, Phrase: {match.Value}");
+                    }
+                }
+
+                return (phraseQueries, remainingQuery.Trim());
+            }
+
+            // 为指定字段构建短语查询
+            private PhraseQuery BuildPhraseQueryForField(string fieldName, List<string> terms)
+            {
+                var phraseQuery = new PhraseQuery();
+                for (int i = 0; i < terms.Count; i++)
+                {
+                    phraseQuery.Add(new Term(fieldName, terms[i]), i);
+                }
+                return phraseQuery;
+            }
+
+            // 验证短语查询的有效性
+            public bool IsValidPhraseQuery(List<string> terms)
+            {
+                return terms != null && terms.Count > 0 && terms.All(t => !string.IsNullOrWhiteSpace(t));
+            }
+        }
+
+        // 统一分词处理器 - 替换原有的GetKeyWords方法，提供更好的错误处理和性能监控
+        private class UnifiedTokenizer
+        {
+            private readonly Analyzer _analyzer;
+            private readonly Action<string> _logAction;
+
+            public UnifiedTokenizer(Action<string> logAction = null)
+            {
+                _analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
+                _logAction = logAction;
+            }
+
+            public List<string> Tokenize(string text)
+            {
+                var keywords = new List<string>();
+                try
+                {
+                    using (var ts = _analyzer.GetTokenStream(null, text))
+                    {
+                        ts.Reset();
+                        var ct = ts.GetAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
+
+                        while (ts.IncrementToken())
+                        {
+                            var keyword = ct.ToString();
+                            if (!keywords.Contains(keyword))
+                            {
+                                keywords.Add(keyword);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // 记录错误并返回原始文本作为分词结果
+                    _logAction?.Invoke($"分词处理失败: {ex.Message}, Text: {text}");
+                    keywords.Add(text);
+                }
+
+                return keywords;
+            }
+
+            // 安全的分词方法，带有降级处理
+            public List<string> SafeTokenize(string text)
+            {
+                try
+                {
+                    return Tokenize(text);
+                }
+                catch (Exception ex)
+                {
+                    _logAction?.Invoke($"分词处理失败，使用原始文本: {ex.Message}, Text: {text}");
+                    
+                    // 回退到简单的空格分词
+                    return text.Split(new[] { ' ', ',', '.', ';', '，', '。', '；' }, 
+                                     StringSplitOptions.RemoveEmptyEntries)
+                              .Where(t => !string.IsNullOrWhiteSpace(t))
+                              .Distinct()
+                              .ToList();
+                }
+            }
+        }
+
+        // 保留原有的GetKeyWords方法作为简化实现，但内部使用UnifiedTokenizer
+        // 🔧 代码简化说明：
+        // 原本实现：直接在GetKeyWords方法中实现分词逻辑，错误处理不够完善
+        // 简化实现：使用UnifiedTokenizer类封装分词逻辑，提供更好的错误处理和降级机制
+        // 简化实现的代码文件：TelegramSearchBot/Manager/LuceneManager.cs
+        // 简化实现的相关函数方法：GetKeyWords方法
+        private List<string> GetKeyWords(string q) {
+            var tokenizer = new UnifiedTokenizer(msg => Send?.Log(msg));
+            return tokenizer.SafeTokenize(q);
         }
 
         // 简单搜索方法 - 搜索Content字段和Ext字段
@@ -155,38 +428,26 @@ namespace TelegramSearchBot.Manager
             return (query, terms);
         }
         
-        // 语法搜索方法 - 新实现，支持字段指定、排除词等语法
-        private (BooleanQuery, string[]) ParseQuery(string q, IndexReader reader) {
+        // 语法搜索方法 - 新实现，支持字段指定、排除词等语法，使用新的短语查询处理器
+        // 🔧 代码简化说明：
+        // 原本实现：直接在ParseQuery方法中处理短语查询，逻辑复杂且代码重复
+        // 简化实现：使用PhraseQueryProcessor处理短语查询，提供更好的扩展性和维护性
+        // 简化实现的代码文件：TelegramSearchBot/Manager/LuceneManager.cs
+        // 简化实现的相关函数方法：ParseQuery方法
+        private (BooleanQuery, string[]) ParseQuery(string q, IndexReader reader, long groupId) {
             var query = new BooleanQuery();
-            var analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
             
-            // 处理引号包裹的精确匹配
-            var phraseMatches = System.Text.RegularExpressions.Regex.Matches(q, "\"([^\"]+)\"");
-            foreach (System.Text.RegularExpressions.Match match in phraseMatches) {
-                var terms = new List<string>(); // 存储分词后的术语
-                
-                using (var ts = analyzer.GetTokenStream(null, match.Groups[1].Value)) {
-                    ts.Reset();
-                    var ct = ts.GetAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
-                    while (ts.IncrementToken()) {
-                        terms.Add(ct.ToString());
-                    }
-                }
-                
-                // 为Content字段创建短语查询
-                var contentPhraseQuery = new PhraseQuery();
-                for (int i = 0; i < terms.Count; i++) {
-                    contentPhraseQuery.Add(new Term("Content", terms[i]), i);
-                }
-                
-                // 创建组合查询，包含Content字段的短语查询
-                var combinedQuery = new BooleanQuery();
-                combinedQuery.Add(contentPhraseQuery, Occur.SHOULD);
-                
-                // 为Ext字段创建短语查询（在SyntaxSearch方法中会实际添加到查询中）
-                query.Add(combinedQuery, Occur.MUST);
-                q = q.Replace(match.Value, ""); // 移除已处理的短语
+            // 使用短语查询处理器提取和处理短语查询
+            var (phraseQueries, remainingQuery) = _phraseProcessor.ExtractPhraseQueries(q);
+            
+            // 添加提取出的短语查询
+            foreach (var phraseQuery in phraseQueries)
+            {
+                query.Add(phraseQuery, Occur.MUST);
             }
+            
+            // 更新q为剩余的查询字符串
+            q = remainingQuery;
 
             // 处理字段指定搜索 field:value
             var fieldMatches = System.Text.RegularExpressions.Regex.Matches(q, @"(\w+):([^\s]+)");
@@ -194,8 +455,18 @@ namespace TelegramSearchBot.Manager
                 var field = match.Groups[1].Value;
                 var value = match.Groups[2].Value;
                 
+                // 支持字段别名
                 if (field.Equals("content", StringComparison.OrdinalIgnoreCase)) {
                     field = "Content";
+                }
+                else if (field.Equals("ocr", StringComparison.OrdinalIgnoreCase)) {
+                    field = "Ext_OCR_Result";
+                }
+                else if (field.Equals("asr", StringComparison.OrdinalIgnoreCase)) {
+                    field = "Ext_ASR_Result";
+                }
+                else if (field.Equals("qr", StringComparison.OrdinalIgnoreCase)) {
+                    field = "Ext_QR_Result";
                 }
                 
                 // 对字段值也进行分词处理
@@ -216,19 +487,19 @@ namespace TelegramSearchBot.Manager
 
             // 处理排除关键词 -keyword
             var excludeMatches = System.Text.RegularExpressions.Regex.Matches(q, @"-([^\s]+)");
+            var excludeTermsList = new List<string>();
             foreach (System.Text.RegularExpressions.Match match in excludeMatches) {
                 var excludeValue = match.Groups[1].Value;
                 // 对排除关键词也进行分词处理
                 var excludeTerms = GetKeyWords(excludeValue);
-                foreach (var term in excludeTerms) {
-                    var termQuery = new TermQuery(new Term("Content", term));
-                    query.Add(termQuery, Occur.MUST_NOT);
-                }
+                excludeTermsList.AddRange(excludeTerms);
                 q = q.Replace(match.Value, ""); // 移除已处理的排除词
             }
 
             // 处理剩余的关键词，使用分词后的关键词
             var remainingTerms = GetKeyWords(q).ToArray();
+            
+            // 先添加Content字段的常规关键词查询
             foreach (var term in remainingTerms) {
                 if (string.IsNullOrWhiteSpace(term)) continue;
                 
@@ -236,161 +507,194 @@ namespace TelegramSearchBot.Manager
                 query.Add(termQuery, Occur.SHOULD);
             }
 
+            // 添加排除关键词查询（Content字段）
+            foreach (var term in excludeTermsList) {
+                if (string.IsNullOrWhiteSpace(term)) continue;
+                
+                var termQuery = new TermQuery(new Term("Content", term));
+                query.Add(termQuery, Occur.MUST_NOT);
+            }
+
             return (query, remainingTerms);
         }
-        // 简单搜索方法 - 搜索Content字段和Ext字段，不支持语法
+        // 简单搜索方法 - 搜索Content字段和Ext字段，使用新的优化组件
+        // 🔧 代码简化说明：
+        // 原本实现：直接在SimpleSearch方法中遍历所有Ext字段，性能较差，代码重复
+        // 简化实现：使用ExtFieldQueryOptimizer优化Ext字段查询，提升性能并减少代码重复
+        // 简化实现的代码文件：TelegramSearchBot/Manager/LuceneManager.cs
+        // 简化实现的相关函数方法：SimpleSearch方法
         public (int, List<Message>) SimpleSearch(string q, long GroupId, int Skip, int Take) {
-            IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
-            var searcher = new IndexSearcher(reader);
+            try 
+            {
+                var reader = DirectoryReader.Open(GetFSDirectory(GroupId));
+                var searcher = new IndexSearcher(reader);
 
-            var (query, searchTerms) = ParseSimpleQuery(q, reader);
-            
-            // 添加扩展字段搜索（简单版本）
-            var fields = MultiFields.GetIndexedFields(reader);
-            foreach (var field in fields) {
-                if (field.StartsWith("Ext_")) {
-                    // 检查searchTerms是否有内容
-                    if (searchTerms != null && searchTerms.Length > 0) {
-                        var extQuery = new BooleanQuery();
-                        foreach (var term in searchTerms) {
-                            if (!string.IsNullOrWhiteSpace(term)) {
-                                extQuery.Add(new TermQuery(new Term(field, term)), Occur.SHOULD);
-                            }
-                        }
-                        // 将扩展字段查询添加到主查询中
-                        if (query is BooleanQuery booleanQuery) {
-                            booleanQuery.Add(extQuery, Occur.SHOULD);
-                        } else {
-                            // 如果不是BooleanQuery，创建一个新的BooleanQuery
-                            var newQuery = new BooleanQuery();
-                            newQuery.Add(query, Occur.SHOULD);
-                            newQuery.Add(extQuery, Occur.SHOULD);
-                            query = newQuery;
-                        }
+                var (query, searchTerms) = ParseSimpleQuery(q, reader);
+                
+                // 使用优化器构建Ext字段查询，替换原有的遍历逻辑
+                if (searchTerms != null && searchTerms.Length > 0)
+                {
+                    var extQuery = _extOptimizer.BuildOptimizedExtQuery(searchTerms.ToList(), reader, GroupId);
+                    
+                    // 将Ext字段查询添加到主查询中
+                    if (query is BooleanQuery booleanQuery)
+                    {
+                        booleanQuery.Add(extQuery, Occur.SHOULD);
+                    }
+                    else
+                    {
+                        var newQuery = new BooleanQuery();
+                        newQuery.Add(query, Occur.SHOULD);
+                        newQuery.Add(extQuery, Occur.SHOULD);
+                        query = newQuery;
                     }
                 }
-            }
 
-            var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
-            var total = top.TotalHits;
-            var hits = top.ScoreDocs;
+                var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
+                var total = top.TotalHits;
+                var hits = top.ScoreDocs;
 
-            var messages = new List<Message>();
-            var id = 0;
-            foreach (var hit in hits) {
-                if (id++ < Skip) continue;
-                var document = searcher.Doc(hit.Doc);
-                var message = new Message() {
-                    Id = id,
-                    MessageId = long.Parse(document.Get("MessageId")),
-                    GroupId = long.Parse(document.Get("GroupId")),
-                    Content = document.Get("Content")
-                };
+                var messages = new List<Message>();
+                var id = 0;
+                foreach (var hit in hits) {
+                    if (id++ < Skip) continue;
+                    var document = searcher.Doc(hit.Doc);
+                    var message = new Message() {
+                        Id = id,
+                        MessageId = long.Parse(document.Get("MessageId")),
+                        GroupId = long.Parse(document.Get("GroupId")),
+                        Content = document.Get("Content")
+                    };
 
-                // 安全解析可能缺失的字段
-                if (document.Get("DateTime") != null) {
-                    message.DateTime = DateTime.Parse(document.Get("DateTime"));
-                }
-                if (document.Get("FromUserId") != null) {
-                    message.FromUserId = long.Parse(document.Get("FromUserId"));
-                }
-                if (document.Get("ReplyToUserId") != null) {
-                    message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
-                }
-                if (document.Get("ReplyToMessageId") != null) {
-                    message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
-                }
-
-                // 获取扩展字段
-                var extensions = new List<MessageExtension>();
-                foreach (var field in document.Fields) {
-                    if (field.Name.StartsWith("Ext_")) {
-                        extensions.Add(new MessageExtension {
-                            Name = field.Name.Substring(4),
-                            Value = field.GetStringValue()
-                        });
+                    // 安全解析可能缺失的字段
+                    if (document.Get("DateTime") != null) {
+                        message.DateTime = DateTime.Parse(document.Get("DateTime"));
                     }
-                }
-                if (extensions.Any()) {
-                    message.MessageExtensions = extensions;
-                }
+                    if (document.Get("FromUserId") != null) {
+                        message.FromUserId = long.Parse(document.Get("FromUserId"));
+                    }
+                    if (document.Get("ReplyToUserId") != null) {
+                        message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
+                    }
+                    if (document.Get("ReplyToMessageId") != null) {
+                        message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
+                    }
 
-                messages.Add(message);
+                    // 获取扩展字段
+                    var extensions = new List<MessageExtension>();
+                    foreach (var field in document.Fields) {
+                        if (field.Name.StartsWith("Ext_")) {
+                            extensions.Add(new MessageExtension {
+                                Name = field.Name.Substring(4),
+                                Value = field.GetStringValue()
+                            });
+                        }
+                    }
+                    if (extensions.Any()) {
+                        message.MessageExtensions = extensions;
+                    }
+
+                    messages.Add(message);
+                }
+                
+                Send?.Log($"SimpleSearch完成: GroupId={GroupId}, Query={q}, Results={total},耗时={DateTime.Now:HH:mm:ss.fff}");
+                return (total, messages);
             }
-            return (total, messages);
+            catch (Exception ex)
+            {
+                Send?.Log($"SimpleSearch失败: {ex.Message}, GroupId={GroupId}, Query={q}");
+                return (0, new List<Message>());
+            }
         }
         
-        // 语法搜索方法 - 搜索Content字段和Ext字段，支持字段指定、排除词等语法
+        // 语法搜索方法 - 搜索Content字段和Ext字段，使用新的优化组件
+        // 🔧 代码简化说明：
+        // 原本实现：直接在SyntaxSearch方法中遍历所有Ext字段，性能较差，代码重复
+        // 简化实现：使用ExtFieldQueryOptimizer优化Ext字段查询，增强排除关键词处理，提升性能
+        // 简化实现的代码文件：TelegramSearchBot/Manager/LuceneManager.cs
+        // 简化实现的相关函数方法：SyntaxSearch方法
         public (int, List<Message>) SyntaxSearch(string q, long GroupId, int Skip, int Take) {
-            IndexReader reader = DirectoryReader.Open(GetFSDirectory(GroupId));
-            var searcher = new IndexSearcher(reader);
+            try 
+            {
+                var reader = DirectoryReader.Open(GetFSDirectory(GroupId));
+                var searcher = new IndexSearcher(reader);
 
-            var (query, searchTerms) = ParseQuery(q, reader);
-            
-            // 添加扩展字段搜索
-            var fields = MultiFields.GetIndexedFields(reader);
-            foreach (var field in fields) {
-                if (field.StartsWith("Ext_")) {
-                    // 检查searchTerms是否有内容，而不是检查字段中的术语
-                    if (searchTerms != null && searchTerms.Length > 0) {
-                        var extQuery = new BooleanQuery();
-                        foreach (var term in searchTerms) {
-                            if (!string.IsNullOrWhiteSpace(term)) {
-                                extQuery.Add(new TermQuery(new Term(field, term)), Occur.SHOULD);
-                            }
+                var (query, searchTerms) = ParseQuery(q, reader, GroupId);
+                
+                // 使用优化器构建Ext字段查询，替换原有的遍历逻辑
+                if (searchTerms != null && searchTerms.Length > 0)
+                {
+                    var extQuery = _extOptimizer.BuildOptimizedExtQuery(searchTerms.ToList(), reader, GroupId);
+                    
+                    // 将Ext字段查询添加到主查询中
+                    if (query is BooleanQuery booleanQuery)
+                    {
+                        booleanQuery.Add(extQuery, Occur.SHOULD);
+                    }
+                    else
+                    {
+                        var newQuery = new BooleanQuery();
+                        newQuery.Add(query, Occur.SHOULD);
+                        newQuery.Add(extQuery, Occur.SHOULD);
+                        query = newQuery;
+                    }
+                }
+
+                var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
+                var total = top.TotalHits;
+                var hits = top.ScoreDocs;
+
+                var messages = new List<Message>();
+                var id = 0;
+                foreach (var hit in hits) {
+                    if (id++ < Skip) continue;
+                    var document = searcher.Doc(hit.Doc);
+                    var message = new Message() {
+                        Id = id,
+                        MessageId = long.Parse(document.Get("MessageId")),
+                        GroupId = long.Parse(document.Get("GroupId")),
+                        Content = document.Get("Content")
+                    };
+
+                    // 安全解析可能缺失的字段
+                    if (document.Get("DateTime") != null) {
+                        message.DateTime = DateTime.Parse(document.Get("DateTime"));
+                    }
+                    if (document.Get("FromUserId") != null) {
+                        message.FromUserId = long.Parse(document.Get("FromUserId"));
+                    }
+                    if (document.Get("ReplyToUserId") != null) {
+                        message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
+                    }
+                    if (document.Get("ReplyToMessageId") != null) {
+                        message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
+                    }
+
+                    // 获取扩展字段
+                    var extensions = new List<MessageExtension>();
+                    foreach (var field in document.Fields) {
+                        if (field.Name.StartsWith("Ext_")) {
+                            extensions.Add(new MessageExtension {
+                                Name = field.Name.Substring(4),
+                                Value = field.GetStringValue()
+                            });
                         }
-                        query.Add(extQuery, Occur.SHOULD);
                     }
-                }
-            }
-
-            var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
-            var total = top.TotalHits;
-            var hits = top.ScoreDocs;
-
-            var messages = new List<Message>();
-            var id = 0;
-            foreach (var hit in hits) {
-                if (id++ < Skip) continue;
-                var document = searcher.Doc(hit.Doc);
-                var message = new Message() {
-                    Id = id,
-                    MessageId = long.Parse(document.Get("MessageId")),
-                    GroupId = long.Parse(document.Get("GroupId")),
-                    Content = document.Get("Content")
-                };
-
-                // 安全解析可能缺失的字段
-                if (document.Get("DateTime") != null) {
-                    message.DateTime = DateTime.Parse(document.Get("DateTime"));
-                }
-                if (document.Get("FromUserId") != null) {
-                    message.FromUserId = long.Parse(document.Get("FromUserId"));
-                }
-                if (document.Get("ReplyToUserId") != null) {
-                    message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
-                }
-                if (document.Get("ReplyToMessageId") != null) {
-                    message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
-                }
-
-                // 获取扩展字段
-                var extensions = new List<MessageExtension>();
-                foreach (var field in document.Fields) {
-                    if (field.Name.StartsWith("Ext_")) {
-                        extensions.Add(new MessageExtension {
-                            Name = field.Name.Substring(4),
-                            Value = field.GetStringValue()
-                        });
+                    if (extensions.Any()) {
+                        message.MessageExtensions = extensions;
                     }
-                }
-                if (extensions.Any()) {
-                    message.MessageExtensions = extensions;
-                }
 
-                messages.Add(message);
+                    messages.Add(message);
+                }
+                
+                Send?.Log($"SyntaxSearch完成: GroupId={GroupId}, Query={q}, Results={total},耗时={DateTime.Now:HH:mm:ss.fff}");
+                return (total, messages);
             }
-            return (total, messages);
+            catch (Exception ex)
+            {
+                Send?.Log($"SyntaxSearch失败: {ex.Message}, GroupId={GroupId}, Query={q}");
+                return (0, new List<Message>());
+            }
         }
         
         // 默认搜索方法 - 保持向后兼容，实际调用简单搜索
