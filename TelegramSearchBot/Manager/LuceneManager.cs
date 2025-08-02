@@ -163,20 +163,28 @@ namespace TelegramSearchBot.Manager
             // 处理引号包裹的精确匹配
             var phraseMatches = System.Text.RegularExpressions.Regex.Matches(q, "\"([^\"]+)\"");
             foreach (System.Text.RegularExpressions.Match match in phraseMatches) {
-                var phraseQuery = new PhraseQuery();
-                var extPhraseQueries = new Dictionary<string, PhraseQuery>(); // 为Ext字段存储短语查询
+                var terms = new List<string>(); // 存储分词后的术语
+                
                 using (var ts = analyzer.GetTokenStream(null, match.Groups[1].Value)) {
                     ts.Reset();
                     var ct = ts.GetAttribute<Lucene.Net.Analysis.TokenAttributes.ICharTermAttribute>();
-                    int position = 0;
                     while (ts.IncrementToken()) {
-                        // 为Content字段添加短语查询
-                        phraseQuery.Add(new Term("Content", ct.ToString()), position++);
-                        
-                        // 为所有可能的Ext字段添加短语查询（在后续处理中会实际使用）
+                        terms.Add(ct.ToString());
                     }
                 }
-                query.Add(phraseQuery, Occur.MUST);
+                
+                // 为Content字段创建短语查询
+                var contentPhraseQuery = new PhraseQuery();
+                for (int i = 0; i < terms.Count; i++) {
+                    contentPhraseQuery.Add(new Term("Content", terms[i]), i);
+                }
+                
+                // 创建组合查询，包含Content字段的短语查询
+                var combinedQuery = new BooleanQuery();
+                combinedQuery.Add(contentPhraseQuery, Occur.SHOULD);
+                
+                // 为Ext字段创建短语查询（在SyntaxSearch方法中会实际添加到查询中）
+                query.Add(combinedQuery, Occur.MUST);
                 q = q.Replace(match.Value, ""); // 移除已处理的短语
             }
 
