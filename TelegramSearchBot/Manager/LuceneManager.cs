@@ -180,8 +180,8 @@ namespace TelegramSearchBot.Manager
             var fields = MultiFields.GetIndexedFields(reader);
             foreach (var field in fields) {
                 if (field.StartsWith("Ext_")) {
-                    var terms = MultiFields.GetTerms(reader, field);
-                    if (terms != null) {
+                    // 检查searchTerms是否有内容，而不是检查字段中的术语
+                    if (searchTerms != null && searchTerms.Length > 0) {
                         var extQuery = new BooleanQuery();
                         foreach (var term in searchTerms) {
                             if (!string.IsNullOrWhiteSpace(term)) {
