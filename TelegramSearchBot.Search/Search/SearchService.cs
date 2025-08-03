@@ -4,21 +4,23 @@ using System.Collections.Generic;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Search
 {
     /// <summary>
     /// 搜索服务 - 简化实现版本
     /// 专注于Lucene搜索功能，其他依赖暂时注释
+    /// 实现ISearchService接口
     /// </summary>
-    public class SearchService 
+    public class SearchService : ISearchService 
     {
-        private readonly LuceneManager lucene;
+        private readonly ILuceneManager lucene;
         private readonly DataDbContext dbContext;
         
-        public SearchService(DataDbContext dbContext)
+        public SearchService(DataDbContext dbContext, ILuceneManager lucene = null)
         {
-            this.lucene = new LuceneManager();
+            this.lucene = lucene ?? new LuceneManager();
             this.dbContext = dbContext;
         }
 

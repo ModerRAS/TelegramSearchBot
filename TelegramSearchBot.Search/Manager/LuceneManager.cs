@@ -12,14 +12,16 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Manager
 {
     /// <summary>
     /// Lucene索引管理器 - 简化实现版本
     /// 移除SendMessage依赖，专注于核心Lucene功能
+    /// 实现ILuceneManager接口
     /// </summary>
-    public class LuceneManager 
+    public class LuceneManager : ILuceneManager 
     {
         private readonly string indexPathBase;
         
