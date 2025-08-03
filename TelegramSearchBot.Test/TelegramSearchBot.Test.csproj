@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
     <ProjectReference Include="..\TelegramSearchBot\TelegramSearchBot.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Data\TelegramSearchBot.Data.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="TestData\EmptyResults.html" />
