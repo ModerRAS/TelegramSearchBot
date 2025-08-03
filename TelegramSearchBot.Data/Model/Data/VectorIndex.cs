@@ -40,7 +40,7 @@ namespace TelegramSearchBot.Model.Data
         /// 向量内容的摘要（用于调试和展示）
         /// </summary>
         [MaxLength(1000)]
-        public string ContentSummary { get; set; }
+        public string? ContentSummary { get; set; }
 
         /// <summary>
         /// 创建时间
