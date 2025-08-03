@@ -32,7 +32,7 @@ namespace TelegramSearchBot.Model.Data
         /// 账本描述
         /// </summary>
         [StringLength(500)]
-        public string Description { get; set; }
+        public string? Description { get; set; }
 
         /// <summary>
         /// 创建者ID

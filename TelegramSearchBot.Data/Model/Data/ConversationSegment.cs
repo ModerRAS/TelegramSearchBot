@@ -67,7 +67,7 @@ namespace TelegramSearchBot.Model.Data
         /// <summary>
         /// 向量存储的ID（在FAISS中的索引位置）
         /// </summary>
-        public string VectorId { get; set; }
+        public string? VectorId { get; set; }
 
         /// <summary>
         /// 创建时间

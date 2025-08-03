@@ -31,15 +31,14 @@ namespace TelegramSearchBot.Model.Data
         /// <summary>
         /// 标签/分类
         /// </summary>
-        [Required]
         [StringLength(50)]
-        public string Tag { get; set; }
+        public string? Tag { get; set; }
 
         /// <summary>
         /// 描述
         /// </summary>
         [StringLength(500)]
-        public string Description { get; set; }
+        public string? Description { get; set; }
 
         /// <summary>
         /// 创建者ID
@@ -51,7 +50,7 @@ namespace TelegramSearchBot.Model.Data
         /// 创建者用户名
         /// </summary>
         [StringLength(100)]
-        public string CreatedByUsername { get; set; }
+        public string? CreatedByUsername { get; set; }
 
         /// <summary>
         /// 创建时间

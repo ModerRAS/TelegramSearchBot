@@ -19,13 +19,13 @@ namespace TelegramSearchBot.Model.Data
         [Required]
         public string EntityType { get; set; }
         
-        public string Observations { get; set; }
+        public string? Observations { get; set; }
         
-        public string FromEntity { get; set; }
+        public long FromEntity { get; set; }
         
-        public string ToEntity { get; set; }
+        public long ToEntity { get; set; }
         
-        public string RelationType { get; set; }
+        public string? RelationType { get; set; }
         
         [Required]
         public DateTime CreatedTime { get; set; } = DateTime.UtcNow;
