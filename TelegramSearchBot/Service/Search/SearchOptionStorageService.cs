@@ -9,6 +9,7 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Attributes;
+using SearchOption = TelegramSearchBot.Model.SearchOption;
 
 namespace TelegramSearchBot.Service.Search {
     /// <summary>
