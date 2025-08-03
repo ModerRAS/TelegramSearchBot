@@ -21,9 +21,9 @@ namespace TelegramSearchBot.Model.Data
         
         public string? Observations { get; set; }
         
-        public long FromEntity { get; set; }
+        public string? FromEntity { get; set; }
         
-        public long ToEntity { get; set; }
+        public string? ToEntity { get; set; }
         
         public string? RelationType { get; set; }
         
