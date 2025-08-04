@@ -30,9 +30,7 @@
     <PackageReference Include="Whisper.net.Runtime" Version="1.8.1" />
     <PackageReference Include="ZXing.Net" Version="0.16.10" />
     <PackageReference Include="ZXing.Net.Bindings.SkiaSharp" Version="0.16.21" />
-    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507" />
-    <PackageReference Include="OpenCvSharp4.runtime.win64.mkl" Version="3.1.0.54" />
-    <PackageReference Include="Teru.Code.WechatQrcode.Lite" Version="1.0.0.20230813" />
+        <PackageReference Include="Teru.Code.WechatQrcode.Lite" Version="1.0.0.20230813" />
     <PackageReference Include="FFMpegCore" Version="5.2.0" />
     <PackageReference Include="System.Linq.Async" Version="6.0.3" />
     <PackageReference Include="MediatR" Version="13.0.0" />
