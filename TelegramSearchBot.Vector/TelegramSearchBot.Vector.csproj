@@ -13,4 +13,13 @@
     <ProjectReference Include="..\TelegramSearchBot.AI\TelegramSearchBot.AI.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="FaissNet" Version="1.1.0" />
+    <PackageReference Include="System.Linq.Async" Version="6.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.7" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.7" />
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
 </Project>
