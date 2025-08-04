@@ -11,6 +11,7 @@
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.AI\TelegramSearchBot.AI.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Infrastructure\TelegramSearchBot.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
