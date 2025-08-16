@@ -32,7 +32,12 @@ namespace TelegramSearchBot {
                 OLTPName = config.OLTPName;
                 BraveApiKey = config.BraveApiKey;
                 EnableAccounting = config.EnableAccounting;
+<<<<<<< HEAD
                 MaxToolCycles = config.MaxToolCycles;
+                UseMicrosoftExtensionsAI = config.UseMicrosoftExtensionsAI;
+=======
+                UseMicrosoftExtensionsAI = config.UseMicrosoftExtensionsAI;
+>>>>>>> eb54deb (实现 Microsoft.Extensions.AI POC 集成)
             } catch {
             }
 
@@ -60,6 +65,7 @@ namespace TelegramSearchBot {
         public static string BraveApiKey { get; set; }
         public static bool EnableAccounting { get; set; } = false;
         public static int MaxToolCycles { get; set; }
+        public static bool UseMicrosoftExtensionsAI { get; set; } = false;
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
     }
@@ -82,6 +88,11 @@ namespace TelegramSearchBot {
         public string OLTPName { get; set; }
         public string BraveApiKey { get; set; }
         public bool EnableAccounting { get; set; } = false;
+<<<<<<< HEAD
         public int MaxToolCycles { get; set; } = 25;
+        public bool UseMicrosoftExtensionsAI { get; set; } = false;
+=======
+        public bool UseMicrosoftExtensionsAI { get; set; } = false;
+>>>>>>> eb54deb (实现 Microsoft.Extensions.AI POC 集成)
     }
 }

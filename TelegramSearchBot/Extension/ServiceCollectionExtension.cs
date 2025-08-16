@@ -27,6 +27,8 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.View;
+using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.Extension {
     public static class ServiceCollectionExtension {
@@ -80,6 +82,30 @@ namespace TelegramSearchBot.Extension {
             return services;
         }
 
+        /// <summary>
+        /// 添加AI服务 - 包括Microsoft.Extensions.AI POC实现
+        /// </summary>
+        public static IServiceCollection AddAIServices(this IServiceCollection services) {
+            // 注册原有服务
+            services.AddTransient<OpenAIService>();
+            services.AddTransient<GeneralLLMService>();
+            
+            // 注册Microsoft.Extensions.AI POC服务
+            services.AddTransient<OpenAIExtensionsAIService>();
+            
+            // 注册原有的LLMFactory（使用单例模式）
+            services.AddSingleton<LLMFactory>();
+            
+            // 注册新的工厂实现（如果需要）
+            if (Env.UseMicrosoftExtensionsAI) {
+                // 这里可以添加对新工厂的特殊处理
+                // 但为了保持简单，我们仍然使用原有的LLMFactory
+                // 通过OpenAIExtensionsAIService内部的逻辑来切换实现
+            }
+            
+            return services;
+        }
+
         public static IServiceCollection AddAutoRegisteredServices(this IServiceCollection services) {
             return services
                 .Scan(scan => scan
@@ -110,6 +136,7 @@ namespace TelegramSearchBot.Extension {
                 .AddCoreServices()
                 .AddBilibiliServices()
                 .AddCommonServices()
+                .AddAIServices() // 添加AI服务
                 .AddAutoRegisteredServices()
                 .AddInjectables(assembly);
         }
