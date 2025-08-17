@@ -70,12 +70,18 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507" />
-    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
-    <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
     <PackageReference Include="Sdcb.PaddleInference" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="3.0.1" />
-    <PackageReference Include="Sdcb.PaddleInference.runtime.win64.mkl" Version="3.1.0.54" />
+    
+    <!-- Windows 运行时包 -->
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" Condition="'$(RuntimeIdentifier)' == 'win-x64' OR '$(RuntimeIdentifier)' == ''" />
+    <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" Condition="'$(RuntimeIdentifier)' == 'win-x64' OR '$(RuntimeIdentifier)' == ''" />
+    <PackageReference Include="Sdcb.PaddleInference.runtime.win64.mkl" Version="3.1.0.54" Condition="'$(RuntimeIdentifier)' == 'win-x64' OR '$(RuntimeIdentifier)' == ''" />
+    
+    <!-- Linux 运行时包 -->
+    <PackageReference Include="OpenCvSharp4.runtime.linux-x64" Version="4.10.0.20240717" Condition="'$(RuntimeIdentifier)' == 'linux-x64'" />
+    <PackageReference Include="Sdcb.PaddleInference.runtime.linux-x64.mkl" Version="3.1.0.54" Condition="'$(RuntimeIdentifier)' == 'linux-x64'" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.7" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.7" />
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />

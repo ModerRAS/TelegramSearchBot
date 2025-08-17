@@ -27,7 +27,69 @@
 
 ## 安装与配置
 
-### 快速开始
+### 支持平台
+- ✅ **Windows** - 原生支持，推荐使用 ClickOnce 安装包
+- ✅ **Linux** - 完全支持，需要手动安装依赖和编译
+
+### Linux 系统要求
+
+#### 操作系统
+- Ubuntu 20.04+ 或 Debian 11+
+- 其他 Linux 发行版（可能需要调整依赖包名称）
+
+#### .NET 运行时
+- .NET 9.0 运行时或 SDK
+
+#### 系统依赖包
+```bash
+# 更新包管理器
+sudo apt update
+
+# 安装基础依赖
+sudo apt install -y libgomp1 libdnnl2 intel-mkl-full libomp-dev
+```
+
+#### 快速开始（Linux）
+1. 克隆仓库
+```bash
+git clone https://github.com/ModerRAS/TelegramSearchBot.git
+cd TelegramSearchBot
+```
+
+2. 安装依赖
+```bash
+# 安装系统依赖
+sudo apt install -y libgomp1 libdnnl2 intel-mkl-full libomp-dev
+
+# 恢复 .NET 依赖
+dotnet restore TelegramSearchBot.sln
+```
+
+3. 构建项目
+```bash
+dotnet build TelegramSearchBot.sln --configuration Release
+```
+
+4. 运行验证
+```bash
+./scripts/verify_linux_deployment.sh
+```
+
+5. 运行测试
+```bash
+./scripts/run_paddle_tests.sh
+```
+
+6. 配置并运行
+```bash
+# 首次运行生成配置文件
+./scripts/run_linux.sh
+
+# 编辑配置文件
+nano ~/.config/TelegramSearchBot/Config.json
+```
+
+### Windows 快速开始
 1. 下载[最新版本](https://clickonce.miaostay.com/TelegramSearchBot/Publish.html)
 2. 首次运行会自动生成配置目录
 3. 编辑`AppData/Local/TelegramSearchBot/Config.json`:
