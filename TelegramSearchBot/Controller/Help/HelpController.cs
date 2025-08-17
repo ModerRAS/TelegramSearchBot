@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Service.BotAPI;
@@ -8,6 +9,7 @@ using System.IO;
 using TelegramSearchBot.Model;
 using System.Text;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.Help {
     public class HelpController : IOnUpdate
@@ -77,7 +79,7 @@ namespace TelegramSearchBot.Controller.Help {
                         }
                     }
 
-                    await sendMessageService.SplitAndSendTextMessage(sb.ToString(), e.Message.Chat, e.Message.MessageId);
+                    await sendMessageService.SplitAndSendTextMessage(sb.ToString(), e.Message.Chat.Id, e.Message.MessageId);
                 }
             }
         }

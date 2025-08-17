@@ -19,6 +19,7 @@ using System.Web;
 using System.Threading;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Manager;
 
 namespace TelegramSearchBot.Service.BotAPI
 {
@@ -28,14 +29,14 @@ namespace TelegramSearchBot.Service.BotAPI
         #region Fields and Constructor
         public string ServiceName => "SendMessageService";
         private readonly ITelegramBotClient botClient;
-        private readonly SendMessage Send; 
         private readonly ILogger<SendMessageService> logger;
+        private readonly ISendMessageService sendMessageService;
 
-        public SendMessageService(ITelegramBotClient botClient, SendMessage Send, ILogger<SendMessageService> logger)
+        public SendMessageService(ITelegramBotClient botClient, ILogger<SendMessageService> logger, ISendMessageService sendMessageService)
         {
-            this.Send = Send;
             this.botClient = botClient;
             this.logger = logger;
+            this.sendMessageService = sendMessageService;
         }
         #endregion
 
@@ -58,7 +59,7 @@ namespace TelegramSearchBot.Service.BotAPI
                 if (isEdit)
                 {
                     Message editedMessage = null;
-                    await Send.AddTask(async () =>
+                    await sendMessageService.AddTask(async () =>
                     {
                         editedMessage = await botClient.EditMessageText(
                             chatId: chatId, messageId: messageId, parseMode: currentParseMode, text: textToSend);
@@ -72,7 +73,7 @@ namespace TelegramSearchBot.Service.BotAPI
                 else 
                 {
                     Message sentMsg = null;
-                    await Send.AddTask(async () =>
+                    await sendMessageService.AddTask(async () =>
                     {
                         sentMsg = await botClient.SendMessage(
                             chatId: chatId, text: textToSend, parseMode: currentParseMode, 
@@ -117,14 +118,14 @@ namespace TelegramSearchBot.Service.BotAPI
             {
                 if (wasEditAttempt) 
                 {
-                    await Send.AddTask(async () => {
+                    await sendMessageService.AddTask(async () => {
                         var fallbackEditedMessage = await botClient.EditMessageText(chatId: chatId, messageId: messageId, text: plainText);
                         logger.LogInformation($"Successfully resent message {fallbackEditedMessage.MessageId} as plain text after Markdown failure ({initialFailureReason}).");
                     }, isGroup);
                 }
                 else 
                 {
-                    await Send.AddTask(async () => {
+                    await sendMessageService.AddTask(async () => {
                         var fallbackSentMsg = await botClient.SendMessage(chatId: chatId, text: plainText, replyParameters: new ReplyParameters() { MessageId = replyToMessageId });
                         logger.LogInformation($"Successfully sent new message {fallbackSentMsg.MessageId} as plain text after Markdown failure ({initialFailureReason}).");
                     }, isGroup);
@@ -134,11 +135,66 @@ namespace TelegramSearchBot.Service.BotAPI
             {
                 logger.LogError(ex, $"Failed to send message to {chatId} even as plain text. Initial failure: {initialFailureReason}.");
                 if (!wasEditAttempt) { 
-                    await Send.AddTask(async () => {
+                    await sendMessageService.AddTask(async () => {
                         await botClient.SendMessage(chatId: chatId, text: "An error occurred while formatting the message.", replyParameters: new ReplyParameters() { MessageId = replyToMessageId });
                     }, isGroup);
                 }
             }
+        }
+        #endregion
+
+        #region ISendMessageService 实现
+        public async Task<Message> SendTextMessageAsync(string text, long chatId, int replyToMessageId = 0, bool disableNotification = false)
+        {
+            return await botClient.SendMessage(
+                chatId: chatId,
+                text: text,
+                replyParameters: replyToMessageId != 0 ? new ReplyParameters { MessageId = replyToMessageId } : null,
+                disableNotification: disableNotification
+            );
+        }
+
+        public async Task SplitAndSendTextMessage(string text, long chatId, int replyToMessageId = 0)
+        {
+            // 简化实现：直接发送完整消息
+            await SendTextMessageAsync(text, chatId, replyToMessageId);
+        }
+
+        public async Task<Message> SendButtonMessageAsync(string text, long chatId, int replyToMessageId = 0, params (string text, string callbackData)[] buttons)
+        {
+            // 创建内联键盘
+            var inlineKeyboard = buttons.Select(b => new[] { InlineKeyboardButton.WithCallbackData(b.text, b.callbackData) }).ToArray();
+            var replyMarkup = new InlineKeyboardMarkup(inlineKeyboard);
+
+            return await botClient.SendMessage(
+                chatId: chatId,
+                text: text,
+                replyParameters: replyToMessageId != 0 ? new ReplyParameters { MessageId = replyToMessageId } : null,
+                replyMarkup: replyMarkup
+            );
+        }
+
+        public async Task AddTask(Func<Task> action, bool isGroup)
+        {
+            // 简化实现：直接执行任务
+            await action();
+        }
+
+        public async Task<Message> SendPhotoAsync(long chatId, InputFile photo, string caption = null, int replyToMessageId = 0, bool disableNotification = false)
+        {
+            // 简化实现：直接调用BotClient发送图片
+            return await botClient.SendPhoto(
+                chatId: chatId,
+                photo: photo,
+                caption: caption,
+                replyParameters: replyToMessageId != 0 ? new ReplyParameters { MessageId = replyToMessageId } : null,
+                disableNotification: disableNotification
+            );
+        }
+
+        public async Task Log(string text)
+        {
+            logger.LogInformation(text);
         }
         #endregion
     }

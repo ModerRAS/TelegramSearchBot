@@ -51,7 +51,7 @@ namespace TelegramSearchBot.Service.Tools
             (int totalHits, List<Message> messages) searchResult;
             try
             {
-                searchResult = _luceneManager.Search(query, chatId, skip, take);
+                searchResult = await _luceneManager.Search(query, chatId, skip, take);
             }
             catch (System.IO.DirectoryNotFoundException) 
             {

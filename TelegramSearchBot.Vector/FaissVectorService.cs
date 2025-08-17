@@ -16,8 +16,6 @@ using TelegramSearchBot.Attributes;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
 using FaissIndex = FaissNet.Index;
 using System.Threading;
-using System.Threading.Tasks;
-using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Service.Vector
 {
@@ -33,6 +31,7 @@ namespace TelegramSearchBot.Service.Vector
         private readonly ILogger<FaissVectorService> _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly IGeneralLLMService _generalLLMService;
+        private readonly IEnvService _envService;
         
         private readonly string _indexDirectory;
         private readonly int _vectorDimension = 1024;
@@ -49,13 +48,15 @@ namespace TelegramSearchBot.Service.Vector
         public FaissVectorService(
             ILogger<FaissVectorService> logger,
             IServiceProvider serviceProvider,
-            IGeneralLLMService generalLLMService)
+            IGeneralLLMService generalLLMService,
+            IEnvService envService)
         {
             _logger = logger;
             _serviceProvider = serviceProvider;
             _generalLLMService = generalLLMService;
+            _envService = envService;
             
-            _indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
+            _indexDirectory = Path.Combine(_envService.WorkDir, "faiss_indexes");
             Directory.CreateDirectory(_indexDirectory);
             
             _logger.LogInformation($"FAISS向量服务初始化，索引目录: {_indexDirectory}");

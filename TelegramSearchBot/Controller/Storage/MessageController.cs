@@ -9,6 +9,9 @@ using MediatR; // Added for IMediator
 using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.Storage {
     public class MessageController : IOnUpdate

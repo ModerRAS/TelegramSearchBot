@@ -1,0 +1,310 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using Telegram.Bot.Types;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Test.Base;
+using TelegramSearchBot.Test.Extensions;
+using TelegramSearchBot.Test.Helpers;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace TelegramSearchBot.Test.Examples
+{
+    /// <summary>
+    /// 示例测试类，展示如何使用测试工具类
+    /// </summary>
+    public class TestToolsExample : IntegrationTestBase
+    {
+        private readonly ITestOutputHelper _output;
+
+        public TestToolsExample(ITestOutputHelper output)
+        {
+            _output = output;
+        }
+
+        [Fact]
+        public async Task TestDatabaseHelper_Example()
+        {
+            // 使用TestDatabaseHelper创建数据库
+            using var dbContext = TestDatabaseHelper.CreateInMemoryDbContext("TestDatabase_Example");
+            
+            // 创建标准测试数据
+            var testData = await TestDatabaseHelper.CreateStandardTestDataAsync(dbContext);
+            
+            // 验证数据创建成功
+            await TestDatabaseHelper.VerifyEntityCountAsync<Message>(dbContext, 3);
+            await TestDatabaseHelper.VerifyEntityCountAsync<UserData>(dbContext, 3);
+            await TestDatabaseHelper.VerifyEntityCountAsync<GroupData>(dbContext, 2);
+            
+            // 获取数据库统计信息
+            var stats = await TestDatabaseHelper.GetDatabaseStatisticsAsync(dbContext);
+            Assert.Equal(3, stats.MessageCount);
+            Assert.Equal(3, stats.UserCount);
+            Assert.Equal(2, stats.GroupCount);
+            
+            _output.WriteLine($"Database stats: {stats.MessageCount} messages, {stats.UserCount} users, {stats.GroupCount} groups");
+        }
+
+        [Fact]
+        public void TestMockServiceFactory_Example()
+        {
+            // 创建TelegramBotClient Mock
+            var botClientMock = MockServiceFactory.CreateTelegramBotClientMock();
+            
+            // 配置SendMessage行为
+            var configuredMock = MockServiceFactory.CreateTelegramBotClientWithSendMessage("Hello, World!", 12345);
+            
+            // 创建LLM服务Mock
+            var llmMock = MockServiceFactory.CreateLLMServiceWithChatCompletion("AI response");
+            
+            // 创建Logger Mock
+            var loggerMock = MockServiceFactory.CreateLoggerMock<TestToolsExample>();
+            
+            // 创建DbContext Mock
+            var dbContextMock = MockServiceFactory.CreateDbContextMock();
+            
+            // 验证Mock创建成功
+            Assert.NotNull(botClientMock);
+            Assert.NotNull(configuredMock);
+            Assert.NotNull(llmMock);
+            Assert.NotNull(loggerMock);
+            Assert.NotNull(dbContextMock);
+            
+            _output.WriteLine("All mock services created successfully");
+        }
+
+        [Fact]
+        public void TestAssertionExtensions_Example()
+        {
+            // 创建测试数据
+            var message = MessageTestDataFactory.CreateValidMessage();
+            var user = MessageTestDataFactory.CreateUserData();
+            var group = MessageTestDataFactory.CreateGroupData();
+            
+            // 使用自定义断言扩展
+            message.ShouldBeValidMessage(100, 1000, 1, "Test message");
+            user.ShouldBeValidUserData("Test", "User", "testuser", false);
+            group.ShouldBeValidGroupData("Test Chat", "Group", false);
+            
+            // 测试集合断言
+            var messages = new List<Message> { message };
+            messages.ShouldContainMessageWithContent("Test message");
+            
+            // 测试字符串断言
+            var specialText = "Hello 世界! 😊";
+            specialText.ShouldContainChinese();
+            specialText.ShouldContainEmoji();
+            specialText.ShouldContainSpecialCharacters();
+            
+            _output.WriteLine("All assertions passed successfully");
+        }
+
+        [Fact]
+        public void TestConfigurationHelper_Example()
+        {
+            // 获取测试配置
+            var config = TestConfigurationHelper.GetConfiguration();
+            Assert.NotNull(config);
+            
+            // 获取Bot配置
+            var botConfig = TestConfigurationHelper.GetTestBotConfig();
+            Assert.Equal("test_bot_token_123456789", botConfig.BotToken);
+            Assert.Equal(123456789, botConfig.AdminId);
+            
+            // 获取LLM通道配置
+            var llmChannels = TestConfigurationHelper.GetTestLLMChannels();
+            Assert.Equal(3, llmChannels.Count);
+            Assert.Contains(llmChannels, c => c.Provider == LLMProvider.OpenAI);
+            
+            // 获取搜索配置
+            var searchConfig = TestConfigurationHelper.GetTestSearchConfig();
+            Assert.Equal(50, searchConfig.MaxResults);
+            Assert.True(searchConfig.EnableVectorSearch);
+            
+            // 创建临时配置文件
+            var configPath = TestConfigurationHelper.CreateTempConfigFile();
+            Assert.True(System.IO.File.Exists(configPath));
+            
+            // 清理临时文件
+            TestConfigurationHelper.CleanupTempConfigFile();
+            
+            _output.WriteLine("Configuration test completed successfully");
+        }
+
+        [Fact]
+        public async Task TestIntegrationTestBase_Example()
+        {
+            // 使用基类中的测试数据
+            Assert.NotNull(_testData);
+            Assert.Equal(3, _testData.Messages.Count);
+            Assert.Equal(3, _testData.Users.Count);
+            Assert.Equal(2, _testData.Groups.Count);
+            
+            // 创建消息服务
+            var messageService = CreateMessageService();
+            Assert.NotNull(messageService);
+            
+            // 创建搜索服务
+            var searchService = CreateSearchService();
+            Assert.NotNull(searchService);
+            
+            // 模拟Bot消息接收
+            var messageOption = MessageTestDataFactory.CreateValidMessageOption();
+            await SimulateBotMessageReceivedAsync(messageOption);
+            
+            // 模拟搜索请求
+            var searchResults = await SimulateSearchRequestAsync("test", 100);
+            Assert.NotNull(searchResults);
+            
+            // 验证数据库状态
+            await ValidateDatabaseStateAsync(3, 3, 2);
+            
+            // 验证Mock调用
+            VerifyMockCall(_botClientMock, x => x.GetMeAsync(It.IsAny<System.Threading.CancellationToken>()));
+            
+            _output.WriteLine("Integration test completed successfully");
+        }
+
+        [Fact]
+        public async Task TestMessageProcessingPipeline_Example()
+        {
+            // 创建数据库快照
+            var snapshot = await CreateDatabaseSnapshotAsync();
+            
+            try
+            {
+                // 创建复杂测试数据
+                var complexMessage = new MessageOptionBuilder()
+                    .WithUserId(1)
+                    .WithChatId(100)
+                    .WithMessageId(2000)
+                    .WithContent("Complex message with 中文 and emoji 😊")
+                    .WithReplyTo(1000)
+                    .Build();
+                
+                // 模拟消息处理
+                await SimulateBotMessageReceivedAsync(complexMessage);
+                
+                // 验证消息被正确处理
+                var processedMessage = await _dbContext.Messages
+                    .FirstOrDefaultAsync(m => m.MessageId == 2000);
+                
+                Assert.NotNull(processedMessage);
+                processedMessage.ShouldBeValidMessage(100, 2000, 1, "Complex message with 中文 and emoji 😊");
+                
+                // 验证消息包含特殊字符
+                processedMessage.Content.ShouldContainChinese();
+                processedMessage.Content.ShouldContainEmoji();
+                
+                _output.WriteLine($"Message processed successfully: {processedMessage.Content}");
+            }
+            finally
+            {
+                // 恢复数据库状态
+                await RestoreDatabaseFromSnapshotAsync(snapshot);
+            }
+        }
+
+        [Fact]
+        public async Task TestLLMIntegration_Example()
+        {
+            // 配置LLM服务响应
+            var expectedResponse = "This is a test AI response";
+            await SimulateLLMRequestAsync("Hello AI", expectedResponse);
+            
+            // 验证LLM服务被调用
+            VerifyMockCall(_llmServiceMock, x => x.ChatCompletionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<System.Threading.CancellationToken>()
+            ));
+            
+            _output.WriteLine("LLM integration test completed successfully");
+        }
+
+        [Fact]
+        public async Task TestSearchIntegration_Example()
+        {
+            // 创建搜索测试数据
+            var searchMessage = new Message
+            {
+                GroupId = 100,
+                MessageId = 3000,
+                FromUserId = 1,
+                Content = "This is a searchable message about testing",
+                DateTime = DateTime.UtcNow
+            };
+            
+            await _dbContext.Messages.AddAsync(searchMessage);
+            await _dbContext.SaveChangesAsync();
+            
+            // 执行搜索
+            var searchResults = await SimulateSearchRequestAsync("searchable", 100);
+            
+            // 验证搜索结果
+            Assert.NotNull(searchResults);
+            Assert.Contains(searchResults, m => m.Content.Contains("searchable"));
+            
+            _output.WriteLine($"Search completed, found {searchResults.Count} results");
+        }
+
+        [Fact]
+        public async Task TestErrorHandling_Example()
+        {
+            // 配置LLM服务抛出异常
+            _llmServiceMock.Setup(x => x.ChatCompletionAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<System.Threading.CancellationToken>()
+                ))
+                .ThrowsAsync(new InvalidOperationException("LLM service unavailable"));
+            
+            // 验证异常处理
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                SimulateLLMRequestAsync("test", "response")
+            );
+            
+            exception.ShouldContainMessage("LLM service unavailable");
+            
+            _output.WriteLine("Error handling test completed successfully");
+        }
+
+        [Fact]
+        public async Task TestPerformance_Example()
+        {
+            // 批量创建测试数据
+            var batchMessages = new List<MessageOption>();
+            for (int i = 0; i < 100; i++)
+            {
+                batchMessages.Add(MessageTestDataFactory.CreateValidMessageOption(
+                    userId: i + 1,
+                    chatId: 100,
+                    messageId: 4000 + i,
+                    content: $"Batch message {i}"
+                ));
+            }
+            
+            // 测量批量处理时间
+            var startTime = DateTime.UtcNow;
+            
+            foreach (var message in batchMessages)
+            {
+                await SimulateBotMessageReceivedAsync(message);
+            }
+            
+            var endTime = DateTime.UtcNow;
+            var duration = endTime - startTime;
+            
+            // 验证性能要求
+            Assert.True(duration.TotalSeconds < 10, $"Batch processing took {duration.TotalSeconds} seconds, expected less than 10 seconds");
+            
+            _output.WriteLine($"Performance test completed: {duration.TotalMilliseconds}ms for {batchMessages.Count} messages");
+        }
+    }
+}

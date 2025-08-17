@@ -10,6 +10,7 @@ using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Interface.AI.OCR;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
@@ -20,6 +21,8 @@ using TelegramSearchBot.Common.Model.DO;
 using System.Text;
 using Newtonsoft.Json;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.AI.OCR {
     public class AutoOCRController : IOnUpdate
@@ -102,7 +105,7 @@ namespace TelegramSearchBot.Controller.AI.OCR {
                 }
 
                 if (!string.IsNullOrWhiteSpace(ocrResult)) {
-                    await SendMessageService.SendMessage(ocrResult, e.Message.Chat.Id, e.Message.MessageId);
+                    await SendMessageService.SendTextMessageAsync(ocrResult, e.Message.Chat.Id, e.Message.MessageId);
                 }
             }
         }

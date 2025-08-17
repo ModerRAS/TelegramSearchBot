@@ -7,6 +7,7 @@ using Telegram.Bot.Types;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Common.Model;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Core.Architecture

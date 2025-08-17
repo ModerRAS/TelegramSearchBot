@@ -7,16 +7,17 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model.Bilibili;
+using TelegramSearchBot.Model.Notifications;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using TelegramSearchBot.Manager; // For Env (though BiliCookie will now come from service)
-using TelegramSearchBot.Service.Common; // For IAppConfigurationService
+using TelegramSearchBot.Manager;
+using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Helper;
 using MediatR;
-using TelegramSearchBot.Model.Notifications;
 
-namespace TelegramSearchBot.Service.Bilibili;
+namespace TelegramSearchBot.Media.Bilibili;
 
 [Injectable(ServiceLifetime.Transient)]
 public class BiliApiService : IBiliApiService

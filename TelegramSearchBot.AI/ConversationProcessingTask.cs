@@ -11,6 +11,7 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.Service.Scheduler {
@@ -41,7 +42,7 @@ namespace TelegramSearchBot.Service.Scheduler {
         private async Task ProcessConversations() {
             using var scope = _serviceProvider.CreateScope();
             var segmentationService = scope.ServiceProvider.GetRequiredService<ConversationSegmentationService>();
-            var vectorService = scope.ServiceProvider.GetRequiredService<FaissVectorService>();
+            var vectorService = scope.ServiceProvider.GetRequiredService<IVectorGenerationService>();
 
             try {
                 _logger.LogInformation("开始处理对话段");
@@ -84,7 +85,7 @@ namespace TelegramSearchBot.Service.Scheduler {
             }
         }
 
-        private async Task VectorizeUnprocessedSegments(FaissVectorService vectorService) {
+        private async Task VectorizeUnprocessedSegments(IVectorGenerationService vectorService) {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
@@ -132,7 +133,7 @@ namespace TelegramSearchBot.Service.Scheduler {
         public async Task ProcessSpecificGroup(long groupId) {
             using var scope = _serviceProvider.CreateScope();
             var segmentationService = scope.ServiceProvider.GetRequiredService<ConversationSegmentationService>();
-            var vectorService = scope.ServiceProvider.GetRequiredService<FaissVectorService>();
+            var vectorService = scope.ServiceProvider.GetRequiredService<IVectorGenerationService>();
 
             try {
                 _logger.LogInformation($"开始处理群组 {groupId}");

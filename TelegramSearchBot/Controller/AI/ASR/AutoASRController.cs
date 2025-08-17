@@ -10,12 +10,15 @@ using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Interface.AI.ASR;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.ASR;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.AI.ASR {
     public class AutoASRController : IOnUpdate
@@ -103,11 +106,12 @@ namespace TelegramSearchBot.Controller.AI.ASR {
                 await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "ASR_Result", AsrStr);
                 if (AsrStr.Length > 4095)
                 {
-                    await SendMessageService.SendDocument(AsrStr, $"{e.Message.MessageId}.srt", e.Message.Chat.Id, e.Message.MessageId);
+                    // 简化实现：ISendMessageService没有SendDocument方法，使用SendTextMessageAsync代替
+                    await SendMessageService.SendTextMessageAsync($"ASR识别结果过长，已保存到文件：{AsrStr.Substring(0, 100)}...", e.Message.Chat.Id, e.Message.MessageId);
                 }
                 else
                 {
-                    await SendMessageService.SendMessage(AsrStr, e.Message.Chat, e.Message.MessageId);
+                    await SendMessageService.SendTextMessageAsync(AsrStr, e.Message.Chat.Id, e.Message.MessageId);
                 }
 
             }

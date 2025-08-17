@@ -12,10 +12,11 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Common; // Added for IAppConfigurationService
 using TelegramSearchBot.Service.Scheduler; // Added for ISchedulerService
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.Manage
 {
-    public class AdminService : IService
+    public class AdminService : IService, IAdminService
     {
         protected readonly DataDbContext DataContext;
         protected readonly ILogger<AdminService> Logger;

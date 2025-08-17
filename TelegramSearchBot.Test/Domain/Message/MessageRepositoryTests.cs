@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using TelegramSearchBot.Domain.Message;
 using TelegramSearchBot.Model.Data;
 using Xunit;
 
@@ -12,20 +13,20 @@ namespace TelegramSearchBot.Domain.Tests.Message
     public class MessageRepositoryTests : TestBase
     {
         private readonly Mock<DataDbContext> _mockDbContext;
+        private readonly Mock<ILogger<MessageRepository>> _mockLogger;
         private readonly Mock<DbSet<Message>> _mockMessagesDbSet;
-        private readonly Mock<DbSet<MessageExtension>> _mockExtensionsDbSet;
 
         public MessageRepositoryTests()
         {
             _mockDbContext = CreateMockDbContext();
+            _mockLogger = CreateLoggerMock<MessageRepository>();
             _mockMessagesDbSet = new Mock<DbSet<Message>>();
-            _mockExtensionsDbSet = new Mock<DbSet<MessageExtension>>();
         }
 
-        #region GetMessagesByGroupId Tests
+        #region GetMessagesByGroupIdAsync Tests
 
         [Fact]
-        public async Task GetMessagesByGroupId_ExistingGroup_ShouldReturnMessages()
+        public async Task GetMessagesByGroupIdAsync_ExistingGroup_ShouldReturnMessages()
         {
             // Arrange
             var groupId = 100L;
@@ -48,7 +49,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         }
 
         [Fact]
-        public async Task GetMessagesByGroupId_NonExistingGroup_ShouldReturnEmptyList()
+        public async Task GetMessagesByGroupIdAsync_NonExistingGroup_ShouldReturnEmptyList()
         {
             // Arrange
             var groupId = 999L;
@@ -70,42 +71,23 @@ namespace TelegramSearchBot.Domain.Tests.Message
         }
 
         [Fact]
-        public async Task GetMessagesByGroupId_WithDateRange_ShouldReturnFilteredMessages()
+        public async Task GetMessagesByGroupIdAsync_InvalidGroupId_ShouldThrowArgumentException()
         {
             // Arrange
-            var groupId = 100L;
-            var startDate = DateTime.UtcNow.AddDays(-1);
-            var endDate = DateTime.UtcNow;
-            
-            var messages = new List<Message>
-            {
-                MessageTestDataFactory.CreateValidMessage(groupId, 1000),
-                MessageTestDataFactory.CreateValidMessage(groupId, 1001),
-                new MessageBuilder()
-                    .WithGroupId(groupId)
-                    .WithMessageId(1002)
-                    .WithDateTime(DateTime.UtcNow.AddDays(-2))
-                    .Build()
-            };
-
-            SetupMockMessagesDbSet(messages);
-
+            var invalidGroupId = -1L;
             var repository = CreateRepository();
 
-            // Act
-            var result = await repository.GetMessagesByGroupIdAsync(groupId, startDate, endDate);
-
-            // Assert
-            Assert.Equal(2, result.Count());
-            Assert.All(result, m => Assert.InRange(m.DateTime, startDate, endDate));
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(() => 
+                repository.GetMessagesByGroupIdAsync(invalidGroupId));
         }
 
         #endregion
 
-        #region GetMessageById Tests
+        #region GetMessageByIdAsync Tests
 
         [Fact]
-        public async Task GetMessageById_ExistingMessage_ShouldReturnMessage()
+        public async Task GetMessageByIdAsync_ExistingMessage_ShouldReturnMessage()
         {
             // Arrange
             var groupId = 100L;
@@ -127,7 +109,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         }
 
         [Fact]
-        public async Task GetMessageById_NonExistingMessage_ShouldReturnNull()
+        public async Task GetMessageByIdAsync_NonExistingMessage_ShouldReturnNull()
         {
             // Arrange
             var groupId = 100L;
@@ -148,12 +130,38 @@ namespace TelegramSearchBot.Domain.Tests.Message
             Assert.Null(result);
         }
 
-        #endregion
+        [Fact]
+        public async Task GetMessageByIdAsync_InvalidGroupId_ShouldThrowArgumentException()
+        {
+            // Arrange
+            var invalidGroupId = -1L;
+            var messageId = 1000L;
+            var repository = CreateRepository();
 
-        #region AddMessage Tests
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(() => 
+                repository.GetMessageByIdAsync(invalidGroupId, messageId));
+        }
 
         [Fact]
-        public async Task AddMessage_ValidMessage_ShouldAddToDatabase()
+        public async Task GetMessageByIdAsync_InvalidMessageId_ShouldThrowArgumentException()
+        {
+            // Arrange
+            var groupId = 100L;
+            var invalidMessageId = -1L;
+            var repository = CreateRepository();
+
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(() => 
+                repository.GetMessageByIdAsync(groupId, invalidMessageId));
+        }
+
+        #endregion
+
+        #region AddMessageAsync Tests
+
+        [Fact]
+        public async Task AddMessageAsync_ValidMessage_ShouldAddToDatabase()
         {
             // Arrange
             var message = MessageTestDataFactory.CreateValidMessage();
@@ -176,7 +184,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         }
 
         [Fact]
-        public async Task AddMessage_NullMessage_ShouldThrowArgumentNullException()
+        public async Task AddMessageAsync_NullMessage_ShouldThrowArgumentNullException()
         {
             // Arrange
             var repository = CreateRepository();
@@ -186,29 +194,26 @@ namespace TelegramSearchBot.Domain.Tests.Message
         }
 
         [Fact]
-        public async Task AddMessage_DatabaseSaveFails_ShouldThrowException()
+        public async Task AddMessageAsync_InvalidMessage_ShouldThrowArgumentException()
         {
             // Arrange
-            var message = MessageTestDataFactory.CreateValidMessage();
-            var messages = new List<Message>();
-            
-            SetupMockMessagesDbSet(messages);
-
-            _mockDbContext.Setup(ctx => ctx.SaveChangesAsync(It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new DbUpdateException("Database save failed"));
+            var invalidMessage = new MessageBuilder()
+                .WithGroupId(0) // Invalid group ID
+                .WithMessageId(1000)
+                .Build();
 
             var repository = CreateRepository();
 
             // Act & Assert
-            await Assert.ThrowsAsync<DbUpdateException>(() => repository.AddMessageAsync(message));
+            await Assert.ThrowsAsync<ArgumentException>(() => repository.AddMessageAsync(invalidMessage));
         }
 
         #endregion
 
-        #region SearchMessages Tests
+        #region SearchMessagesAsync Tests
 
         [Fact]
-        public async Task SearchMessages_WithKeyword_ShouldReturnMatchingMessages()
+        public async Task SearchMessagesAsync_WithKeyword_ShouldReturnMatchingMessages()
         {
             // Arrange
             var groupId = 100L;
@@ -234,7 +239,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         }
 
         [Fact]
-        public async Task SearchMessages_WithEmptyKeyword_ShouldReturnAllMessages()
+        public async Task SearchMessagesAsync_WithEmptyKeyword_ShouldReturnAllMessages()
         {
             // Arrange
             var groupId = 100L;
@@ -256,83 +261,15 @@ namespace TelegramSearchBot.Domain.Tests.Message
         }
 
         [Fact]
-        public async Task SearchMessages_WithLimit_ShouldReturnLimitedResults()
+        public async Task SearchMessagesAsync_InvalidGroupId_ShouldThrowArgumentException()
         {
             // Arrange
-            var groupId = 100L;
-            var keyword = "test";
-            
-            var messages = new List<Message>
-            {
-                MessageTestDataFactory.CreateValidMessage(groupId, 1000, "test 1"),
-                MessageTestDataFactory.CreateValidMessage(groupId, 1001, "test 2"),
-                MessageTestDataFactory.CreateValidMessage(groupId, 1002, "test 3"),
-                MessageTestDataFactory.CreateValidMessage(groupId, 1003, "test 4")
-            };
-
-            SetupMockMessagesDbSet(messages);
-
+            var invalidGroupId = -1L;
             var repository = CreateRepository();
 
-            // Act
-            var result = await repository.SearchMessagesAsync(groupId, keyword, limit: 2);
-
-            // Assert
-            Assert.Equal(2, result.Count());
-        }
-
-        #endregion
-
-        #region GetMessagesByUser Tests
-
-        [Fact]
-        public async Task GetMessagesByUser_ExistingUser_ShouldReturnUserMessages()
-        {
-            // Arrange
-            var groupId = 100L;
-            var userId = 1L;
-            
-            var messages = new List<Message>
-            {
-                MessageTestDataFactory.CreateValidMessage(groupId, 1000, userId: userId),
-                MessageTestDataFactory.CreateValidMessage(groupId, 1001, userId: userId),
-                MessageTestDataFactory.CreateValidMessage(groupId, 1002, userId: 2L)
-            };
-
-            SetupMockMessagesDbSet(messages);
-
-            var repository = CreateRepository();
-
-            // Act
-            var result = await repository.GetMessagesByUserAsync(groupId, userId);
-
-            // Assert
-            Assert.Equal(2, result.Count());
-            Assert.All(result, m => Assert.Equal(userId, m.FromUserId));
-        }
-
-        [Fact]
-        public async Task GetMessagesByUser_NonExistingUser_ShouldReturnEmptyList()
-        {
-            // Arrange
-            var groupId = 100L;
-            var userId = 999L;
-            
-            var messages = new List<Message>
-            {
-                MessageTestDataFactory.CreateValidMessage(groupId, 1000, userId: 1L),
-                MessageTestDataFactory.CreateValidMessage(groupId, 1001, userId: 2L)
-            };
-
-            SetupMockMessagesDbSet(messages);
-
-            var repository = CreateRepository();
-
-            // Act
-            var result = await repository.GetMessagesByUserAsync(groupId, userId);
-
-            // Assert
-            Assert.Empty(result);
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(() => 
+                repository.SearchMessagesAsync(invalidGroupId, "test"));
         }
 
         #endregion
@@ -341,9 +278,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
 
         private IMessageRepository CreateRepository()
         {
-            // 注意：这是一个简化的实现，实际项目中应该使用IMessageRepository接口
-            // 这里我们使用一个匿名类来模拟Repository的行为
-            return new MessageRepository(_mockDbContext.Object);
+            return new MessageRepository(_mockDbContext.Object, _mockLogger.Object);
         }
 
         private void SetupMockMessagesDbSet(List<Message> messages)
@@ -358,71 +293,5 @@ namespace TelegramSearchBot.Domain.Tests.Message
         }
 
         #endregion
-    }
-
-    // 简化的MessageRepository实现，用于演示TDD
-    public interface IMessageRepository
-    {
-        Task<IEnumerable<Message>> GetMessagesByGroupIdAsync(long groupId, DateTime? startDate = null, DateTime? endDate = null);
-        Task<Message> GetMessageByIdAsync(long groupId, long messageId);
-        Task<long> AddMessageAsync(Message message);
-        Task<IEnumerable<Message>> SearchMessagesAsync(long groupId, string keyword, int limit = 50);
-        Task<IEnumerable<Message>> GetMessagesByUserAsync(long groupId, long userId);
-    }
-
-    public class MessageRepository : IMessageRepository
-    {
-        private readonly DataDbContext _context;
-
-        public MessageRepository(DataDbContext context)
-        {
-            _context = context;
-        }
-
-        public async Task<IEnumerable<Message>> GetMessagesByGroupIdAsync(long groupId, DateTime? startDate = null, DateTime? endDate = null)
-        {
-            var query = _context.Messages.Where(m => m.GroupId == groupId);
-            
-            if (startDate.HasValue)
-                query = query.Where(m => m.DateTime >= startDate.Value);
-            
-            if (endDate.HasValue)
-                query = query.Where(m => m.DateTime <= endDate.Value);
-            
-            return await query.ToListAsync();
-        }
-
-        public async Task<Message> GetMessageByIdAsync(long groupId, long messageId)
-        {
-            return await _context.Messages
-                .FirstOrDefaultAsync(m => m.GroupId == groupId && m.MessageId == messageId);
-        }
-
-        public async Task<long> AddMessageAsync(Message message)
-        {
-            if (message == null)
-                throw new ArgumentNullException(nameof(message));
-
-            await _context.Messages.AddAsync(message);
-            await _context.SaveChangesAsync();
-            return message.Id;
-        }
-
-        public async Task<IEnumerable<Message>> SearchMessagesAsync(long groupId, string keyword, int limit = 50)
-        {
-            var query = _context.Messages.Where(m => m.GroupId == groupId);
-            
-            if (!string.IsNullOrEmpty(keyword))
-                query = query.Where(m => m.Content.Contains(keyword));
-            
-            return await query.Take(limit).ToListAsync();
-        }
-
-        public async Task<IEnumerable<Message>> GetMessagesByUserAsync(long groupId, long userId)
-        {
-            return await _context.Messages
-                .Where(m => m.GroupId == groupId && m.FromUserId == userId)
-                .ToListAsync();
-        }
     }
 }

@@ -11,8 +11,9 @@ using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Manager; // For Env.WorkDir
 using FFMpegCore; // Added for FFMpeg manipulation
 using FFMpegCore.Enums; // Added for SpeedArgument (may not be needed now)
+using TelegramSearchBot.Common;
 
-namespace TelegramSearchBot.Service.Bilibili;
+namespace TelegramSearchBot.Media.Bilibili;
 
 [Injectable(ServiceLifetime.Transient)]
 public class DownloadService : IDownloadService

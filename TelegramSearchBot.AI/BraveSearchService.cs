@@ -10,6 +10,7 @@ using System.Net.Http.Headers;
 using System.Net;
 using TelegramSearchBot.Service.AI.LLM; // 添加MCP工具支持
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

@@ -26,6 +26,7 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Model.Tools; // For BraveSearchResult
+using TelegramSearchBot.Common;
 // Using alias for the common internal ChatMessage format
 using CommonChat = OpenAI.Chat;
 using TelegramSearchBot.Interface.AI.LLM;
@@ -791,9 +792,58 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
+        public async Task<string> GenerateTextAsync(string prompt, LLMChannel channel)
         {
+            if (string.IsNullOrWhiteSpace(prompt))
+            {
+                _logger.LogWarning("{ServiceName}: Prompt is empty", ServiceName);
+                return string.Empty;
+            }
 
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway) || string.IsNullOrWhiteSpace(channel.ApiKey))
+            {
+                _logger.LogError("{ServiceName}: Channel, Gateway, or ApiKey is not configured", ServiceName);
+                throw new ArgumentException("Channel, Gateway, or ApiKey is not configured");
+            }
+
+            using var httpClient = _httpClientFactory.CreateClient();
+
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(channel.Gateway),
+                Transport = new HttpClientPipelineTransport(httpClient),
+            };
+
+            var chatClient = new ChatClient(model: "gpt-3.5-turbo", credential: new(channel.ApiKey), clientOptions);
+
+            try
+            {
+                var messages = new List<ChatMessage> {
+                    new UserChatMessage(prompt)
+                };
+                
+                var response = await chatClient.CompleteChatAsync(messages);
+                return response.Value.Content[0].Text;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate text with OpenAI");
+                throw;
+            }
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, LLMChannel channel)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                _logger.LogWarning("{ServiceName}: Text is empty", ServiceName);
+                return Array.Empty<float>();
+            }
+
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway) || string.IsNullOrWhiteSpace(channel.ApiKey))
+            {
+                _logger.LogError("{ServiceName}: Channel, Gateway, or ApiKey is not configured", ServiceName);
+                throw new ArgumentException("Channel, Gateway, or ApiKey is not configured");
+            }
 
             using var httpClient = _httpClientFactory.CreateClient();
 
@@ -807,7 +857,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             
             try
             {
-                var embeddingClient = client.GetEmbeddingClient(modelName);
+                var embeddingClient = client.GetEmbeddingClient("text-embedding-ada-002");
                 var response = await embeddingClient.GenerateEmbeddingsAsync(new[] { text });
                 
                 if (response?.Value != null && response.Value.Any())
@@ -873,6 +923,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 _logger.LogError(ex, "Error calling OpenAI Embeddings API");
                 throw;
             }
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
+        {
+            // 简化实现：调用新的接口方法
+            return await GenerateEmbeddingsAsync(text, channel);
         }
 
         public async Task<(string, string)> SetModel(string ModelName, long ChatId)
@@ -956,5 +1012,207 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return $"Error analyzing image: {ex.Message}";
             }
         }
-    }
+
+        // 新增的接口方法实现
+        public async Task<bool> IsHealthyAsync(LLMChannel channel)
+        {
+            try
+            {
+                if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway) || string.IsNullOrWhiteSpace(channel.ApiKey))
+                {
+                    return false;
+                }
+
+                using var httpClient = _httpClientFactory.CreateClient();
+                var clientOptions = new OpenAIClientOptions
+                {
+                    Endpoint = new Uri(channel.Gateway),
+                    Transport = new HttpClientPipelineTransport(httpClient),
+                };
+
+                var chatClient = new ChatClient(model: "gpt-3.5-turbo", credential: new(channel.ApiKey), clientOptions);
+                var messages = new List<ChatMessage>
+                {
+                    new UserChatMessage("test")
+                };
+
+                var response = await chatClient.CompleteChatAsync(messages);
+                return response != null && response.Value != null && !string.IsNullOrWhiteSpace(response.Value.Content[0].Text);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "OpenAI service health check failed");
+                return false;
+            }
+        }
+
+        public async Task<List<string>> GetAllModels()
+        {
+            try
+            {
+                // OpenAI 模型列表
+                return new List<string>
+                {
+                    "gpt-4",
+                    "gpt-4-turbo",
+                    "gpt-4o",
+                    "gpt-4o-mini",
+                    "gpt-3.5-turbo",
+                    "gpt-3.5-turbo-16k",
+                    "text-embedding-ada-002",
+                    "text-embedding-3-small",
+                    "text-embedding-3-large"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get OpenAI models");
+                return new List<string>();
+            }
+        }
+
+        public async Task<List<(string ModelName, Dictionary<string, object> Capabilities)>> GetAllModelsWithCapabilities()
+        {
+            try
+            {
+                var models = new List<(string ModelName, Dictionary<string, object> Capabilities)>();
+                
+                // GPT-4
+                models.Add(("gpt-4", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "advanced_reasoning", true },
+                    { "complex_tasks", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "response_json_object", true },
+                    { "input_token_limit", 8192 },
+                    { "output_token_limit", 4096 },
+                    { "model_family", "GPT" },
+                    { "model_version", "4.0" }
+                }));
+
+                // GPT-4 Turbo
+                models.Add(("gpt-4-turbo", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "advanced_reasoning", true },
+                    { "complex_tasks", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "response_json_object", true },
+                    { "long_context", true },
+                    { "file_upload", true },
+                    { "input_token_limit", 128000 },
+                    { "output_token_limit", 4096 },
+                    { "model_family", "GPT" },
+                    { "model_version", "4.0" }
+                }));
+
+                // GPT-4O
+                models.Add(("gpt-4o", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "audio_content", true },
+                    { "advanced_reasoning", true },
+                    { "complex_tasks", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "response_json_object", true },
+                    { "fast_response", true },
+                    { "optimized", true },
+                    { "input_token_limit", 128000 },
+                    { "output_token_limit", 4096 },
+                    { "model_family", "GPT" },
+                    { "model_version", "4.0" }
+                }));
+
+                // GPT-4O Mini
+                models.Add(("gpt-4o-mini", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "response_json_object", true },
+                    { "fast_response", true },
+                    { "optimized", true },
+                    { "input_token_limit", 128000 },
+                    { "output_token_limit", 16384 },
+                    { "model_family", "GPT" },
+                    { "model_version", "4.0" }
+                }));
+
+                // GPT-3.5 Turbo
+                models.Add(("gpt-3.5-turbo", new Dictionary<string, object>
+                {
+                    { "vision", false },
+                    { "multimodal", false },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "response_json_object", true },
+                    { "chat", true },
+                    { "input_token_limit", 16385 },
+                    { "output_token_limit", 4096 },
+                    { "model_family", "GPT" },
+                    { "model_version", "3.5" }
+                }));
+
+                // Embedding models
+                models.Add(("text-embedding-ada-002", new Dictionary<string, object>
+                {
+                    { "embedding", true },
+                    { "text_embedding", true },
+                    { "function_calling", false },
+                    { "vision", false },
+                    { "chat", false },
+                    { "input_token_limit", 8191 },
+                    { "output_token_limit", 1536 },
+                    { "model_family", "GPT" },
+                    { "model_version", "3.0" }
+                }));
+
+                models.Add(("text-embedding-3-small", new Dictionary<string, object>
+                {
+                    { "embedding", true },
+                    { "text_embedding", true },
+                    { "function_calling", false },
+                    { "vision", false },
+                    { "chat", false },
+                    { "input_token_limit", 8191 },
+                    { "output_token_limit", 1536 },
+                    { "model_family", "GPT" },
+                    { "model_version", "3.0" }
+                }));
+
+                models.Add(("text-embedding-3-large", new Dictionary<string, object>
+                {
+                    { "embedding", true },
+                    { "text_embedding", true },
+                    { "function_calling", false },
+                    { "vision", false },
+                    { "chat", false },
+                    { "input_token_limit", 8191 },
+                    { "output_token_limit", 3072 },
+                    { "model_family", "GPT" },
+                    { "model_version", "3.0" }
+                }));
+
+                return models;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get OpenAI models with capabilities");
+                return new List<(string ModelName, Dictionary<string, object> Capabilities)>();
+            }
+        }
+
+        }
 }

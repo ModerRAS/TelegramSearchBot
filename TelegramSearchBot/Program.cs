@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using TelegramSearchBot.AppBootstrap;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot {
     class Program {

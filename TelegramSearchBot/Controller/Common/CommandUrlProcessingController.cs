@@ -7,6 +7,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
@@ -14,6 +15,7 @@ using TelegramSearchBot.View;
 using Microsoft.Extensions.Logging;
 using Message = Telegram.Bot.Types.Message;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.Common {
     public class CommandUrlProcessingController : IOnUpdate

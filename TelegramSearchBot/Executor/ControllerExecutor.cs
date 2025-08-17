@@ -6,7 +6,11 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Executor {
     public class ControllerExecutor {

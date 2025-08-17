@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Helper;
 using Whisper.net;
 using Whisper.net.Ggml;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Manager {
     public class WhisperManager {

@@ -8,6 +8,7 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using TelegramSearchBot.Service;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Manager {
     public class QRManager {

@@ -9,6 +9,7 @@ using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.View
 {
@@ -42,27 +43,81 @@ namespace TelegramSearchBot.View
         }
 
         // Fluent API methods
-        public GenericView WithChatId(long chatId)
+        public IView WithChatId(long chatId)
         {
             _chatId = chatId;
             return this;
         }
 
-        public GenericView WithReplyTo(int messageId)
+        public IView WithReplyTo(int messageId)
         {
             _replyToMessageId = messageId;
             return this;
         }
 
-        public GenericView WithText(string text)
+        public IView WithText(string text)
         {
             _textContent = MessageFormatHelper.ConvertMarkdownToTelegramHtml(text);
             return this;
         }
 
-        public GenericView DisableNotification(bool disable = true)
+        public IView WithCount(int count)
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSkip(int skip)
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTake(int take)
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSearchType(SearchType searchType)
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithMessages(List<TelegramSearchBot.Model.Data.Message> messages)
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTitle(string title)
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithHelp()
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView DisableNotification(bool disable = true)
         {
             _disableNotification = disable;
+            return this;
+        }
+
+        public IView WithMessage(string message)
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithOwnerName(string ownerName)
+        {
+            // GenericView不需要此方法，但为了实现接口提供空实现
             return this;
         }
 

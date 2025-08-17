@@ -5,6 +5,7 @@ using PuppeteerSharp;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.Tools
 {

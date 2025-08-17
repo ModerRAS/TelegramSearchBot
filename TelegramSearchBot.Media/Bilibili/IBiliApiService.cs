@@ -1,7 +1,7 @@
 using System.Threading.Tasks;
 using TelegramSearchBot.Model.Bilibili;
 
-namespace TelegramSearchBot.Service.Bilibili;
+namespace TelegramSearchBot.Media.Bilibili;
 
 public interface IBiliApiService
 {

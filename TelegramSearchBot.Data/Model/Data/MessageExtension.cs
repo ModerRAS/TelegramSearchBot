@@ -15,8 +15,8 @@ namespace TelegramSearchBot.Model.Data {
         [ForeignKey(nameof(Message))]
         public long MessageDataId { get; set; }
         
-        public string Name { get; set; }
-        public string Value { get; set; }
+        public string ExtensionType { get; set; }
+        public string ExtensionData { get; set; }
         
         public virtual Message Message { get; set; }
     }

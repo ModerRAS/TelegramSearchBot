@@ -12,6 +12,7 @@ using TelegramSearchBot.Controller.Search;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Common.Model;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Core.Controller

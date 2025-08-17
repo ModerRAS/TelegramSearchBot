@@ -10,13 +10,15 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.View
 {
     public class ImageView : IView
     {
         private readonly ITelegramBotClient _botClient;
-        private readonly SendMessage _sendMessage;
+        private readonly ISendMessageService _sendMessage;
 
         // ViewModel properties
         private long _chatId;
@@ -26,7 +28,7 @@ namespace TelegramSearchBot.View
         private bool _disableNotification;
         private InputFile _photo;
 
-        public ImageView(ITelegramBotClient botClient, SendMessage sendMessage) 
+        public ImageView(ITelegramBotClient botClient, ISendMessageService sendMessage) 
         {
             _botClient = botClient;
             _sendMessage = sendMessage;
@@ -45,27 +47,87 @@ namespace TelegramSearchBot.View
         }
 
         // Fluent API methods
-        public ImageView WithChatId(long chatId)
+        public IView WithChatId(long chatId)
         {
             _chatId = chatId;
             return this;
         }
 
-        public ImageView WithReplyTo(int messageId)
+        public IView WithReplyTo(int messageId)
         {
             _replyToMessageId = messageId;
+            return this;
+        }
+
+        public IView WithText(string text)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithCount(int count)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSkip(int skip)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTake(int take)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSearchType(SearchType searchType)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithMessages(List<TelegramSearchBot.Model.Data.Message> messages)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTitle(string title)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithHelp()
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView DisableNotification(bool disable = true)
+        {
+            _disableNotification = disable;
+            return this;
+        }
+
+        public IView WithMessage(string message)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithOwnerName(string ownerName)
+        {
+            // ImageView不需要此方法，但为了实现接口提供空实现
             return this;
         }
 
         public ImageView WithCaption(string caption)
         {
             _caption = MessageFormatHelper.ConvertMarkdownToTelegramHtml(caption);
-            return this;
-        }
-
-        public ImageView DisableNotification(bool disable = true)
-        {
-            _disableNotification = disable;
             return this;
         }
 
@@ -102,18 +164,16 @@ namespace TelegramSearchBot.View
 
         public async Task Render()
         {
-            var replyParameters = new Telegram.Bot.Types.ReplyParameters
-            {
-                MessageId = _replyToMessageId
-            };
-
             var inlineButtons = _buttons?.Select(b => 
                 InlineKeyboardButton.WithCallbackData(b.Text, b.CallbackData)).ToList();
 
             var replyMarkup = inlineButtons != null && inlineButtons.Any() ? 
                 new InlineKeyboardMarkup(inlineButtons) : null;
 
-            await _sendMessage.AddTaskWithResult(async () => await _botClient.SendPhoto(
+            // 简化实现：直接调用BotClient发送图片
+            var replyParameters = _replyToMessageId > 0 ? new ReplyParameters { MessageId = _replyToMessageId } : null;
+            
+            await _botClient.SendPhoto(
                 chatId: _chatId,
                 photo: _photo,
                 caption: _caption,
@@ -121,7 +181,7 @@ namespace TelegramSearchBot.View
                 replyParameters: replyParameters,
                 disableNotification: _disableNotification,
                 replyMarkup: replyMarkup
-            ), _chatId);
+            );
         }
     }
 }

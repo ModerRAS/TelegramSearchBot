@@ -16,12 +16,12 @@ namespace TelegramSearchBot.Service.BotAPI
     public class SendService : IService
     {
         private readonly ITelegramBotClient botClient;
-        private readonly SendMessage Send;
+        private readonly ISendMessageService Send;
         private readonly DataDbContext _dbContext;
 
         public string ServiceName => "SendService";
 
-        public SendService(ITelegramBotClient botClient, SendMessage Send, DataDbContext dbContext)
+        public SendService(ITelegramBotClient botClient, ISendMessageService Send, DataDbContext dbContext)
         {
             this.Send = Send ?? throw new ArgumentNullException(nameof(Send));
             this.botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));

@@ -14,12 +14,13 @@ using TelegramSearchBot.Model;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using TelegramSearchBot.View;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Common.Model;
+using SearchOption = TelegramSearchBot.Model.SearchOption;
 
 namespace TelegramSearchBot.Controller.Search {
     public class SearchNextPageController : IOnUpdate
     {
-        private readonly SendMessage Send;
+        private readonly ISendMessageService Send;
         private readonly DataDbContext _dbContext;
         private readonly ILogger logger;
         private readonly ISearchService searchService;
@@ -30,7 +31,7 @@ namespace TelegramSearchBot.Controller.Search {
         public List<Type> Dependencies => new List<Type>();
         public SearchNextPageController(
             ITelegramBotClient botClient,
-            SendMessage Send,
+            ISendMessageService Send,
             ILogger<SearchNextPageController> logger,
             SearchService searchService,
             DataDbContext dbContext,

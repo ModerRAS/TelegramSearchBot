@@ -11,7 +11,8 @@ using TelegramSearchBot.Exceptions;
 using MediatR; // Added for IMediator
 using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
 using Telegram.Bot.Types.Enums; // For ChatType
-using TelegramSearchBot.Interface; // Added for IOnUpdate, IProcessPhoto
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface; // Added for IOnUpdate, IProcessPhoto
 using TelegramSearchBot.Service.AI.QR; // Added for AutoQRService
 using TelegramSearchBot.Service.Storage; // Added for MessageService
 using TelegramSearchBot.Model; // Added for MessageOption
@@ -21,6 +22,7 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Controller.Storage; // Added for SendMessageService
 using TelegramSearchBot.Interface.Controller; // Added for ISendMessageService
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.AI.QR {
     public class AutoQRController : IOnUpdate, IProcessPhoto
@@ -78,7 +80,7 @@ namespace TelegramSearchBot.Controller.AI.QR {
                 p.ProcessingResults.Add($"[QR识别结果] {qrStr}");
 
                 // 1. Original logic: Send the raw QR string back to the user.
-                await _sendMessageService.SendMessage(qrStr, e.Message.Chat.Id, e.Message.MessageId);
+                await _sendMessageService.SendTextMessageAsync(qrStr, e.Message.Chat.Id, e.Message.MessageId);
                 _logger.LogInformation("Sent raw QR content for {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
 
 

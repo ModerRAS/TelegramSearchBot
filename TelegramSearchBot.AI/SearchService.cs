@@ -7,7 +7,8 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface.Vector;
-using TelegramSearchBot.Service.Vector;
+using SearchOption = TelegramSearchBot.Model.SearchOption;
+using LuceneSearchOption = TelegramSearchBot.Model.SearchOption;
 
 namespace TelegramSearchBot.Service.Search
 {
@@ -17,18 +18,15 @@ namespace TelegramSearchBot.Service.Search
         private readonly LuceneManager lucene;
         private readonly DataDbContext dbContext;
         private readonly IVectorGenerationService vectorService;
-        private readonly FaissVectorService faissVectorService;
         
         public SearchService(
             LuceneManager lucene, 
             DataDbContext dbContext, 
-            IVectorGenerationService vectorService,
-            FaissVectorService faissVectorService)
+            IVectorGenerationService vectorService)
         {
             this.lucene = lucene;
             this.dbContext = dbContext;
             this.vectorService = vectorService;
-            this.faissVectorService = faissVectorService;
         }
 
         public string ServiceName => "SearchService";
@@ -48,7 +46,9 @@ namespace TelegramSearchBot.Service.Search
         {
             if (searchOption.IsGroup)
             {
-                (searchOption.Count, searchOption.Messages) = lucene.Search(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                var (totalHits, messages) = await lucene.Search(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                searchOption.Count = totalHits;
+                searchOption.Messages = messages;
             }
             else
             {
@@ -59,9 +59,9 @@ namespace TelegramSearchBot.Service.Search
                 searchOption.Messages = new List<Message>();
                 foreach (var Group in UserInGroups)
                 {
-                    var (count, messages) = lucene.Search(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
+                    var (totalHits, messages) = await lucene.Search(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
                     searchOption.Messages.AddRange(messages);
-                    searchOption.Count += count;
+                    searchOption.Count += totalHits;
                 }
             }
             return searchOption;
@@ -72,7 +72,9 @@ namespace TelegramSearchBot.Service.Search
         {
             if (searchOption.IsGroup)
             {
-                (searchOption.Count, searchOption.Messages) = lucene.SyntaxSearch(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                var (totalHits, messages) = await lucene.SyntaxSearch(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                searchOption.Count = totalHits;
+                searchOption.Messages = messages;
             }
             else
             {
@@ -83,9 +85,9 @@ namespace TelegramSearchBot.Service.Search
                 searchOption.Messages = new List<Message>();
                 foreach (var Group in UserInGroups)
                 {
-                    var (count, messages) = lucene.SyntaxSearch(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
+                    var (totalHits, messages) = await lucene.SyntaxSearch(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
                     searchOption.Messages.AddRange(messages);
-                    searchOption.Count += count;
+                    searchOption.Count += totalHits;
                 }
             }
             return searchOption;
@@ -96,7 +98,7 @@ namespace TelegramSearchBot.Service.Search
             if (searchOption.IsGroup)
             {
                 // 使用FAISS对话段向量搜索当前群组
-                return await faissVectorService.Search(searchOption);
+                return await vectorService.Search(searchOption);
             }
             else
             {
@@ -122,7 +124,7 @@ namespace TelegramSearchBot.Service.Search
                         Count = -1
                     };
 
-                    var groupResult = await faissVectorService.Search(groupSearchOption);
+                    var groupResult = await vectorService.Search(groupSearchOption);
                     if (groupResult.Messages.Count > 0)
                     {
                         allMessages.AddRange(groupResult.Messages);
@@ -143,6 +145,16 @@ namespace TelegramSearchBot.Service.Search
             }
             
             return searchOption;
+        }
+
+        /// <summary>
+        /// 简化搜索实现（向后兼容性）
+        /// 默认使用倒排索引搜索
+        /// </summary>
+        public async Task<SearchOption> SimpleSearch(SearchOption searchOption)
+        {
+            // 简化实现：直接调用Lucene搜索
+            return await LuceneSearch(searchOption);
         }
     }
 }

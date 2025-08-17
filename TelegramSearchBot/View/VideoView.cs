@@ -13,6 +13,8 @@ using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.View
 {
@@ -69,30 +71,78 @@ UP: {{ owner_name }}
         }
 
         // Fluent API methods
-        public VideoView WithChatId(long chatId)
+        public IView WithChatId(long chatId)
         {
             _chatId = chatId;
             return this;
         }
 
-        public VideoView WithReplyTo(int messageId)
+        public IView WithReplyTo(int messageId)
         {
             _replyToMessageId = messageId;
             return this;
         }
 
+        public IView WithText(string text)
+        {
+            // VideoView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
 
-        public VideoView WithTitle(string title)
+        public IView WithCount(int count)
+        {
+            // VideoView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSkip(int skip)
+        {
+            // VideoView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTake(int take)
+        {
+            // VideoView不需要此方法，但为了接口实现提供空实现
+            return this;
+        }
+
+        public IView WithSearchType(SearchType searchType)
+        {
+            // VideoView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithMessages(List<TelegramSearchBot.Model.Data.Message> messages)
+        {
+            // VideoView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithHelp()
+        {
+            // VideoView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+
+        public IView WithTitle(string title)
         {
             if (_templateModel == null) _templateModel = new Dictionary<string, object>();
             ((Dictionary<string, object>)_templateModel)["title"] = title;
             return this;
         }
 
-        public VideoView WithOwnerName(string ownerName)
+        public IView WithOwnerName(string ownerName)
         {
             if (_templateModel == null) _templateModel = new Dictionary<string, object>();
             ((Dictionary<string, object>)_templateModel)["owner_name"] = ownerName;
+            return this;
+        }
+
+        public IView WithMessage(string message)
+        {
+            // VideoView不需要此方法，但为了实现接口提供空实现
             return this;
         }
 
@@ -132,7 +182,7 @@ UP: {{ owner_name }}
             return this;
         }
 
-        public VideoView DisableNotification(bool disable = true)
+        public IView DisableNotification(bool disable = true)
         {
             _disableNotification = disable;
             return this;
@@ -200,7 +250,7 @@ UP: {{ owner_name }}
             return this;
         }
 
-        public async Task<Message> Render()
+        public async Task Render()
         {
             var replyParameters = new Telegram.Bot.Types.ReplyParameters
             {
@@ -249,7 +299,7 @@ UP: {{ owner_name }}
                         _chatId < 0
                     );
                 }
-                return new Message(); // Return dummy message since we don't have the actual message
+                return;
             }
 
             // Handle video message case
@@ -267,7 +317,7 @@ UP: {{ owner_name }}
                 }
             }
 
-            return await _sendMessage.AddTaskWithResult(async () => await _botClient.SendVideo(
+            await _sendMessage.AddTaskWithResult(async () => await _botClient.SendVideo(
                 chatId: _chatId,
                 video: _video,
                 caption: videoCaption,

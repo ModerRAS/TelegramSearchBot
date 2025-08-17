@@ -9,6 +9,7 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Attributes;
 using J2N.IO;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.Tools
 {

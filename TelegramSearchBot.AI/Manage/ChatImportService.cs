@@ -6,6 +6,7 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.ChatExport;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Common;
 using DataMessage = TelegramSearchBot.Model.Data.Message;
 using ExportMessage = TelegramSearchBot.Model.ChatExport.Message;
 using Newtonsoft.Json;
@@ -21,13 +22,13 @@ namespace TelegramSearchBot.Service.Manage {
     {
         public string ServiceName => "ChatImportService";
         private readonly ILogger<ChatImportService> _logger;
-        private readonly SendMessage _send;
+        private readonly ISendMessageService _send;
         private readonly DataDbContext _context;
         private readonly string _importDir;
 
         public ChatImportService(
             ILogger<ChatImportService> logger,
-            SendMessage send,
+            ISendMessageService send,
             DataDbContext context)
         {
             _logger = logger;

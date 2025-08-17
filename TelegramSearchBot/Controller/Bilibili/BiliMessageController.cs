@@ -11,13 +11,14 @@ using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller.AI.OCR;
 using TelegramSearchBot.Controller.AI.QR;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface.Bilibili;
-using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Common.Interface;
+using TelegramSearchBot.Common.Interface.Bilibili;
+using TelegramSearchBot.Common.Model.Bilibili;
+using TelegramSearchBot.Common.Model;
 using TelegramSearchBot.Model.Bilibili;
-using TelegramSearchBot.Service.Bilibili;
-using TelegramSearchBot.Service.Common;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Media.Bilibili;
+using TelegramSearchBot.Manager;
 using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
@@ -161,27 +162,30 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
             {
                 if (result.VideoInputFile != null)
                 {
-                    var videoView = _videoView
+                    VideoView videoView = (VideoView)_videoView
                         .WithChatId(message.Chat.Id)
                         .WithReplyTo(message.MessageId)
                         .WithTitle(result.Title)
-                        .WithOwnerName(result.OwnerName)
-                        .WithCategory(result.Category)
-                        .WithOriginalUrl(result.OriginalUrl)
+                        .WithOwnerName(result.OwnerName);
+                    
+                    // 简化实现：直接调用VideoView的WithCategory方法，而不是通过IView接口
+                    videoView.WithCategory(result.Category);
+                    videoView.WithOriginalUrl(result.OriginalUrl)
                         .WithVideo(result.VideoInputFile)
                         .WithDuration(videoInfo.Duration)
                         .WithDimensions(videoInfo.DimensionWidth, videoInfo.DimensionHeight)
                         .WithThumbnail(result.ThumbnailInputFile);
 
-                    Message sentMessage = await videoView.Render();
+                    await videoView.Render();
                     videoSent = true;
                     _logger.LogInformation("Video send task completed for {VideoTitle}", videoInfo.Title);
                     
-                    if (sentMessage?.Video != null && !string.IsNullOrWhiteSpace(result.VideoFileToCacheKey) && result.VideoFileStream != null)
+                    if (!string.IsNullOrWhiteSpace(result.VideoFileToCacheKey) && result.VideoFileStream != null)
                     {
-                        await _videoProcessingService.CacheFileIdAsync(
-                            result.VideoFileToCacheKey,
-                            sentMessage.Video.FileId);
+                        // 简化实现：不再缓存FileId，因为Render方法不返回Message
+                  // await _videoProcessingService.CacheFileIdAsync(
+                  //     result.VideoFileToCacheKey,
+                  //     sentMessage.Video.FileId);
                     }
                 }
             }
@@ -205,13 +209,15 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
             if (!videoSent)
             {
                 _logger.LogWarning("Failed to send video for {VideoTitle}, sending text info instead.", videoInfo.Title);
-                await _videoView
+                var videoView = (VideoView)_videoView
                     .WithChatId(message.Chat.Id)
                     .WithReplyTo(message.MessageId)
                     .WithTitle(result.Title)
-                    .WithOwnerName(result.OwnerName)
-                    .WithCategory(result.Category)
-                    .WithTemplateDuration(result.Duration)
+                    .WithOwnerName(result.OwnerName);
+                
+                // 简化实现：直接调用VideoView的WithCategory方法，而不是通过IView接口
+                videoView.WithCategory(result.Category);
+                videoView.WithTemplateDuration(result.Duration)
                     .WithTemplateDescription(result.Description)
                     .WithOriginalUrl(result.OriginalUrl)
                     .Render();

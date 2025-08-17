@@ -76,7 +76,7 @@ namespace TelegramSearchBot.Manager
                     {
                         foreach (var ext in message.MessageExtensions)
                         {
-                            doc.Add(new TextField($"Ext_{ext.Name}", ext.Value, Field.Store.YES));
+                            doc.Add(new TextField($"Ext_{ext.ExtensionType}", ext.ExtensionData, Field.Store.YES));
                         }
                     }
                     writer.AddDocument(doc);
@@ -91,6 +91,70 @@ namespace TelegramSearchBot.Manager
                 catch (Exception ex)
                 {
                     Console.WriteLine($"LuceneManager WriteDocumentAsync Unexpected Error: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 批量写入文档到Lucene索引 - 简化实现
+        /// </summary>
+        /// <param name="messages">消息列表</param>
+        /// <returns>异步任务</returns>
+        public async Task WriteDocuments(List<Message> messages)
+        {
+            if (messages == null || !messages.Any())
+            {
+                return;
+            }
+
+            // 按群组分组处理
+            var groupedMessages = messages.GroupBy(m => m.GroupId);
+            
+            foreach (var group in groupedMessages)
+            {
+                using (var writer = GetIndexWriter(group.Key))
+                {
+                    try
+                    {
+                        foreach (var message in group)
+                        {
+                            Document doc = new Document();
+                            // 基础字段
+                            doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
+                            doc.Add(new Int64Field("MessageId", message.MessageId, Field.Store.YES));
+                            doc.Add(new StringField("DateTime", message.DateTime.ToString("o"), Field.Store.YES));
+                            doc.Add(new Int64Field("FromUserId", message.FromUserId, Field.Store.YES));
+                            doc.Add(new Int64Field("ReplyToUserId", message.ReplyToUserId, Field.Store.YES));
+                            doc.Add(new Int64Field("ReplyToMessageId", message.ReplyToMessageId, Field.Store.YES));
+
+                            // 内容字段
+                            TextField ContentField = new TextField("Content", message.Content, Field.Store.YES);
+                            ContentField.Boost = 1F;
+                            doc.Add(ContentField);
+
+                            // 扩展字段
+                            if (message.MessageExtensions != null)
+                            {
+                                foreach (var ext in message.MessageExtensions)
+                                {
+                                    doc.Add(new TextField($"Ext_{ext.ExtensionType}", ext.ExtensionData, Field.Store.YES));
+                                }
+                            }
+                            writer.AddDocument(doc);
+                        }
+                        
+                        writer.Flush(triggerMerge: true, applyAllDeletes: true);
+                        writer.Commit();
+                    }
+                    catch (ArgumentNullException ex)
+                    {
+                        // 简化版本：暂时忽略错误日志，待后续完善
+                        Console.WriteLine($"LuceneManager WriteDocuments Error: {ex.Message}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"LuceneManager WriteDocuments Unexpected Error: {ex.Message}");
+                    }
                 }
             }
         }

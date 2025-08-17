@@ -5,13 +5,12 @@ using System.Threading.Tasks;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Common.Model;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Vector;
-using TelegramSearchBot.Service.Manage;
-using TelegramSearchBot.View;
+using TelegramSearchBot.Interface;
 using System.Collections.Generic;
-using TelegramSearchBot.Interface.Controller;
 
 namespace TelegramSearchBot.Controller.Manage {
     /// <summary>
@@ -20,26 +19,29 @@ namespace TelegramSearchBot.Controller.Manage {
     public class FaissVectorController : IOnUpdate
     {
 
-        public List<Type> Dependencies => new List<Type>() { typeof(AdminController) };
+        public List<Type> Dependencies => new List<Type>() { typeof(IAdminController) };
 
         private readonly FaissVectorService _faissVectorService;
         private readonly ConversationSegmentationService _segmentationService;
-        private readonly AdminService _adminService;
-        private readonly GenericView _commonMessageView;
+        private readonly IAdminService _adminService;
+        private readonly IView _commonMessageView;
         private readonly DataDbContext _dataDbContext;
+        private readonly IEnvService _envService;
 
         public FaissVectorController(
             FaissVectorService faissVectorService,
             ConversationSegmentationService segmentationService,
-            AdminService adminService,
-            GenericView commonMessageView,
-            DataDbContext dataDbContext)
+            IAdminService adminService,
+            IView commonMessageView,
+            DataDbContext dataDbContext,
+            IEnvService envService)
         {
             _faissVectorService = faissVectorService;
             _segmentationService = segmentationService;
             _adminService = adminService;
             _commonMessageView = commonMessageView;
             _dataDbContext = dataDbContext;
+            _envService = envService;
         }
 
         public async Task ExecuteAsync(PipelineContext p)
@@ -119,7 +121,7 @@ namespace TelegramSearchBot.Controller.Manage {
                 statusMessage.AppendLine($"💾 **存储使用**: {FormatBytes(totalSize)}");
 
                 // 索引目录信息
-                var indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
+                var indexDirectory = Path.Combine(_envService.WorkDir, "faiss_indexes");
                 if (Directory.Exists(indexDirectory))
                 {
                     var files = Directory.GetFiles(indexDirectory, "*.faiss");
@@ -228,7 +230,7 @@ namespace TelegramSearchBot.Controller.Manage {
                 if (isHealthy)
                 {
                     // 额外检查索引目录
-                    var indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
+                    var indexDirectory = Path.Combine(_envService.WorkDir, "faiss_indexes");
                     var directoryExists = Directory.Exists(indexDirectory);
                     healthMessage += directoryExists 
                         ? "\n📁 索引目录正常" 
@@ -345,7 +347,7 @@ namespace TelegramSearchBot.Controller.Manage {
                 await _dataDbContext.SaveChangesAsync();
 
                 // 清理磁盘上的孤立文件
-                var indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
+                var indexDirectory = Path.Combine(_envService.WorkDir, "faiss_indexes");
                 var cleanedFiles = 0;
                 
                 if (Directory.Exists(indexDirectory))

@@ -10,6 +10,7 @@ using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Attributes;
+using SearchOption = TelegramSearchBot.Model.SearchOption;
 
 namespace TelegramSearchBot.Service.Vector
 {
@@ -119,6 +120,11 @@ namespace TelegramSearchBot.Service.Vector
         public async Task<bool> IsHealthyAsync()
         {
             return await _faissVectorService.IsHealthyAsync();
+        }
+
+        public async Task VectorizeGroupSegments(long groupId)
+        {
+            await _faissVectorService.VectorizeGroupSegments(groupId);
         }
 
         #endregion

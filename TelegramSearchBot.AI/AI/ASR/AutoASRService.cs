@@ -13,7 +13,7 @@ namespace TelegramSearchBot.Service.AI.ASR
 
 
         public new string ServiceName => "AutoASRService";
-        public WhisperManager WhisperManager { get; set; }
+        public IWhisperManager WhisperManager { get; set; }
 
         public AutoASRService(IConnectionMultiplexer connectionMultiplexer) : base(connectionMultiplexer) {
             ForkName = "ASR";

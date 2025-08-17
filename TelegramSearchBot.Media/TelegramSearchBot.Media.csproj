@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Data\TelegramSearchBot.Data.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.AI\TelegramSearchBot.AI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

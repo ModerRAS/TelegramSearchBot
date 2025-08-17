@@ -87,6 +87,8 @@
     <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.AI\TelegramSearchBot.AI.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Vector\TelegramSearchBot.Vector.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Media\TelegramSearchBot.Media.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Infrastructure\TelegramSearchBot.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Resources\" />

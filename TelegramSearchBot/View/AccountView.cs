@@ -11,6 +11,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.View
@@ -47,27 +48,75 @@ namespace TelegramSearchBot.View
         }
 
         // Fluent API methods
-        public AccountView WithChatId(long chatId)
+        public IView WithChatId(long chatId)
         {
             _chatId = chatId;
             return this;
         }
 
-        public AccountView WithReplyTo(int messageId)
+        public IView WithReplyTo(int messageId)
         {
             _replyToMessageId = messageId;
             return this;
         }
 
-        public AccountView WithText(string text)
+        public IView WithText(string text)
         {
             _textContent = MessageFormatHelper.ConvertMarkdownToTelegramHtml(text);
             return this;
         }
 
-        public AccountView DisableNotification(bool disable = true)
+        public IView WithCount(int count)
+        {
+            // AccountView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSkip(int skip)
+        {
+            // AccountView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTake(int take)
+        {
+            // AccountView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSearchType(SearchType searchType)
+        {
+            // AccountView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithMessages(List<TelegramSearchBot.Model.Data.Message> messages)
+        {
+            // AccountView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTitle(string title)
+        {
+            // AccountView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView DisableNotification(bool disable = true)
         {
             _disableNotification = disable;
+            return this;
+        }
+
+        public IView WithMessage(string message)
+        {
+            // AccountView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithOwnerName(string ownerName)
+        {
+            // AccountView不需要此方法，但为了实现接口提供空实现
             return this;
         }
 
@@ -213,7 +262,7 @@ namespace TelegramSearchBot.View
             return this;
         }
 
-        public AccountView WithHelp()
+        public IView WithHelp()
         {
             var sb = new StringBuilder();
             sb.AppendLine("💡 <b>记账功能帮助</b>");

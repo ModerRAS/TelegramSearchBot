@@ -16,13 +16,14 @@ using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.AI.QR;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Service.Vector;
 using MediatR;
 using TelegramSearchBot.Interface.AI.OCR;
 using TelegramSearchBot.Interface.AI.ASR;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.Vector;
+using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.Manage
 {
@@ -38,12 +39,12 @@ namespace TelegramSearchBot.Service.Manage
         private readonly AutoQRService _autoQRService;
         private readonly IGeneralLLMService _generalLLMService;
         private readonly IMediator _mediator;
-        private readonly FaissVectorService _faissVectorService;
+        private readonly IVectorGenerationService _vectorService;
         private readonly ConversationSegmentationService _conversationSegmentationService;
 
         public RefreshService(ILogger<RefreshService> logger,
                             LuceneManager lucene,
-                            SendMessage Send,
+                            ISendMessageService Send,
                             DataDbContext context,
                             ChatImportService chatImport,
                             IAutoASRService autoASRService,
@@ -52,7 +53,7 @@ namespace TelegramSearchBot.Service.Manage
                             AutoQRService autoQRService,
                             IGeneralLLMService generalLLMService,
                             IMediator mediator,
-                            FaissVectorService faissVectorService,
+                            IVectorGenerationService vectorService,
                             ConversationSegmentationService conversationSegmentationService) : base(logger, lucene, Send, context, mediator)
         {
             _logger = logger;
@@ -63,7 +64,7 @@ namespace TelegramSearchBot.Service.Manage
             _autoQRService = autoQRService;
             _generalLLMService = generalLLMService;
             _mediator = mediator;
-            _faissVectorService = faissVectorService;
+            _vectorService = vectorService;
             _conversationSegmentationService = conversationSegmentationService;
         }
 
@@ -486,7 +487,7 @@ namespace TelegramSearchBot.Service.Manage
                         await Send.Log($"群组 {groupId} 生成了 {segments.Count} 个对话段");
 
                         // 向量化对话段
-                        await _faissVectorService.VectorizeGroupSegments(groupId);
+                        await _vectorService.VectorizeGroupSegments(groupId);
                         
                         // 统计成功向量化的对话段数量
                         var vectorizedCount = await DataContext.ConversationSegments
@@ -578,7 +579,7 @@ namespace TelegramSearchBot.Service.Manage
                 await Send.Log($"群组 {groupId} 生成了 {newSegments.Count} 个对话段");
 
                 // 向量化对话段
-                await _faissVectorService.VectorizeGroupSegments(groupId);
+                await _vectorService.VectorizeGroupSegments(groupId);
                 
                 var vectorizedCount = await DataContext.ConversationSegments
                     .Where(s => s.GroupId == groupId && s.IsVectorized)
@@ -656,7 +657,7 @@ namespace TelegramSearchBot.Service.Manage
                     Take = 5
                 };
 
-                var searchResult = await _faissVectorService.Search(searchOption);
+                var searchResult = await _vectorService.Search(searchOption);
                 await Send.Log($"搜索结果数量: {searchResult.Count}");
 
                 foreach (var message in searchResult.Messages)
@@ -667,7 +668,7 @@ namespace TelegramSearchBot.Service.Manage
                 // 8. 检查搜索查询向量
                 try
                 {
-                    var queryVector = await _faissVectorService.GenerateVectorAsync(searchQuery);
+                    var queryVector = await _vectorService.GenerateVectorAsync(searchQuery);
                     await Send.Log($"查询向量维度: {queryVector?.Length ?? 0}");
                     
                     if (queryVector != null && queryVector.Length > 0)

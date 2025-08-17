@@ -8,11 +8,14 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums; // Added for MessageEntityType
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Storage;
@@ -93,7 +96,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             {
                 var (previous, current) = await service.SetModel(Message.Substring(5), e.Message.Chat.Id);
                 logger.LogInformation($"群{e.Message.Chat.Id}模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{e.Message.MessageId}");
-                await SendMessageService.SendMessage($"模型设置成功，原模型：{previous}，现模型：{current}", e.Message.Chat.Id, e.Message.MessageId);
+                await SendMessageService.SendTextMessageAsync($"模型设置成功，原模型：{previous}，现模型：{current}", e.Message.Chat.Id, e.Message.MessageId);
                 return;
             }
 

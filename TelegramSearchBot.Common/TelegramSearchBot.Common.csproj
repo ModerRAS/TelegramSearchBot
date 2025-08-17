@@ -6,5 +6,15 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="MediatR" Version="13.0.0" />
+    <PackageReference Include="Scriban" Version="6.2.1" />
+    <PackageReference Include="Telegram.Bot" Version="22.6.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.58" />
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="FFMpegCore" Version="5.2.0" />
+    <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="13.10.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TelegramSearchBot.Data\TelegramSearchBot.Data.csproj" />
   </ItemGroup>
 </Project>

@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Helper
 {
@@ -199,10 +200,21 @@ namespace TelegramSearchBot.Helper
         {
             try
             {
-                // 直接设置JiebaNet的配置文件目录，避免使用环境变量
-                JiebaNet.Segmenter.ConfigManager.ConfigFileBaseDir = resourceDir;
+                // 设置环境变量来指定JiebaNet的配置文件目录
+                var originalValue = Environment.GetEnvironmentVariable("JIEBA_DEFAULT_DICT_DIR");
+                Environment.SetEnvironmentVariable("JIEBA_DEFAULT_DICT_DIR", resourceDir);
                 
                 var segmenter = new JiebaNet.Segmenter.JiebaSegmenter();
+                
+                // 恢复原始环境变量值
+                if (originalValue != null)
+                {
+                    Environment.SetEnvironmentVariable("JIEBA_DEFAULT_DICT_DIR", originalValue);
+                }
+                else
+                {
+                    Environment.SetEnvironmentVariable("JIEBA_DEFAULT_DICT_DIR", null);
+                }
                 
                 return segmenter;
             }

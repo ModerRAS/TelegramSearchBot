@@ -11,8 +11,11 @@ using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
@@ -91,7 +94,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 }
 
                 if (!string.IsNullOrWhiteSpace(ocrResult)) {
-                    await SendMessageService.SendMessage(ocrResult, e.Message.Chat.Id, e.Message.MessageId);
+                    await SendMessageService.SendTextMessageAsync(ocrResult, e.Message.Chat.Id, e.Message.MessageId);
                 }
             }
         }

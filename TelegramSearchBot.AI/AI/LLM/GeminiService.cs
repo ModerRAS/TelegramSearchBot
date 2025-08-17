@@ -18,6 +18,7 @@ using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(ServiceLifetime.Transient)]
@@ -363,8 +364,42 @@ namespace TelegramSearchBot.Service.AI.LLM {
             yield return "Maximum tool call cycles reached. Please try again.";
         }
 
-        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
+        public async Task<string> GenerateTextAsync(string prompt, LLMChannel channel)
         {
+            if (string.IsNullOrWhiteSpace(prompt))
+            {
+                _logger.LogWarning("{ServiceName}: Prompt is empty", ServiceName);
+                return string.Empty;
+            }
+
+            if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey))
+            {
+                _logger.LogError("{ServiceName}: Channel or ApiKey is not configured", ServiceName);
+                throw new ArgumentException("Channel or ApiKey is not configured");
+            }
+
+            try
+            {
+                var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+                var model = googleAI.CreateGenerativeModel("models/gemini-1.5-flash");
+                var response = await model.GenerateContentAsync(prompt);
+                return response.Text;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate text with Gemini");
+                throw;
+            }
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, LLMChannel channel)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                _logger.LogWarning("{ServiceName}: Text is empty", ServiceName);
+                return Array.Empty<float>();
+            }
+
             if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey))
             {
                 _logger.LogError("{ServiceName}: Channel or ApiKey is not configured", ServiceName);
@@ -385,6 +420,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 _logger.LogError(ex, "Failed to generate embeddings");
                 throw;
             }
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
+        {
+            // 简化实现：调用新的接口方法
+            return await GenerateEmbeddingsAsync(text, channel);
         }
 
         public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel) {
@@ -417,5 +458,145 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return $"Error analyzing image: {ex.Message}";
             }
         }
-    }
+
+        // 新增的接口方法实现
+        public async Task<bool> IsHealthyAsync(LLMChannel channel)
+        {
+            try
+            {
+                if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey))
+                {
+                    return false;
+                }
+
+                var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+                var model = googleAI.CreateGenerativeModel("models/gemini-1.5-flash");
+                var response = await model.GenerateContentAsync("test");
+                return !string.IsNullOrWhiteSpace(response.Text);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Gemini service health check failed");
+                return false;
+            }
+        }
+
+        public async Task<List<string>> GetAllModels()
+        {
+            try
+            {
+                // Gemini 模型列表
+                return new List<string>
+                {
+                    "gemini-1.5-flash",
+                    "gemini-1.5-pro",
+                    "gemini-1.5-flash-8b",
+                    "gemini-2.0-flash-exp",
+                    "gemini-2.0-flash-thinking-exp",
+                    "gemini-exp-1206",
+                    "gemini-exp-1121",
+                    "embedding-001"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get Gemini models");
+                return new List<string>();
+            }
+        }
+
+        public async Task<List<(string ModelName, Dictionary<string, object> Capabilities)>> GetAllModelsWithCapabilities()
+        {
+            try
+            {
+                var models = new List<(string ModelName, Dictionary<string, object> Capabilities)>();
+                
+                // Gemini 1.5 Flash
+                models.Add(("gemini-1.5-flash", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "fast_response", true },
+                    { "optimized", true },
+                    { "input_token_limit", 1048576 },
+                    { "output_token_limit", 8192 },
+                    { "model_family", "Gemini" },
+                    { "model_version", "1.5" }
+                }));
+
+                // Gemini 1.5 Pro
+                models.Add(("gemini-1.5-pro", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "long_context", true },
+                    { "file_upload", true },
+                    { "audio_content", true },
+                    { "advanced_reasoning", true },
+                    { "complex_tasks", true },
+                    { "input_token_limit", 2097152 },
+                    { "output_token_limit", 8192 },
+                    { "model_family", "Gemini" },
+                    { "model_version", "1.5" }
+                }));
+
+                // Gemini 1.5 Flash 8B
+                models.Add(("gemini-1.5-flash-8b", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "fast_response", true },
+                    { "optimized", true },
+                    { "input_token_limit", 1048576 },
+                    { "output_token_limit", 8192 },
+                    { "model_family", "Gemini" },
+                    { "model_version", "1.5" }
+                }));
+
+                // Gemini 2.0 Flash Experimental
+                models.Add(("gemini-2.0-flash-exp", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "audio_content", true },
+                    { "video_content", true },
+                    { "file_upload", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "response_json_object", true },
+                    { "fast_response", true },
+                    { "input_token_limit", 1048576 },
+                    { "output_token_limit", 8192 },
+                    { "model_family", "Gemini" },
+                    { "model_version", "2.0" }
+                }));
+
+                // Embedding model
+                models.Add(("embedding-001", new Dictionary<string, object>
+                {
+                    { "embedding", true },
+                    { "text_embedding", true },
+                    { "function_calling", false },
+                    { "vision", false },
+                    { "chat", false },
+                    { "input_token_limit", 2048 },
+                    { "output_token_limit", 1536 },
+                    { "model_family", "Gemini" },
+                    { "model_version", "1.0" }
+                }));
+
+                return models;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get Gemini models with capabilities");
+                return new List<(string ModelName, Dictionary<string, object> Capabilities)>();
+            }
+        }
+
+            }
 }

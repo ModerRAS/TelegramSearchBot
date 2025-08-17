@@ -9,7 +9,11 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model;
 using File = System.IO.File;
 
 namespace TelegramSearchBot.Controller.Download {

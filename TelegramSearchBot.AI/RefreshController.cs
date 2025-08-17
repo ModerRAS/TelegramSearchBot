@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Bot.Args;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Manage;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.Manage {
     public class RefreshController : IOnUpdate

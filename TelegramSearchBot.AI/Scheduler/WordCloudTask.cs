@@ -11,6 +11,7 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.View;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Scheduler
@@ -24,11 +25,11 @@ namespace TelegramSearchBot.Service.Scheduler
 
         private readonly DataDbContext _dbContext;
         private readonly ITelegramBotClient _botClient;
-        private readonly SendMessage _sendMessage;
+        private readonly ISendMessageService _sendMessage;
         private readonly ILogger<WordCloudTask> _logger;
         private Func<Task> _heartbeatCallback;
 
-        public WordCloudTask(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<WordCloudTask> logger)
+        public WordCloudTask(DataDbContext dbContext, ITelegramBotClient botClient, ISendMessageService sendMessage, ILogger<WordCloudTask> logger)
         {
             _dbContext = dbContext;
             _botClient = botClient;
@@ -179,9 +180,7 @@ namespace TelegramSearchBot.Service.Scheduler
                         .WithUserCount(stats.UserCounts.Count)
                         .WithMessageCount(stats.TotalCount)
                         .WithTopUsers(topUsers)
-                        .BuildCaption()
-                        .WithChatId(group.Key)
-                        .WithPhotoBytes(wordCloudBytes);
+                        .WithChatId(group.Key);
 
                     try
                     {

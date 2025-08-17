@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Attributes;
+using SearchOption = TelegramSearchBot.Model.SearchOption;
 
 namespace TelegramSearchBot.Service.Search
 {

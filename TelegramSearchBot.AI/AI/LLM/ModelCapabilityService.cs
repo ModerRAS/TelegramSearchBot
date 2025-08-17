@@ -60,10 +60,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return false;
                 }
 
-                var modelsWithCapabilities = await service.GetAllModelsWithCapabilities(channel);
+                var modelsWithCapabilities = await service.GetAllModelsWithCapabilities();
                 
-                foreach (var modelWithCaps in modelsWithCapabilities)
+                foreach (var tupleModel in modelsWithCapabilities)
                 {
+                    var modelWithCaps = ConvertToModelWithCapabilities(tupleModel);
                     await UpdateOrCreateModelWithCapabilities(channel, modelWithCaps);
                 }
 
@@ -197,6 +198,26 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
+        /// 将元组类型的模型能力信息转换为ModelWithCapabilities对象
+        /// </summary>
+        private ModelWithCapabilities ConvertToModelWithCapabilities((string ModelName, Dictionary<string, object> Capabilities) tupleModel)
+        {
+            var modelWithCaps = new ModelWithCapabilities
+            {
+                ModelName = tupleModel.ModelName
+            };
+            
+            // 将Dictionary<string, object>转换为Dictionary<string, string>
+            foreach (var capability in tupleModel.Capabilities)
+            {
+                var value = capability.Value?.ToString() ?? "false";
+                modelWithCaps.SetCapability(capability.Key, value);
+            }
+            
+            return modelWithCaps;
+        }
+
+        /// <summary>
         /// 更新或创建模型及其能力信息
         /// </summary>
         private async Task UpdateOrCreateModelWithCapabilities(LLMChannel channel, ModelWithCapabilities modelWithCaps)
@@ -297,7 +318,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     
                     try
                     {
-                        var modelsWithCaps = await service.GetAllModelsWithCapabilities(channel);
+                        var modelsWithCaps = await service.GetAllModelsWithCapabilities();
                         
                         if (!modelsWithCaps.Any())
                         {
@@ -305,8 +326,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             continue;
                         }
                         
-                        foreach (var model in modelsWithCaps.Take(3)) // 只显示前3个模型
+                        foreach (var tupleModel in modelsWithCaps.Take(3)) // 只显示前3个模型
                         {
+                            var model = ConvertToModelWithCapabilities(tupleModel);
                             results.Add($"\n模型: {model.ModelName}");
                             results.Add($"  支持工具调用: {model.SupportsToolCalling}");
                             results.Add($"  支持视觉: {model.SupportsVision}");

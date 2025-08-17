@@ -203,7 +203,7 @@ namespace TelegramSearchBot.Service.Vector
                 {
                     foreach (var extension in extensions)
                     {
-                        contentBuilder.AppendLine($"[{extension.Name}]: {extension.Value}");
+                        contentBuilder.AppendLine($"[{extension.ExtensionType}]: {extension.ExtensionData}");
                     }
                 }
             }

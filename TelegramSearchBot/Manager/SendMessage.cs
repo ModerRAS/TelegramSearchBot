@@ -10,9 +10,13 @@ using Microsoft.Extensions.Logging;
 using RateLimiter;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.ReplyMarkups;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Manager {
-    public class SendMessage : BackgroundService {
+    public class SendMessage : BackgroundService, ISendMessageService {
         private ConcurrentQueue<Task> tasks;
         private readonly TimeLimiter GroupLimit;
         private readonly TimeLimiter GlobalLimit;
@@ -114,5 +118,102 @@ namespace TelegramSearchBot.Manager {
                 return GlobalLimit.Enqueue(Action);
             }
         }
+
+        #region ISendMessageService 实现
+
+        public async Task<Message> SendTextMessageAsync(string text, long chatId, int replyToMessageId = 0, bool disableNotification = false)
+        {
+            return await AddTaskWithResult(async () =>
+            {
+                return await botClient.SendMessage(
+                    chatId: chatId,
+                    text: text,
+                    replyParameters: replyToMessageId != 0 ? new ReplyParameters { MessageId = replyToMessageId } : null,
+                    disableNotification: disableNotification
+                );
+            }, chatId < 0);
+        }
+
+        public async Task SplitAndSendTextMessage(string text, long chatId, int replyToMessageId = 0)
+        {
+            // 简化实现：直接发送完整消息
+            await SendTextMessageAsync(text, chatId, replyToMessageId);
+        }
+
+        public async Task<Message> SendButtonMessageAsync(string text, long chatId, int replyToMessageId = 0, params (string text, string callbackData)[] buttons)
+        {
+            // 创建内联键盘
+            var inlineKeyboard = buttons.Select(b => new[] { InlineKeyboardButton.WithCallbackData(b.text, b.callbackData) }).ToArray();
+            var replyMarkup = new InlineKeyboardMarkup(inlineKeyboard);
+
+            return await AddTaskWithResult(async () =>
+            {
+                return await botClient.SendMessage(
+                    chatId: chatId,
+                    text: text,
+                    replyParameters: replyToMessageId != 0 ? new ReplyParameters { MessageId = replyToMessageId } : null,
+                    replyMarkup: replyMarkup
+                );
+            }, chatId < 0);
+        }
+
+        public async Task<Message> SendPhotoAsync(long chatId, InputFile photo, string caption = null, int replyToMessageId = 0, bool disableNotification = false)
+        {
+            return await AddTaskWithResult(async () =>
+            {
+                return await botClient.SendPhoto(
+                    chatId: chatId,
+                    photo: photo,
+                    caption: caption,
+                    replyParameters: replyToMessageId != 0 ? new ReplyParameters { MessageId = replyToMessageId } : null,
+                    disableNotification: disableNotification
+                );
+            }, chatId < 0);
+        }
+
+        public async Task<List<TelegramSearchBot.Model.Data.Message>> SendFullMessageStream(
+            IAsyncEnumerable<string> fullMessagesStream,
+            long chatId,
+            int replyTo,
+            string initialPlaceholderContent = "⏳",
+            CancellationToken cancellationToken = default)
+        {
+            // 简化实现：直接发送第一条消息
+            var sentMessage = await AddTaskWithResult(async () =>
+            {
+                return await botClient.SendMessage(
+                    chatId: chatId,
+                    text: initialPlaceholderContent,
+                    replyParameters: replyTo != 0 ? new ReplyParameters { MessageId = replyTo } : null
+                );
+            }, chatId < 0);
+
+            // 收集所有消息内容
+            var allContent = new List<string>();
+            await foreach (var content in fullMessagesStream.WithCancellation(cancellationToken))
+            {
+                allContent.Add(content);
+            }
+
+            // 发送完整内容
+            var finalContent = string.Join("", allContent);
+            var finalMessage = await AddTaskWithResult(async () =>
+            {
+                return await botClient.SendMessage(
+                    chatId: chatId,
+                    text: finalContent,
+                    replyParameters: replyTo != 0 ? new ReplyParameters { MessageId = replyTo } : null
+                );
+            }, chatId < 0);
+
+            // 返回数据库消息列表
+            return new List<TelegramSearchBot.Model.Data.Message>
+            {
+                TelegramSearchBot.Model.Data.Message.FromTelegramMessage(sentMessage),
+                TelegramSearchBot.Model.Data.Message.FromTelegramMessage(finalMessage)
+            };
+        }
+
+        #endregion
     }
 }

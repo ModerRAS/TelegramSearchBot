@@ -5,12 +5,15 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.View;
 using TelegramSearchBot;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.Manage {
     public class AccountController : IOnUpdate
@@ -67,7 +70,7 @@ namespace TelegramSearchBot.Controller.Manage {
             if (string.IsNullOrEmpty(command))
                 return;
 
-            var view = new AccountView(_botClient, _sendMessage)
+            AccountView view = (AccountView)new AccountView(_botClient, _sendMessage)
                 .WithChatId(chatId)
                 .WithReplyTo(message.MessageId);
 
@@ -167,7 +170,7 @@ namespace TelegramSearchBot.Controller.Manage {
                 else if (data.StartsWith("account_records_page_"))
                 {
                     var page = int.Parse(data.Replace("account_records_page_", ""));
-                    await HandleListRecords(chatId, view, page);
+                    await HandleListRecords(chatId, (AccountView)view, page);
                 }
 
                 // 回应callback query

@@ -21,14 +21,14 @@ namespace TelegramSearchBot.Service.Storage
     public class MessageService : IMessageService, IService
     {
         protected readonly LuceneManager lucene;
-        protected readonly SendMessage Send;
+        protected readonly ISendMessageService Send;
         protected readonly DataDbContext DataContext;
         protected readonly ILogger<MessageService> Logger;
         protected readonly IMediator _mediator;
         private static readonly AsyncLock _asyncLock = new AsyncLock();
         public string ServiceName => "MessageService";
 
-        public MessageService(ILogger<MessageService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context, IMediator mediator)
+        public MessageService(ILogger<MessageService> logger, LuceneManager lucene, ISendMessageService Send, DataDbContext context, IMediator mediator)
         {
             this.lucene = lucene;
             this.Send = Send;

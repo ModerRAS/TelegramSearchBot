@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ScottPlot;
-using ScottPlot.Plottables;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -250,7 +249,7 @@ namespace TelegramSearchBot.Service.Manage
                     {
                         Value = values[i],
                         Label = labels[i],
-                        FillColor = ScottPlot.Color.FromHex(colorMap[i % colorMap.Length])
+                        FillColor = Color.FromHex(colorMap[i % colorMap.Length])
                     });
                 }
 

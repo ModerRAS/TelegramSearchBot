@@ -8,10 +8,12 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface.Bilibili;
+using TelegramSearchBot.Common.Model.Bilibili;
 using TelegramSearchBot.Model.Bilibili;
 using TelegramSearchBot.Service.Common;
 
-namespace TelegramSearchBot.Service.Bilibili
+namespace TelegramSearchBot.Media.Bilibili
 {
     public class BiliOpusProcessingService : IService
     {

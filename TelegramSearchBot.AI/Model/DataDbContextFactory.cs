@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Model {
     public class DataDbContextFactory : IDesignTimeDbContextFactory<DataDbContext> {

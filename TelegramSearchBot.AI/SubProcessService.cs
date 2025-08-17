@@ -4,8 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Extension;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.Abstract
 {
@@ -20,11 +21,12 @@ namespace TelegramSearchBot.Service.Abstract
         }
         public async Task<string> RunRpc(string payload)
         {
+            // 简化实现：暂时注释掉AppBootstrap相关代码
             var db = connectionMultiplexer.GetDatabase();
             var guid = Guid.NewGuid();
             await db.ListRightPushAsync($"{ForkName}Tasks", $"{guid}");
             await db.StringSetAsync($"{ForkName}Post-{guid}", payload);
-            await AppBootstrap.AppBootstrap.RateLimitForkAsync([ForkName, $"{Env.SchedulerPort}"]);
+            // await AppBootstrap.AppBootstrap.RateLimitForkAsync([ForkName, $"{Env.SchedulerPort}"]);
             return await db.StringWaitGetDeleteAsync($"{ForkName}Result-{guid}");
         }
     }

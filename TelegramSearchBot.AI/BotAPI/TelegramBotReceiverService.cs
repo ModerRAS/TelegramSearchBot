@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -11,6 +12,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.BotAPI
 {
@@ -57,7 +59,7 @@ namespace TelegramSearchBot.Service.BotAPI
             try
             {
                 using var scope = _serviceProvider.CreateScope();
-                var executor = new ControllerExecutor(scope.ServiceProvider.GetServices<IOnUpdate>());
+                var executor = new ControllerExecutor(scope.ServiceProvider.GetServices<IOnUpdate>().Cast<TelegramSearchBot.Interface.IOnUpdate>());
                 await executor.ExecuteControllers(update);
             }
             catch (Exception ex)

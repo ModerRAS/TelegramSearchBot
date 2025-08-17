@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Controller.AI.QR;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.Common {
     public class UrlProcessingController : IOnUpdate

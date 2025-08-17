@@ -10,8 +10,6 @@
     <ProjectReference Include="..\TelegramSearchBot.Data\TelegramSearchBot.Data.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
-    <ProjectReference Include="..\TelegramSearchBot.AI\TelegramSearchBot.AI.csproj" />
-    <ProjectReference Include="..\TelegramSearchBot.Infrastructure\TelegramSearchBot.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +19,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.7" />
     <PackageReference Include="Serilog" Version="4.3.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="MediatR" Version="13.0.0" />
   </ItemGroup>
 
 </Project>

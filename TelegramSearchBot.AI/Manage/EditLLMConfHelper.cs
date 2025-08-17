@@ -66,7 +66,7 @@ namespace TelegramSearchBot.Service.Manage {
                     return -1;
                 }
                 
-                models = await service.GetAllModels(channel);
+                models = await service.GetAllModels();
                 var list = new List<ChannelWithModel>();
                 foreach (var e in models) {
                     list.Add(new ChannelWithModel() { LLMChannelId = channel.Id, ModelName = e });
@@ -111,7 +111,7 @@ namespace TelegramSearchBot.Service.Manage {
                 _logger.LogInformation("正在刷新通道: {ChannelName} ({Provider})", channel.Name, channel.Provider);
                 
                 try {
-                    models = await service.GetAllModels(channel);
+                    models = await service.GetAllModels();
 
                     var list = new List<ChannelWithModel>();
 

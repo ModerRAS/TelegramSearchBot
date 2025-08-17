@@ -9,6 +9,8 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.View {
     public class StreamingView : IView {
@@ -42,17 +44,57 @@ namespace TelegramSearchBot.View {
         }
 
         // Fluent API methods
-        public StreamingView WithChatId(long chatId) {
+        public IView WithChatId(long chatId) {
             _chatId = chatId;
             return this;
         }
 
-        public StreamingView WithReplyTo(int messageId) {
+        public IView WithReplyTo(int messageId) {
             _replyToMessageId = messageId;
             return this;
         }
 
-        private async Task<Message> RenderFinalMessage(CancellationToken cancellationToken) {
+        public IView WithText(string text) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithCount(int count) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSkip(int skip) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTake(int take) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithSearchType(SearchType searchType) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithMessages(List<TelegramSearchBot.Model.Data.Message> messages) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithTitle(string title) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithHelp() {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        private async Task<Telegram.Bot.Types.Message> RenderFinalMessage(CancellationToken cancellationToken) {
             var inlineButtons = _buttons?.Select(b =>
                 InlineKeyboardButton.WithCallbackData(b.Text, b.CallbackData)).ToList();
 
@@ -81,8 +123,18 @@ namespace TelegramSearchBot.View {
             return this;
         }
 
-        public StreamingView DisableNotification(bool disable = true) {
+        public IView DisableNotification(bool disable = true) {
             _disableNotification = disable;
+            return this;
+        }
+
+        public IView WithMessage(string message) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
+            return this;
+        }
+
+        public IView WithOwnerName(string ownerName) {
+            // StreamingView不需要此方法，但为了实现接口提供空实现
             return this;
         }
 
@@ -91,9 +143,13 @@ namespace TelegramSearchBot.View {
             return this;
         }
 
-        public async Task<List<Model.Data.Message>> Render(CancellationToken cancellationToken = default) {
+        public async Task Render() {
+            await Render(default);
+        }
+
+        public async Task<List<TelegramSearchBot.Model.Data.Message>> Render(CancellationToken cancellationToken = default) {
             if (_streamData == null) {
-                return new List<Model.Data.Message>() { Model.Data.Message.FromTelegramMessage(await RenderFinalMessage(cancellationToken)) };
+                return new List<TelegramSearchBot.Model.Data.Message>() { TelegramSearchBot.Model.Data.Message.FromTelegramMessage(await RenderFinalMessage(cancellationToken)) };
             }
 
             var inlineButtons = _buttons?.Select(b =>

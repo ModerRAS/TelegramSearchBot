@@ -25,6 +25,7 @@ using TelegramSearchBot.Service.Tools;
 using SkiaSharp;
 using TelegramSearchBot.Model.Tools; // For BraveSearchResult
 using TelegramSearchBot.Interface.AI.LLM; // For ILLMService
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService
@@ -370,13 +371,69 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return "Unknown";
         }
 
-        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
+        public async Task<string> GenerateTextAsync(string prompt, LLMChannel channel)
         {
-            if (string.IsNullOrWhiteSpace(modelName))
+            if (string.IsNullOrWhiteSpace(prompt))
             {
-                modelName = "bge-m3";
+                _logger.LogWarning("{ServiceName}: Prompt is empty", ServiceName);
+                return string.Empty;
             }
 
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway))
+            {
+                _logger.LogError("{ServiceName}: Channel or Gateway is not configured", ServiceName);
+                throw new ArgumentException("Channel or Gateway is not configured");
+            }
+
+            var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
+            httpClient.BaseAddress = new Uri(channel.Gateway);
+            var ollama = new OllamaApiClient(httpClient);
+            
+            string modelName = Env.OllamaModelName ?? "llama3.2:latest";
+            
+            if (!await CheckAndPullModelAsync(ollama, modelName))
+            {
+                throw new Exception($"Could not check or pull Ollama model '{modelName}'");
+            }
+
+            try
+            {
+                var generateRequest = new GenerateRequest 
+                { 
+                    Model = modelName, 
+                    Prompt = prompt 
+                };
+                
+                // 简化实现：使用同步方式获取响应
+                string fullResponse = "";
+                await foreach (var chunk in ollama.GenerateAsync(generateRequest))
+                {
+                    fullResponse += chunk.Response;
+                }
+                return fullResponse;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate text with Ollama");
+                throw;
+            }
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, LLMChannel channel)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                _logger.LogWarning("{ServiceName}: Text is empty", ServiceName);
+                return Array.Empty<float>();
+            }
+
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway))
+            {
+                _logger.LogError("{ServiceName}: Channel or Gateway is not configured", ServiceName);
+                throw new ArgumentException("Channel or Gateway is not configured");
+            }
+
+            string modelName = "bge-m3";
             var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
             httpClient.BaseAddress = new Uri(channel.Gateway);
             var ollama = new OllamaApiClient(httpClient, modelName);
@@ -401,6 +458,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 _logger.LogError(ex, "Error generating embeddings with Ollama");
                 throw;
             }
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel)
+        {
+            // 简化实现：调用新的接口方法
+            return await GenerateEmbeddingsAsync(text, channel);
         }
 
         public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel)
@@ -447,6 +510,149 @@ namespace TelegramSearchBot.Service.AI.LLM {
             {
                 _logger.LogError(ex, "Error analyzing image with Ollama");
                 return $"Error analyzing image: {ex.Message}";
+            }
+        }
+
+        // 新增的接口方法实现
+        public async Task<bool> IsHealthyAsync(LLMChannel channel)
+        {
+            try
+            {
+                if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway))
+                {
+                    return false;
+                }
+
+                var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
+                httpClient.BaseAddress = new Uri(channel.Gateway);
+                var ollama = new OllamaApiClient(httpClient, "llama3.2:latest");
+                
+                // 检查Ollama服务是否可用
+                var tags = await ollama.ListLocalModelsAsync();
+                return tags != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ollama service health check failed");
+                return false;
+            }
+        }
+
+        public async Task<List<string>> GetAllModels()
+        {
+            try
+            {
+                var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
+                httpClient.BaseAddress = new Uri("http://localhost:11434");
+                var ollama = new OllamaApiClient(httpClient);
+                
+                var models = await ollama.ListLocalModelsAsync();
+                return models?.Select(m => m.Name).ToList() ?? new List<string>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get Ollama models");
+                return new List<string>();
+            }
+        }
+
+        public async Task<List<(string ModelName, Dictionary<string, object> Capabilities)>> GetAllModelsWithCapabilities()
+        {
+            try
+            {
+                var models = new List<(string ModelName, Dictionary<string, object> Capabilities)>();
+                
+                // 常见的Ollama模型及其能力
+                models.Add(("llama3.2:latest", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "advanced_reasoning", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "chat", true },
+                    { "input_token_limit", 131072 },
+                    { "output_token_limit", 131072 },
+                    { "model_family", "Llama" },
+                    { "model_version", "3.2" }
+                }));
+
+                models.Add(("llama3.1:latest", new Dictionary<string, object>
+                {
+                    { "vision", false },
+                    { "multimodal", false },
+                    { "advanced_reasoning", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "chat", true },
+                    { "input_token_limit", 131072 },
+                    { "output_token_limit", 131072 },
+                    { "model_family", "Llama" },
+                    { "model_version", "3.1" }
+                }));
+
+                models.Add(("gemma3:27b", new Dictionary<string, object>
+                {
+                    { "vision", true },
+                    { "multimodal", true },
+                    { "image_content", true },
+                    { "advanced_reasoning", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "chat", true },
+                    { "input_token_limit", 8192 },
+                    { "output_token_limit", 8192 },
+                    { "model_family", "Gemma" },
+                    { "model_version", "3.0" }
+                }));
+
+                models.Add(("qwen2.5:latest", new Dictionary<string, object>
+                {
+                    { "vision", false },
+                    { "multimodal", false },
+                    { "advanced_reasoning", true },
+                    { "function_calling", true },
+                    { "tool_calls", true },
+                    { "chat", true },
+                    { "input_token_limit", 32768 },
+                    { "output_token_limit", 32768 },
+                    { "model_family", "Qwen" },
+                    { "model_version", "2.5" }
+                }));
+
+                models.Add(("nomic-embed-text:v1.5", new Dictionary<string, object>
+                {
+                    { "embedding", true },
+                    { "text_embedding", true },
+                    { "function_calling", false },
+                    { "vision", false },
+                    { "chat", false },
+                    { "input_token_limit", 8192 },
+                    { "output_token_limit", 768 },
+                    { "model_family", "Nomic" },
+                    { "model_version", "1.5" }
+                }));
+
+                models.Add(("bge-m3:latest", new Dictionary<string, object>
+                {
+                    { "embedding", true },
+                    { "text_embedding", true },
+                    { "function_calling", false },
+                    { "vision", false },
+                    { "chat", false },
+                    { "input_token_limit", 8192 },
+                    { "output_token_limit", 1024 },
+                    { "model_family", "BGE" },
+                    { "model_version", "3.0" }
+                }));
+
+                return models;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get Ollama models with capabilities");
+                return new List<(string ModelName, Dictionary<string, object> Capabilities)>();
             }
         }
     }

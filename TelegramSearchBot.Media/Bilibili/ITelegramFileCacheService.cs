@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Service.Bilibili;
+namespace TelegramSearchBot.Media.Bilibili;
 
 public interface ITelegramFileCacheService
 {

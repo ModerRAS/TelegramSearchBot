@@ -7,7 +7,7 @@ using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service.Bilibili;
+namespace TelegramSearchBot.Media.Bilibili;
 
 [Injectable(ServiceLifetime.Transient)]
 public class TelegramFileCacheService : ITelegramFileCacheService

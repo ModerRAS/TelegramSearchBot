@@ -6,9 +6,12 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Manage;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.Manage {
     public class CheckBanGroupController : IOnUpdate

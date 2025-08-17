@@ -5,10 +5,13 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Scheduler;
+using TelegramSearchBot.Common.Model;
 using TgMessage = Telegram.Bot.Types.Message;
 
 namespace TelegramSearchBot.Controller.Manage {

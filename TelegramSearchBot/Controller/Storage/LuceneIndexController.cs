@@ -14,6 +14,9 @@ using TelegramSearchBot.Controller.Help;
 using TelegramSearchBot.Controller.Manage;
 using TelegramSearchBot.Controller.Search;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Common.Interface;
+using TelegramSearchBot.Common.Model;
 
 namespace TelegramSearchBot.Controller.Storage {
     public class LuceneIndexController : IOnUpdate

@@ -20,7 +20,7 @@ namespace TelegramSearchBot.Service.BotAPI
         #region Standard Send Methods
         public async Task SendVideoAsync(InputFile video, string caption, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2)
         {
-            await Send.AddTask(async () =>
+            await AddTask(async () =>
             {
                 await botClient.SendVideo(
                     chatId: chatId,
@@ -34,7 +34,7 @@ namespace TelegramSearchBot.Service.BotAPI
 
         public async Task SendMediaGroupAsync(IEnumerable<IAlbumInputMedia> mediaGroup, long chatId, int replyTo)
         {
-            await Send.AddTask(async () =>
+            await AddTask(async () =>
             {
                 await botClient.SendMediaGroup(
                     chatId: chatId,
@@ -46,7 +46,7 @@ namespace TelegramSearchBot.Service.BotAPI
 
         public async Task SendDocument(InputFile inputFile, long ChatId, int replyTo)
         {
-            await Send.AddTask(async () =>
+            await AddTask(async () =>
             {
                 var message = await botClient.SendDocument(
                     chatId: ChatId,
@@ -62,7 +62,7 @@ namespace TelegramSearchBot.Service.BotAPI
         public Task SendMessage(string Text, Chat ChatId, int replyTo) => SendMessage(Text, ChatId.Id, replyTo);
         public async Task SendMessage(string Text, long ChatId, int replyTo)
         {
-            await Send.AddTask(async () =>
+            await AddTask(async () =>
             {
                 await botClient.SendMessage(
                     chatId: ChatId,
@@ -74,7 +74,7 @@ namespace TelegramSearchBot.Service.BotAPI
         }
         public async Task SendMessage(string Text, long ChatId)
         {
-            await Send.AddTask(async () =>
+            await AddTask(async () =>
             {
                 await botClient.SendMessage(
                     chatId: ChatId,
@@ -82,40 +82,6 @@ namespace TelegramSearchBot.Service.BotAPI
                     text: Text
                     );
             }, ChatId < 0);
-        }
-        public Task SplitAndSendTextMessage(string Text, Chat ChatId, int replyTo) => SplitAndSendTextMessage(Text, ChatId.Id, replyTo);
-        public async Task SplitAndSendTextMessage(string Text, long ChatId, int replyTo) {
-            const int maxLength = 4096; // Telegram message length limit
-            if (Text.Length <= maxLength) {
-                await SendMessage(Text, ChatId, replyTo);
-                return;
-            }
-
-            // Split text into chunks preserving words and markdown formatting
-            var chunks = new List<string>();
-            var currentChunk = new StringBuilder();
-            var lines = Text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-
-            foreach (var line in lines) {
-                if (currentChunk.Length + line.Length + 1 > maxLength) {
-                    chunks.Add(currentChunk.ToString());
-                    currentChunk.Clear();
-                }
-                currentChunk.AppendLine(line);
-            }
-
-            if (currentChunk.Length > 0) {
-                chunks.Add(currentChunk.ToString());
-            }
-
-            // Send chunks with page numbers
-            for (int i = 0; i < chunks.Count; i++) {
-                var chunkText = chunks[i];
-                if (chunks.Count > 1) {
-                    chunkText = $"{chunkText}\n\n({i + 1}/{chunks.Count})";
-                }
-                await SendMessage(chunkText, ChatId, replyTo);
-            }
         }
         #endregion
     }
