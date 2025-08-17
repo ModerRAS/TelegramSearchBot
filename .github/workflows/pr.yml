@@ -11,8 +11,10 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v3
@@ -25,6 +27,30 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore --force --no-cache
     - name: Build
-      run: dotnet build --no-restore
+      run: dotnet build --no-restore --configuration Release
+    
+    - name: Check code formatting
+      if: matrix.os == 'windows-latest'
+      run: dotnet format --verify-no-changes
+    
+    - name: Run security analysis
+      if: matrix.os == 'windows-latest'
+      run: dotnet list package --vulnerable --include-transitive
+    
     - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test --no-build --verbosity normal --configuration Release --collect:"XPlat Code Coverage"
+    
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'windows-latest'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./TestResults/**/*.xml
+        flags: pr-check
+        name: pr-${{ github.event.number }}-${{ matrix.os }}
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results-${{ matrix.os }}
+        path: TestResults/
