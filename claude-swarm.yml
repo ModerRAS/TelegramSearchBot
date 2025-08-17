@@ -128,7 +128,7 @@ swarm:
     # 第三层 - 专业领域负责人
     ai_services_engineer:
       description: "AI服务专家，专门负责OCR、ASR、LLM等AI服务的集成和优化"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.AI
       model: opus
       connections: [ocr_specialist, asr_specialist, llm_specialist]
       prompt: |
@@ -160,7 +160,7 @@ swarm:
 
     search_systems_engineer:
       description: "搜索系统专家，负责Lucene.NET全文搜索和FAISS向量搜索的优化"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.Search
       model: opus
       connections: [lucene_specialist, faiss_specialist]
       prompt: |
@@ -225,7 +225,7 @@ swarm:
 
     database_expert:
       description: "数据库专家，负责SQLite数据库设计、EF Core优化和索引管理"
-      directory: ./TelegramSearchBot/Model
+      directory: ./TelegramSearchBot.Data
       model: sonnet
       connections: [efcore_specialist, indexing_specialist]
       prompt: |
@@ -257,7 +257,7 @@ swarm:
 
     multimedia_specialist:
       description: "多媒体处理专家，负责图片、音频、视频的处理和内容提取"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.Media
       model: sonnet
       connections: []
       prompt: |
@@ -289,7 +289,7 @@ swarm:
 
     api_integrator:
       description: "API集成专家，负责外部API集成、短链接服务和Bot API管理"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.AI
       model: sonnet
       connections: []
       prompt: |
@@ -623,7 +623,7 @@ swarm:
     # 第四层 - 专项专家（叶子节点）
     ocr_specialist:
       description: "OCR专项专家，专门负责PaddleOCR中文识别优化"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.AI
       model: sonnet
       connections: []
       prompt: |
@@ -640,7 +640,7 @@ swarm:
 
     asr_specialist:
       description: "ASR专项专家，专门负责Whisper语音识别优化"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.AI
       model: sonnet
       connections: []
       prompt: |
@@ -657,7 +657,7 @@ swarm:
 
     llm_specialist:
       description: "LLM专项专家，专门负责大语言模型集成和优化"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.AI
       model: sonnet
       connections: []
       prompt: |
@@ -674,7 +674,7 @@ swarm:
 
     lucene_specialist:
       description: "Lucene专项专家，专门负责Lucene.NET全文搜索优化"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.Search
       model: sonnet
       connections: []
       prompt: |
@@ -691,7 +691,7 @@ swarm:
 
     faiss_specialist:
       description: "FAISS专项专家，专门负责FAISS向量搜索优化"
-      directory: ./TelegramSearchBot/Service
+      directory: ./TelegramSearchBot.Vector
       model: sonnet
       connections: []
       prompt: |
@@ -742,7 +742,7 @@ swarm:
 
     efcore_specialist:
       description: "EF Core专家，专门负责EF Core数据访问优化"
-      directory: ./TelegramSearchBot/Model
+      directory: ./TelegramSearchBot.Data
       model: sonnet
       connections: []
       prompt: |
@@ -759,7 +759,7 @@ swarm:
 
     indexing_specialist:
       description: "索引专家，专门负责数据库索引优化"
-      directory: ./TelegramSearchBot/Model
+      directory: ./TelegramSearchBot.Data
       model: sonnet
       connections: []
       prompt: |

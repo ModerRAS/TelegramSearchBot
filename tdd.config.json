@@ -1,0 +1,281 @@
+# TDD配置文件 - TelegramSearchBot项目
+
+## 测试分类定义
+
+### 测试类别（TestCategory）
+- **Unit**: 单元测试，测试单个组件或方法
+- **Integration**: 集成测试，测试多个组件之间的交互
+- **Performance**: 性能测试，测试系统性能指标
+- **Message**: Message领域相关测试
+- **Search**: Search领域相关测试
+- **AI**: AI服务相关测试
+- **Database**: 数据库相关测试
+- **API**: API相关测试
+
+### 测试优先级
+- **P0**: 核心功能，必须通过
+- **P1**: 重要功能，应该通过
+- **P2**: 一般功能，最好通过
+- **P3**: 边缘情况，可以失败
+
+## 测试运行配置
+
+### 单元测试配置
+```json
+{
+  "unitTests": {
+    "timeout": "00:00:30",
+    "parallel": true,
+    "maxParallelThreads": 4,
+    "categories": ["Unit"],
+    "excludedCategories": ["Integration", "Performance"],
+    "coverageThreshold": 80
+  }
+}
+```
+
+### 集成测试配置
+```json
+{
+  "integrationTests": {
+    "timeout": "00:02:00",
+    "parallel": false,
+    "categories": ["Integration"],
+    "database": "InMemory",
+    "externalServices": {
+      "mockTelegramAPI": true,
+      "mockAIServices": true,
+      "useTestContainers": false
+    }
+  }
+}
+```
+
+### 性能测试配置
+```json
+{
+  "performanceTests": {
+    "timeout": "00:05:00",
+    "warmupIterations": 3,
+    "measurementIterations": 10,
+    "categories": ["Performance"],
+    "thresholds": {
+      "maxResponseTime": "00:00:01",
+      "maxMemoryUsage": "100MB",
+      "maxCpuUsage": "50%"
+    }
+  }
+}
+```
+
+## 测试数据配置
+
+### 测试数据库配置
+```json
+{
+  "testDatabases": {
+    "sqlite": {
+      "connectionString": "Data Source=:memory:",
+      "migrations": true
+    },
+    "postgres": {
+      "connectionString": "Host=localhost;Database=testdb;Username=testuser;Password=testpass",
+      "useTestContainers": true
+    }
+  }
+}
+```
+
+### Mock服务配置
+```json
+{
+  "mockServices": {
+    "telegramBot": {
+      "defaultResponses": {
+        "sendMessage": {"ok": true, "result": {"message_id": 1234}},
+        "getChat": {"ok": true, "result": {"id": -100, "title": "Test Group"}}
+      }
+    },
+    "aiServices": {
+      "ollama": {
+        "mockResponse": {"response": "Mock AI response"},
+        "responseTime": "00:00:00.500"
+      },
+      "openai": {
+        "mockResponse": {"choices": [{"text": "Mock OpenAI response"}]},
+        "responseTime": "00:00:01.000"
+      }
+    }
+  }
+}
+```
+
+## 测试报告配置
+
+### 覆盖率配置
+```json
+{
+  "coverage": {
+    "excludedFiles": [
+      "**/Migrations/*.cs",
+      "**/obj/**/*.cs",
+      "**/bin/**/*.cs",
+      "**/Test*.cs"
+    ],
+    "thresholds": {
+      "module": 80,
+      "namespace": 75,
+      "class": 70
+    },
+    "reportFormats": ["Html", "Cobertura", "Json"]
+  }
+}
+```
+
+### 测试报告格式
+```json
+{
+  "reporting": {
+    "formats": ["Html", "JUnit", "NUnit"],
+    "outputDirectory": "TestResults",
+    "includePassedTests": true,
+    "includeFailedTests": true,
+    "includeSkippedTests": false
+  }
+}
+```
+
+## CI/CD配置
+
+### GitHub Actions配置
+```yaml
+name: TDD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        test-category: [Unit, Integration, Performance]
+        
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+    
+    - name: Run Tests
+      run: ./run_tdd_tests.sh --category ${{ matrix.test-category }}
+    
+    - name: Upload Coverage
+      if: matrix.test-category == 'Unit'
+      uses: codecov/codecov-action@v3
+```
+
+### 本地开发配置
+```bash
+# 开发环境变量
+export DOTNET_ENVIRONMENT=Development
+export TELEGRAM_BOT_TOKEN=test_token
+export ADMIN_ID=123456789
+
+# 测试环境变量
+export TEST_DATABASE_CONNECTION_STRING="Data Source=test.db"
+export TEST_USE_INMEMORY_DATABASE=true
+export TEST_MOCK_EXTERNAL_SERVICES=true
+```
+
+## 测试工具配置
+
+### xUnit配置
+```xml
+<xunit>
+  <appSettings>
+    <add key="parallelizeTestCollections" value="true" />
+    <add key="maxParallelThreads" value="4" />
+    <add key="diagnosticMessages" value="true" />
+  </appSettings>
+</xunit>
+```
+
+### Moq配置
+```csharp
+// Moq行为配置
+public static class MockConfig
+{
+    public static Mock<T> CreateStrictMock<T>() where T : class
+    {
+        return new Mock<T>(MockBehavior.Strict);
+    }
+    
+    public static Mock<T> CreateLooseMock<T>() where T : class
+    {
+        return new Mock<T>(MockBehavior.Loose);
+    }
+}
+```
+
+### FluentAssertions配置
+```csharp
+// FluentAssertions扩展
+public static class TestAssertions
+{
+    public static void ShouldBeValidMessage(this Message message)
+    {
+        message.Should().NotBeNull();
+        message.MessageId.Should().BeGreaterThan(0);
+        message.GroupId.Should().BeGreaterThan(0);
+        message.Content.Should().NotBeNullOrEmpty();
+        message.FromUserId.Should().BeGreaterThan(0);
+    }
+}
+```
+
+## 测试数据管理
+
+### 测试数据工厂配置
+```csharp
+// 测试数据工厂配置
+public static class TestDataConfig
+{
+    public const long DefaultUserId = 1L;
+    public const long DefaultGroupId = 100L;
+    public const long DefaultMessageId = 1000L;
+    public const string DefaultContent = "Test message";
+    
+    public static MessageOption CreateDefaultMessageOption()
+    {
+        return MessageTestDataFactory.CreateValidMessageOption(
+            DefaultUserId, 
+            DefaultGroupId, 
+            DefaultMessageId, 
+            DefaultContent);
+    }
+}
+```
+
+### 测试数据清理策略
+```json
+{
+  "cleanup": {
+    "autoCleanup": true,
+    "cleanupAfterEachTest": true,
+    "cleanupAfterAllTests": true,
+    "strategies": {
+      "database": "DropAndRecreate",
+      "files": "Delete",
+      "externalServices": "Reset"
+    }
+  }
+}
+```
+
+这个配置文件为TelegramSearchBot项目的TDD实施提供了完整的配置选项，支持不同类型的测试、测试数据管理、Mock服务和CI/CD集成。
