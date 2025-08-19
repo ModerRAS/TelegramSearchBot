@@ -7,7 +7,7 @@ namespace TelegramSearchBot.Interface {
         Task<MessageExtension> GetByIdAsync(int id);
         Task<List<MessageExtension>> GetByMessageDataIdAsync(long messageDataId);
         Task AddOrUpdateAsync(MessageExtension extension);
-        Task AddOrUpdateAsync(long messageDataId, string name, string value);
+        Task AddOrUpdateAsync(long messageDataId, string extensionType, string extensionData);
         Task DeleteAsync(int id);
         Task DeleteByMessageDataIdAsync(long messageDataId);
         Task<long?> GetMessageIdByMessageIdAndGroupId(long messageId, long groupId);

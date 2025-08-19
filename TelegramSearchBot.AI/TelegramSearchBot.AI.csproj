@@ -51,7 +51,7 @@
     <PackageReference Include="JiebaNet.Segmenter" Version="1.0.0" />
     <PackageReference Include="WordCloudSharp" Version="1.1.0" />
     <PackageReference Include="ScottPlot" Version="5.0.55" />
-    <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="13.10.0" />
+    <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="14.8.0" />
     <PackageReference Include="System.Drawing.Common" Version="7.0.0" />
   </ItemGroup>
 

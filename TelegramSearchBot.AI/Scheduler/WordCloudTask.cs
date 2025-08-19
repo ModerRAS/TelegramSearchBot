@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.View;
@@ -308,7 +307,7 @@ namespace TelegramSearchBot.Service.Scheduler
                     if (message.MessageExtensions != null)
                     {
                         groupResults.AddRange(message.MessageExtensions
-                            .Select(e => e.Value)
+                            .Select(e => e.ExtensionData)
                             .Where(v => !string.IsNullOrEmpty(v)));
                     }
                 }

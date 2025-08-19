@@ -9,12 +9,12 @@ using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.BotAPI;
-using TelegramSearchBot.Service.Bilibili;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.Service.Scheduler;
 using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.Service.Tools;
+using TelegramSearchBot.Media.Bilibili;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Core.Service

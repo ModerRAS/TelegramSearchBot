@@ -20,7 +20,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_Constructor_ShouldInitializeWithDefaultValues()
         {
             // Arrange & Act
-            var message = new Message();
+            var message = new TelegramSearchBot.Model.Data.Message();
 
             // Assert
             Assert.Equal(0, message.Id);
@@ -143,12 +143,12 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_Properties_ShouldSetAndGetCorrectly()
         {
             // Arrange
-            var message = new Message();
+            var message = new TelegramSearchBot.Model.Data.Message();
             var testDateTime = DateTime.UtcNow;
             var testContent = "Test content";
             var testExtensions = new List<MessageExtension>
             {
-                new MessageExtension { ExtensionType = "OCR", ExtensionData = "Test data" }
+                new TelegramSearchBot.Model.Data.MessageExtension { ExtensionType = "OCR", ExtensionData = "Test data" }
             };
 
             // Act
@@ -178,7 +178,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_MessageExtensions_ShouldInitializeEmptyCollection()
         {
             // Arrange
-            var message = new Message();
+            var message = new TelegramSearchBot.Model.Data.Message();
 
             // Act & Assert
             Assert.NotNull(message.MessageExtensions);
@@ -189,15 +189,15 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_MessageExtensions_ShouldAllowAddingExtensions()
         {
             // Arrange
-            var message = new Message();
-            var extension = new MessageExtension { ExtensionType = "OCR", ExtensionData = "Test data" };
+            var message = new TelegramSearchBot.Model.Data.Message();
+            var extension = new TelegramSearchBot.Model.Data.MessageExtension { ExtensionType = "OCR", ExtensionData = "Test data" };
 
             // Act
             message.MessageExtensions.Add(extension);
 
             // Assert
             Assert.Single(message.MessageExtensions);
-            Assert.Same(extension, message.MessageExtensions[0]);
+            Assert.Same(extension, message.MessageExtensions.First());
         }
 
         #endregion
@@ -208,7 +208,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_Validate_ShouldReturnValidForCorrectData()
         {
             // Arrange
-            var message = new Message
+            var message = new TelegramSearchBot.Model.Data.Message
             {
                 GroupId = 100,
                 MessageId = 1000,
@@ -228,7 +228,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_Validate_ShouldReturnInvalidForEmptyContent()
         {
             // Arrange
-            var message = new Message
+            var message = new TelegramSearchBot.Model.Data.Message
             {
                 GroupId = 100,
                 MessageId = 1000,
@@ -248,7 +248,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_Validate_ShouldReturnInvalidForZeroGroupId()
         {
             // Arrange
-            var message = new Message
+            var message = new TelegramSearchBot.Model.Data.Message
             {
                 GroupId = 0,
                 MessageId = 1000,
@@ -268,7 +268,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_Validate_ShouldReturnInvalidForZeroMessageId()
         {
             // Arrange
-            var message = new Message
+            var message = new TelegramSearchBot.Model.Data.Message
             {
                 GroupId = 100,
                 MessageId = 0,
@@ -288,7 +288,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
 
         #region Helper Methods
 
-        private bool ValidateMessage(Message message)
+        private bool ValidateMessage(TelegramSearchBot.Model.Data.Message message)
         {
             // 简化的验证逻辑
             if (message.GroupId <= 0) return false;

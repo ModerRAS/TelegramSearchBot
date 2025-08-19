@@ -32,7 +32,7 @@ namespace TelegramSearchBot.Test.Service.BotAPI
     public class TestDataDbContext : DataDbContext
     {
         public TestDataDbContext(DbContextOptions<DataDbContext> options) : base(options) { }
-        public virtual DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
+        public override DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
     }
 
     public class SendServiceTests

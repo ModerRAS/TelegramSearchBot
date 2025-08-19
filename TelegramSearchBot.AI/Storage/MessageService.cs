@@ -1,7 +1,6 @@
 ﻿using System.Linq;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using ICU4N.Text;
 using System;
@@ -20,7 +19,7 @@ namespace TelegramSearchBot.Service.Storage
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class MessageService : IMessageService, IService
     {
-        protected readonly LuceneManager lucene;
+        protected readonly ILuceneManager lucene;
         protected readonly ISendMessageService Send;
         protected readonly DataDbContext DataContext;
         protected readonly ILogger<MessageService> Logger;
@@ -28,7 +27,7 @@ namespace TelegramSearchBot.Service.Storage
         private static readonly AsyncLock _asyncLock = new AsyncLock();
         public string ServiceName => "MessageService";
 
-        public MessageService(ILogger<MessageService> logger, LuceneManager lucene, ISendMessageService Send, DataDbContext context, IMediator mediator)
+        public MessageService(ILogger<MessageService> logger, ILuceneManager lucene, ISendMessageService Send, DataDbContext context, IMediator mediator)
         {
             this.lucene = lucene;
             this.Send = Send;

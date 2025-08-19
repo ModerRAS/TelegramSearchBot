@@ -34,7 +34,7 @@ using TelegramSearchBot.Interface.AI.LLM;
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not inheriting from BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
-    public class OpenAIService : IService, ILLMService
+    public class OpenAIService : IService, ILLMService, IOpenAIService
     {
         public string ServiceName => "OpenAIService";
 
@@ -647,7 +647,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     str.Append("[扩展信息：");
                     foreach (var ext in extensions)
                     {
-                        str.Append($"{ext.Name}={ext.Value}; ");
+                        str.Append($"{ext.ExtensionType}={ext.ExtensionData}; ");
                     }
                     str.Append("]\n");
                 }
@@ -1211,6 +1211,30 @@ namespace TelegramSearchBot.Service.AI.LLM {
             {
                 _logger.LogError(ex, "Failed to get OpenAI models with capabilities");
                 return new List<(string ModelName, Dictionary<string, object> Capabilities)>();
+            }
+        }
+
+        /// <summary>
+        /// 简化实现：适配器方法，实现IOpenAIService接口
+        /// 注意：这个简化实现使用默认配置，可能不完整
+        /// </summary>
+        public async System.Collections.Generic.IAsyncEnumerable<string> ExecAsync(
+            Model.Data.Message message, 
+            long chatId, 
+            System.Threading.CancellationToken cancellationToken = default)
+        {
+            // 简化实现：创建默认的LLMChannel
+            var channel = new LLMChannel
+            {
+                Provider = LLMProvider.OpenAI,
+                Gateway = Env.OpenAIGateway,
+                ApiKey = Env.OpenAIKey
+            };
+
+            // 调用实际的ExecAsync方法
+            await foreach (var result in ExecAsync(message, chatId, Env.OpenAIModelName, channel, cancellationToken))
+            {
+                yield return result;
             }
         }
 

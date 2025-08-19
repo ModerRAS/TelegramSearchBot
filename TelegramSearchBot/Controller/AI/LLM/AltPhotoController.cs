@@ -30,7 +30,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
-        private readonly ILogger<AutoOCRController> logger;
+        private readonly ILogger<AltPhotoController> logger;
         private readonly ISendMessageService SendMessageService;
         private readonly MessageExtensionService MessageExtensionService;
         public AltPhotoController(
@@ -38,7 +38,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             IGeneralLLMService generalLLMService,
             SendMessage Send,
             MessageService messageService,
-            ILogger<AutoOCRController> logger,
+            ILogger<AltPhotoController> logger,
             ISendMessageService sendMessageService,
             MessageExtensionService messageExtensionService
             ) {
@@ -86,9 +86,9 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
                     if (originalMessageId.HasValue) {
                         var extensions = await MessageExtensionService.GetByMessageDataIdAsync(originalMessageId.Value);
-                        var ocrExtension = extensions.FirstOrDefault(x => x.Name == "Alt_Result");
+                        var ocrExtension = extensions.FirstOrDefault(x => x.ExtensionType == "Alt_Result");
                         if (ocrExtension != null) {
-                            ocrResult = ocrExtension.Value;
+                            ocrResult = ocrExtension.ExtensionData;
                         }
                     }
                 }

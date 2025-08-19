@@ -1,4 +1,3 @@
-using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model; // For DataDbContext
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM; // For McpTool attributes
@@ -21,11 +20,11 @@ namespace TelegramSearchBot.Service.Tools
     {
         public string ServiceName => "SearchToolService";
 
-        private readonly LuceneManager _luceneManager;
+        private readonly ILuceneManager _luceneManager;
         private readonly DataDbContext _dbContext;
         private readonly MessageExtensionService _messageExtensionService;
 
-        public SearchToolService(LuceneManager luceneManager, DataDbContext dbContext, MessageExtensionService messageExtensionService)
+        public SearchToolService(ILuceneManager luceneManager, DataDbContext dbContext, MessageExtensionService messageExtensionService)
         {
             _luceneManager = luceneManager;
             _dbContext = dbContext;

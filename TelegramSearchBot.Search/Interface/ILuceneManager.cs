@@ -18,6 +18,13 @@ namespace TelegramSearchBot.Interface
         Task WriteDocumentAsync(Message message);
 
         /// <summary>
+        /// 批量写入文档到索引
+        /// </summary>
+        /// <param name="messages">消息列表</param>
+        /// <returns>异步任务</returns>
+        Task WriteDocuments(List<Message> messages);
+
+        /// <summary>
         /// 搜索指定群组的消息
         /// </summary>
         /// <param name="keyword">搜索关键词</param>

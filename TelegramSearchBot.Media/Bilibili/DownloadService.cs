@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Manager; // For Env.WorkDir
 using FFMpegCore; // Added for FFMpeg manipulation
 using FFMpegCore.Enums; // Added for SpeedArgument (may not be needed now)
 using TelegramSearchBot.Common;

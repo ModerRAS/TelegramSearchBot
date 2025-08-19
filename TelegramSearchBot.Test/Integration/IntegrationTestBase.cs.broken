@@ -1,0 +1,495 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Test.Fixtures;
+using TelegramSearchBot.Test.Helpers;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace TelegramSearchBot.Test.Integration
+{
+    /// <summary>
+    /// 集成测试基类，提供通用的测试基础设施
+    /// </summary>
+    public abstract class IntegrationTestBase : IDisposable
+    {
+        protected readonly ITestOutputHelper Output;
+        protected readonly TestDatabaseFixture DatabaseFixture;
+        protected readonly TestServerFixture ServerFixture;
+        protected readonly IServiceProvider ServiceProvider;
+        protected readonly ILogger<IntegrationTestBase> Logger;
+        protected readonly Stopwatch Stopwatch;
+
+        // 测试性能数据收集
+        protected readonly Dictionary<string, List<double>> PerformanceMetrics = new();
+
+        /// <summary>
+        /// 初始化集成测试基类
+        /// </summary>
+        protected IntegrationTestBase(ITestOutputHelper output, bool useServer = true)
+        {
+            Output = output;
+            DatabaseFixture = new TestDatabaseFixture();
+            Stopwatch = new Stopwatch();
+
+            if (useServer)
+            {
+                ServerFixture = new TestServerFixture();
+                ServiceProvider = ServerFixture.ServiceProvider;
+            }
+            else
+            {
+                ServiceProvider = DatabaseFixture.ServiceProvider;
+            }
+
+            Logger = ServiceProvider.GetRequiredService<ILogger<IntegrationTestBase>>();
+
+            // 输出测试初始化信息
+            Output.WriteLine($"[Test Setup] {GetType().Name} initialized at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
+        }
+
+        #region Service Accessors
+
+        /// <summary>
+        /// 获取数据库上下文
+        /// </summary>
+        protected DataDbContext GetDbContext()
+        {
+            return DatabaseFixture.CreateNewContext();
+        }
+
+        /// <summary>
+        /// 获取消息仓储
+        /// </summary>
+        protected IMessageRepository GetMessageRepository()
+        {
+            return ServiceProvider.GetRequiredService<IMessageRepository>();
+        }
+
+        /// <summary>
+        /// 获取消息服务
+        /// </summary>
+        protected IMessageService GetMessageService()
+        {
+            return ServiceProvider.GetRequiredService<IMessageService>();
+        }
+
+        /// <summary>
+        /// 获取消息处理管道
+        /// </summary>
+        protected IMessageProcessingPipeline GetMessageProcessingPipeline()
+        {
+            return ServiceProvider.GetRequiredService<IMessageProcessingPipeline>();
+        }
+
+        /// <summary>
+        /// 获取指定服务
+        /// </summary>
+        protected T GetService<T>() where T : notnull
+        {
+            return ServiceProvider.GetRequiredService<T>();
+        }
+
+        /// <summary>
+        /// 创建服务作用域
+        /// </summary>
+        protected IServiceScope CreateScope()
+        {
+            return ServiceProvider.CreateScope();
+        }
+
+        #endregion
+
+        #region Test Data Management
+
+        /// <summary>
+        /// 清空数据库
+        /// </summary>
+        protected async Task ClearDatabaseAsync()
+        {
+            using var context = GetDbContext();
+            context.Messages.RemoveRange(context.Messages);
+            context.MessageExtensions.RemoveRange(context.MessageExtensions);
+            await context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// 种子基础测试数据
+        /// </summary>
+        protected async Task SeedBasicDataAsync()
+        {
+            await TestDataSeeder.SeedBasicDataAsync(GetDbContext());
+        }
+
+        /// <summary>
+        /// 种子性能测试数据
+        /// </summary>
+        protected async Task SeedPerformanceDataAsync(int count = 1000)
+        {
+            await TestDataSeeder.SeedPerformanceDataAsync(GetDbContext(), count);
+        }
+
+        /// <summary>
+        /// 种子AI处理测试数据
+        /// </summary>
+        protected async Task SeedAIProcessingDataAsync()
+        {
+            await TestDataSeeder.SeedAIProcessingDataAsync(GetDbContext());
+        }
+
+        /// <summary>
+        /// 创建测试消息
+        /// </summary>
+        protected async Task<Message> CreateTestMessageAsync(string text = "测试消息")
+        {
+            var message = TestDataFactory.CreateTextMessage(text: text);
+            var repository = GetMessageRepository();
+            return await repository.AddAsync(message);
+        }
+
+        /// <summary>
+        /// 批量创建测试消息
+        /// </summary>
+        protected async Task<List<Message>> CreateTestMessagesAsync(int count = 10)
+        {
+            var messages = TestDataFactory.CreateMessageList(count);
+            var repository = GetMessageRepository();
+            
+            foreach (var message in messages)
+            {
+                await repository.AddAsync(message);
+            }
+            
+            return messages;
+        }
+
+        #endregion
+
+        #region Performance Monitoring
+
+        /// <summary>
+        /// 开始性能监控
+        /// </summary>
+        protected void StartPerformanceMonitoring()
+        {
+            Stopwatch.Restart();
+        }
+
+        /// <summary>
+        /// 停止性能监控并记录结果
+        /// </summary>
+        protected double StopPerformanceMonitoring(string metricName)
+        {
+            Stopwatch.Stop();
+            var elapsedMs = Stopwatch.ElapsedMilliseconds;
+            
+            if (!PerformanceMetrics.ContainsKey(metricName))
+            {
+                PerformanceMetrics[metricName] = new List<double>();
+            }
+            
+            PerformanceMetrics[metricName].Add(elapsedMs);
+            
+            Output.WriteLine($"[Performance] {metricName}: {elapsedMs}ms");
+            return elapsedMs;
+        }
+
+        /// <summary>
+        /// 记录自定义性能指标
+        /// </summary>
+        protected void RecordPerformanceMetric(string metricName, double value)
+        {
+            if (!PerformanceMetrics.ContainsKey(metricName))
+            {
+                PerformanceMetrics[metricName] = new List<double>();
+            }
+            
+            PerformanceMetrics[metricName].Add(value);
+            Output.WriteLine($"[Performance] {metricName}: {value}");
+        }
+
+        /// <summary>
+        /// 输出性能统计信息
+        /// </summary>
+        protected void OutputPerformanceStats()
+        {
+            if (!PerformanceMetrics.Any())
+            {
+                Output.WriteLine("[Performance] No performance metrics recorded");
+                return;
+            }
+
+            Output.WriteLine("[Performance Statistics]");
+            foreach (var metric in PerformanceMetrics)
+            {
+                var values = metric.Value;
+                var avg = values.Average();
+                var min = values.Min();
+                var max = values.Max();
+                var count = values.Count;
+
+                Output.WriteLine($"  {metric.Key}:");
+                Output.WriteLine($"    Count: {count}");
+                Output.WriteLine($"    Average: {avg:F2}ms");
+                Output.WriteLine($"    Min: {min:F2}ms");
+                Output.WriteLine($"    Max: {max:F2}ms");
+            }
+        }
+
+        #endregion
+
+        #region Assertion Helpers
+
+        /// <summary>
+        /// 验证消息是否存在
+        /// </summary>
+        protected async Task AssertMessageExistsAsync(int messageId, bool shouldExist = true)
+        {
+            var repository = GetMessageRepository();
+            var message = await repository.GetByIdAsync(messageId);
+            
+            if (shouldExist)
+            {
+                Assert.NotNull(message);
+                Assert.Equal(messageId, message.MessageId);
+            }
+            else
+            {
+                Assert.Null(message);
+            }
+        }
+
+        /// <summary>
+        /// 验证消息是否已处理
+        /// </summary>
+        protected async Task AssertMessageProcessedAsync(int messageId, bool isProcessed = true)
+        {
+            var repository = GetMessageRepository();
+            var message = await repository.GetByIdAsync(messageId);
+            
+            Assert.NotNull(message);
+            Assert.Equal(isProcessed, message.Processed);
+        }
+
+        /// <summary>
+        /// 验证消息是否已向量化
+        /// </summary>
+        protected async Task AssertMessageVectorizedAsync(int messageId, bool isVectorized = true)
+        {
+            var repository = GetMessageRepository();
+            var message = await repository.GetByIdAsync(messageId);
+            
+            Assert.NotNull(message);
+            Assert.Equal(isVectorized, message.Vectorized);
+        }
+
+        /// <summary>
+        /// 验证消息扩展是否存在
+        /// </summary>
+        protected async Task AssertMessageExtensionExistsAsync(int messageId, string extensionType, bool shouldExist = true)
+        {
+            using var context = GetDbContext();
+            var extension = await context.MessageExtensions
+                .FirstOrDefaultAsync(e => e.MessageId == messageId && e.ExtensionType == extensionType);
+            
+            if (shouldExist)
+            {
+                Assert.NotNull(extension);
+                Assert.Equal(messageId, extension.MessageId);
+                Assert.Equal(extensionType, extension.ExtensionType);
+            }
+            else
+            {
+                Assert.Null(extension);
+            }
+        }
+
+        /// <summary>
+        /// 验证性能指标是否在预期范围内
+        /// </summary>
+        protected void AssertPerformanceMetric(string metricName, double expectedMaxMs)
+        {
+            Assert.True(PerformanceMetrics.ContainsKey(metricName), 
+                $"Performance metric '{metricName}' not found");
+            
+            var values = PerformanceMetrics[metricName];
+            var avg = values.Average();
+            var max = values.Max();
+            
+            Assert.True(avg <= expectedMaxMs, 
+                $"Average performance for {metricName} ({avg:F2}ms) exceeds expected maximum ({expectedMaxMs}ms)");
+            
+            Assert.True(max <= expectedMaxMs * 2, 
+                $"Maximum performance for {metricName} ({max:F2}ms) exceeds 2x expected maximum ({expectedMaxMs * 2}ms)");
+        }
+
+        #endregion
+
+        #region Test Lifecycle
+
+        /// <summary>
+        /// 测试设置前的准备工作
+        /// </summary>
+        protected virtual async Task TestSetupAsync()
+        {
+            await ClearDatabaseAsync();
+            PerformanceMetrics.Clear();
+            Output.WriteLine($"[Test Setup] {GetType().Name} setup completed");
+        }
+
+        /// <summary>
+        /// 测试清理工作
+        /// </summary>
+        protected virtual async Task TestCleanupAsync()
+        {
+            OutputPerformanceStats();
+            await ClearDatabaseAsync();
+            Output.WriteLine($"[Test Cleanup] {GetType().Name} cleanup completed");
+        }
+
+        /// <summary>
+        /// 执行测试并自动处理设置和清理
+        /// </summary>
+        protected async Task ExecuteTestAsync(Func<Task> testAction)
+        {
+            try
+            {
+                await TestSetupAsync();
+                await testAction();
+            }
+            finally
+            {
+                await TestCleanupAsync();
+            }
+        }
+
+        #endregion
+
+        #region Logging
+
+        /// <summary>
+        /// 输出测试日志
+        /// </summary>
+        protected void LogTestInfo(string message)
+        {
+            Output.WriteLine($"[Test Info] {message}");
+            Logger.LogInformation(message);
+        }
+
+        /// <summary>
+        /// 输出测试警告
+        /// </summary>
+        protected void LogTestWarning(string message)
+        {
+            Output.WriteLine($"[Test Warning] {message}");
+            Logger.LogWarning(message);
+        }
+
+        /// <summary>
+        /// 输出测试错误
+        /// </summary>
+        protected void LogTestError(string message, Exception? exception = null)
+        {
+            Output.WriteLine($"[Test Error] {message}");
+            if (exception != null)
+            {
+                Output.WriteLine($"[Test Error] Exception: {exception.Message}");
+                Logger.LogError(exception, message);
+            }
+            else
+            {
+                Logger.LogError(message);
+            }
+        }
+
+        #endregion
+
+        #region IDisposable
+
+        /// <summary>
+        /// 释放资源
+        /// </summary>
+        public void Dispose()
+        {
+            DatabaseFixture?.Dispose();
+            ServerFixture?.Dispose();
+            Stopwatch?.Stop();
+            GC.SuppressFinalize(this);
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// 集成测试基类集合Fixture，用于在多个测试类之间共享资源
+    /// </summary>
+    public class IntegrationTestCollectionFixture : IDisposable
+    {
+        private readonly TestDatabaseCollectionFixture _databaseCollectionFixture;
+        private readonly Dictionary<string, TestServerFixture> _serverFixtures = new();
+        private readonly object _lock = new object();
+
+        /// <summary>
+        /// 初始化集成测试集合Fixture
+        /// </summary>
+        public IntegrationTestCollectionFixture()
+        {
+            _databaseCollectionFixture = new TestDatabaseCollectionFixture();
+        }
+
+        /// <summary>
+        /// 获取数据库Fixture
+        /// </summary>
+        public TestDatabaseFixture GetDatabaseFixture(string testName)
+        {
+            return _databaseCollectionFixture.GetDatabaseFixture(testName);
+        }
+
+        /// <summary>
+        /// 获取服务器Fixture
+        /// </summary>
+        public TestServerFixture GetServerFixture(string testName)
+        {
+            lock (_lock)
+            {
+                if (!_serverFixtures.TryGetValue(testName, out var fixture))
+                {
+                    fixture = new TestServerFixture();
+                    _serverFixtures[testName] = fixture;
+                }
+                return fixture;
+            }
+        }
+
+        /// <summary>
+        /// 释放资源
+        /// </summary>
+        public void Dispose()
+        {
+            foreach (var fixture in _serverFixtures.Values)
+            {
+                fixture.Dispose();
+            }
+            _serverFixtures.Clear();
+            _databaseCollectionFixture.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 集成测试基类特性
+    /// </summary>
+    [CollectionDefinition("Integration Tests")]
+    public class IntegrationTestCollection : ICollectionFixture<IntegrationTestCollectionFixture>
+    {
+        // This class has no code, and is never created. Its purpose is simply
+        // to be the place to apply [CollectionDefinition] and all the
+        // ICollectionFixture<> interfaces.
+    }
+}

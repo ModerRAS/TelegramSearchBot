@@ -1,0 +1,412 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Test.Helpers;
+using TelegramSearchBot.Test.Integration;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace TelegramSearchBot.Test.Integration
+{
+    /// <summary>
+    /// AI处理集成测试
+    /// </summary>
+    public class AIProcessingIntegrationTests : IntegrationTestBase
+    {
+        public AIProcessingIntegrationTests(ITestOutputHelper output) : base(output)
+        {
+        }
+
+        [Fact]
+        public async Task ProcessOCRRequest_ShouldExtractTextFromImage()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var imageMessage = TestDataFactory.CreatePhotoMessage();
+                var ocrService = GetService<IImageOCRService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var extractedText = await ocrService.ExtractTextAsync(new byte[] { 0x01, 0x02, 0x03 }); // 模拟图片数据
+                var processingTime = StopPerformanceMonitoring("OCRProcessing");
+
+                // Assert
+                Assert.NotNull(extractedText);
+                Assert.NotEmpty(extractedText);
+                Assert.Contains("图片", extractedText); // Mock返回的数据应该包含关键词
+
+                // 验证性能
+                Assert.True(processingTime < 5000, $"OCR处理时间 {processingTime}ms 超过预期阈值 5000ms");
+
+                LogTestInfo($"OCR处理测试通过，提取文本: {extractedText}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessASRRequest_ShouldConvertSpeechToText()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var audioMessage = TestDataFactory.CreateVoiceMessage();
+                var asrService = GetService<ISpeechToTextService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var convertedText = await asrService.ConvertSpeechToTextAsync(new byte[] { 0x01, 0x02, 0x03 }); // 模拟音频数据
+                var processingTime = StopPerformanceMonitoring("ASRProcessing");
+
+                // Assert
+                Assert.NotNull(convertedText);
+                Assert.NotEmpty(convertedText);
+                Assert.Contains("语音", convertedText); // Mock返回的数据应该包含关键词
+
+                // 验证性能
+                Assert.True(processingTime < 8000, $"ASR处理时间 {processingTime}ms 超过预期阈值 8000ms");
+
+                LogTestInfo($"ASR处理测试通过，转换文本: {convertedText}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessLLMChatRequest_ShouldGenerateResponse()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var prompt = "请解释什么是机器学习";
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var response = await llmService.ChatAsync(prompt);
+                var processingTime = StopPerformanceMonitoring("LLMChatProcessing");
+
+                // Assert
+                Assert.NotNull(response);
+                Assert.NotEmpty(response);
+                Assert.Contains("模拟回复", response); // Mock返回的数据应该包含关键词
+
+                // 验证性能
+                Assert.True(processingTime < 10000, $"LLM聊天处理时间 {processingTime}ms 超过预期阈值 10000ms");
+
+                LogTestInfo($"LLM聊天测试通过，回复: {response}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessLLMEmbeddingRequest_ShouldGenerateVector()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var text = "这是一段需要生成向量的文本";
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var embedding = await llmService.GenerateEmbeddingsAsync(text);
+                var processingTime = StopPerformanceMonitoring("LLMEmbeddingProcessing");
+
+                // Assert
+                Assert.NotNull(embedding);
+                Assert.NotEmpty(embedding);
+                Assert.StartsWith("[", embedding); // 应该是数组格式的字符串
+                Assert.EndsWith("]", embedding);
+
+                // 验证性能
+                Assert.True(processingTime < 5000, $"LLM嵌入处理时间 {processingTime}ms 超过预期阈值 5000ms");
+
+                LogTestInfo($"LLM嵌入测试通过，向量长度: {embedding.Length}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessLLMSummarizationRequest_ShouldGenerateSummary()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var longText = "这是一段很长的文本内容，需要被总结成简洁的摘要。包含了很多重要的信息和细节。";
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var summary = await llmService.SummarizeAsync(longText);
+                var processingTime = StopPerformanceMonitoring("LLMSummarizationProcessing");
+
+                // Assert
+                Assert.NotNull(summary);
+                Assert.NotEmpty(summary);
+                Assert.Contains("模拟摘要", summary); // Mock返回的数据应该包含关键词
+
+                // 验证性能
+                Assert.True(processingTime < 8000, $"LLM摘要处理时间 {processingTime}ms 超过预期阈值 8000ms");
+
+                LogTestInfo($"LLM摘要测试通过，摘要: {summary}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessLLMTranslationRequest_ShouldTranslateText()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var text = "Hello, how are you?";
+                var targetLanguage = "zh";
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var translation = await llmService.TranslateAsync(text, targetLanguage);
+                var processingTime = StopPerformanceMonitoring("LLMTranslationProcessing");
+
+                // Assert
+                Assert.NotNull(translation);
+                Assert.NotEmpty(translation);
+                Assert.Contains("模拟", translation); // Mock返回的数据应该包含关键词
+
+                // 验证性能
+                Assert.True(processingTime < 6000, $"LLM翻译处理时间 {processingTime}ms 超过预期阈值 6000ms");
+
+                LogTestInfo($"LLM翻译测试通过，翻译: {translation}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessLLMSentimentAnalysisRequest_ShouldAnalyzeSentiment()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var text = "我非常喜欢这个产品，它非常实用！";
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var sentiment = await llmService.AnalyzeSentimentAsync(text);
+                var processingTime = StopPerformanceMonitoring("LLMSentimentAnalysisProcessing");
+
+                // Assert
+                Assert.NotNull(sentiment);
+                Assert.NotEmpty(sentiment);
+                Assert.Contains("sentiment", sentiment); // 应该包含情感分析结果
+
+                // 验证性能
+                Assert.True(processingTime < 4000, $"LLM情感分析处理时间 {processingTime}ms 超过预期阈值 4000ms");
+
+                LogTestInfo($"LLM情感分析测试通过，结果: {sentiment}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessLLMKeywordExtractionRequest_ShouldExtractKeywords()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var text = "人工智能和机器学习在自然语言处理领域有广泛的应用";
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var keywords = await llmService.ExtractKeywordsAsync(text);
+                var processingTime = StopPerformanceMonitoring("LLMKeywordExtractionProcessing");
+
+                // Assert
+                Assert.NotNull(keywords);
+                Assert.NotEmpty(keywords);
+                Assert.Contains("关键词", keywords); // Mock返回的数据应该包含关键词
+
+                // 验证性能
+                Assert.True(processingTime < 5000, $"LLM关键词提取处理时间 {processingTime}ms 超过预期阈值 5000ms");
+
+                LogTestInfo($"LLM关键词提取测试通过，关键词: {keywords}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessConcurrentAIRequests_ShouldHandleParallelProcessing()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var llmService = GetService<IGeneralLLMService>();
+                var prompts = new[]
+                {
+                    "解释什么是深度学习",
+                    "什么是自然语言处理",
+                    "机器学习有哪些应用",
+                    "什么是神经网络"
+                };
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                var tasks = prompts.Select(async prompt =>
+                {
+                    return await llmService.ChatAsync(prompt);
+                });
+                
+                var results = await Task.WhenAll(tasks);
+                var totalProcessingTime = StopPerformanceMonitoring("ConcurrentAIProcessing");
+
+                // Assert
+                Assert.Equal(prompts.Length, results.Length);
+                Assert.All(results, result => 
+                {
+                    Assert.NotNull(result);
+                    Assert.NotEmpty(result);
+                });
+
+                // 验证性能
+                var averageTimePerRequest = totalProcessingTime / prompts.Length;
+                Assert.True(averageTimePerRequest < 12000, $"平均每个AI请求处理时间 {averageTimePerRequest}ms 超过预期阈值 12000ms");
+
+                LogTestInfo($"并发AI处理测试通过，处理 {prompts.Length} 个请求，总时间: {totalProcessingTime}ms，平均: {averageTimePerRequest}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessAIPipeline_ShouldHandleMultipleAISteps()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var originalText = "这是一段包含图片和语音的多媒体消息内容";
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act - 模拟完整的AI处理管道
+                StartPerformanceMonitoring();
+                
+                // 步骤1: 生成嵌入向量
+                var embedding = await llmService.GenerateEmbeddingsAsync(originalText);
+                
+                // 步骤2: 情感分析
+                var sentiment = await llmService.AnalyzeSentimentAsync(originalText);
+                
+                // 步骤3: 关键词提取
+                var keywords = await llmService.ExtractKeywordsAsync(originalText);
+                
+                // 步骤4: 摘要生成
+                var summary = await llmService.SummarizeAsync(originalText);
+                
+                var totalProcessingTime = StopPerformanceMonitoring("AIPipelineProcessing");
+
+                // Assert
+                Assert.NotNull(embedding);
+                Assert.NotNull(sentiment);
+                Assert.NotNull(keywords);
+                Assert.NotNull(summary);
+
+                Assert.NotEmpty(embedding);
+                Assert.NotEmpty(sentiment);
+                Assert.NotEmpty(keywords);
+                Assert.NotEmpty(summary);
+
+                // 验证性能
+                Assert.True(totalProcessingTime < 20000, $"AI管道处理时间 {totalProcessingTime}ms 超过预期阈值 20000ms");
+
+                LogTestInfo($"AI管道处理测试通过，完成4个AI步骤，总时间: {totalProcessingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessAIWithLargeInput_ShouldHandleLongText()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var longText = string.Join(" ", Enumerable.Range(1, 1000).Select(i => $"这是一个很长的文本内容{i}，用于测试AI处理大文本的能力。"));
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act
+                StartPerformanceMonitoring();
+                var summary = await llmService.SummarizeAsync(longText);
+                var processingTime = StopPerformanceMonitoring("AILargeTextProcessing");
+
+                // Assert
+                Assert.NotNull(summary);
+                Assert.NotEmpty(summary);
+                Assert.True(longText.Length > 10000, "输入文本应该超过10000字符");
+
+                // 验证性能
+                Assert.True(processingTime < 15000, $"AI大文本处理时间 {processingTime}ms 超过预期阈值 15000ms");
+
+                LogTestInfo($"AI大文本处理测试通过，输入长度: {longText.Length}字符，摘要: {summary}，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessAIWithSpecialContent_ShouldHandleUnicodeAndEmoji()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var specialText = "测试消息包含特殊字符：🎉😊🚀 以及中文、English、日本語、한국어";
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act
+                var embedding = await llmService.GenerateEmbeddingsAsync(specialText);
+
+                // Assert
+                Assert.NotNull(embedding);
+                Assert.NotEmpty(embedding);
+
+                LogTestInfo($"AI特殊内容处理测试通过，处理包含emoji和多语言的内容");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessAIServiceAvailability_ShouldHandleServiceHealthChecks()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var ocrService = GetService<IImageOCRService>();
+                var asrService = GetService<ISpeechToTextService>();
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act - 测试各个AI服务的可用性
+                var imageData = new byte[] { 0x01, 0x02, 0x03 };
+                var audioData = new byte[] { 0x04, 0x05, 0x06 };
+
+                var ocrAvailable = await ocrService.IsImageProcessableAsync(imageData);
+                var asrAvailable = await asrService.IsAudioProcessableAsync(audioData);
+                var llmResponse = await llmService.ChatAsync("测试消息");
+
+                // Assert
+                Assert.True(ocrAvailable, "OCR服务应该可用");
+                Assert.True(asrAvailable, "ASR服务应该可用");
+                Assert.NotNull(llmResponse);
+                Assert.NotEmpty(llmResponse);
+
+                LogTestInfo($"AI服务可用性测试通过，OCR: {ocrAvailable}, ASR: {asrAvailable}, LLM: 正常");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessAIErrorHandling_ShouldHandleInvalidInput()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var llmService = GetService<IGeneralLLMService>();
+
+                // Act - 测试空输入
+                var emptyResponse = await llmService.ChatAsync("");
+                var nullResponse = await llmService.ChatAsync(null!);
+
+                // Assert - Mock服务应该能够处理空输入
+                Assert.NotNull(emptyResponse);
+                Assert.NotNull(nullResponse);
+
+                LogTestInfo($"AI错误处理测试通过，能够处理空输入和null输入");
+            });
+        }
+    }
+}

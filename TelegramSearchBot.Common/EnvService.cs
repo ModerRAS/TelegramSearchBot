@@ -80,6 +80,8 @@ namespace TelegramSearchBot.Common
                 EnableVideoASR = config.EnableVideoASR;
                 EnableOpenAI = config.EnableOpenAI;
                 OpenAIModelName = config.OpenAIModelName;
+                OpenAIKey = config.OpenAIKey;
+                OpenAIGateway = config.OpenAIGateway;
                 OLTPAuth = config.OLTPAuth;
                 OLTPAuthUrl = config.OLTPAuthUrl;
                 OLTPName = config.OLTPName;
@@ -105,6 +107,8 @@ namespace TelegramSearchBot.Common
         public static bool EnableVideoASR { get; set; }
         public static bool EnableOpenAI { get; set; } = false;
         public static string OpenAIModelName { get; set; }
+        public static readonly string OpenAIKey;
+        public static readonly string OpenAIGateway;
         public static int SchedulerPort { get; set; }
         public static string OLTPAuth { get; set; }
         public static string OLTPAuthUrl { get; set; }
@@ -128,6 +132,8 @@ namespace TelegramSearchBot.Common
             public bool EnableVideoASR { get; set; } = false;
             public bool EnableOpenAI { get; set; } = false;
             public string OpenAIModelName { get; set; } = "gpt-4o";
+            public string OpenAIKey { get; set; }
+            public string OpenAIGateway { get; set; } = "https://api.openai.com/v1";
             public string OLTPAuth { get; set; }
             public string OLTPAuthUrl { get; set; }
             public string OLTPName { get; set; }

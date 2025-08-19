@@ -14,6 +14,7 @@ using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Common.Model;
 using TelegramSearchBot.Service.BotAPI;
@@ -24,28 +25,28 @@ namespace TelegramSearchBot.Controller.AI.LLM {
     public class GeneralLLMController : IOnUpdate
     {
         private readonly ILogger logger;
-        private readonly OpenAIService service;
+        private readonly IOpenAIService openAIService;
         private readonly SendMessage Send;
         public List<Type> Dependencies => new List<Type>();
         public ITelegramBotClient botClient { get; set; }
-        public MessageService messageService { get; set; }
-        public AdminService adminService { get; set; }
+        public IMessageService messageService { get; set; }
+        public IAdminService adminService { get; set; }
         public ISendMessageService SendMessageService { get; set; }
         public IGeneralLLMService GeneralLLMService { get; set; }
         public GeneralLLMController(
-            MessageService messageService,
+            IMessageService messageService,
             ITelegramBotClient botClient,
-            OpenAIService openaiService,
+            IOpenAIService openaiService,
             SendMessage Send,
             ILogger<GeneralLLMController> logger,
-            AdminService adminService,
+            IAdminService adminService,
             ISendMessageService SendMessageService,
             IGeneralLLMService generalLLMService
             )
         {
             this.logger = logger;
             this.botClient = botClient;
-            service = openaiService;
+            this.openAIService = openaiService;
             this.Send = Send;
             this.messageService = messageService;
             this.adminService = adminService;
@@ -60,11 +61,11 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             {
                 return;
             }
-            if (string.IsNullOrEmpty(service.BotName))
+            if (string.IsNullOrEmpty(openAIService.BotName))
             {
                 var me = await botClient.GetMe();
                 Env.BotId = me.Id;
-                service.BotName = me.Username; // service.BotName is the username, e.g., "MyBot"
+                openAIService.BotName = me.Username; // openAIService.BotName is the username, e.g., "MyBot"
             }
 
             var Message = string.IsNullOrEmpty(e?.Message?.Text) ? e?.Message?.Caption : e.Message.Text;
@@ -74,8 +75,8 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             }
 
             // Check if the message is a bot command specifically targeting this bot
-            // service.BotName should be initialized by the block above.
-            if (e.Message.Entities != null && !string.IsNullOrEmpty(service.BotName) &&
+            // openAIService.BotName should be initialized by the block above.
+            if (e.Message.Entities != null && !string.IsNullOrEmpty(openAIService.BotName) &&
                 e.Message.Entities.Any(entity => entity.Type == MessageEntityType.BotCommand))
             {
                 var botCommandEntity = e.Message.Entities.First(entity => entity.Type == MessageEntityType.BotCommand);
@@ -84,7 +85,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 {
                     string commandText = Message.Substring(botCommandEntity.Offset, botCommandEntity.Length);
                     // Check if the command text itself contains @BotName (e.g., /cmd@MyBot)
-                    if (commandText.Contains($"@{service.BotName}"))
+                    if (commandText.Contains($"@{openAIService.BotName}"))
                     {
                         logger.LogInformation($"Ignoring command '{commandText}' in GeneralLLMController as it's a direct command to the bot and should be handled by a dedicated command handler. MessageId: {e.Message.MessageId}");
                         return; // Let other command handlers process it
@@ -94,16 +95,16 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
             if (Message.StartsWith("设置模型 ") && await adminService.IsNormalAdmin(e.Message.From.Id))
             {
-                var (previous, current) = await service.SetModel(Message.Substring(5), e.Message.Chat.Id);
+                var (previous, current) = await openAIService.SetModel(Message.Substring(5), e.Message.Chat.Id);
                 logger.LogInformation($"群{e.Message.Chat.Id}模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{e.Message.MessageId}");
                 await SendMessageService.SendTextMessageAsync($"模型设置成功，原模型：{previous}，现模型：{current}", e.Message.Chat.Id, e.Message.MessageId);
                 return;
             }
 
             // Trigger LLM if:
-            // 1. Message contains an explicit mention @BotName (and service.BotName is set)
+            // 1. Message contains an explicit mention @BotName (and openAIService.BotName is set)
             // 2. Message is a reply to the bot (Env.BotId must be set)
-            bool isMentionToBot = !string.IsNullOrEmpty(service.BotName) && Message.Contains($"@{service.BotName}");
+            bool isMentionToBot = !string.IsNullOrEmpty(openAIService.BotName) && Message.Contains($"@{openAIService.BotName}");
             bool isReplyToBot = e.Message.ReplyToMessage != null && e.Message.ReplyToMessage.From != null && e.Message.ReplyToMessage.From.Id == Env.BotId;
             
             if (isMentionToBot || isReplyToBot)
@@ -111,7 +112,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 // TODO: Consider getting BotName in a more generic way if GeneralLLMService is to be truly general
                 // For now, this relies on OpenAIService instance's BotName being set for mentions.
 
-                var modelName = await service.GetModel(e.Message.Chat.Id); // Still uses OpenAIService for GetModel
+                var modelName = await openAIService.GetModel(e.Message.Chat.Id); // Still uses OpenAIService for GetModel
                 var initialContentPlaceholder = $"{modelName}初始化中。。。";
 
                 // Prepare the input message for GeneralLLMService

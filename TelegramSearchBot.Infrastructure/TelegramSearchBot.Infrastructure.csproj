@@ -10,6 +10,8 @@
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Data\TelegramSearchBot.Data.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Domain\TelegramSearchBot.Domain.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Application\TelegramSearchBot.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,6 +28,8 @@
     <PackageReference Include="System.Linq.Async" Version="6.0.3" />
     <PackageReference Include="MediatR" Version="13.0.0" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.7" />
+    <PackageReference Include="AutoMapper" Version="12.0.1" />
+    <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="12.0.1" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,493 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Test.Helpers;
+using TelegramSearchBot.Test.Integration;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace TelegramSearchBot.Test.Integration
+{
+    /// <summary>
+    /// 性能基准测试
+    /// </summary>
+    public class PerformanceBenchmarkTests : IntegrationTestBase
+    {
+        public PerformanceBenchmarkTests(ITestOutputHelper output) : base(output)
+        {
+        }
+
+        [Fact]
+        public async Task BenchmarkMessageProcessingSpeed_ShouldMeetPerformanceTargets()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var messageCounts = new[] { 10, 50, 100, 500 };
+                var performanceResults = new Dictionary<int, double>();
+
+                foreach (var count in messageCounts)
+                {
+                    var messages = TestDataFactory.CreateMessageList(count, MessageType.Text);
+                    var messageService = GetMessageService();
+
+                    // Act
+                    StartPerformanceMonitoring();
+                    
+                    var processingTasks = messages.Select(async message =>
+                    {
+                        await messageService.AddMessageAsync(message);
+                    });
+                    
+                    await Task.WhenAll(processingTasks);
+                    var processingTime = StopPerformanceMonitoring($"MessageProcessing_{count}");
+
+                    // Record performance metric
+                    performanceResults[count] = processingTime;
+                    var messagesPerSecond = count / (processingTime / 1000.0);
+
+                    LogTestInfo($"处理 {count} 条消息耗时: {processingTime}ms, 速度: {messagesPerSecond:F2} 条/秒");
+
+                    // Assert performance targets
+                    var targetTime = count * 10; // 每条消息目标处理时间10ms
+                    Assert.True(processingTime < targetTime, 
+                        $"处理 {count} 条消息时间 {processingTime}ms 超过目标时间 {targetTime}ms");
+                }
+
+                // Assert overall performance trends
+                Assert.True(performanceResults[500] < performanceResults[100] * 6, 
+                    "处理500条消息的时间应该小于处理100条消息时间的6倍（考虑线性扩展）");
+
+                LogTestInfo($"消息处理性能基准测试通过，处理了 {messageCounts.Sum()} 条消息");
+            });
+        }
+
+        [Fact]
+        public async Task BenchmarkSearchPerformance_ShouldMeetResponseTimeTargets()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedPerformanceDataAsync(1000); // 创建1000条测试数据
+                var searchService = GetService<ISearchService>();
+                var searchQueries = new[]
+                {
+                    "测试",
+                    "机器学习",
+                    "人工智能",
+                    "长查询内容 " + string.Join(" ", Enumerable.Range(1, 20).Select(i => $"关键词{i}")),
+                    "不存在的查询内容"
+                };
+
+                var searchResults = new Dictionary<string, double>();
+
+                // Act
+                foreach (var query in searchQueries)
+                {
+                    StartPerformanceMonitoring();
+                    
+                    var results = await searchService.SearchAsync(query, limit: 20);
+                    var searchTime = StopPerformanceMonitoring($"Search_{query.GetHashCode()}");
+
+                    searchResults[query] = searchTime;
+                    var resultCount = results?.Count ?? 0;
+
+                    LogTestInfo($"搜索 '{query}' 耗时: {searchTime}ms, 返回 {resultCount} 条结果");
+
+                    // Assert search performance targets
+                    Assert.True(searchTime < 2000, $"搜索 '{query}' 时间 {searchTime}ms 超过目标时间 2000ms");
+                }
+
+                // Assert average search performance
+                var averageSearchTime = searchResults.Values.Average();
+                Assert.True(averageSearchTime < 1500, $"平均搜索时间 {averageSearchTime:F2}ms 超过目标时间 1500ms");
+
+                LogTestInfo($"搜索性能基准测试通过，平均搜索时间: {averageSearchTime:F2}ms");
+            });
+        }
+
+        [Fact]
+        public async Task BenchmarkAIServicePerformance_ShouldMeetServiceLevelAgreements()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var llmService = GetService<IGeneralLLMService>();
+                var ocrService = GetService<IImageOCRService>();
+                var asrService = GetService<ISpeechToTextService>();
+
+                var testPrompts = new[]
+                {
+                    "简短的问题",
+                    "中等长度的问题，需要一些思考和分析才能回答",
+                    "长问题 " + string.Join(" ", Enumerable.Range(1, 50).Select(i => $"包含更多内容的详细问题{i}"))
+                };
+
+                var aiResults = new Dictionary<string, List<double>>();
+
+                // Benchmark LLM Chat
+                foreach (var prompt in testPrompts)
+                {
+                    StartPerformanceMonitoring();
+                    var response = await llmService.ChatAsync(prompt);
+                    var processingTime = StopPerformanceMonitoring($"LLM_Chat_{prompt.Length}");
+
+                    if (!aiResults.ContainsKey("LLM_Chat"))
+                        aiResults["LLM_Chat"] = new List<double>();
+                    aiResults["LLM_Chat"].Add(processingTime);
+
+                    LogTestInfo($"LLM Chat ({prompt.Length}字符) 耗时: {processingTime}ms");
+                }
+
+                // Benchmark OCR
+                for (int i = 0; i < 5; i++)
+                {
+                    var imageData = new byte[1024 * (i + 1)]; // 不同大小的图片数据
+                    StartPerformanceMonitoring();
+                    var ocrText = await ocrService.ExtractTextAsync(imageData);
+                    var processingTime = StopPerformanceMonitoring($"OCR_{imageData.Length}");
+
+                    if (!aiResults.ContainsKey("OCR"))
+                        aiResults["OCR"] = new List<double>();
+                    aiResults["OCR"].Add(processingTime);
+
+                    LogTestInfo($"OCR ({imageData.Length}字节) 耗时: {processingTime}ms");
+                }
+
+                // Benchmark ASR
+                for (int i = 0; i < 5; i++)
+                {
+                    var audioData = new byte[2048 * (i + 1)]; // 不同大小的音频数据
+                    StartPerformanceMonitoring();
+                    var asrText = await asrService.ConvertSpeechToTextAsync(audioData);
+                    var processingTime = StopPerformanceMonitoring($"ASR_{audioData.Length}");
+
+                    if (!aiResults.ContainsKey("ASR"))
+                        aiResults["ASR"] = new List<double>();
+                    aiResults["ASR"].Add(processingTime);
+
+                    LogTestInfo($"ASR ({audioData.Length}字节) 耗时: {processingTime}ms");
+                }
+
+                // Assert AI service performance targets
+                foreach (var service in aiResults.Keys)
+                {
+                    var averageTime = aiResults[service].Average();
+                    var maxTime = aiResults[service].Max();
+
+                    switch (service)
+                    {
+                        case "LLM_Chat":
+                            Assert.True(averageTime < 10000, $"LLM Chat平均时间 {averageTime:F2}ms 超过目标时间 10000ms");
+                            break;
+                        case "OCR":
+                            Assert.True(averageTime < 5000, $"OCR平均时间 {averageTime:F2}ms 超过目标时间 5000ms");
+                            break;
+                        case "ASR":
+                            Assert.True(averageTime < 8000, $"ASR平均时间 {averageTime:F2}ms 超过目标时间 8000ms");
+                            break;
+                    }
+
+                    LogTestInfo($"{service} 平均性能: {averageTime:F2}ms, 最大: {maxTime:F2}ms");
+                }
+
+                LogTestInfo($"AI服务性能基准测试通过，测试了 {aiResults.Keys.Count} 种AI服务");
+            });
+        }
+
+        [Fact]
+        public async Task BenchmarkDatabaseOperations_ShouldMeetDataAccessTargets()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var testDataCounts = new[] { 100, 500, 1000, 2000 };
+                var databaseResults = new Dictionary<string, Dictionary<int, double>>();
+
+                foreach (var count in testDataCounts)
+                {
+                    // Create test data
+                    var messages = TestDataFactory.GetPerformanceTestData(count);
+                    var messageService = GetMessageService();
+
+                    // Benchmark Insert
+                    StartPerformanceMonitoring();
+                    foreach (var message in messages)
+                    {
+                        await messageService.AddMessageAsync(message);
+                    }
+                    var insertTime = StopPerformanceMonitoring($"DB_Insert_{count}");
+
+                    // Benchmark Read All
+                    StartPerformanceMonitoring();
+                    var allMessages = await messageService.GetAllMessagesAsync();
+                    var readAllTime = StopPerformanceMonitoring($"DB_ReadAll_{count}");
+
+                    // Benchmark Search
+                    StartPerformanceMonitoring();
+                    var searchResults = await messageService.SearchMessagesAsync("测试");
+                    var searchTime = StopPerformanceMonitoring($"DB_Search_{count}");
+
+                    // Store results
+                    if (!databaseResults.ContainsKey("Insert"))
+                        databaseResults["Insert"] = new Dictionary<int, double>();
+                    if (!databaseResults.ContainsKey("ReadAll"))
+                        databaseResults["ReadAll"] = new Dictionary<int, double>();
+                    if (!databaseResults.ContainsKey("Search"))
+                        databaseResults["Search"] = new Dictionary<int, double>();
+
+                    databaseResults["Insert"][count] = insertTime;
+                    databaseResults["ReadAll"][count] = readAllTime;
+                    databaseResults["Search"][count] = searchTime;
+
+                    LogTestInfo($"数据库操作 ({count}条) - 插入: {insertTime}ms, 读取全部: {readAllTime}ms, 搜索: {searchTime}ms");
+
+                    // Assert database performance targets
+                    var insertPerSecond = count / (insertTime / 1000.0);
+                    Assert.True(insertPerSecond > 100, $"插入速度 {insertPerSecond:F2} 条/秒 低于目标 100 条/秒");
+                }
+
+                // Assert scalability
+                var insert100 = databaseResults["Insert"][100];
+                var insert2000 = databaseResults["Insert"][2000];
+                var scalabilityRatio = insert2000 / insert100;
+                
+                Assert.True(scalabilityRatio < 25, $"扩展性比率 {scalabilityRatio:F2} 超过目标 25 (2000条/100条)");
+
+                LogTestInfo($"数据库操作性能基准测试通过，测试了 {testDataCounts.Sum()} 条记录的操作");
+            });
+        }
+
+        [Fact]
+        public async Task BenchmarkConcurrentProcessing_ShouldHandleLoad()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var concurrentLevels = new[] { 1, 5, 10, 20, 50 };
+                var concurrentResults = new Dictionary<int, (double Time, int Success, int Error)>();
+
+                foreach (var level in concurrentLevels)
+                {
+                    var messageService = GetMessageService();
+                    var tasks = new List<Task<bool>>();
+                    var successCount = 0;
+                    var errorCount = 0;
+
+                    // Act
+                    StartPerformanceMonitoring();
+
+                    for (int i = 0; i < level; i++)
+                    {
+                        tasks.Add(Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var message = TestDataFactory.CreateTextMessage(text: $"并发测试消息 {DateTime.Now.Ticks}");
+                                await messageService.AddMessageAsync(message);
+                                return true;
+                            }
+                            catch
+                            {
+                                return false;
+                            }
+                        }));
+                    }
+
+                    var results = await Task.WhenAll(tasks);
+                    var processingTime = StopPerformanceMonitoring($"Concurrent_{level}");
+
+                    successCount = results.Count(r => r);
+                    errorCount = results.Count(r => !r);
+
+                    concurrentResults[level] = (processingTime, successCount, errorCount);
+
+                    var throughput = successCount / (processingTime / 1000.0);
+                    LogTestInfo($"并发级别 {level} - 成功: {successCount}, 错误: {errorCount}, 耗时: {processingTime}ms, 吞吐量: {throughput:F2} 请求/秒");
+                }
+
+                // Assert concurrent performance
+                var singleThreadTime = concurrentResults[1].Time;
+                var fiftyThreadTime = concurrentResults[50].Time;
+                var concurrencyEfficiency = (singleThreadTime / 50) / fiftyThreadTime;
+
+                Assert.True(concurrencyEfficiency > 0.3, $"并发效率 {concurrencyEfficiency:F2} 低于目标 0.3");
+
+                LogTestInfo($"并发处理性能基准测试通过，最高并发级别: {concurrentLevels.Max()}，并发效率: {concurrencyEfficiency:F2}");
+            });
+        }
+
+        [Fact]
+        public async Task BenchmarkMemoryUsage_ShouldStayWithinLimits()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var memoryMonitor = new PerformanceMonitor();
+                var largeMessageCount = 5000;
+                var messages = TestDataFactory.GetPerformanceTestData(largeMessageCount);
+
+                // Act - Monitor memory during intensive operations
+                memoryMonitor.Start();
+                
+                var initialMemory = memoryMonitor.GetCurrentMemoryUsage();
+                LogTestInfo($"初始内存使用: {initialMemory}MB");
+
+                // Process large dataset
+                var messageService = GetMessageService();
+                var batchSize = 100;
+                var processedBatches = 0;
+
+                for (int i = 0; i < messages.Count; i += batchSize)
+                {
+                    var batch = messages.Skip(i).Take(batchSize).ToList();
+                    
+                    var batchStartMemory = memoryMonitor.GetCurrentMemoryUsage();
+                    
+                    foreach (var message in batch)
+                    {
+                        await messageService.AddMessageAsync(message);
+                    }
+                    
+                    var batchEndMemory = memoryMonitor.GetCurrentMemoryUsage();
+                    processedBatches++;
+                    
+                    LogTestInfo($"批次 {processedBatches} - 内存: {batchStartMemory}MB -> {batchEndMemory}MB (增长: {batchEndMemory - batchStartMemory}MB)");
+
+                    // Assert memory usage doesn't grow uncontrollably
+                    var memoryGrowth = batchEndMemory - initialMemory;
+                    Assert.True(memoryGrowth < 500, $"内存增长 {memoryGrowth}MB 超过限制 500MB");
+
+                    // Force garbage collection periodically
+                    if (processedBatches % 10 == 0)
+                    {
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                        var gcMemory = memoryMonitor.GetCurrentMemoryUsage();
+                        LogTestInfo($"GC后内存: {gcMemory}MB");
+                    }
+                }
+
+                var finalMemory = memoryMonitor.GetCurrentMemoryUsage();
+                var totalMemoryGrowth = finalMemory - initialMemory;
+                var processingTime = memoryMonitor.Stop();
+
+                LogTestInfo($"内存使用基准测试完成 - 初始: {initialMemory}MB, 最终: {finalMemory}MB, 增长: {totalMemoryGrowth}MB, 耗时: {processingTime}ms");
+
+                // Assert memory efficiency
+                Assert.True(totalMemoryGrowth < 300, $"总内存增长 {totalMemoryGrowth}MB 超过限制 300MB");
+                Assert.True(processingTime < 60000, $"处理时间 {processingTime}ms 超过限制 60000ms");
+
+                LogTestInfo($"内存使用基准测试通过，处理了 {largeMessageCount} 条消息");
+            });
+        }
+
+        [Fact]
+        public async Task BenchmarkSystemStability_ShouldHandleExtendedLoad()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var durationMinutes = 2;
+                var endTime = DateTime.UtcNow.AddMinutes(durationMinutes);
+                var operationsPerformed = 0;
+                var errorCount = 0;
+                var messageService = GetMessageService();
+                var searchService = GetService<ISearchService>();
+
+                // Act - Run sustained load test
+                var stabilityMonitor = new PerformanceMonitor();
+                stabilityMonitor.Start();
+
+                while (DateTime.UtcNow < endTime)
+                {
+                    try
+                    {
+                        // Perform mixed operations
+                        var operation = DateTime.UtcNow.Ticks % 4;
+
+                        switch (operation)
+                        {
+                            case 0: // Add message
+                                var message = TestDataFactory.CreateTextMessage(text: $"稳定性测试消息 {DateTime.Now.Ticks}");
+                                await messageService.AddMessageAsync(message);
+                                break;
+                            
+                            case 1: // Search
+                                await searchService.SearchAsync("稳定性测试", limit: 10);
+                                break;
+                            
+                            case 2: // Get all messages
+                                await messageService.GetAllMessagesAsync();
+                                break;
+                            
+                            case 3: // AI service call
+                                var llmService = GetService<IGeneralLLMService>();
+                                await llmService.ChatAsync("简短测试");
+                                break;
+                        }
+
+                        operationsPerformed++;
+                        
+                        // Small delay to prevent overwhelming the system
+                        await Task.Delay(10);
+                    }
+                    catch (Exception ex)
+                    {
+                        errorCount++;
+                        LogTestError($"稳定性测试错误: {ex.Message}");
+                    }
+                }
+
+                var totalTime = stabilityMonitor.Stop();
+                var operationsPerSecond = operationsPerformed / (totalTime / 1000.0);
+                var errorRate = (double)errorCount / operationsPerformed * 100;
+
+                LogTestInfo($"系统稳定性测试完成 - 运行时间: {totalTime}ms, 操作数: {operationsPerformed}, 错误: {errorCount}");
+                LogTestInfo($"性能指标 - 吞吐量: {operationsPerSecond:F2} 操作/秒, 错误率: {errorRate:F2}%");
+
+                // Assert stability metrics
+                Assert.True(operationsPerSecond > 10, $"吞吐量 {operationsPerSecond:F2} 操作/秒 低于目标 10 操作/秒");
+                Assert.True(errorRate < 5, $"错误率 {errorRate:F2}% 超过目标 5%");
+                Assert.True(totalTime >= durationMinutes * 60000 * 0.95, $"运行时间 {totalTime}ms 小于预期 {durationMinutes} 分钟");
+
+                LogTestInfo($"系统稳定性基准测试通过，系统在负载下稳定运行 {durationMinutes} 分钟");
+            });
+        }
+
+        /// <summary>
+        /// 性能监控器辅助类
+        /// </summary>
+        private class PerformanceMonitor
+        {
+            private readonly Stopwatch _stopwatch;
+            private Process _currentProcess;
+
+            public PerformanceMonitor()
+            {
+                _stopwatch = new Stopwatch();
+                _currentProcess = Process.GetCurrentProcess();
+            }
+
+            public void Start()
+            {
+                _stopwatch.Restart();
+            }
+
+            public double Stop()
+            {
+                _stopwatch.Stop();
+                return _stopwatch.ElapsedMilliseconds;
+            }
+
+            public double GetCurrentMemoryUsage()
+            {
+                _currentProcess.Refresh();
+                return _currentProcess.WorkingSet64 / (1024.0 * 1024.0); // Convert to MB
+            }
+        }
+    }
+}

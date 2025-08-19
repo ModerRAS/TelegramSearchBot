@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Manager;
+using TelegramSearchBot.Search.Manager;
 using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Search
@@ -20,7 +20,7 @@ namespace TelegramSearchBot.Service.Search
         
         public SearchService(DataDbContext dbContext, ILuceneManager lucene = null)
         {
-            this.lucene = lucene ?? new LuceneManager();
+            this.lucene = lucene ?? new SearchLuceneManager();
             this.dbContext = dbContext;
         }
 

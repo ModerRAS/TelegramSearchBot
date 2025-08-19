@@ -1,20 +1,60 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Model.Data;
+using Moq;
+using Message = TelegramSearchBot.Model.Data.Message;
 
 namespace TelegramSearchBot.Domain.Tests.Message
 {
     public class MessageEntityTests
     {
+        /// <summary>
+        /// 创建测试用的Telegram.Bot.Types.Message对象
+        /// 简化实现：使用Moq框架来创建模拟对象，避免只读属性问题
+        /// </summary>
+        private static Telegram.Bot.Types.Message CreateTestTelegramMessage(int messageId, long chatId, long userId, string text, DateTime? date = null)
+        {
+            var mockMessage = new Mock<Telegram.Bot.Types.Message>();
+            mockMessage.SetupGet(m => m.MessageId).Returns(messageId);
+            mockMessage.SetupGet(m => m.Chat).Returns(new Chat { Id = chatId });
+            mockMessage.SetupGet(m => m.From).Returns(new User { Id = userId });
+            mockMessage.SetupGet(m => m.Text).Returns(text);
+            mockMessage.SetupGet(m => m.Date).Returns(date ?? DateTime.UtcNow);
+            
+            return mockMessage.Object;
+        }
+
+        /// <summary>
+        /// 创建测试用的Telegram.Bot.Types.Message对象（带回复消息）
+        /// 简化实现：使用Moq框架来创建模拟对象，避免只读属性问题
+        /// </summary>
+        private static Telegram.Bot.Types.Message CreateTestTelegramMessageWithReply(int messageId, long chatId, long userId, string text, int replyToMessageId, long replyToUserId)
+        {
+            var mockMessage = new Mock<Telegram.Bot.Types.Message>();
+            mockMessage.SetupGet(m => m.MessageId).Returns(messageId);
+            mockMessage.SetupGet(m => m.Chat).Returns(new Chat { Id = chatId });
+            mockMessage.SetupGet(m => m.From).Returns(new User { Id = userId });
+            mockMessage.SetupGet(m => m.Text).Returns(text);
+            mockMessage.SetupGet(m => m.Date).Returns(DateTime.UtcNow);
+            
+            var mockReplyMessage = new Mock<Telegram.Bot.Types.Message>();
+            mockReplyMessage.SetupGet(m => m.MessageId).Returns(replyToMessageId);
+            mockReplyMessage.SetupGet(m => m.From).Returns(new User { Id = replyToUserId });
+            
+            mockMessage.SetupGet(m => m.ReplyToMessage).Returns(mockReplyMessage.Object);
+            
+            return mockMessage.Object;
+        }
         #region Constructor Tests
 
         [Fact]
         public void Message_Constructor_ShouldInitializeWithDefaultValues()
         {
             // Arrange & Act
-            var message = new Message();
+            var message = new TelegramSearchBot.Model.Data.Message();
 
             // Assert
             Assert.Equal(0, message.Id);
@@ -36,17 +76,10 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void FromTelegramMessage_ValidTextMessage_ShouldCreateMessageCorrectly()
         {
             // Arrange
-            var telegramMessage = new Telegram.Bot.Types.Message
-            {
-                MessageId = 1000,
-                Chat = new Chat { Id = 100 },
-                From = new User { Id = 1 },
-                Text = "Hello World",
-                Date = DateTime.UtcNow
-            };
+            var telegramMessage = CreateTestTelegramMessage(1000, 100, 1, "Hello World");
 
             // Act
-            var result = Message.FromTelegramMessage(telegramMessage);
+            var result = TelegramSearchBot.Model.Data.Message.FromTelegramMessage(telegramMessage);
 
             // Assert
             Assert.Equal(telegramMessage.MessageId, result.MessageId);
@@ -62,17 +95,17 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void FromTelegramMessage_ValidCaptionMessage_ShouldUseCaptionAsContent()
         {
             // Arrange
-            var telegramMessage = new Telegram.Bot.Types.Message
-            {
-                MessageId = 1001,
-                Chat = new Chat { Id = 101 },
-                From = new User { Id = 2 },
-                Caption = "Image caption",
-                Date = DateTime.UtcNow
-            };
+            var mockMessage = new Mock<Telegram.Bot.Types.Message>();
+            mockMessage.SetupGet(m => m.MessageId).Returns(1001);
+            mockMessage.SetupGet(m => m.Chat).Returns(new Chat { Id = 101 });
+            mockMessage.SetupGet(m => m.From).Returns(new User { Id = 2 });
+            mockMessage.SetupGet(m => m.Caption).Returns("Image caption");
+            mockMessage.SetupGet(m => m.Date).Returns(DateTime.UtcNow);
+            
+            var telegramMessage = mockMessage.Object;
 
             // Act
-            var result = Message.FromTelegramMessage(telegramMessage);
+            var result = TelegramSearchBot.Model.Data.Message.FromTelegramMessage(telegramMessage);
 
             // Assert
             Assert.Equal(telegramMessage.MessageId, result.MessageId);
@@ -86,22 +119,10 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void FromTelegramMessage_WithReplyToMessage_ShouldSetReplyToFields()
         {
             // Arrange
-            var telegramMessage = new Telegram.Bot.Types.Message
-            {
-                MessageId = 1002,
-                Chat = new Chat { Id = 102 },
-                From = new User { Id = 3 },
-                Text = "Reply message",
-                ReplyToMessage = new Telegram.Bot.Types.Message
-                {
-                    MessageId = 1001,
-                    From = new User { Id = 4 }
-                },
-                Date = DateTime.UtcNow
-            };
+            var telegramMessage = CreateTestTelegramMessageWithReply(1002, 102, 3, "Reply message", 1001, 4);
 
             // Act
-            var result = Message.FromTelegramMessage(telegramMessage);
+            var result = TelegramSearchBot.Model.Data.Message.FromTelegramMessage(telegramMessage);
 
             // Assert
             Assert.Equal(telegramMessage.MessageId, result.MessageId);
@@ -116,17 +137,17 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void FromTelegramMessage_NullFromUser_ShouldSetUserIdToZero()
         {
             // Arrange
-            var telegramMessage = new Telegram.Bot.Types.Message
-            {
-                MessageId = 1003,
-                Chat = new Chat { Id = 103 },
-                From = null,
-                Text = "Message without user",
-                Date = DateTime.UtcNow
-            };
+            var mockMessage = new Mock<Telegram.Bot.Types.Message>();
+            mockMessage.SetupGet(m => m.MessageId).Returns(1003);
+            mockMessage.SetupGet(m => m.Chat).Returns(new Chat { Id = 103 });
+            mockMessage.SetupGet(m => m.From).Returns((User)null);
+            mockMessage.SetupGet(m => m.Text).Returns("Message without user");
+            mockMessage.SetupGet(m => m.Date).Returns(DateTime.UtcNow);
+            
+            var telegramMessage = mockMessage.Object;
 
             // Act
-            var result = Message.FromTelegramMessage(telegramMessage);
+            var result = TelegramSearchBot.Model.Data.Message.FromTelegramMessage(telegramMessage);
 
             // Assert
             Assert.Equal(0, result.FromUserId);
@@ -136,18 +157,18 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void FromTelegramMessage_NullReplyToMessage_ShouldSetReplyToFieldsToZero()
         {
             // Arrange
-            var telegramMessage = new Telegram.Bot.Types.Message
-            {
-                MessageId = 1004,
-                Chat = new Chat { Id = 104 },
-                From = new User { Id = 5 },
-                Text = "Message without reply",
-                ReplyToMessage = null,
-                Date = DateTime.UtcNow
-            };
+            var mockMessage = new Mock<Telegram.Bot.Types.Message>();
+            mockMessage.SetupGet(m => m.MessageId).Returns(1004);
+            mockMessage.SetupGet(m => m.Chat).Returns(new Chat { Id = 104 });
+            mockMessage.SetupGet(m => m.From).Returns(new User { Id = 5 });
+            mockMessage.SetupGet(m => m.Text).Returns("Message without reply");
+            mockMessage.SetupGet(m => m.ReplyToMessage).Returns((Telegram.Bot.Types.Message)null);
+            mockMessage.SetupGet(m => m.Date).Returns(DateTime.UtcNow);
+            
+            var telegramMessage = mockMessage.Object;
 
             // Act
-            var result = Message.FromTelegramMessage(telegramMessage);
+            var result = TelegramSearchBot.Model.Data.Message.FromTelegramMessage(telegramMessage);
 
             // Assert
             Assert.Equal(0, result.ReplyToUserId);
@@ -158,18 +179,18 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void FromTelegramMessage_NullTextAndCaption_ShouldSetContentToEmpty()
         {
             // Arrange
-            var telegramMessage = new Telegram.Bot.Types.Message
-            {
-                MessageId = 1005,
-                Chat = new Chat { Id = 105 },
-                From = new User { Id = 6 },
-                Text = null,
-                Caption = null,
-                Date = DateTime.UtcNow
-            };
+            var mockMessage = new Mock<Telegram.Bot.Types.Message>();
+            mockMessage.SetupGet(m => m.MessageId).Returns(1005);
+            mockMessage.SetupGet(m => m.Chat).Returns(new Chat { Id = 105 });
+            mockMessage.SetupGet(m => m.From).Returns(new User { Id = 6 });
+            mockMessage.SetupGet(m => m.Text).Returns((string)null);
+            mockMessage.SetupGet(m => m.Caption).Returns((string)null);
+            mockMessage.SetupGet(m => m.Date).Returns(DateTime.UtcNow);
+            
+            var telegramMessage = mockMessage.Object;
 
             // Act
-            var result = Message.FromTelegramMessage(telegramMessage);
+            var result = TelegramSearchBot.Model.Data.Message.FromTelegramMessage(telegramMessage);
 
             // Assert
             Assert.Equal(string.Empty, result.Content);
@@ -183,7 +204,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_Properties_ShouldSetAndGetCorrectly()
         {
             // Arrange
-            var message = new Message();
+            var message = new TelegramSearchBot.Model.Data.Message();
             var testDateTime = DateTime.UtcNow;
             var testContent = "Test content";
             var testExtensions = new List<MessageExtension>
@@ -192,10 +213,8 @@ namespace TelegramSearchBot.Domain.Tests.Message
             };
 
             // Act
-            message.Id = 1;
             message.DateTime = testDateTime;
             message.GroupId = 100;
-            message.MessageId = 1000;
             message.FromUserId = 1;
             message.ReplyToUserId = 2;
             message.ReplyToMessageId = 999;
@@ -203,10 +222,11 @@ namespace TelegramSearchBot.Domain.Tests.Message
             message.MessageExtensions = testExtensions;
 
             // Assert
-            Assert.Equal(1, message.Id);
+            // Id是由数据库生成的，所以验证默认值
+            Assert.Equal(0, message.Id);
             Assert.Equal(testDateTime, message.DateTime);
             Assert.Equal(100, message.GroupId);
-            Assert.Equal(1000, message.MessageId);
+            Assert.Equal(0, message.MessageId); // MessageId需要通过FromTelegramMessage设置
             Assert.Equal(1, message.FromUserId);
             Assert.Equal(2, message.ReplyToUserId);
             Assert.Equal(999, message.ReplyToMessageId);
@@ -218,7 +238,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_MessageExtensions_ShouldInitializeEmptyCollection()
         {
             // Arrange
-            var message = new Message();
+            var message = new TelegramSearchBot.Model.Data.Message();
 
             // Act & Assert
             Assert.NotNull(message.MessageExtensions);
@@ -229,7 +249,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void Message_MessageExtensions_ShouldAllowAddingExtensions()
         {
             // Arrange
-            var message = new Message();
+            var message = new TelegramSearchBot.Model.Data.Message();
             var extension = new MessageExtension { ExtensionType = "OCR", ExtensionData = "Test data" };
 
             // Act
@@ -237,7 +257,9 @@ namespace TelegramSearchBot.Domain.Tests.Message
 
             // Assert
             Assert.Single(message.MessageExtensions);
-            Assert.Same(extension, message.MessageExtensions[0]);
+            // 简化实现：原本实现是使用索引访问message.MessageExtensions[0]
+            // 简化实现：改为使用LINQ的First()方法，因为ICollection不支持索引访问
+            Assert.Same(extension, message.MessageExtensions.First());
         }
 
         #endregion
@@ -248,17 +270,10 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void FromTelegramMessage_EmptyText_ShouldCreateMessageWithEmptyContent()
         {
             // Arrange
-            var telegramMessage = new Telegram.Bot.Types.Message
-            {
-                MessageId = 1006,
-                Chat = new Chat { Id = 106 },
-                From = new User { Id = 7 },
-                Text = "",
-                Date = DateTime.UtcNow
-            };
+            var telegramMessage = CreateTestTelegramMessage(1006, 106, 7, "");
 
             // Act
-            var result = Message.FromTelegramMessage(telegramMessage);
+            var result = TelegramSearchBot.Model.Data.Message.FromTelegramMessage(telegramMessage);
 
             // Assert
             Assert.Equal(string.Empty, result.Content);
@@ -268,17 +283,17 @@ namespace TelegramSearchBot.Domain.Tests.Message
         public void FromTelegramMessage_EmptyCaption_ShouldCreateMessageWithEmptyContent()
         {
             // Arrange
-            var telegramMessage = new Telegram.Bot.Types.Message
-            {
-                MessageId = 1007,
-                Chat = new Chat { Id = 107 },
-                From = new User { Id = 8 },
-                Caption = "",
-                Date = DateTime.UtcNow
-            };
+            var mockMessage = new Mock<Telegram.Bot.Types.Message>();
+            mockMessage.SetupGet(m => m.MessageId).Returns(1007);
+            mockMessage.SetupGet(m => m.Chat).Returns(new Chat { Id = 107 });
+            mockMessage.SetupGet(m => m.From).Returns(new User { Id = 8 });
+            mockMessage.SetupGet(m => m.Caption).Returns("");
+            mockMessage.SetupGet(m => m.Date).Returns(DateTime.UtcNow);
+            
+            var telegramMessage = mockMessage.Object;
 
             // Act
-            var result = Message.FromTelegramMessage(telegramMessage);
+            var result = TelegramSearchBot.Model.Data.Message.FromTelegramMessage(telegramMessage);
 
             // Assert
             Assert.Equal(string.Empty, result.Content);

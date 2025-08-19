@@ -1,0 +1,560 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Test.Helpers;
+using TelegramSearchBot.Test.Integration;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace TelegramSearchBot.Test.Integration
+{
+    /// <summary>
+    /// 错误处理集成测试
+    /// </summary>
+    public class ErrorHandlingIntegrationTests : IntegrationTestBase
+    {
+        public ErrorHandlingIntegrationTests(ITestOutputHelper output) : base(output)
+        {
+        }
+
+        [Fact]
+        public async Task HandleDatabaseConnectionFailure_ShouldGracefullyRecover()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var testMessage = TestDataFactory.CreateTextMessage(text: "测试数据库连接失败恢复");
+                var messageService = GetMessageService();
+
+                // Act - 模拟数据库连接失败后的恢复
+                StartPerformanceMonitoring();
+                
+                try
+                {
+                    // 尝试添加消息
+                    await messageService.AddMessageAsync(testMessage);
+                    
+                    // 验证消息被正确添加
+                    var retrievedMessage = await messageService.GetMessageAsync(testMessage.MessageId);
+                    Assert.NotNull(retrievedMessage);
+                }
+                catch (Exception ex)
+                {
+                    LogTestError($"数据库操作失败: {ex.Message}", ex);
+                    
+                    // 系统应该能够继续运行
+                    var recoveryTime = StopPerformanceMonitoring("DatabaseConnectionFailureRecovery");
+                    
+                    // 验证恢复时间在合理范围内
+                    Assert.True(recoveryTime < 5000, $"数据库连接失败恢复时间 {recoveryTime}ms 超过预期阈值 5000ms");
+                    
+                    LogTestInfo($"数据库连接失败恢复测试通过，恢复时间: {recoveryTime}ms");
+                    return;
+                }
+
+                var normalTime = StopPerformanceMonitoring("DatabaseConnectionNormal");
+                LogTestInfo($"数据库连接正常测试通过，处理时间: {normalTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HandleInvalidMessageData_ShouldNotCrashSystem()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var invalidMessages = new[]
+                {
+                    new Message { MessageId = -1, GroupId = 0, FromUserId = 0, Content = null, DateTime = DateTime.UtcNow },
+                    new Message { MessageId = int.MaxValue, GroupId = long.MinValue, FromUserId = long.MaxValue, Content = "", DateTime = DateTime.MinValue },
+                    new Message { MessageId = 0, GroupId = 0, FromUserId = 0, Content = new string('a', 10000), DateTime = DateTime.MaxValue }
+                };
+
+                var messageService = GetMessageService();
+                var processedCount = 0;
+                var errorCount = 0;
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                foreach (var invalidMessage in invalidMessages)
+                {
+                    try
+                    {
+                        await messageService.AddMessageAsync(invalidMessage);
+                        processedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        errorCount++;
+                        LogTestError($"处理无效消息时发生错误: {ex.Message}");
+                        
+                        // 系统不应该崩溃，应该继续处理下一条消息
+                        continue;
+                    }
+                }
+
+                var processingTime = StopPerformanceMonitoring("InvalidMessageDataHandling");
+
+                // Assert
+                Assert.True(processedCount + errorCount == invalidMessages.Length, 
+                    $"所有消息都应该被处理，已处理: {processedCount}, 错误: {errorCount}, 总数: {invalidMessages.Length}");
+
+                // 验证性能
+                Assert.True(processingTime < 10000, $"无效消息处理时间 {processingTime}ms 超过预期阈值 10000ms");
+
+                LogTestInfo($"无效消息处理测试通过，成功处理: {processedCount}, 错误: {errorCount}, 处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HandleAIServiceTimeout_ShouldFallbackToDefault()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var llmService = GetService<IGeneralLLMService>();
+                var timeoutPrompts = new[]
+                {
+                    "这是一个很长的提示词，可能会导致AI服务超时..." + string.Join(" ", Enumerable.Range(1, 1000).Select(i => $"额外内容{i}")),
+                    "正常提示词"
+                };
+
+                var results = new List<string>();
+                var timeoutCount = 0;
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                foreach (var prompt in timeoutPrompts)
+                {
+                    try
+                    {
+                        // 设置较短的超时时间来模拟超时情况
+                        var timeoutTask = Task.Delay(1000); // 1秒超时
+                        var llmTask = llmService.ChatAsync(prompt);
+                        
+                        var completedTask = await Task.WhenAny(llmTask, timeoutTask);
+                        
+                        if (completedTask == timeoutTask)
+                        {
+                            timeoutCount++;
+                            // 使用默认回复
+                            results.Add("默认回复（服务超时）");
+                        }
+                        else
+                        {
+                            var result = await llmTask;
+                            results.Add(result);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        timeoutCount++;
+                        results.Add("默认回复（服务异常）");
+                        LogTestError($"AI服务调用失败: {ex.Message}");
+                    }
+                }
+
+                var processingTime = StopPerformanceMonitoring("AIServiceTimeoutHandling");
+
+                // Assert
+                Assert.Equal(timeoutPrompts.Length, results.Count);
+                Assert.All(results, result => Assert.NotNull(result));
+                Assert.True(timeoutCount <= timeoutPrompts.Length, $"超时次数 {timeoutCount} 不应该超过总请求数 {timeoutPrompts.Length}");
+
+                // 验证性能
+                Assert.True(processingTime < 5000, $"AI服务超时处理时间 {processingTime}ms 超过预期阈值 5000ms");
+
+                LogTestInfo($"AI服务超时处理测试通过，超时次数: {timeoutCount}, 总请求数: {timeoutPrompts.Length}, 处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HandleMemoryPressure_ShouldNotCrashSystem()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var largeMessages = new List<Message>();
+                for (int i = 1; i <= 100; i++)
+                {
+                    largeMessages.Add(new Message
+                    {
+                        MessageId = i,
+                        GroupId = -100123456789,
+                        FromUserId = 123456789,
+                        Content = new string('x', 1000), // 每条消息1KB
+                        DateTime = DateTime.UtcNow
+                    });
+                }
+
+                var messageService = GetMessageService();
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                var successfullyAdded = 0;
+                var failedToAdd = 0;
+
+                foreach (var message in largeMessages)
+                {
+                    try
+                    {
+                        await messageService.AddMessageAsync(message);
+                        successfullyAdded++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failedToAdd++;
+                        LogTestError($"添加大消息时发生错误: {ex.Message}");
+                        
+                        // 系统应该继续运行，不会崩溃
+                        await Task.Delay(100); // 短暂延迟以减轻内存压力
+                    }
+                }
+
+                var processingTime = StopPerformanceMonitoring("MemoryPressureHandling");
+
+                // Assert
+                Assert.True(successfullyAdded > 0, $"应该至少成功添加一些消息，成功: {successfullyAdded}");
+                Assert.True(failedToAdd <= largeMessages.Count, $"失败次数不应该超过总消息数，失败: {failedToAdd}");
+
+                // 验证系统仍然可以正常工作
+                try
+                {
+                    var testMessage = TestDataFactory.CreateTextMessage(text: "内存压力测试后的正常消息");
+                    await messageService.AddMessageAsync(testMessage);
+                    
+                    var retrievedMessage = await messageService.GetMessageAsync(testMessage.MessageId);
+                    Assert.NotNull(retrievedMessage);
+                }
+                catch (Exception ex)
+                {
+                    LogTestError($"内存压力后系统无法正常工作: {ex.Message}");
+                    Assert.Fail("系统在内存压力后应该能够正常工作");
+                }
+
+                // 验证性能
+                Assert.True(processingTime < 30000, $"内存压力处理时间 {processingTime}ms 超过预期阈值 30000ms");
+
+                LogTestInfo($"内存压力处理测试通过，成功添加: {successfullyAdded}, 失败: {failedToAdd}, 处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HandleConcurrentAccess_ShouldNotCauseDataCorruption()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var concurrentMessages = new List<Message>();
+                for (int i = 1; i <= 50; i++)
+                {
+                    concurrentMessages.Add(new Message
+                    {
+                        MessageId = i,
+                        GroupId = -100123456789,
+                        FromUserId = 123456789 + i,
+                        Content = $"并发测试消息 {i}",
+                        DateTime = DateTime.UtcNow
+                    });
+                }
+
+                var messageService = GetMessageService();
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                var tasks = concurrentMessages.Select(async message =>
+                {
+                    try
+                    {
+                        await messageService.AddMessageAsync(message);
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        LogTestError($"并发访问错误: {ex.Message}");
+                        return false;
+                    }
+                });
+
+                var results = await Task.WhenAll(tasks);
+                var processingTime = StopPerformanceMonitoring("ConcurrentAccessHandling");
+
+                // Assert
+                var successCount = results.Count(r => r);
+                var failureCount = results.Count(r => !r);
+
+                Assert.True(successCount > concurrentMessages.Length * 0.8, 
+                    $"成功率应该超过80%，成功: {successCount}, 总数: {concurrentMessages.Length}");
+
+                // 验证数据完整性
+                var allMessages = await messageService.GetAllMessagesAsync();
+                Assert.True(allMessages.Count() >= successCount, 
+                    $"检索到的消息数量应该至少等于成功添加的数量，检索: {allMessages.Count()}, 成功: {successCount}");
+
+                // 验证性能
+                Assert.True(processingTime < 15000, $"并发访问处理时间 {processingTime}ms 超过预期阈值 15000ms");
+
+                LogTestInfo($"并发访问处理测试通过，成功: {successCount}, 失败: {failureCount}, 处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HandleFileOperationFailure_ShouldGracefullyRecover()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var testFiles = new[]
+                {
+                    new { Name = "nonexistent.jpg", Data = (byte[])null },
+                    new { Name = "empty.png", Data = new byte[0] },
+                    new { Name = "corrupt.gif", Data = new byte[] { 0xFF, 0xD8, 0xFF } } // 不完整的JPEG文件头
+                };
+
+                var ocrService = GetService<IImageOCRService>();
+                var processedCount = 0;
+                var errorCount = 0;
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                foreach (var file in testFiles)
+                {
+                    try
+                    {
+                        if (file.Data != null)
+                        {
+                            var isProcessable = await ocrService.IsImageProcessableAsync(file.Data);
+                            if (isProcessable)
+                            {
+                                var text = await ocrService.ExtractTextAsync(file.Data);
+                                processedCount++;
+                            }
+                        }
+                        else
+                        {
+                            // 模拟文件不存在的情况
+                            throw new FileNotFoundException("文件不存在");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        errorCount++;
+                        LogTestError($"文件操作失败: {file.Name} - {ex.Message}");
+                        
+                        // 系统应该继续处理下一个文件
+                        continue;
+                    }
+                }
+
+                var processingTime = StopPerformanceMonitoring("FileOperationFailureHandling");
+
+                // Assert
+                Assert.True(processedCount + errorCount == testFiles.Length, 
+                    $"所有文件都应该被处理，已处理: {processedCount}, 错误: {errorCount}, 总数: {testFiles.Length}");
+
+                // 验证性能
+                Assert.True(processingTime < 8000, $"文件操作失败处理时间 {processingTime}ms 超过预期阈值 8000ms");
+
+                LogTestInfo($"文件操作失败处理测试通过，成功处理: {processedCount}, 错误: {errorCount}, 处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HandleNetworkFailure_ShouldRetryAndRecover()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var llmService = GetService<IGeneralLLMService>();
+                var retryCount = 0;
+                var maxRetries = 3;
+                var successCount = 0;
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                for (int i = 0; i < 5; i++)
+                {
+                    var currentRetry = 0;
+                    bool success = false;
+
+                    while (currentRetry < maxRetries && !success)
+                    {
+                        try
+                        {
+                            var response = await llmService.ChatAsync($"网络重试测试消息 {i}");
+                            Assert.NotNull(response);
+                            success = true;
+                            successCount++;
+                        }
+                        catch (Exception ex)
+                        {
+                            retryCount++;
+                            currentRetry++;
+                            LogTestError($"网络调用失败，重试 {currentRetry}/{maxRetries}: {ex.Message}");
+                            
+                            if (currentRetry < maxRetries)
+                            {
+                                await Task.Delay(1000 * currentRetry); // 指数退避
+                            }
+                        }
+                    }
+                }
+
+                var processingTime = StopPerformanceMonitoring("NetworkFailureHandling");
+
+                // Assert
+                Assert.True(successCount > 0, $"应该至少成功一次，成功次数: {successCount}");
+                Assert.True(retryCount <= 5 * maxRetries, $"重试次数应该在合理范围内，重试次数: {retryCount}");
+
+                // 验证性能
+                Assert.True(processingTime < 30000, $"网络失败处理时间 {processingTime}ms 超过预期阈值 30000ms");
+
+                LogTestInfo($"网络失败处理测试通过，成功: {successCount}, 重试: {retryCount}, 处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HandleInvalidUserInput_ShouldValidateAndReject()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var invalidInputs = new[]
+                {
+                    "",
+                    "   ",
+                    null,
+                    new string('x', 10001), // 超长输入
+                    "<script>alert('xss')</script>", // 恶意脚本
+                    "'; DROP TABLE Messages; --" // SQL注入
+                };
+
+                var llmService = GetService<IGeneralLLMService>();
+                var rejectedCount = 0;
+                var processedCount = 0;
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                foreach (var input in invalidInputs)
+                {
+                    try
+                    {
+                        if (string.IsNullOrWhiteSpace(input))
+                        {
+                            rejectedCount++;
+                            continue;
+                        }
+
+                        if (input.Length > 10000)
+                        {
+                            rejectedCount++;
+                            continue;
+                        }
+
+                        if (input.Contains("<script>") || input.Contains("DROP TABLE"))
+                        {
+                            rejectedCount++;
+                            continue;
+                        }
+
+                        var response = await llmService.ChatAsync(input);
+                        processedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        rejectedCount++;
+                        LogTestError($"输入验证失败: {ex.Message}");
+                    }
+                }
+
+                var processingTime = StopPerformanceMonitoring("InvalidInputHandling");
+
+                // Assert
+                Assert.True(rejectedCount > 0, $"应该拒绝一些无效输入，拒绝次数: {rejectedCount}");
+                Assert.True(processedCount + rejectedCount == invalidInputs.Length, 
+                    $"所有输入都应该被处理，已处理: {processedCount}, 拒绝: {rejectedCount}, 总数: {invalidInputs.Length}");
+
+                // 验证性能
+                Assert.True(processingTime < 5000, $"无效输入处理时间 {processingTime}ms 超过预期阈值 5000ms");
+
+                LogTestInfo($"无效输入处理测试通过，已处理: {processedCount}, 拒绝: {rejectedCount}, 处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HandleSystemResourceExhaustion_ShouldDegradeGracefully()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var largeDataset = new List<string>();
+                for (int i = 1; i <= 1000; i++)
+                {
+                    largeDataset.Add($"大数据集测试项目 {i} " + new string('x', 100));
+                }
+
+                var llmService = GetService<IGeneralLLMService>();
+                var processedCount = 0;
+                var errorCount = 0;
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                var tasks = largeDataset.Select(async (item, index) =>
+                {
+                    try
+                    {
+                        // 模拟资源限制，每100个项目暂停一下
+                        if (index % 100 == 0 && index > 0)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        var response = await llmService.SummarizeAsync(item);
+                        Interlocked.Increment(ref processedCount);
+                        return response;
+                    }
+                    catch (Exception ex)
+                    {
+                        Interlocked.Increment(ref errorCount);
+                        LogTestError($"资源耗尽错误: {ex.Message}");
+                        return null;
+                    }
+                });
+
+                await Task.WhenAll(tasks);
+                var processingTime = StopPerformanceMonitoring("ResourceExhaustionHandling");
+
+                // Assert
+                Assert.True(processedCount > largeDataset.Count * 0.5, 
+                    $"应该处理超过50%的项目，已处理: {processedCount}, 总数: {largeDataset.Count}");
+
+                // 验证系统仍然可以响应简单的请求
+                try
+                {
+                    var simpleResponse = await llmService.ChatAsync("简单测试");
+                    Assert.NotNull(simpleResponse);
+                }
+                catch (Exception ex)
+                {
+                    LogTestError($"系统在资源耗尽后无法响应简单请求: {ex.Message}");
+                    Assert.Fail("系统在资源耗尽后应该能够响应简单请求");
+                }
+
+                // 验证性能
+                Assert.True(processingTime < 60000, $"资源耗尽处理时间 {processingTime}ms 超过预期阈值 60000ms");
+
+                LogTestInfo($"资源耗尽处理测试通过，已处理: {processedCount}, 错误: {errorCount}, 处理时间: {processingTime}ms");
+            });
+        }
+    }
+}

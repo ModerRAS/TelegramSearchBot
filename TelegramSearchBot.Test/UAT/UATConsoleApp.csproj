@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <StartupObject>TelegramSearchBot.Test.UAT.UATConsoleApp</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\TelegramSearchBot.Domain\TelegramSearchBot.Domain.csproj" />
+    <ProjectReference Include="..\..\TelegramSearchBot.Data\TelegramSearchBot.Data.csproj" />
+    <ProjectReference Include="..\..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.7" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="*.cs" />
+    <Compile Include="UATConsoleApp.cs" />
+  </ItemGroup>
+
+</Project>

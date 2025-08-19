@@ -30,10 +30,10 @@ namespace TelegramSearchBot.Service.Storage {
 
         public virtual async Task AddOrUpdateAsync(MessageExtension extension) {
             var existing = await _context.MessageExtensions
-                .FirstOrDefaultAsync(x => x.MessageDataId == extension.MessageDataId && x.Name == extension.Name);
+                .FirstOrDefaultAsync(x => x.MessageDataId == extension.MessageDataId && x.ExtensionType == extension.ExtensionType);
             
             if (existing != null) {
-                existing.Value = extension.Value;
+                existing.ExtensionData = extension.ExtensionData;
                 _context.MessageExtensions.Update(existing);
             } else {
                 await _context.MessageExtensions.AddAsync(extension);
@@ -42,18 +42,18 @@ namespace TelegramSearchBot.Service.Storage {
             await _context.SaveChangesAsync();
         }
 
-        public virtual async Task AddOrUpdateAsync(long messageDataId, string name, string value) {
+        public virtual async Task AddOrUpdateAsync(long messageDataId, string extensionType, string extensionData) {
             var existing = await _context.MessageExtensions
-                .FirstOrDefaultAsync(x => x.MessageDataId == messageDataId && x.Name == name);
+                .FirstOrDefaultAsync(x => x.MessageDataId == messageDataId && x.ExtensionType == extensionType);
             
             if (existing != null) {
-                existing.Value = value;
+                existing.ExtensionData = extensionData;
                 _context.MessageExtensions.Update(existing);
             } else {
                 await _context.MessageExtensions.AddAsync(new MessageExtension {
                     MessageDataId = messageDataId,
-                    Name = name,
-                    Value = value
+                    ExtensionType = extensionType,
+                    ExtensionData = extensionData
                 });
             }
 

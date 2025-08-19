@@ -1,0 +1,217 @@
+{
+  "performanceBaselines": {
+    "messageRepository": {
+      "querySmallDataset": {
+        "mean": "< 1ms",
+        "allocated": "< 1KB",
+        "description": "小数据集查询 (100条消息)"
+      },
+      "queryMediumDataset": {
+        "mean": "< 5ms", 
+        "allocated": "< 5KB",
+        "description": "中等数据集查询 (1,000条消息)"
+      },
+      "queryLargeDataset": {
+        "mean": "< 50ms",
+        "allocated": "< 50KB", 
+        "description": "大数据集查询 (10,000条消息)"
+      },
+      "searchMediumDataset": {
+        "mean": "< 10ms",
+        "allocated": "< 10KB",
+        "description": "中等数据集关键词搜索"
+      },
+      "insertSingleMessage": {
+        "mean": "< 5ms",
+        "allocated": "< 2KB",
+        "description": "单条消息插入"
+      }
+    },
+    "messageProcessing": {
+      "processSingleMessage": {
+        "mean": "< 10ms",
+        "allocated": "< 5KB",
+        "description": "单条消息处理"
+      },
+      "processLongMessage": {
+        "mean": "< 50ms",
+        "allocated": "< 50KB",
+        "description": "长消息处理 (500词)"
+      },
+      "processSmallBatch": {
+        "mean": "< 100ms",
+        "allocated": "< 100KB",
+        "description": "小批量处理 (10条消息)"
+      },
+      "processMediumBatch": {
+        "mean": "< 1s",
+        "allocated": "< 1MB",
+        "description": "中批量处理 (100条消息)"
+      }
+    },
+    "luceneSearch": {
+      "simpleSearchSmallIndex": {
+        "mean": "< 5ms",
+        "allocated": "< 10KB",
+        "description": "小索引简单搜索 (1,000条文档)"
+      },
+      "simpleSearchMediumIndex": {
+        "mean": "< 20ms",
+        "allocated": "< 50KB",
+        "description": "中等索引简单搜索 (10,000条文档)"
+      },
+      "simpleSearchLargeIndex": {
+        "mean": "< 100ms",
+        "allocated": "< 200KB",
+        "description": "大索引简单搜索 (50,000条文档)"
+      },
+      "phraseSearch": {
+        "mean": "< 15ms",
+        "allocated": "< 20KB",
+        "description": "短语搜索"
+      },
+      "buildMediumIndex": {
+        "mean": "< 5s",
+        "allocated": "< 50MB",
+        "description": "构建中等索引 (10,000条文档)"
+      }
+    },
+    "vectorSearch": {
+      "generateSingleVector": {
+        "mean": "< 100ms",
+        "allocated": "< 1MB",
+        "description": "单个向量生成"
+      },
+      "searchSmallVectorIndex": {
+        "mean": "< 10ms",
+        "allocated": "< 50KB",
+        "description": "小规模向量搜索 (500个向量)"
+      },
+      "searchMediumVectorIndex": {
+        "mean": "< 50ms",
+        "allocated": "< 200KB",
+        "description": "中等规模向量搜索 (5,000个向量)"
+      },
+      "calculateCosineSimilarity": {
+        "mean": "< 0.1ms",
+        "allocated": "< 1KB",
+        "description": "余弦相似性计算 (1024维)"
+      },
+      "findTopKSimilar": {
+        "mean": "< 5ms",
+        "allocated": "< 100KB",
+        "description": "TopK相似性搜索 (5,000个向量)"
+      }
+    }
+  },
+  "performanceTargets": {
+    "responseTime": {
+      "critical": "< 100ms",
+      "acceptable": "< 1s",
+      "description": "用户交互响应时间目标"
+    },
+    "throughput": {
+      "messagesPerSecond": "> 100",
+      "searchesPerSecond": "> 50",
+      "description": "系统吞吐量目标"
+    },
+    "memory": {
+      "maxMemoryUsage": "< 1GB",
+      "memoryPerMessage": "< 10KB",
+      "description": "内存使用目标"
+    },
+    "scalability": {
+      "maxMessages": "> 1,000,000",
+      "maxIndexSize": "< 10GB",
+      "description": "可扩展性目标"
+    }
+  },
+  "testConfigurations": {
+    "messageRepository": {
+      "smallDatasetSize": 100,
+      "mediumDatasetSize": 1000,
+      "largeDatasetSize": 10000,
+      "randomSeed": 42,
+      "iterations": 10,
+      "warmupIterations": 3
+    },
+    "messageProcessing": {
+      "smallBatchSize": 10,
+      "mediumBatchSize": 100,
+      "largeBatchSize": 1000,
+      "longMessageWordCount": 500,
+      "randomSeed": 42,
+      "iterations": 10,
+      "warmupIterations": 3
+    },
+    "luceneSearch": {
+      "smallIndexSize": 1000,
+      "mediumIndexSize": 10000,
+      "largeIndexSize": 50000,
+      "randomSeed": 42,
+      "iterations": 5,
+      "warmupIterations": 2
+    },
+    "vectorSearch": {
+      "smallVectorCount": 500,
+      "mediumVectorCount": 5000,
+      "vectorDimension": 1024,
+      "topKResults": 10,
+      "randomSeed": 42,
+      "iterations": 5,
+      "warmupIterations": 2
+    }
+  },
+  "environmentRequirements": {
+    "dotnetVersion": "9.0",
+    "benchmarkDotNetVersion": "0.13.12",
+    "minMemory": "4GB",
+    "recommendedMemory": "8GB",
+    "diskSpace": "1GB",
+    "cpuCores": "4+"
+  },
+  "knownLimitations": {
+    "messageRepository": {
+      "description": "使用内存数据库模拟，实际性能可能因数据库类型而异",
+      "impact": "中等",
+      "mitigation": "在生产环境中使用真实数据库进行测试"
+    },
+    "messageProcessing": {
+      "description": "外部依赖服务使用模拟实现，网络延迟未计入",
+      "impact": "低",
+      "mitigation": "在集成测试中包含网络延迟测试"
+    },
+    "luceneSearch": {
+      "description": "索引存储在内存中，磁盘I/O性能未完全模拟",
+      "impact": "中等",
+      "mitigation": "在实际存储介质上进行测试"
+    },
+    "vectorSearch": {
+      "description": "向量生成使用模拟数据，未使用真实的LLM服务",
+      "impact": "高",
+      "mitigation": "使用真实的LLM服务进行集成测试"
+    }
+  },
+  "interpretationGuide": {
+    "metrics": {
+      "Mean": "平均执行时间，最重要的性能指标",
+      "StdDev": "标准差，反映性能稳定性",
+      "Allocated": "内存分配量，反映内存使用效率",
+      "Gen0/1/2": "垃圾回收代数，反映内存压力",
+      "OperationsPerSecond": "每秒操作数，反映吞吐量"
+    },
+    "thresholds": {
+      "excellent": "性能超过基线50%以上",
+      "good": "性能超过基线20%以上",
+      "acceptable": "性能达到基线标准",
+      "poor": "性能低于基线20%以上",
+      "critical": "性能低于基线50%以上"
+    },
+    "recommendations": {
+      "highMemoryUsage": "检查内存泄漏和优化算法",
+      "highStdDev": "检查系统稳定性和资源竞争",
+      "slowExecution": "检查算法复杂度和数据库查询",
+      "lowThroughput": "检查并发处理和资源利用率"
+    }
+  }
+}

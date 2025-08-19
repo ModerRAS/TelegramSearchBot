@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Test.AI.LLM
 {

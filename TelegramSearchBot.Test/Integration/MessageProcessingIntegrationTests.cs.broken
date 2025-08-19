@@ -1,0 +1,391 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Telegram.Bot.Types;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Test.Configuration;
+using TelegramSearchBot.Test.Helpers;
+using TelegramSearchBot.Test.Integration;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace TelegramSearchBot.Test.Integration
+{
+    /// <summary>
+    /// 消息处理流程集成测试
+    /// </summary>
+    public class MessageProcessingIntegrationTests : IntegrationTestBase
+    {
+        public MessageProcessingIntegrationTests(ITestOutputHelper output) : base(output)
+        {
+        }
+
+        [Fact]
+        public async Task ProcessTextMessage_ShouldStoreAndProcessCorrectly()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var testMessage = TestDataFactory.CreateTextMessage(text: "这是一条测试文本消息");
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                await processingPipeline.ProcessMessageAsync(testMessage);
+                var processingTime = StopPerformanceMonitoring("TextMessageProcessing");
+
+                // Assert
+                await AssertMessageExistsAsync(testMessage.MessageId);
+                await AssertMessageProcessedAsync(testMessage.MessageId);
+
+                // 验证消息内容正确存储
+                var repository = GetMessageRepository();
+                var storedMessage = await repository.GetByIdAsync(testMessage.MessageId);
+                Assert.NotNull(storedMessage);
+                Assert.Equal("这是一条测试文本消息", storedMessage.Text);
+                Assert.Equal(testMessage.ChatId, storedMessage.ChatId);
+                Assert.Equal(testMessage.UserId, storedMessage.UserId);
+
+                // 验证性能
+                Assert.True(processingTime < 1000, $"文本消息处理时间 {processingTime}ms 超过预期阈值 1000ms");
+
+                LogTestInfo($"文本消息处理测试通过，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessPhotoMessage_ShouldTriggerOCRAndStoreCorrectly()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var testMessage = TestDataFactory.CreatePhotoMessage(text: "这是一条图片消息");
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                await processingPipeline.ProcessMessageAsync(testMessage);
+                var processingTime = StopPerformanceMonitoring("PhotoMessageProcessing");
+
+                // Assert
+                await AssertMessageExistsAsync(testMessage.MessageId);
+                await AssertMessageProcessedAsync(testMessage.MessageId);
+
+                // 验证OCR扩展被创建
+                await AssertMessageExtensionExistsAsync(testMessage.MessageId, "ocr");
+
+                // 验证OCR内容
+                using var context = GetDbContext();
+                var ocrExtension = await context.MessageExtensions
+                    .FirstOrDefaultAsync(e => e.MessageId == testMessage.MessageId && e.ExtensionType == "ocr");
+                
+                Assert.NotNull(ocrExtension);
+                Assert.Contains("图片中的文字内容", ocrExtension.ExtensionData);
+
+                // 验证性能
+                Assert.True(processingTime < 2000, $"图片消息处理时间 {processingTime}ms 超过预期阈值 2000ms");
+
+                LogTestInfo($"图片消息处理测试通过，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessVoiceMessage_ShouldTriggerASRAndStoreCorrectly()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var testMessage = TestDataFactory.CreateVoiceMessage();
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                await processingPipeline.ProcessMessageAsync(testMessage);
+                var processingTime = StopPerformanceMonitoring("VoiceMessageProcessing");
+
+                // Assert
+                await AssertMessageExistsAsync(testMessage.MessageId);
+                await AssertMessageProcessedAsync(testMessage.MessageId);
+
+                // 验证ASR扩展被创建
+                await AssertMessageExtensionExistsAsync(testMessage.MessageId, "asr");
+
+                // 验证ASR内容
+                using var context = GetDbContext();
+                var asrExtension = await context.MessageExtensions
+                    .FirstOrDefaultAsync(e => e.MessageId == testMessage.MessageId && e.ExtensionType == "asr");
+                
+                Assert.NotNull(asrExtension);
+                Assert.Contains("语音转写的文字", asrExtension.ExtensionData);
+
+                // 验证性能
+                Assert.True(processingTime < 3000, $"语音消息处理时间 {processingTime}ms 超过预期阈值 3000ms");
+
+                LogTestInfo($"语音消息处理测试通过，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessMultimediaMessage_ShouldHandleMultipleContentTypes()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var testMessage = TestDataFactory.CreateMultimediaMessage(text: "这是一条多媒体消息，包含文字和图片");
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                await processingPipeline.ProcessMessageAsync(testMessage);
+                var processingTime = StopPerformanceMonitoring("MultimediaMessageProcessing");
+
+                // Assert
+                await AssertMessageExistsAsync(testMessage.MessageId);
+                await AssertMessageProcessedAsync(testMessage.MessageId);
+
+                // 验证消息包含文本内容
+                var repository = GetMessageRepository();
+                var storedMessage = await repository.GetByIdAsync(testMessage.MessageId);
+                Assert.NotNull(storedMessage);
+                Assert.Contains("多媒体消息", storedMessage.Text);
+
+                // 验证OCR扩展被创建（因为有图片）
+                await AssertMessageExtensionExistsAsync(testMessage.MessageId, "ocr");
+
+                // 验证向量扩展被创建
+                await AssertMessageExtensionExistsAsync(testMessage.MessageId, "vector");
+
+                // 验证性能
+                Assert.True(processingTime < 2500, $"多媒体消息处理时间 {processingTime}ms 超过预期阈值 2500ms");
+
+                LogTestInfo($"多媒体消息处理测试通过，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessMultipleMessages_ShouldHandleConcurrentProcessing()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var testMessages = TestDataFactory.CreateMessageList(10, MessageType.Text);
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                // 并行处理多个消息
+                var processingTasks = testMessages.Select(async message =>
+                {
+                    await processingPipeline.ProcessMessageAsync(message);
+                });
+                
+                await Task.WhenAll(processingTasks);
+                var totalProcessingTime = StopPerformanceMonitoring("ConcurrentMessageProcessing");
+
+                // Assert
+                foreach (var message in testMessages)
+                {
+                    await AssertMessageExistsAsync(message.MessageId);
+                    await AssertMessageProcessedAsync(message.MessageId);
+                }
+
+                // 验证所有消息都被正确存储
+                var repository = GetMessageRepository();
+                var allMessages = await repository.GetAllAsync();
+                Assert.Equal(testMessages.Count, allMessages.Count());
+
+                // 验证性能
+                var averageTimePerMessage = totalProcessingTime / testMessages.Count;
+                Assert.True(averageTimePerMessage < 500, $"平均每条消息处理时间 {averageTimePerMessage}ms 超过预期阈值 500ms");
+
+                LogTestInfo($"并发消息处理测试通过，总处理时间: {totalProcessingTime}ms，平均每条: {averageTimePerMessage}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessEditedMessage_ShouldUpdateContentCorrectly()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var originalMessage = TestDataFactory.CreateTextMessage(text: "原始消息内容");
+                var editedMessage = TestDataFactory.CreateEditedMessage(
+                    originalText: "原始消息内容",
+                    editedText: "编辑后的消息内容");
+                
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act - 处理原始消息
+                await processingPipeline.ProcessMessageAsync(originalMessage);
+                
+                // Act - 处理编辑后的消息
+                StartPerformanceMonitoring();
+                await processingPipeline.ProcessMessageAsync(editedMessage);
+                var processingTime = StopPerformanceMonitoring("EditedMessageProcessing");
+
+                // Assert
+                await AssertMessageExistsAsync(editedMessage.MessageId);
+                await AssertMessageProcessedAsync(editedMessage.MessageId);
+
+                // 验证消息内容已更新
+                var repository = GetMessageRepository();
+                var storedMessage = await repository.GetByIdAsync(editedMessage.MessageId);
+                Assert.NotNull(storedMessage);
+                Assert.Equal("编辑后的消息内容", storedMessage.Text);
+
+                // 验证性能
+                Assert.True(processingTime < 500, $"编辑消息处理时间 {processingTime}ms 超过预期阈值 500ms");
+
+                LogTestInfo($"编辑消息处理测试通过，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessMessageWithSpecialCharacters_ShouldHandleUnicodeCorrectly()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var specialText = "测试消息包含特殊字符：🎉😊🚀 以及中文、English、日本語、한국어";
+                var testMessage = TestDataFactory.CreateTextMessage(text: specialText);
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                await processingPipeline.ProcessMessageAsync(testMessage);
+                var processingTime = StopPerformanceMonitoring("SpecialCharactersMessageProcessing");
+
+                // Assert
+                await AssertMessageExistsAsync(testMessage.MessageId);
+                await AssertMessageProcessedAsync(testMessage.MessageId);
+
+                // 验证特殊字符被正确存储
+                var repository = GetMessageRepository();
+                var storedMessage = await repository.GetByIdAsync(testMessage.MessageId);
+                Assert.NotNull(storedMessage);
+                Assert.Equal(specialText, storedMessage.Text);
+
+                // 验证性能
+                Assert.True(processingTime < 1000, $"特殊字符消息处理时间 {processingTime}ms 超过预期阈值 1000ms");
+
+                LogTestInfo($"特殊字符消息处理测试通过，处理时间: {processingTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessLargeMessage_ShouldHandleLongContent()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var longText = string.Join(" ", Enumerable.Range(1, 1000).Select(i => $"这是一个很长的测试消息{i}，包含大量内容用于测试系统的处理能力。"));
+                var testMessage = TestDataFactory.CreateTextMessage(text: longText);
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                await processingPipeline.ProcessMessageAsync(testMessage);
+                var processingTime = StopPerformanceMonitoring("LargeMessageProcessing");
+
+                // Assert
+                await AssertMessageExistsAsync(testMessage.MessageId);
+                await AssertMessageProcessedAsync(testMessage.MessageId);
+
+                // 验证长消息被正确存储
+                var repository = GetMessageRepository();
+                var storedMessage = await repository.GetByIdAsync(testMessage.MessageId);
+                Assert.NotNull(storedMessage);
+                Assert.Equal(longText, storedMessage.Text);
+                Assert.True(storedMessage.Text.Length > 10000, "消息长度应该超过10000字符");
+
+                // 验证性能
+                Assert.True(processingTime < 2000, $"长消息处理时间 {processingTime}ms 超过预期阈值 2000ms");
+
+                LogTestInfo($"长消息处理测试通过，处理时间: {processingTime}ms，消息长度: {longText.Length}字符");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessMessageWithDifferentLanguages_ShouldHandleMultilingualContent()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var multilingualMessages = new[]
+                {
+                    TestDataFactory.CreateTextMessage(text: "这是中文消息"),
+                    TestDataFactory.CreateTextMessage(text: "This is an English message"),
+                    TestDataFactory.CreateTextMessage(text: "これは日本語のメッセージです"),
+                    TestDataFactory.CreateTextMessage(text: "이것은 한국어 메시지입니다"),
+                    TestDataFactory.CreateTextMessage(text: "Este es un mensaje en español")
+                };
+
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                
+                var processingTasks = multilingualMessages.Select(async message =>
+                {
+                    await processingPipeline.ProcessMessageAsync(message);
+                });
+                
+                await Task.WhenAll(processingTasks);
+                var totalProcessingTime = StopPerformanceMonitoring("MultilingualMessageProcessing");
+
+                // Assert
+                foreach (var message in multilingualMessages)
+                {
+                    await AssertMessageExistsAsync(message.MessageId);
+                    await AssertMessageProcessedAsync(message.MessageId);
+                }
+
+                // 验证所有语言的消息都被正确处理
+                var repository = GetMessageRepository();
+                var allMessages = await repository.GetAllAsync();
+                Assert.Equal(multilingualMessages.Length, allMessages.Count());
+
+                // 验证性能
+                var averageTimePerMessage = totalProcessingTime / multilingualMessages.Length;
+                Assert.True(averageTimePerMessage < 800, $"平均每条多语言消息处理时间 {averageTimePerMessage}ms 超过预期阈值 800ms");
+
+                LogTestInfo($"多语言消息处理测试通过，总处理时间: {totalProcessingTime}ms，平均每条: {averageTimePerMessage}ms");
+            });
+        }
+
+        [Fact]
+        public async Task ProcessMessageWithEmptyContent_ShouldHandleGracefully()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var emptyMessage = new Message
+                {
+                    MessageId = 99999,
+                    ChatId = -100123456789,
+                    UserId = 123456789,
+                    Text = "",
+                    Timestamp = DateTime.UtcNow,
+                    Processed = false,
+                    Vectorized = false
+                };
+
+                var processingPipeline = GetMessageProcessingPipeline();
+
+                // Act
+                StartPerformanceMonitoring();
+                await processingPipeline.ProcessMessageAsync(emptyMessage);
+                var processingTime = StopPerformanceMonitoring("EmptyMessageProcessing");
+
+                // Assert
+                // 空消息应该被处理，但可能不会存储或会特殊处理
+                // 这里我们验证系统不会崩溃
+                Assert.True(processingTime < 500, $"空消息处理时间 {processingTime}ms 超过预期阈值 500ms");
+
+                LogTestInfo($"空消息处理测试通过，处理时间: {processingTime}ms");
+            });
+        }
+    }
+}

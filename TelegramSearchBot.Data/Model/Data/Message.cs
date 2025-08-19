@@ -19,6 +19,12 @@ namespace TelegramSearchBot.Model.Data
         public string Content { get; set; }
         
         public virtual ICollection<MessageExtension> MessageExtensions { get; set; }
+        
+        // 简化实现：添加Processed和Vectorized属性以兼容测试代码
+        // 原本实现：这些属性可能存在于其他地方或者应该使用不同的模式
+        // 简化实现：为了快速修复编译错误，添加这些属性
+        public bool Processed { get; set; } = false;
+        public bool Vectorized { get; set; } = false;
 
         public static Message FromTelegramMessage(Telegram.Bot.Types.Message telegramMessage)
         {

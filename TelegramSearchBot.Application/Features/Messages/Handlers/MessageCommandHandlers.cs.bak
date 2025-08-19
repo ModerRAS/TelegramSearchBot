@@ -1,0 +1,133 @@
+using System.Threading;
+using System.Threading.Tasks;
+using MediatR;
+using TelegramSearchBot.Application.Abstractions;
+using TelegramSearchBot.Application.DTOs.Requests;
+using TelegramSearchBot.Application.DTOs.Responses;
+using TelegramSearchBot.Application.Exceptions;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Domain.Message.Repositories;
+using TelegramSearchBot.Domain.Message.ValueObjects;
+
+namespace TelegramSearchBot.Application.Features.Messages.Handlers
+{
+    /// <summary>
+    /// 创建消息命令处理器
+    /// </summary>
+    public class CreateMessageCommandHandler : TelegramSearchBot.Application.Abstractions.IRequestHandler<CreateMessageCommand, long>
+    {
+        private readonly IMessageRepository _messageRepository;
+        private readonly IMediator _mediator;
+
+        public CreateMessageCommandHandler(
+            IMessageRepository messageRepository,
+            IMediator mediator)
+        {
+            _messageRepository = messageRepository;
+            _mediator = mediator;
+        }
+
+        public async Task<long> Handle(CreateMessageCommand request, CancellationToken cancellationToken)
+        {
+            if (request.MessageDto == null)
+                throw new ValidationException(new[] { "Message data cannot be null" });
+
+            // 映射到领域实体
+            var message = new TelegramSearchBot.Model.Data.Message
+            {
+                GroupId = request.GroupId, // 使用命令中的GroupId
+                MessageId = request.MessageDto.MessageId,
+                FromUserId = request.MessageDto.FromUserId,
+                Content = request.MessageDto.Content,
+                DateTime = request.MessageDto.DateTime
+            };
+
+            // 保存到数据库
+            var messageId = await _messageRepository.AddMessageAsync(message);
+
+            // 发布领域事件
+            await _mediator.Publish(new MessageCreatedNotification(messageId), cancellationToken);
+
+            return messageId;
+        }
+    }
+
+    /// <summary>
+    /// 获取消息查询处理器
+    /// </summary>
+    public class GetMessageByIdQueryHandler : TelegramSearchBot.Application.Abstractions.IRequestHandler<GetMessageByIdQuery, MessageDto>
+    {
+        private readonly IMessageRepository _messageRepository;
+
+        public GetMessageByIdQueryHandler(IMessageRepository messageRepository)
+        {
+            _messageRepository = messageRepository;
+        }
+
+        public async Task<MessageDto> Handle(GetMessageByIdQuery request, CancellationToken cancellationToken)
+        {
+            // 使用查询中的GroupId
+            var message = await _messageRepository.GetMessageByIdAsync(request.GroupId, request.Id);
+            if (message == null)
+                throw new MessageNotFoundException(request.Id);
+
+            return new MessageDto
+            {
+                Id = message.Id,
+                GroupId = message.GroupId,
+                MessageId = message.MessageId,
+                FromUserId = message.FromUserId,
+                Content = message.Content,
+                DateTime = message.DateTime,
+                Extensions = new List<MessageExtensionDto>() // 简化实现：暂时不处理扩展数据
+            };
+        }
+    }
+
+    /// <summary>
+    /// 搜索消息查询处理器
+    /// </summary>
+    public class SearchMessagesQueryHandler : TelegramSearchBot.Application.Abstractions.IRequestHandler<SearchMessagesQuery, SearchResponseDto>
+    {
+        private readonly IMessageRepository _messageRepository;
+
+        public SearchMessagesQueryHandler(IMessageRepository messageRepository)
+        {
+            _messageRepository = messageRepository;
+        }
+
+        public async Task<SearchResponseDto> Handle(SearchMessagesQuery request, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(request.Query))
+                throw new ValidationException(new[] { "Search query cannot be empty" });
+
+            // 简化实现：使用现有的搜索方法
+            var messages = await _messageRepository.SearchMessagesAsync(
+                request.GroupId ?? 1, 
+                request.Query, 
+                request.Take);
+
+            return new SearchResponseDto
+            {
+                Messages = messages
+                    .Skip(request.Skip)
+                    .Take(request.Take)
+                    .Select(m => new MessageResponseDto
+                    {
+                        Id = m.Id,
+                        GroupId = m.GroupId,
+                        MessageId = m.MessageId,
+                        Content = m.Content,
+                        DateTime = m.DateTime,
+                        FromUser = new UserInfoDto { Id = m.FromUserId },
+                        Extensions = new List<MessageExtensionDto>() // 简化实现：暂时不处理扩展数据
+                    })
+                    .ToList(),
+                TotalCount = messages.Count(),
+                Skip = request.Skip,
+                Take = request.Take,
+                Query = request.Query
+            };
+        }
+    }
+}

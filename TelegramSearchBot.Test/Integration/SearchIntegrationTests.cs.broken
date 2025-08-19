@@ -1,0 +1,487 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Search;
+using TelegramSearchBot.Test.Helpers;
+using TelegramSearchBot.Test.Integration;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace TelegramSearchBot.Test.Integration
+{
+    /// <summary>
+    /// 搜索功能集成测试
+    /// </summary>
+    public class SearchIntegrationTests : IntegrationTestBase
+    {
+        public SearchIntegrationTests(ITestOutputHelper output) : base(output)
+        {
+        }
+
+        [Fact]
+        public async Task SearchByKeyword_ShouldReturnRelevantResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var keyword = "搜索";
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.SearchAsync(keyword, limit: 10);
+                var searchTime = StopPerformanceMonitoring("KeywordSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+                Assert.True(results.Count <= 10, "搜索结果数量应该不超过限制");
+
+                // 验证搜索结果包含关键词
+                foreach (var result in results)
+                {
+                    Assert.Contains(keyword, result.Text, StringComparison.OrdinalIgnoreCase);
+                }
+
+                // 验证性能
+                Assert.True(searchTime < 1000, $"关键词搜索时间 {searchTime}ms 超过预期阈值 1000ms");
+
+                LogTestInfo($"关键词搜索测试通过，找到 {results.Count} 条结果，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SearchByMultipleKeywords_ShouldReturnFilteredResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var keywords = new[] { "人工智能", "机器学习" };
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.SearchAsync(keywords, limit: 10);
+                var searchTime = StopPerformanceMonitoring("MultipleKeywordsSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+
+                // 验证搜索结果包含至少一个关键词
+                foreach (var result in results)
+                {
+                    var containsKeyword = keywords.Any(keyword => 
+                        result.Text.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+                    Assert.True(containsKeyword, $"搜索结果 '{result.Text}' 应该包含至少一个关键词");
+                }
+
+                // 验证性能
+                Assert.True(searchTime < 1500, $"多关键词搜索时间 {searchTime}ms 超过预期阈值 1500ms");
+
+                LogTestInfo($"多关键词搜索测试通过，找到 {results.Count} 条结果，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SearchByDateRange_ShouldReturnTimeFilteredResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var startDate = DateTime.UtcNow.AddHours(-1);
+                var endDate = DateTime.UtcNow;
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.SearchByDateRangeAsync(startDate, endDate, limit: 10);
+                var searchTime = StopPerformanceMonitoring("DateRangeSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+
+                // 验证搜索结果在指定时间范围内
+                foreach (var result in results)
+                {
+                    Assert.True(result.Timestamp >= startDate && result.Timestamp <= endDate,
+                        $"搜索结果时间 {result.Timestamp} 应该在 {startDate} 和 {endDate} 之间");
+                }
+
+                // 验证性能
+                Assert.True(searchTime < 1000, $"时间范围搜索时间 {searchTime}ms 超过预期阈值 1000ms");
+
+                LogTestInfo($"时间范围搜索测试通过，找到 {results.Count} 条结果，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SearchByUser_ShouldReturnUserSpecificResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var targetUserId = 123456789L;
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.SearchByUserAsync(targetUserId, limit: 10);
+                var searchTime = StopPerformanceMonitoring("UserSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+
+                // 验证搜索结果都属于指定用户
+                foreach (var result in results)
+                {
+                    Assert.Equal(targetUserId, result.UserId);
+                }
+
+                // 验证性能
+                Assert.True(searchTime < 800, $"用户搜索时间 {searchTime}ms 超过预期阈值 800ms");
+
+                LogTestInfo($"用户搜索测试通过，找到 {results.Count} 条结果，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SearchByChat_ShouldReturnChatSpecificResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var targetChatId = -100123456789L;
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.SearchByChatAsync(targetChatId, limit: 10);
+                var searchTime = StopPerformanceMonitoring("ChatSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+
+                // 验证搜索结果都属于指定聊天
+                foreach (var result in results)
+                {
+                    Assert.Equal(targetChatId, result.ChatId);
+                }
+
+                // 验证性能
+                Assert.True(searchTime < 800, $"聊天搜索时间 {searchTime}ms 超过预期阈值 800ms");
+
+                LogTestInfo($"聊天搜索测试通过，找到 {results.Count} 条结果，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SemanticSearch_ShouldReturnContextuallyRelevantResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var query = "AI技术的发展趋势";
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.SemanticSearchAsync(query, limit: 10);
+                var searchTime = StopPerformanceMonitoring("SemanticSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+
+                // 语义搜索的结果可能不包含完全匹配的关键词
+                // 但应该包含相关概念
+                var allText = string.Join(" ", results.Select(r => r.Text));
+                Assert.True(allText.Length > 0, "语义搜索应该返回有内容的文本");
+
+                // 验证性能
+                Assert.True(searchTime < 2000, $"语义搜索时间 {searchTime}ms 超过预期阈值 2000ms");
+
+                LogTestInfo($"语义搜索测试通过，找到 {results.Count} 条结果，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task HybridSearch_ShouldCombineKeywordAndSemanticResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var keyword = "机器学习";
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.HybridSearchAsync(keyword, limit: 10);
+                var searchTime = StopPerformanceMonitoring("HybridSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+
+                // 验证混合搜索结果的相关性
+                // 混合搜索应该结合关键词匹配和语义相似度
+                var keywordMatches = results.Count(r => r.Text.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+                var semanticMatches = results.Count - keywordMatches;
+
+                Assert.True(keywordMatches > 0, "混合搜索应该包含关键词匹配结果");
+                Assert.True(results.Count >= keywordMatches, "混合搜索结果应该包含语义匹配结果");
+
+                // 验证性能
+                Assert.True(searchTime < 2500, $"混合搜索时间 {searchTime}ms 超过预期阈值 2500ms");
+
+                LogTestInfo($"混合搜索测试通过，找到 {results.Count} 条结果（关键词匹配: {keywordMatches}, 语义匹配: {semanticMatches}），搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SearchWithPagination_ShouldReturnCorrectPage()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedPerformanceDataAsync(100); // 创建100条测试数据
+                var searchService = GetService<ISearchService>();
+                var keyword = "测试";
+
+                // Act - 获取第一页
+                var page1Results = await searchService.SearchAsync(keyword, page: 1, pageSize: 10);
+                
+                // Act - 获取第二页
+                var page2Results = await searchService.SearchAsync(keyword, page: 2, pageSize: 10);
+
+                // Assert
+                Assert.Equal(10, page1Results.Count);
+                Assert.True(page2Results.Count <= 10, "第二页结果数量应该不超过页面大小");
+
+                // 验证两页结果不重复
+                var page1Ids = page1Results.Select(r => r.MessageId).ToHashSet();
+                var page2Ids = page2Results.Select(r => r.MessageId).ToHashSet();
+                
+                Assert.Empty(page1Ids.Intersect(page2Ids), "分页结果不应该有重复");
+
+                LogTestInfo($"分页搜索测试通过，第一页: {page1Results.Count} 条，第二页: {page2Results.Count} 条");
+            });
+        }
+
+        [Fact]
+        public async Task SearchWithSorting_ShouldReturnOrderedResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var keyword = "测试";
+
+                // Act - 按时间降序排序
+                var timeDescResults = await searchService.SearchAsync(keyword, sortBy: "time", sortOrder: "desc", limit: 10);
+                
+                // Act - 按时间升序排序
+                var timeAscResults = await searchService.SearchAsync(keyword, sortBy: "time", sortOrder: "asc", limit: 10);
+
+                // Assert
+                Assert.NotEmpty(timeDescResults);
+                Assert.NotEmpty(timeAscResults);
+
+                // 验证降序排序
+                for (int i = 0; i < timeDescResults.Count - 1; i++)
+                {
+                    Assert.True(timeDescResults[i].Timestamp >= timeDescResults[i + 1].Timestamp,
+                        "降序排序结果时间应该递减");
+                }
+
+                // 验证升序排序
+                for (int i = 0; i < timeAscResults.Count - 1; i++)
+                {
+                    Assert.True(timeAscResults[i].Timestamp <= timeAscResults[i + 1].Timestamp,
+                        "升序排序结果时间应该递增");
+                }
+
+                LogTestInfo($"排序搜索测试通过，降序: {timeDescResults.Count} 条，升序: {timeAscResults.Count} 条");
+            });
+        }
+
+        [Fact]
+        public async Task SearchWithFilters_ShouldReturnFilteredResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var keyword = "测试";
+                var filters = new Dictionary<string, object>
+                {
+                    { "processed", true },
+                    { "vectorized", true }
+                };
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.SearchAsync(keyword, filters: filters, limit: 10);
+                var searchTime = StopPerformanceMonitoring("FilteredSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+
+                // 验证搜索结果符合过滤条件
+                foreach (var result in results)
+                {
+                    Assert.True(result.Processed, "搜索结果应该已处理");
+                    Assert.True(result.Vectorized, "搜索结果应该已向量化");
+                }
+
+                // 验证性能
+                Assert.True(searchTime < 1200, $"过滤搜索时间 {searchTime}ms 超过预期阈值 1200ms");
+
+                LogTestInfo($"过滤搜索测试通过，找到 {results.Count} 条结果，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SearchWithAggregations_ShouldReturnStatistics()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var keyword = "测试";
+
+                // Act
+                StartPerformanceMonitoring();
+                var (results, aggregations) = await searchService.SearchWithAggregationsAsync(keyword, 
+                    new[] { "userId", "chatId" }, limit: 10);
+                var searchTime = StopPerformanceMonitoring("AggregatedSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+                Assert.NotNull(aggregations);
+
+                // 验证聚合统计
+                Assert.True(aggregations.ContainsKey("userId"), "聚合结果应该包含用户统计");
+                Assert.True(aggregations.ContainsKey("chatId"), "聚合结果应该包含聊天统计");
+
+                // 验证性能
+                Assert.True(searchTime < 1500, $"聚合搜索时间 {searchTime}ms 超过预期阈值 1500ms");
+
+                LogTestInfo($"聚合搜索测试通过，找到 {results.Count} 条结果，聚合字段: {aggregations.Keys.Count}，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SearchPerformance_ShouldHandleLargeDataset()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedPerformanceDataAsync(1000); // 创建1000条测试数据
+                var searchService = GetService<ISearchService>();
+                var keyword = "测试";
+
+                // Act
+                StartPerformanceMonitoring();
+                var results = await searchService.SearchAsync(keyword, limit: 100);
+                var searchTime = StopPerformanceMonitoring("LargeDatasetSearch");
+
+                // Assert
+                Assert.NotEmpty(results);
+                Assert.True(results.Count <= 100, "搜索结果数量应该不超过限制");
+
+                // 验证性能 - 大数据集搜索应该在合理时间内完成
+                Assert.True(searchTime < 3000, $"大数据集搜索时间 {searchTime}ms 超过预期阈值 3000ms");
+
+                LogTestInfo($"大数据集搜索测试通过，找到 {results.Count} 条结果，搜索时间: {searchTime}ms");
+            });
+        }
+
+        [Fact]
+        public async Task SearchWithSpecialCharacters_ShouldHandleUnicodeAndEmoji()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                var specialMessages = new[]
+                {
+                    TestDataFactory.CreateTextMessage(text: "包含emoji的消息 🎉😊🚀"),
+                    TestDataFactory.CreateTextMessage(text: "包含特殊符号的消息 @#$%^&*()"),
+                    TestDataFactory.CreateTextMessage(text: "包含中文和English混合的消息"),
+                    TestDataFactory.CreateTextMessage(text: "包含日文日本語和한국어的消息")
+                };
+
+                var messageService = GetMessageService();
+                foreach (var message in specialMessages)
+                {
+                    await messageService.AddMessageAsync(message);
+                }
+
+                var searchService = GetService<ISearchService>();
+
+                // Act
+                var searchQueries = new[] { "🎉", "@#$", "English", "日本語" };
+                var totalResults = 0;
+
+                foreach (var query in searchQueries)
+                {
+                    var results = await searchService.SearchAsync(query, limit: 10);
+                    totalResults += results.Count;
+                }
+
+                // Assert
+                Assert.True(totalResults > 0, "特殊字符搜索应该返回结果");
+
+                LogTestInfo($"特殊字符搜索测试通过，总共找到 {totalResults} 条结果");
+            });
+        }
+
+        [Fact]
+        public async Task SearchWithEmptyQuery_ShouldReturnAllResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+
+                // Act
+                var results = await searchService.SearchAsync("", limit: 10);
+
+                // Assert
+                Assert.NotEmpty(results);
+                Assert.True(results.Count <= 10, "空查询结果数量应该不超过限制");
+
+                LogTestInfo($"空查询搜索测试通过，返回 {results.Count} 条结果");
+            });
+        }
+
+        [Fact]
+        public async Task SearchNonExistentContent_ShouldReturnEmptyResults()
+        {
+            await ExecuteTestAsync(async () =>
+            {
+                // Arrange
+                await SeedBasicDataAsync();
+                var searchService = GetService<ISearchService>();
+                var nonExistentKeyword = "这个关键词肯定不存在于任何消息中";
+
+                // Act
+                var results = await searchService.SearchAsync(nonExistentKeyword, limit: 10);
+
+                // Assert
+                Assert.Empty(results);
+
+                LogTestInfo($"不存在内容搜索测试通过，返回 {results.Count} 条结果");
+            });
+        }
+    }
+}

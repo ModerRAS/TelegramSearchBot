@@ -1,0 +1,203 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Telegram.Bot;
+using Telegram.Bot.Types;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.AI.ASR;
+using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Test.Configuration;
+using TelegramSearchBot.Test.Helpers;
+using Xunit;
+using Xunit.Abstractions;
+using MessageEntity = TelegramSearchBot.Model.Data.Message;
+
+namespace TelegramSearchBot.Test.Integration
+{
+    /// <summary>
+    /// 简化版本的集成测试，专注于核心功能验证
+    /// </summary>
+    public class SimpleIntegrationTests : IDisposable
+    {
+        private readonly ITestOutputHelper _output;
+        private readonly ServiceProvider _serviceProvider;
+        private readonly ILogger<SimpleIntegrationTests> _logger;
+
+        public SimpleIntegrationTests(ITestOutputHelper output)
+        {
+            _output = output;
+            
+            // 创建服务集合
+            var services = new ServiceCollection();
+            
+            // 添加数据库服务
+            services.AddDbContext<DataDbContext>(options =>
+                options.UseInMemoryDatabase($"SimpleTestDb_{Guid.NewGuid()}"));
+
+            // 注册Mock的AI服务
+            services.AddScoped<IGeneralLLMService, MockGeneralLLMService>();
+            services.AddScoped<MockProcessPhotoService>();
+            services.AddScoped<IWhisperManager, MockWhisperManager>();
+
+            // 注册Mock的Telegram Bot客户端
+            services.AddScoped<ITelegramBotClient, MockTelegramBotClient>();
+
+            // 注册日志服务
+            services.AddLogging(builder =>
+            {
+                builder.AddConsole();
+                builder.AddDebug();
+                builder.SetMinimumLevel(LogLevel.Information);
+            });
+
+            // 注册领域服务
+            services.AddScoped<IMessageRepository, MessageRepository>();
+            services.AddScoped<IMessageService, MessageService>();
+            services.AddScoped<IMessageProcessingPipeline, MessageProcessingPipeline>();
+
+            // 构建服务提供者
+            _serviceProvider = services.BuildServiceProvider();
+            _logger = _serviceProvider.GetRequiredService<ILogger<SimpleIntegrationTests>>();
+
+            // 初始化数据库
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+            dbContext.Database.EnsureCreated();
+
+            _output.WriteLine($"[Test Setup] SimpleIntegrationTests initialized at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
+        }
+
+        [Fact]
+        public async Task MessageRepository_AddAndGetMessage_ShouldWork()
+        {
+            // Arrange
+            var repository = _serviceProvider.GetRequiredService<IMessageRepository>();
+            var testMessage = TestDataFactory.CreateTextMessage(1, "测试消息");
+            
+            // Act
+            var addedMessage = await repository.AddAsync(testMessage);
+            var retrievedMessage = await repository.GetByIdAsync(1);
+            
+            // Assert
+            Assert.NotNull(addedMessage);
+            Assert.NotNull(retrievedMessage);
+            Assert.Equal(1, retrievedMessage.MessageId);
+            Assert.Equal("测试消息", retrievedMessage.Content);
+            
+            _output.WriteLine($"[Test] MessageRepository test passed");
+        }
+
+        [Fact]
+        public async Task MessageService_ProcessMessage_ShouldWork()
+        {
+            // Arrange
+            var messageService = _serviceProvider.GetRequiredService<IMessageService>();
+            var testMessage = TestDataFactory.CreateTextMessage(2, "需要处理的消息");
+            
+            // Act
+            var processedMessage = await messageService.ProcessMessageAsync(testMessage);
+            
+            // Assert
+            Assert.NotNull(processedMessage);
+            Assert.Equal(2, processedMessage.MessageId);
+            Assert.Equal("需要处理的消息", processedMessage.Content);
+            
+            _output.WriteLine($"[Test] MessageService test passed");
+        }
+
+        [Fact]
+        public async Task LLMService_GenerateEmbeddings_ShouldWork()
+        {
+            // Arrange
+            var llmService = _serviceProvider.GetRequiredService<IGeneralLLMService>();
+            var testText = "这是一个测试文本";
+            
+            // Act
+            var embeddings = await llmService.GenerateEmbeddingsAsync(testText);
+            
+            // Assert
+            Assert.NotNull(embeddings);
+            Assert.Equal(768, embeddings.Length);
+            Assert.All(embeddings, e => Assert.Equal(0.1f, e));
+            
+            _output.WriteLine($"[Test] LLMService embeddings test passed");
+        }
+
+        [Fact]
+        public async Task TelegramBotClient_SendMessage_ShouldWork()
+        {
+            // Arrange
+            var botClient = _serviceProvider.GetRequiredService<ITelegramBotClient>();
+            var chatId = 123456789;
+            var message = "测试消息";
+            
+            // Act
+            var result = await botClient.SendTextMessageAsync(chatId, message);
+            
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(chatId, result.Chat.Id);
+            Assert.Equal(message, result.Text);
+            Assert.Equal(999, result.MessageId);
+            
+            _output.WriteLine($"[Test] TelegramBotClient test passed");
+        }
+
+        [Fact]
+        public async Task TestDataFactory_CreateMessageList_ShouldWork()
+        {
+            // Arrange & Act
+            var messages = TestDataFactory.CreateMessageList(5);
+            
+            // Assert
+            Assert.NotNull(messages);
+            Assert.Equal(5, messages.Count);
+            Assert.All(messages, m => Assert.True(m.MessageId > 0));
+            Assert.All(messages, m => Assert.False(string.IsNullOrEmpty(m.Content)));
+            
+            _output.WriteLine($"[Test] TestDataFactory test passed - created {messages.Count} messages");
+        }
+
+        [Fact]
+        public async Task FullMessageProcessingPipeline_ShouldWork()
+        {
+            // Arrange
+            var repository = _serviceProvider.GetRequiredService<IMessageRepository>();
+            var messageService = _serviceProvider.GetRequiredService<IMessageService>();
+            var llmService = _serviceProvider.GetRequiredService<IGeneralLLMService>();
+            
+            var testMessage = TestDataFactory.CreateTextMessage(100, "完整的处理流程测试消息");
+            
+            // Act
+            // 1. 添加消息到数据库
+            var addedMessage = await repository.AddAsync(testMessage);
+            
+            // 2. 处理消息
+            var processedMessage = await messageService.ProcessMessageAsync(addedMessage);
+            
+            // 3. 生成向量
+            var embeddings = await llmService.GenerateEmbeddingsAsync(processedMessage.Content);
+            
+            // Assert
+            Assert.NotNull(addedMessage);
+            Assert.NotNull(processedMessage);
+            Assert.NotNull(embeddings);
+            Assert.Equal(100, processedMessage.MessageId);
+            Assert.Equal("完整的处理流程测试消息", processedMessage.Content);
+            Assert.Equal(768, embeddings.Length);
+            
+            _output.WriteLine($"[Test] Full pipeline test passed - MessageId: {processedMessage.MessageId}");
+        }
+
+        public void Dispose()
+        {
+            _serviceProvider?.Dispose();
+            _output.WriteLine($"[Test Cleanup] SimpleIntegrationTests disposed");
+        }
+    }
+}

@@ -97,9 +97,9 @@ namespace TelegramSearchBot.Controller.AI.OCR {
 
                     if (originalMessageId.HasValue) {
                         var extensions = await MessageExtensionService.GetByMessageDataIdAsync(originalMessageId.Value);
-                        var ocrExtension = extensions.FirstOrDefault(x => x.Name == "OCR_Result");
+                        var ocrExtension = extensions.FirstOrDefault(x => x.ExtensionType == "OCR_Result");
                         if (ocrExtension != null) {
-                            ocrResult = ocrExtension.Value;
+                            ocrResult = ocrExtension.ExtensionData;
                         }
                     }
                 }

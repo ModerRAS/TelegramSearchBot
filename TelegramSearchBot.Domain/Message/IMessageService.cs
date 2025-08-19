@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Model;
 
 namespace TelegramSearchBot.Domain.Message
 {
@@ -20,13 +21,20 @@ namespace TelegramSearchBot.Domain.Message
         Task<long> ProcessMessageAsync(MessageOption messageOption);
 
         /// <summary>
+        /// 执行消息处理（别名方法，为了兼容性）
+        /// </summary>
+        /// <param name="messageOption">消息选项</param>
+        /// <returns>处理后的消息ID</returns>
+        Task<long> ExecuteAsync(MessageOption messageOption);
+
+        /// <summary>
         /// 获取群组中的消息列表
         /// </summary>
         /// <param name="groupId">群组ID</param>
         /// <param name="page">页码</param>
         /// <param name="pageSize">页面大小</param>
         /// <returns>消息列表</returns>
-        Task<IEnumerable<Message>> GetGroupMessagesAsync(long groupId, int page = 1, int pageSize = 50);
+        Task<IEnumerable<TelegramSearchBot.Model.Data.Message>> GetGroupMessagesAsync(long groupId, int page = 1, int pageSize = 50);
 
         /// <summary>
         /// 搜索消息
@@ -36,7 +44,7 @@ namespace TelegramSearchBot.Domain.Message
         /// <param name="page">页码</param>
         /// <param name="pageSize">页面大小</param>
         /// <returns>搜索结果</returns>
-        Task<IEnumerable<Message>> SearchMessagesAsync(long groupId, string keyword, int page = 1, int pageSize = 50);
+        Task<IEnumerable<TelegramSearchBot.Model.Data.Message>> SearchMessagesAsync(long groupId, string keyword, int page = 1, int pageSize = 50);
 
         /// <summary>
         /// 获取用户消息
@@ -46,7 +54,7 @@ namespace TelegramSearchBot.Domain.Message
         /// <param name="page">页码</param>
         /// <param name="pageSize">页面大小</param>
         /// <returns>用户消息列表</returns>
-        Task<IEnumerable<Message>> GetUserMessagesAsync(long groupId, long userId, int page = 1, int pageSize = 50);
+        Task<IEnumerable<TelegramSearchBot.Model.Data.Message>> GetUserMessagesAsync(long groupId, long userId, int page = 1, int pageSize = 50);
 
         /// <summary>
         /// 删除消息
@@ -64,5 +72,19 @@ namespace TelegramSearchBot.Domain.Message
         /// <param name="newContent">新内容</param>
         /// <returns>更新是否成功</returns>
         Task<bool> UpdateMessageAsync(long groupId, long messageId, string newContent);
+
+        /// <summary>
+        /// 将消息添加到Lucene搜索索引（简化实现）
+        /// </summary>
+        /// <param name="messageOption">消息选项</param>
+        /// <returns>添加是否成功</returns>
+        Task<bool> AddToLucene(MessageOption messageOption);
+
+        /// <summary>
+        /// 将消息添加到SQLite数据库（简化实现）
+        /// </summary>
+        /// <param name="messageOption">消息选项</param>
+        /// <returns>添加是否成功</returns>
+        Task<bool> AddToSqlite(MessageOption messageOption);
     }
 }

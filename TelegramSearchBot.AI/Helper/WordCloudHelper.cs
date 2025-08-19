@@ -69,7 +69,17 @@ namespace TelegramSearchBot.Helper
                         {
                             if (word.Length > 1) // 过滤单字
                             {
-                                wordFrequencies[word] = wordFrequencies.GetValueOrDefault(word, 0) + 1;
+                                // 简化实现：使用TryGetValue避免潜在的空引用问题
+                                // 原本实现：使用wordFrequencies.GetValueOrDefault(word, 0) + 1
+                                // 简化实现：使用更安全的字典访问方式
+                                if (wordFrequencies.TryGetValue(word, out var count))
+                                {
+                                    wordFrequencies[word] = count + 1;
+                                }
+                                else
+                                {
+                                    wordFrequencies[word] = 1;
+                                }
                             }
                         }
                     }
@@ -79,7 +89,17 @@ namespace TelegramSearchBot.Helper
                         // 分词失败时直接使用原文
                         if (text.Length > 1)
                         {
-                            wordFrequencies[text] = wordFrequencies.GetValueOrDefault(text, 0) + 1;
+                            // 简化实现：使用TryGetValue避免潜在的空引用问题
+                            // 原本实现：使用wordFrequencies.GetValueOrDefault(text, 0) + 1
+                            // 简化实现：使用更安全的字典访问方式
+                            if (wordFrequencies.TryGetValue(text, out var count))
+                            {
+                                wordFrequencies[text] = count + 1;
+                            }
+                            else
+                            {
+                                wordFrequencies[text] = 1;
+                            }
                         }
                     }
                 }
@@ -98,7 +118,17 @@ namespace TelegramSearchBot.Helper
                     {
                         if (word.Length > 1) // 过滤单字
                         {
-                            wordFrequencies[word] = wordFrequencies.GetValueOrDefault(word, 0) + 1;
+                            // 简化实现：使用TryGetValue避免潜在的空引用问题
+                            // 原本实现：使用wordFrequencies.GetValueOrDefault(word, 0) + 1
+                            // 简化实现：使用更安全的字典访问方式
+                            if (wordFrequencies.TryGetValue(word, out var count))
+                            {
+                                wordFrequencies[word] = count + 1;
+                            }
+                            else
+                            {
+                                wordFrequencies[word] = 1;
+                            }
                         }
                     }
                 }

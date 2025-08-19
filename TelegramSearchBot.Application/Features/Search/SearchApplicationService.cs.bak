@@ -1,0 +1,184 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using MediatR;
+using TelegramSearchBot.Application.Abstractions;
+using TelegramSearchBot.Application.DTOs.Requests;
+using TelegramSearchBot.Application.DTOs.Responses;
+using TelegramSearchBot.Application.Exceptions;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Domain.Message.Repositories;
+using TelegramSearchBot.Domain.Message.ValueObjects;
+
+namespace TelegramSearchBot.Application.Features.Search
+{
+    /// <summary>
+    /// 搜索应用服务实现
+    /// </summary>
+    public class SearchApplicationService : ISearchApplicationService
+    {
+        private readonly IMessageRepository _messageRepository;
+        private readonly IMediator _mediator;
+
+        public SearchApplicationService(
+            IMessageRepository messageRepository,
+            IMediator mediator)
+        {
+            _messageRepository = messageRepository;
+            _mediator = mediator;
+        }
+
+        /// <summary>
+        /// 执行搜索
+        /// </summary>
+        /// <param name="query">搜索查询</param>
+        /// <returns>搜索结果</returns>
+        public async Task<SearchResponseDto> SearchAsync(SearchQuery query)
+        {
+            if (string.IsNullOrWhiteSpace(query.Query))
+                throw new ValidationException(new[] { "Search query cannot be empty" });
+
+            // 简化实现：使用现有的仓储搜索方法
+            var messages = await _messageRepository.SearchMessagesAsync(
+                query.GroupId ?? 1, 
+                query.Query, 
+                query.Take);
+
+            return new SearchResponseDto
+            {
+                Messages = messages
+                    .Skip(query.Skip)
+                    .Take(query.Take)
+                    .Select(MapToMessageResponseDto)
+                    .ToList(),
+                TotalCount = messages.Count(),
+                Skip = query.Skip,
+                Take = query.Take,
+                Query = query.Query
+            };
+        }
+
+        /// <summary>
+        /// 高级搜索
+        /// </summary>
+        /// <param name="query">高级搜索查询</param>
+        /// <returns>搜索结果</returns>
+        public async Task<SearchResponseDto> AdvancedSearchAsync(AdvancedSearchQuery query)
+        {
+            if (string.IsNullOrWhiteSpace(query.Query))
+                throw new ValidationException(new[] { "Search query cannot be empty" });
+
+            // 简化实现：暂时使用基础搜索，后续可以集成Lucene.NET
+            var messages = await _messageRepository.SearchMessagesAsync(
+                query.GroupId ?? 1, 
+                query.Query, 
+                query.Take);
+
+            // 简化实现：按日期过滤
+            if (query.StartDate.HasValue)
+            {
+                messages = messages.Where(m => m.DateTime >= query.StartDate.Value);
+            }
+
+            if (query.EndDate.HasValue)
+            {
+                messages = messages.Where(m => m.DateTime <= query.EndDate.Value);
+            }
+
+            if (query.UserId.HasValue)
+            {
+                messages = messages.Where(m => m.FromUserId == query.UserId.Value);
+            }
+
+            return new SearchResponseDto
+            {
+                Messages = messages
+                    .Skip(query.Skip)
+                    .Take(query.Take)
+                    .Select(MapToMessageResponseDto)
+                    .ToList(),
+                TotalCount = messages.Count(),
+                Skip = query.Skip,
+                Take = query.Take,
+                Query = query.Query
+            };
+        }
+
+        /// <summary>
+        /// 获取搜索建议
+        /// </summary>
+        /// <param name="query">搜索建议查询</param>
+        /// <returns>搜索建议</returns>
+        public async Task<SearchSuggestionResponseDto> GetSuggestionsAsync(SearchSuggestionQuery query)
+        {
+            // 简化实现：返回空建议，后续可以实现搜索历史、热门搜索等功能
+            return new SearchSuggestionResponseDto
+            {
+                Query = query.Query,
+                Suggestions = new List<string>(),
+                RecentSearches = new List<string>()
+            };
+        }
+
+        // 私有映射方法
+        private MessageResponseDto MapToMessageResponseDto(TelegramSearchBot.Model.Data.Message message)
+        {
+            return new MessageResponseDto
+            {
+                Id = message.Id,
+                GroupId = message.GroupId,
+                MessageId = message.MessageId,
+                Content = message.Content,
+                DateTime = message.DateTime,
+                FromUser = new UserInfoDto
+                {
+                    Id = message.FromUserId,
+                    // 简化实现：暂时不处理用户详细信息
+                },
+                Extensions = new List<MessageExtensionDto>() // 简化实现：暂时不处理扩展数据
+            };
+        }
+    }
+
+    /// <summary>
+    /// 搜索应用服务接口
+    /// </summary>
+    public interface ISearchApplicationService : IApplicationService
+    {
+        Task<SearchResponseDto> SearchAsync(SearchQuery query);
+        Task<SearchResponseDto> AdvancedSearchAsync(AdvancedSearchQuery query);
+        Task<SearchSuggestionResponseDto> GetSuggestionsAsync(SearchSuggestionQuery query);
+    }
+
+    /// <summary>
+    /// 搜索查询
+    /// </summary>
+    public record SearchQuery(string Query, long? GroupId = null, int Skip = 0, int Take = 20) : IRequest<SearchResponseDto>;
+
+    /// <summary>
+    /// 高级搜索查询
+    /// </summary>
+    public record AdvancedSearchQuery(
+        string Query, 
+        long? GroupId = null, 
+        long? UserId = null,
+        System.DateTime? StartDate = null,
+        System.DateTime? EndDate = null,
+        int Skip = 0, 
+        int Take = 20) : IRequest<SearchResponseDto>;
+
+    /// <summary>
+    /// 搜索建议查询
+    /// </summary>
+    public record SearchSuggestionQuery(string Query, long? GroupId = null) : IRequest<SearchSuggestionResponseDto>;
+
+    /// <summary>
+    /// 搜索建议响应
+    /// </summary>
+    public class SearchSuggestionResponseDto
+    {
+        public string Query { get; set; }
+        public IEnumerable<string> Suggestions { get; set; } = new List<string>();
+        public IEnumerable<string> RecentSearches { get; set; } = new List<string>();
+    }
+}

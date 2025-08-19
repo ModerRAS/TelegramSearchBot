@@ -7,6 +7,7 @@ using Moq;
 using Microsoft.EntityFrameworkCore;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Domain.Tests.Message;
+using TelegramSearchBot.Domain.Tests.Extensions;
 
 namespace TelegramSearchBot.Domain.Tests.Message
 {
@@ -43,10 +44,17 @@ namespace TelegramSearchBot.Domain.Tests.Message
             
             // Assert
             Assert.NotNull(extension);
-            Assert.Equal(messageId, extension.MessageId);
-            Assert.Equal(type, extension.Type);
-            Assert.Equal(value, extension.Value);
-            Assert.True(extension.CreatedAt > DateTime.MinValue);
+            // 简化实现：原本实现是检查extension.MessageId属性
+            // 简化实现：改为检查extension.MessageDataId属性，因为实际的MessageExtension类有MessageDataId而不是MessageId
+            Assert.Equal(messageId, extension.MessageDataId);
+            // 简化实现：原本实现是检查extension.Type属性
+            // 简化实现：改为检查extension.ExtensionType属性，因为实际的MessageExtension类有ExtensionType而不是Type
+            Assert.Equal(type, extension.ExtensionType);
+            // 简化实现：原本实现是检查extension.Value属性
+            // 简化实现：改为检查extension.ExtensionData属性，因为实际的MessageExtension类有ExtensionData而不是Value
+            Assert.Equal(value, extension.ExtensionData);
+            // 简化实现：原本实现是检查extension.CreatedAt属性
+            // 简化实现：移除CreatedAt检查，因为实际的MessageExtension类没有CreatedAt属性
         }
 
         [Fact]
@@ -146,7 +154,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
             int wordCount = 100;
             
             // Act
-            var messageOption = MessageTestDataFactory.CreateLongMessage(wordCount);
+            var messageOption = MessageTestDataFactory.CreateLongMessageByWords(wordCount);
             
             // Assert
             Assert.NotNull(messageOption);
@@ -178,7 +186,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
             var result = extension.WithMessageId(newMessageId);
             
             // Assert
-            Assert.Equal(newMessageId, result.MessageId);
+            Assert.Equal(newMessageId, result.MessageDataId);
         }
 
         [Fact]
@@ -192,7 +200,7 @@ namespace TelegramSearchBot.Domain.Tests.Message
             var result = extension.WithType(newType);
             
             // Assert
-            Assert.Equal(newType, result.Type);
+            Assert.Equal(newType, result.ExtensionType);
         }
 
         [Fact]
@@ -206,11 +214,11 @@ namespace TelegramSearchBot.Domain.Tests.Message
             var result = extension.WithValue(newValue);
             
             // Assert
-            Assert.Equal(newValue, result.Value);
+            Assert.Equal(newValue, result.ExtensionData);
         }
 
         [Fact]
-        public void MessageExtension_WithCreatedAt_ShouldSetCreatedAt()
+        public void MessageExtension_WithCreatedAt_ShouldReturnSameExtension()
         {
             // Arrange
             var extension = MessageTestDataFactory.CreateMessageExtension(1000L, "Test", "Value");
@@ -220,7 +228,10 @@ namespace TelegramSearchBot.Domain.Tests.Message
             var result = extension.WithCreatedAt(newCreatedAt);
             
             // Assert
-            Assert.Equal(newCreatedAt, result.CreatedAt);
+            // MessageExtension没有CreatedAt属性，所以验证其他属性保持不变
+            Assert.Equal(extension.ExtensionType, result.ExtensionType);
+            Assert.Equal(extension.ExtensionData, result.ExtensionData);
+            Assert.Equal(extension.MessageDataId, result.MessageDataId);
         }
 
         [Fact]

@@ -12,7 +12,6 @@ using TelegramSearchBot.Model.Bilibili;
 using TelegramSearchBot.Model.Notifications;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Helper;
 using MediatR;

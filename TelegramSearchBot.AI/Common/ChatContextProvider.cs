@@ -20,7 +20,10 @@ namespace TelegramSearchBot.Service.Common
             {
                 throw new InvalidOperationException("ChatId not found in the current context. Ensure SetCurrentChatId was called.");
             }
-            return chatId.GetValueOrDefault();
+            // 简化实现：使用空值合并运算符避免潜在的空引用问题
+            // 原本实现：使用chatId.GetValueOrDefault()
+            // 简化实现：使用更安全的空值处理方式
+            return chatId ?? 0;
         }
 
         public static void Clear()

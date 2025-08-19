@@ -16,6 +16,7 @@ using System.Threading;
 using TelegramSearchBot.Model.Notifications;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Storage;
@@ -34,7 +35,7 @@ namespace TelegramSearchBot.Test.Service.Storage
         private Mock<ILogger<MessageService>>? _mockLogger;
         private Mock<ITelegramBotClient>? _mockTelegramBotClient; // Added
         private Mock<SendMessage>? _mockSendMessage;
-        private Mock<LuceneManager>? _mockLuceneManager;
+        private Mock<ILuceneManager>? _mockLuceneManager;
         private Mock<IMediator>? _mockMediator;
         private DataDbContext? _context; // Used for assertions
 
@@ -65,7 +66,10 @@ namespace TelegramSearchBot.Test.Service.Storage
             // Note: Since LuceneManager.WriteDocumentAsync is not virtual, we cannot Verify its call on the mock.
             // We are essentially testing with a real (but potentially non-functional if dependencies are shallow mocked) LuceneManager.
             // For true unit testing of MessageService, ILuceneManager would be preferred.
-            _mockLuceneManager = new Mock<LuceneManager>(_mockSendMessage.Object);
+            // 简化实现：直接 Mock ILuceneManager 接口
+            // 原本实现：使用 LuceneManager 具体类
+            // 简化实现：由于接口类型问题，直接 Mock 接口
+            _mockLuceneManager = new Mock<ILuceneManager>();
             _mockMediator = new Mock<IMediator>();
 
             // Create mocks for all LLM services

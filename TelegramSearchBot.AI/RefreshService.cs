@@ -2,7 +2,6 @@
 using System.Linq;
 using System.Threading.Tasks;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Manager;
 using System.IO;
 using Newtonsoft.Json;
 using TelegramSearchBot.Model;
@@ -43,7 +42,7 @@ namespace TelegramSearchBot.Service.Manage
         private readonly ConversationSegmentationService _conversationSegmentationService;
 
         public RefreshService(ILogger<RefreshService> logger,
-                            LuceneManager lucene,
+                            ILuceneManager lucene,
                             ISendMessageService Send,
                             DataDbContext context,
                             ChatImportService chatImport,
@@ -129,7 +128,7 @@ namespace TelegramSearchBot.Service.Manage
                         if (messageDataId.HasValue)
                         {
                             var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
-                            if (!extensions.Any(x => x.Name == "ASR_Result"))
+                            if (!extensions.Any(x => x.ExtensionType == "ASR_Result"))
                             {
                                 try
                                 {
@@ -183,7 +182,7 @@ namespace TelegramSearchBot.Service.Manage
                             var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
 
                             // 处理OCR
-                            if (!extensions.Any(x => x.Name == "OCR_Result")) {
+                            if (!extensions.Any(x => x.ExtensionType == "OCR_Result")) {
                                 try {
                                     var ocrResult = await _paddleOCRService.ExecuteAsync(new MemoryStream(await File.ReadAllBytesAsync(imageFile)));
                                     await _messageExtensionService.AddOrUpdateAsync(messageDataId.Value, "OCR_Result", ocrResult);
@@ -193,7 +192,7 @@ namespace TelegramSearchBot.Service.Manage
                             }
 
                             // 处理QR码
-                            if (!extensions.Any(x => x.Name == "QR_Result")) {
+                            if (!extensions.Any(x => x.ExtensionType == "QR_Result")) {
                                 try {
                                     var qrResult = await _autoQRService.ExecuteAsync(imageFile);
                                     if (!string.IsNullOrEmpty(qrResult)) {
@@ -248,7 +247,7 @@ namespace TelegramSearchBot.Service.Manage
                         if (messageDataId.HasValue)
                         {
                             var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
-                            if (!extensions.Any(x => x.Name == "ASR_Result"))
+                            if (!extensions.Any(x => x.ExtensionType == "ASR_Result"))
                             {
                                 try
                                 {
@@ -377,7 +376,7 @@ namespace TelegramSearchBot.Service.Manage
                             var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
 
                             // 处理Alt信息
-                            if (!extensions.Any(x => x.Name == "Alt_Result"))
+                            if (!extensions.Any(x => x.ExtensionType == "Alt_Result"))
                             {
                                 try
                                 {

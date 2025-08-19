@@ -1,4 +1,5 @@
 using System.Reflection;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,6 +22,15 @@ using TelegramSearchBot.Attributes;
 using System.Linq;
 using TelegramSearchBot.Common;
 using MediatR;
+using TelegramSearchBot.Domain.Message.Repositories;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Common.Interface;
+using TelegramSearchBot.Infrastructure.Persistence.Repositories;
+using TelegramSearchBot.Infrastructure.Search.Repositories;
+using TelegramSearchBot.Application.Adapters;
+using TelegramSearchBot.Application.Mappings;
 
 namespace TelegramSearchBot.Extension {
     public static class ServiceCollectionExtension {
@@ -52,6 +62,30 @@ namespace TelegramSearchBot.Extension {
             return services;
         }
 
+        /// <summary>
+        /// 注册Infrastructure层服务
+        /// </summary>
+        /// <param name="services">服务集合</param>
+        /// <param name="connectionString">数据库连接字符串</param>
+        /// <returns>服务集合</returns>
+        public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, string connectionString) {
+            // 注册数据库上下文
+            services.AddDbContext<DataDbContext>(options => {
+                options.UseSqlite(connectionString);
+            }, ServiceLifetime.Transient);
+
+            // 注册Domain Repository
+            services.AddScoped<IMessageRepository, TelegramSearchBot.Domain.Message.MessageRepository>();
+            services.AddScoped<IMessageSearchRepository, MessageSearchRepository>();
+
+            // 注册其他Infrastructure服务
+            services.AddTelegramBotClient();
+            services.AddRedis();
+            services.AddHttpClients();
+
+            return services;
+        }
+
         public static IServiceCollection AddBilibiliServices(this IServiceCollection services) {
             // Bilibili服务注册 - 需要根据实际可用的类进行调整
             return services;
@@ -59,7 +93,10 @@ namespace TelegramSearchBot.Extension {
 
         public static IServiceCollection AddCommonServices(this IServiceCollection services) {
             // 通用服务注册 - 需要根据实际可用的类进行调整
-            // 简化实现：不注册MediatR，避免静态类型问题
+            // 注册MediatR支持
+            services.AddMediatR(cfg => {
+                cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
+            });
             return services;
         }
 
@@ -68,19 +105,46 @@ namespace TelegramSearchBot.Extension {
             return services;
         }
 
+        // Application层服务已经在Application层自己的扩展方法中注册
+        // 这里不应该重复注册，避免循环依赖
+
         public static IServiceCollection ConfigureAllServices(this IServiceCollection services) {
-            // 简化实现：使用当前程序集而不是GeneralBootstrap程序集
+            // 使用DDD架构的统一服务注册
+            var connectionString = $"Data Source={Path.Combine(Env.WorkDir, "Data.sqlite")};Cache=Shared;Mode=ReadWriteCreate;";
+            
+            // 注册Infrastructure层服务
+            services.AddInfrastructureServices(connectionString);
+            
+            // 注册统一架构服务
+            services.AddUnifiedArchitectureServices();
+            
+            // 注册其他基础服务
             var assembly = typeof(ServiceCollectionExtension).Assembly;
             return services
-                .AddTelegramBotClient()
-                .AddRedis()
-                .AddDatabase()
-                .AddHttpClients()
                 .AddCoreServices()
                 .AddBilibiliServices()
                 .AddCommonServices()
                 .AddAutoRegisteredServices()
                 .AddInjectables(assembly);
+        }
+
+        /// <summary>
+        /// 注册统一架构服务，包含适配器和AutoMapper配置
+        /// </summary>
+        /// <param name="services">服务集合</param>
+        /// <returns>服务集合</returns>
+        public static IServiceCollection AddUnifiedArchitectureServices(this IServiceCollection services)
+        {
+            // 适配器服务
+            services.AddScoped<IMessageRepositoryAdapter, MessageRepositoryAdapter>();
+
+            // AutoMapper配置
+            services.AddAutoMapper(cfg =>
+            {
+                cfg.AddProfile<MessageMappingProfile>();
+            });
+
+            return services;
         }
 
         /// <summary>

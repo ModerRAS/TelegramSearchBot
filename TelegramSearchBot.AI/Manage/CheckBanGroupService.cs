@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Attributes;
 

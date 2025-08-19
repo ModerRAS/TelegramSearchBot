@@ -10,7 +10,6 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Manager;
 using Markdig;
 using Telegram.Bot.Exceptions;
 using System.Text.RegularExpressions;
@@ -19,7 +18,6 @@ using System.Web;
 using System.Threading;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Manager;
 
 namespace TelegramSearchBot.Service.BotAPI
 {

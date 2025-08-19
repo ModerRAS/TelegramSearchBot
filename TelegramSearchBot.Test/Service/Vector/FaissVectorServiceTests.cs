@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Vector;
@@ -25,6 +26,7 @@ namespace TelegramSearchBot.Test.Service.Vector
     {
         private readonly Mock<ILogger<FaissVectorService>> _mockLogger;
         private readonly Mock<IGeneralLLMService> _mockLLMService;
+        private readonly Mock<IEnvService> _mockEnvService;
         private readonly Mock<IServiceProvider> _mockServiceProvider;
         private readonly Mock<IServiceScope> _mockServiceScope;
         private readonly Mock<IServiceProvider> _mockScopeServiceProvider;
@@ -47,6 +49,8 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             _mockLogger = new Mock<ILogger<FaissVectorService>>();
             _mockLLMService = new Mock<IGeneralLLMService>();
+            _mockEnvService = new Mock<IEnvService>();
+            _mockEnvService.Setup(x => x.WorkDir).Returns(_testDirectory);
             _mockServiceProvider = new Mock<IServiceProvider>();
             _mockServiceScope = new Mock<IServiceScope>();
             _mockScopeServiceProvider = new Mock<IServiceProvider>();
@@ -69,7 +73,8 @@ namespace TelegramSearchBot.Test.Service.Vector
             _faissVectorService = new FaissVectorService(
                 _mockLogger.Object,
                 _mockServiceProvider.Object,
-                _mockLLMService.Object);
+                _mockLLMService.Object,
+                _mockEnvService.Object);
         }
 
         private void SetupDefaultVectorMock()

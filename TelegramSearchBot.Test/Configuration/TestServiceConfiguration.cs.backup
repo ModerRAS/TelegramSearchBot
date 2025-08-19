@@ -1,0 +1,573 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Telegram.Bot;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
+using Telegram.Bot.Requests;
+using Telegram.Bot.Exceptions;
+using TelegramSearchBot.AI;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Domain.Message;
+using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.AI.ASR;
+using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
+using Telegram.Bot.Requests;
+using MessageEntity = TelegramSearchBot.Model.Data.Message;
+
+namespace TelegramSearchBot.Test.Configuration
+{
+    /// <summary>
+    /// 测试依赖注入容器配置
+    /// </summary>
+    public static class TestServiceCollectionExtensions
+    {
+        /// <summary>
+        /// 添加测试服务到服务集合
+        /// </summary>
+        public static IServiceCollection AddTestServices(this IServiceCollection services)
+        {
+            // 注册数据库服务
+            services.AddDbContext<DataDbContext>(options =>
+                options.UseInMemoryDatabase($"TestDb_{Guid.NewGuid()}"));
+
+            // 注册Mock的AI服务
+            services.AddScoped<IGeneralLLMService, MockGeneralLLMService>();
+            services.AddScoped<MockProcessPhotoService>();
+            services.AddScoped<IWhisperManager, MockWhisperManager>();
+
+            // 注册Mock的Telegram Bot客户端
+            services.AddScoped<ITelegramBotClient, MockTelegramBotClient>();
+
+            // 注册日志服务
+            services.AddLogging(builder =>
+            {
+                builder.AddConsole();
+                builder.AddDebug();
+                builder.SetMinimumLevel(LogLevel.Information);
+            });
+
+            return services;
+        }
+
+        /// <summary>
+        /// 添加集成测试专用服务
+        /// </summary>
+        public static IServiceCollection AddIntegrationTestServices(this IServiceCollection services)
+        {
+            // 添加测试专用的服务配置
+            services.AddTestServices();
+
+            // 注册测试专用的消息处理器
+            services.AddScoped<TestMessageProcessor>();
+            services.AddScoped<TestPerformanceMonitor>();
+
+            // 注册测试事件处理器
+            services.AddScoped<TestEventHandler>();
+
+            return services;
+        }
+
+        /// <summary>
+        /// 创建测试用的服务提供者
+        /// </summary>
+        public static IServiceProvider CreateTestServiceProvider()
+        {
+            var services = new ServiceCollection();
+            services.AddTestServices();
+            return services.BuildServiceProvider();
+        }
+
+        /// <summary>
+        /// 创建集成测试用的服务提供者
+        /// </summary>
+        public static IServiceProvider CreateIntegrationTestServiceProvider()
+        {
+            var services = new ServiceCollection();
+            services.AddIntegrationTestServices();
+            return services.BuildServiceProvider();
+        }
+    }
+
+    /// <summary>
+    /// Mock的通用LLM服务
+    /// </summary>
+    public class MockGeneralLLMService : IGeneralLLMService
+    {
+        private readonly ILogger<MockGeneralLLMService> _logger;
+
+        public MockGeneralLLMService(ILogger<MockGeneralLLMService> logger)
+        {
+            _logger = logger;
+        }
+
+        public string ServiceName => "MockGeneralLLMService";
+
+        public Task<List<LLMChannel>> GetChannelsAsync(string modelName)
+        {
+            _logger.LogInformation($"Mock GetChannels: {modelName}");
+            var channels = new List<LLMChannel>
+            {
+                new LLMChannel { Id = "mock_channel", Provider = "Mock", Parallel = 1, Priority = 1 }
+            };
+            return Task.FromResult(channels);
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(MessageEntity message, long ChatId, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock ExecAsync: {message.MessageId} in {ChatId}");
+            yield return $"这是对消息'{message.Content}'的模拟回复";
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(MessageEntity message, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellation)
+        {
+            _logger.LogInformation($"Mock ExecAsync with channel: {message.MessageId} in {ChatId} using {modelName}");
+            yield return $"这是对消息'{message.Content}'的模拟回复，使用模型{modelName}";
+        }
+
+        public async IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(Func<ILLMService, LLMChannel, CancellationToken, IAsyncEnumerable<TResult>> operation, string modelName, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock ExecOperationAsync: {modelName}");
+            // 简化实现，直接返回空结果
+            yield break;
+        }
+
+        public Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock AnalyzeImage: {PhotoPath} for {ChatId}");
+            return Task.FromResult("这是对图片的模拟分析结果");
+        }
+
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock AnalyzeImage with channel: {PhotoPath} for {ChatId} using {modelName}");
+            yield return "这是对图片的模拟分析结果";
+        }
+
+        public Task<float[]> GenerateEmbeddingsAsync(MessageEntity message, long ChatId)
+        {
+            _logger.LogInformation($"Mock GenerateEmbeddings for message: {message.MessageId}");
+            var vector = Enumerable.Range(0, 768).Select(_ => (float)0.1).ToArray();
+            return Task.FromResult(vector);
+        }
+
+        public Task<float[]> GenerateEmbeddingsAsync(string message, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock GenerateEmbeddings for text: {message}");
+            var vector = Enumerable.Range(0, 768).Select(_ => (float)0.1).ToArray();
+            return Task.FromResult(vector);
+        }
+
+        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock GenerateEmbeddings with channel: {message} using {modelName}");
+            var vector = Enumerable.Range(0, 768).Select(_ => (float)0.1).ToArray();
+            yield return vector;
+        }
+
+        public Task<int> GetAltPhotoAvailableCapacityAsync()
+        {
+            _logger.LogInformation("Mock GetAltPhotoAvailableCapacity");
+            return Task.FromResult(1);
+        }
+
+        public Task<int> GetAvailableCapacityAsync(string modelName = "gemma3:27b")
+        {
+            _logger.LogInformation($"Mock GetAvailableCapacity: {modelName}");
+            return Task.FromResult(1);
+        }
+    }
+
+    /// <summary>
+    /// Mock的图片处理服务
+    /// </summary>
+    public class MockProcessPhotoService
+    {
+        private readonly ILogger<MockProcessPhotoService> _logger;
+
+        public MockProcessPhotoService(ILogger<MockProcessPhotoService> logger)
+        {
+            _logger = logger;
+        }
+
+        public Task<string> ExtractTextAsync(byte[] imageData)
+        {
+            _logger.LogInformation($"Mock OCR processing image data: {imageData.Length} bytes");
+            return Task.FromResult("这是从图片中提取的模拟文字内容");
+        }
+
+        public Task<bool> IsImageProcessableAsync(byte[] imageData)
+        {
+            _logger.LogInformation($"Mock checking if image is processable: {imageData.Length} bytes");
+            return Task.FromResult(true);
+        }
+    }
+
+    /// <summary>
+    /// Mock的语音识别服务
+    /// </summary>
+    public class MockWhisperManager : IWhisperManager
+    {
+        private readonly ILogger<MockWhisperManager> _logger;
+
+        public MockWhisperManager(ILogger<MockWhisperManager> logger)
+        {
+            _logger = logger;
+        }
+
+        public Task<string> ExecuteAsync(Stream wavStream)
+        {
+            _logger.LogInformation($"Mock ASR processing audio stream: {wavStream.Length} bytes");
+            return Task.FromResult("这是从语音中转换的模拟文字内容");
+        }
+    }
+
+    /// <summary>
+    /// Mock的Telegram Bot客户端 - 简化实现，仅用于测试
+    /// </summary>
+    public class MockTelegramBotClient : ITelegramBotClient
+    {
+        private readonly ILogger<MockTelegramBotClient> _logger;
+        private readonly List<Telegram.Bot.Types.Update> _receivedUpdates = new();
+
+        public MockTelegramBotClient(ILogger<MockTelegramBotClient> logger)
+        {
+            _logger = logger;
+        }
+
+        // 核心属性
+        public long BotId => 123456789;
+        public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+        public IExceptionsParser ExceptionsParser => new MockExceptionsParser();
+        public ILocalBotServer? LocalBotServer => null;
+
+        // 事件 - 使用正确的事件类型
+        public event EventHandler<ApiRequestEventArgs>? OnMakingApiRequest
+        {
+            add { }
+            remove { }
+        }
+        
+        public event EventHandler<ApiResponseEventArgs>? OnApiResponseReceived
+        {
+            add { }
+            remove { }
+        }
+
+        // 核心方法实现
+        public async Task<Telegram.Bot.Types.Message> SendTextMessageAsync(
+            long chatId,
+            string text,
+            ParseMode? parseMode = null,
+            IEnumerable<Telegram.Bot.Types.MessageEntity>? entities = null,
+            bool? disableWebPagePreview = null,
+            bool? disableNotification = null,
+            int? replyToMessageId = null,
+            bool? allowSendingWithoutReply = null,
+            IReplyMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock SendTextMessage to {chatId}: {text}");
+            
+            return await Task.FromResult(new Telegram.Bot.Types.Message
+            {
+                MessageId = 999,
+                Chat = new Telegram.Bot.Types.Chat { Id = chatId },
+                Text = text,
+                Date = DateTime.UtcNow
+            });
+        }
+
+        public async Task<Telegram.Bot.Types.User> GetMeAsync(CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Mock GetMeAsync");
+            
+            return await Task.FromResult(new Telegram.Bot.Types.User
+            {
+                Id = 123456789,
+                FirstName = "Mock",
+                LastName = "Bot",
+                Username = "mock_bot",
+                IsBot = true
+            });
+        }
+
+        public async Task<Telegram.Bot.Types.Update[]> GetUpdatesAsync(
+            int? offset = null,
+            int? limit = null,
+            int? timeout = null,
+            IEnumerable<UpdateType>? allowedUpdates = null,
+            CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock GetUpdatesAsync - offset: {offset}, limit: {limit}");
+            
+            var updates = new List<Telegram.Bot.Types.Update>();
+            
+            if (_receivedUpdates.Any())
+            {
+                updates.AddRange(_receivedUpdates);
+                _receivedUpdates.Clear();
+            }
+            
+            return await Task.FromResult(updates.ToArray());
+        }
+
+        // 添加模拟的接收更新方法
+        public void AddReceivedUpdate(Telegram.Bot.Types.Update update)
+        {
+            _receivedUpdates.Add(update);
+        }
+
+        // 其他方法的简化实现
+        public Task<TResponse> SendRequest<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock SendRequest: {request.GetType().Name}");
+            return Task.FromException<TResponse>(new NotImplementedException("Mock implementation"));
+        }
+
+        // 添加缺失的接口成员
+        public Task<TResponse> SendRequest<TResponse>(IRequest<TResponse> request, HttpContent? content, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock SendRequest with content: {request.GetType().Name}");
+            return Task.FromException<TResponse>(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task DownloadFile(string filePath, Stream destination, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock DownloadFile: {filePath}");
+            return Task.FromException(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task<bool> TestApi(CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Mock TestApi");
+            return Task.FromResult(true);
+        }
+
+        // 所有其他方法抛出NotImplementedException
+        public Task<Telegram.Bot.Types.Message> DeleteMessageAsync(long chatId, int messageId, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock DeleteMessage: {chatId}/{messageId}");
+            return Task.FromException<Telegram.Bot.Types.Message>(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task<Telegram.Bot.Types.Message> EditMessageTextAsync(
+            long chatId,
+            int messageId,
+            string text,
+            ParseMode? parseMode = null,
+            IEnumerable<Telegram.Bot.Types.MessageEntity>? entities = null,
+            bool? disableWebPagePreview = null,
+            IReplyMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock EditMessageText: {chatId}/{messageId}");
+            return Task.FromException<Telegram.Bot.Types.Message>(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task<Telegram.Bot.Types.Message> SendPhotoAsync(
+            long chatId,
+            InputFile photo,
+            string? caption = null,
+            ParseMode? parseMode = null,
+            IEnumerable<Telegram.Bot.Types.MessageEntity>? captionEntities = null,
+            bool? disableNotification = null,
+            int? replyToMessageId = null,
+            bool? allowSendingWithoutReply = null,
+            IReplyMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock SendPhoto: {chatId}");
+            return Task.FromException<Telegram.Bot.Types.Message>(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task<Telegram.Bot.Types.Message> SendDocumentAsync(
+            long chatId,
+            InputFile document,
+            string? caption = null,
+            ParseMode? parseMode = null,
+            IEnumerable<Telegram.Bot.Types.MessageEntity>? captionEntities = null,
+            bool? disableContentTypeDetection = null,
+            bool? disableNotification = null,
+            int? replyToMessageId = null,
+            bool? allowSendingWithoutReply = null,
+            IReplyMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock SendDocument: {chatId}");
+            return Task.FromException<Telegram.Bot.Types.Message>(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task<Telegram.Bot.Types.Message> SendAudioAsync(
+            long chatId,
+            InputFile audio,
+            string? caption = null,
+            ParseMode? parseMode = null,
+            IEnumerable<Telegram.Bot.Types.MessageEntity>? captionEntities = null,
+            int? duration = null,
+            string? performer = null,
+            string? title = null,
+            InputFile? thumb = null,
+            bool? disableNotification = null,
+            int? replyToMessageId = null,
+            bool? allowSendingWithoutReply = null,
+            IReplyMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock SendAudio: {chatId}");
+            return Task.FromException<Telegram.Bot.Types.Message>(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task<Telegram.Bot.Types.Message> SendVoiceAsync(
+            long chatId,
+            InputFile voice,
+            string? caption = null,
+            ParseMode? parseMode = null,
+            IEnumerable<Telegram.Bot.Types.MessageEntity>? captionEntities = null,
+            int? duration = null,
+            bool? disableNotification = null,
+            int? replyToMessageId = null,
+            bool? allowSendingWithoutReply = null,
+            IReplyMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock SendVoice: {chatId}");
+            return Task.FromException<Telegram.Bot.Types.Message>(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task<bool> AnswerCallbackQueryAsync(
+            string callbackQueryId,
+            string? text = null,
+            bool? showAlert = null,
+            string? url = null,
+            int? cacheTime = null,
+            CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock AnswerCallbackQuery: {callbackQueryId}");
+            return Task.FromResult(true);
+        }
+
+        public Task DownloadFile(string filePath, Stream destination, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock DownloadFile: {filePath}");
+            return Task.FromException(new NotImplementedException("Mock implementation"));
+        }
+
+        public Task DownloadFile(Telegram.Bot.Types.File file, Stream destination, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation($"Mock DownloadFile: {file.FileId}");
+            return Task.FromException(new NotImplementedException("Mock implementation"));
+        }
+    }
+
+    /// <summary>
+    /// Mock异常解析器
+    /// </summary>
+    public class MockExceptionsParser : IExceptionsParser
+    {
+        public Exception? ParseException(ApiResponseEventArgs response)
+        {
+            return null; // Mock实现，不解析异常
+        }
+    }
+
+    /// <summary>
+    /// 测试消息处理器
+    /// </summary>
+    public class TestMessageProcessor
+    {
+        private readonly ILogger<TestMessageProcessor> _logger;
+        private readonly IMessageProcessingPipeline _processingPipeline;
+
+        public TestMessageProcessor(ILogger<TestMessageProcessor> logger, IMessageProcessingPipeline processingPipeline)
+        {
+            _logger = logger;
+            _processingPipeline = processingPipeline;
+        }
+
+        public async Task ProcessTestMessageAsync(Message message)
+        {
+            _logger.LogInformation($"Processing test message: {message.MessageId}");
+            await _processingPipeline.ProcessMessageAsync(message);
+        }
+
+        public async Task ProcessTestMessagesAsync(IEnumerable<Message> messages)
+        {
+            foreach (var message in messages)
+            {
+                await ProcessTestMessageAsync(message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 测试性能监控器
+    /// </summary>
+    public class TestPerformanceMonitor
+    {
+        private readonly ILogger<TestPerformanceMonitor> _logger;
+        private readonly Dictionary<string, List<double>> _metrics = new();
+
+        public TestPerformanceMonitor(ILogger<TestPerformanceMonitor> logger)
+        {
+            _logger = logger;
+        }
+
+        public void RecordMetric(string name, double value)
+        {
+            if (!_metrics.ContainsKey(name))
+            {
+                _metrics[name] = new List<double>();
+            }
+            
+            _metrics[name].Add(value);
+            _logger.LogInformation($"Performance metric recorded: {name} = {value}ms");
+        }
+
+        public Dictionary<string, double> GetAverageMetrics()
+        {
+            return _metrics.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Average());
+        }
+
+        public void ClearMetrics()
+        {
+            _metrics.Clear();
+        }
+    }
+
+    /// <summary>
+    /// 测试事件处理器
+    /// </summary>
+    public class TestEventHandler
+    {
+        private readonly ILogger<TestEventHandler> _logger;
+        private readonly List<string> _handledEvents = new();
+
+        public TestEventHandler(ILogger<TestEventHandler> logger)
+        {
+            _logger = logger;
+        }
+
+        public IReadOnlyList<string> HandledEvents => _handledEvents.AsReadOnly();
+
+        public async Task HandleEventAsync(string eventType, object data)
+        {
+            _logger.LogInformation($"Handling event: {eventType}");
+            _handledEvents.Add($"{eventType}_{DateTime.UtcNow:HH:mm:ss.fff}");
+            await Task.Delay(10); // 模拟异步处理
+        }
+
+        public void ClearEvents()
+        {
+            _handledEvents.Clear();
+        }
+    }
+}
