@@ -4,7 +4,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- 解决TargetFrameworkAttribute重复问题 -->
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="FluentAssertions" Version="8.6.0" />
@@ -38,7 +40,6 @@
     <ProjectReference Include="..\TelegramSearchBot.Infrastructure\TelegramSearchBot.Infrastructure.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Domain\TelegramSearchBot.Domain.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Application\TelegramSearchBot.Application.csproj" />
-    <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="TestData\EmptyResults.html" />

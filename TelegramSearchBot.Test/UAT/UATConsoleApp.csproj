@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <StartupObject>TelegramSearchBot.Test.UAT.UATConsoleApp</StartupObject>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- 解决TargetFrameworkAttribute重复问题 -->
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
 
   <ItemGroup>
