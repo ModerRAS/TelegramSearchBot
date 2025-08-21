@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Xunit;
 using FluentAssertions;
 using TelegramSearchBot.Domain.Message.ValueObjects;
@@ -99,7 +100,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
             var limit = 20;
 
             // Act
-            var searchQuery = new MessageSearchByUserQuery(groupId, userId, limit);
+            var searchQuery = new MessageSearchByUserQuery(groupId, userId, "", limit);
 
             // Assert
             searchQuery.GroupId.Should().Be(groupId);
@@ -116,7 +117,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
             var invalidLimit = -1;
 
             // Act
-            var searchQuery = new MessageSearchByUserQuery(groupId, userId, invalidLimit);
+            var searchQuery = new MessageSearchByUserQuery(groupId, userId, "", invalidLimit);
 
             // Assert
             searchQuery.Limit.Should().Be(50); // Default limit
@@ -192,10 +193,10 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
 
         #endregion
 
-        #region MessageSearchResult Tests
+        #region MessageMessage Tests
 
         [Fact]
-        public void MessageSearchResult_Constructor_WithValidParameters_ShouldCreateResult()
+        public void MessageMessage_Constructor_WithValidParameters_ShouldCreateResult()
         {
             // Arrange
             var messageId = new MessageId(100L, 1000L);
@@ -204,7 +205,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
             var score = 0.85f;
 
             // Act
-            var result = new MessageSearchResult(messageId, content, timestamp, score);
+            var result = new MessageMessage(messageId, content, timestamp, score);
 
             // Assert
             result.MessageId.Should().Be(messageId);
@@ -214,7 +215,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
         }
 
         [Fact]
-        public void MessageSearchResult_Constructor_WithNullMessageId_ShouldThrowArgumentNullException()
+        public void MessageMessage_Constructor_WithNullMessageId_ShouldThrowArgumentNullException()
         {
             // Arrange
             MessageId messageId = null;
@@ -223,7 +224,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
             var score = 0.85f;
 
             // Act
-            var action = () => new MessageSearchResult(messageId, content, timestamp, score);
+            var action = () => new MessageMessage(messageId, content, timestamp, score);
 
             // Assert
             action.Should().Throw<ArgumentNullException>()
@@ -231,7 +232,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
         }
 
         [Fact]
-        public void MessageSearchResult_Constructor_WithNullContent_ShouldThrowArgumentNullException()
+        public void MessageMessage_Constructor_WithNullContent_ShouldThrowArgumentNullException()
         {
             // Arrange
             var messageId = new MessageId(100L, 1000L);
@@ -240,7 +241,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
             var score = 0.85f;
 
             // Act
-            var action = () => new MessageSearchResult(messageId, content, timestamp, score);
+            var action = () => new MessageMessage(messageId, content, timestamp, score);
 
             // Assert
             action.Should().Throw<ArgumentNullException>()
@@ -248,7 +249,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
         }
 
         [Fact]
-        public void MessageSearchResult_WithRecordType_ShouldSupportEquality()
+        public void MessageMessage_WithRecordType_ShouldSupportEquality()
         {
             // Arrange
             var messageId = new MessageId(100L, 1000L);
@@ -256,8 +257,8 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
             var timestamp = DateTime.UtcNow;
             var score = 0.85f;
 
-            var result1 = new MessageSearchResult(messageId, content, timestamp, score);
-            var result2 = new MessageSearchResult(messageId, content, timestamp, score);
+            var result1 = new MessageMessage(messageId, content, timestamp, score);
+            var result2 = new MessageMessage(messageId, content, timestamp, score);
 
             // Act & Assert
             result1.Should().Be(result2);
@@ -265,7 +266,7 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
         }
 
         [Fact]
-        public void MessageSearchResult_WithDifferentParameters_ShouldNotBeEqual()
+        public void MessageMessage_WithDifferentParameters_ShouldNotBeEqual()
         {
             // Arrange
             var messageId1 = new MessageId(100L, 1000L);
@@ -274,8 +275,8 @@ namespace TelegramSearchBot.Domain.Tests.Message.ValueObjects
             var timestamp = DateTime.UtcNow;
             var score = 0.85f;
 
-            var result1 = new MessageSearchResult(messageId1, content, timestamp, score);
-            var result2 = new MessageSearchResult(messageId2, content, timestamp, score);
+            var result1 = new MessageMessage(messageId1, content, timestamp, score);
+            var result2 = new MessageMessage(messageId2, content, timestamp, score);
 
             // Act & Assert
             result1.Should().NotBe(result2);

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 using Moq;
@@ -7,11 +8,12 @@ using Telegram.Bot;
 using TelegramSearchBot.Controller.AI.OCR;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.AI.OCR;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Test.Controllers;
+using TelegramSearchBot.Manager;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -25,8 +27,8 @@ namespace TelegramSearchBot.Test.Controllers.AI
     public class AutoOCRControllerTests : ControllerTestBase
     {
         private readonly Mock<ITelegramBotClient> _botClientMock;
-        private readonly Mock<IGeneralLLMService> _llmServiceMock;
-        private readonly Mock<ISendMessageService> _sendMessageMock;
+        private readonly Mock<IPaddleOCRService> _paddleOCRServiceMock;
+        private readonly Mock<SendMessage> _sendMessageMock;
         private readonly Mock<MessageService> _messageServiceMock;
         private readonly Mock<Microsoft.Extensions.Logging.ILogger<AutoOCRController>> _loggerMock;
         private readonly Mock<ISendMessageService> _sendMessageServiceMock;
@@ -36,8 +38,8 @@ namespace TelegramSearchBot.Test.Controllers.AI
         public AutoOCRControllerTests()
         {
             _botClientMock = new Mock<ITelegramBotClient>();
-            _llmServiceMock = new Mock<IGeneralLLMService>();
-            _sendMessageMock = new Mock<ISendMessageService>();
+            _paddleOCRServiceMock = new Mock<IPaddleOCRService>();
+            _sendMessageMock = new Mock<SendMessage>();
             _messageServiceMock = new Mock<MessageService>();
             _loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<AutoOCRController>>();
             _sendMessageServiceMock = new Mock<ISendMessageService>();
@@ -45,7 +47,7 @@ namespace TelegramSearchBot.Test.Controllers.AI
             
             _controller = new AutoOCRController(
                 _botClientMock.Object,
-                _llmServiceMock.Object,
+                _paddleOCRServiceMock.Object,
                 _sendMessageMock.Object,
                 _messageServiceMock.Object,
                 _loggerMock.Object,

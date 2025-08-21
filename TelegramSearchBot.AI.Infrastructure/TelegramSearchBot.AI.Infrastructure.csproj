@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="13.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.7" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TelegramSearchBot.AI.Domain\TelegramSearchBot.AI.Domain.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.AI.Application\TelegramSearchBot.AI.Application.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Domain\TelegramSearchBot.Domain.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Application\TelegramSearchBot.Application.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.AI\TelegramSearchBot.AI.csproj" />
+  </ItemGroup>
+
+</Project>

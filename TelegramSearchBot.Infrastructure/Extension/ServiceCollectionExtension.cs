@@ -31,6 +31,7 @@ using TelegramSearchBot.Infrastructure.Persistence.Repositories;
 using TelegramSearchBot.Infrastructure.Search.Repositories;
 using TelegramSearchBot.Application.Adapters;
 using TelegramSearchBot.Application.Mappings;
+// Media领域服务将在实际使用时注册
 
 namespace TelegramSearchBot.Extension {
     public static class ServiceCollectionExtension {
@@ -143,6 +144,9 @@ namespace TelegramSearchBot.Extension {
             {
                 cfg.AddProfile<MessageMappingProfile>();
             });
+
+            // Media领域服务将在实际使用时注册
+            // services.AddMediaDomainServices();
 
             return services;
         }

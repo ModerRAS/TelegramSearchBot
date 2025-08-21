@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Linq;
 using Xunit;
 using FluentAssertions;
 using TelegramSearchBot.Domain.Message;

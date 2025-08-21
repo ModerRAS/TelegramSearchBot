@@ -25,6 +25,33 @@
 
 详细功能说明请参考: [Docs/Bot_Commands_User_Guide.md](Docs/Bot_Commands_User_Guide.md)
 
+## 📚 项目文档
+
+### 架构文档
+- [项目重构完成报告](PROJECT_RESTRUCTURE_COMPLETION_REPORT.md) - DDD架构重构总结
+- [DDD最终验证报告](DDD_Final_Validation_Report.md) - 架构验证结果
+- [项目完成分析报告](Project_Completion_Analysis_Report.md) - 项目状态分析
+
+### 开发指南
+- [TDD开发指南](TDD_Development_Guide.md) - 测试驱动开发流程
+- [TDD实施总结](TDD_Implementation_Summary.md) - TDD实施情况
+- [CI/CD集成指南](CI_CD_Integration_Guide.md) - 持续集成配置
+
+### 领域实现
+- [Message领域TDD完成总结](Message_Domain_TDD_Completion_Summary.md)
+- [AI领域DDD实现报告](AI_DOMAIN_IMPLEMENTATION.md)
+- [Media领域DDD实现报告](MEDIA_DOMAIN_DDD_IMPLEMENTATION_REPORT.md)
+
+### 测试相关
+- [TelegramSearchBot测试完成报告](TelegramSearchBot.Tests.COMPLETION_REPORT.md)
+- [TelegramSearchBot测试运行指南](TelegramSearchBot.Tests.RUNNING_GUIDE.md)
+- [测试编译修复报告](Test_Compilation_Fix_Report.md)
+
+### 项目管理
+- [需求文档](requirements.md)
+- [用户故事](user-stories.md)
+- [验收标准](acceptance-criteria.md)
+
 ## 安装与配置
 
 ### 快速开始

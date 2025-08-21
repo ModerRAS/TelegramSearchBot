@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using TelegramSearchBot.Model.Data;
 using MessageEntity = TelegramSearchBot.Model.Data.Message;

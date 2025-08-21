@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Xunit;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Model.Data;

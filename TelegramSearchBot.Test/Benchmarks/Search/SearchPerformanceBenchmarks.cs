@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -67,7 +68,7 @@ namespace TelegramSearchBot.Benchmarks.Search
             
             // 设置测试索引目录
             _testIndexDirectory = Path.Combine(Path.GetTempPath(), $"LuceneBenchmark_{Guid.NewGuid()}");
-            Directory.CreateDirectory(_testIndexDirectory);
+            System.IO.Directory.CreateDirectory(_testIndexDirectory);
             
             // 初始化测试数据
             InitializeTestData();
@@ -89,7 +90,7 @@ namespace TelegramSearchBot.Benchmarks.Search
             // 清理测试索引目录
             try
             {
-                if (Directory.Exists(_testIndexDirectory))
+                if (System.IO.Directory.Exists(_testIndexDirectory))
                 {
                     Directory.Delete(_testIndexDirectory, true);
                 }
@@ -437,7 +438,7 @@ namespace TelegramSearchBot.Benchmarks.Search
         private void PerformSearch(string query, string indexName, int skip, int take, bool useSyntaxSearch = false)
         {
             var indexPath = Path.Combine(_testIndexDirectory, indexName);
-            if (!Directory.Exists(indexPath))
+            if (!System.IO.Directory.Exists(indexPath))
                 return;
 
             using (var directory = FSDirectory.Open(indexPath))

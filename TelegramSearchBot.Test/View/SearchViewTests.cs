@@ -29,7 +29,7 @@ namespace TelegramSearchBot.Test.View
             _searchView = new SearchView(_sendMessageMock.Object, _botClientMock.Object);
         }
         [Fact]
-        public void RenderSearchResults_WithResults_ReturnsFormattedString()
+        public void RenderMessages_WithResults_ReturnsFormattedString()
         {
             // Arrange
             var messages = new List<Message>
@@ -55,7 +55,7 @@ namespace TelegramSearchBot.Test.View
 
             // Act
             searchOption.Messages = messages;
-            var result = _searchView.RenderSearchResults(searchOption);
+            var result = _searchView.RenderMessages(searchOption);
 
             // Assert
             Assert.Contains("共找到 2 项结果", result);
@@ -66,7 +66,7 @@ namespace TelegramSearchBot.Test.View
         }
 
         [Fact]
-        public void RenderSearchResults_NoResults_ReturnsNoResultsMessage()
+        public void RenderMessages_NoResults_ReturnsNoResultsMessage()
         {
             // Arrange
             var messages = new List<Message>();
@@ -79,7 +79,7 @@ namespace TelegramSearchBot.Test.View
 
             // Act
             searchOption.Messages = messages;
-            var result = _searchView.RenderSearchResults(searchOption);
+            var result = _searchView.RenderMessages(searchOption);
 
             // Assert
             Assert.Equal("<b>搜索方式</b>: 倒排索引未找到结果。\n", result);

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -376,18 +377,18 @@ namespace TelegramSearchBot.Application.Tests.Features.Messages
         #region SearchMessagesAsync Tests
 
         [Fact]
-        public async Task SearchMessagesAsync_WithValidQuery_ShouldReturnSearchResults()
+        public async Task SearchMessagesAsync_WithValidQuery_ShouldReturnMessages()
         {
             // Arrange
             var query = new SearchMessagesQuery("test search", 100L, 0, 20);
-            var searchResults = new List<MessageSearchResult>
+            var searchResults = new List<MessageMessage>
             {
-                new MessageSearchResult(
+                new MessageMessage(
                     new MessageId(100L, 1000L),
                     "test search result",
                     DateTime.UtcNow,
                     0.85f),
-                new MessageSearchResult(
+                new MessageMessage(
                     new MessageId(100L, 1001L),
                     "another test result",
                     DateTime.UtcNow,
@@ -413,7 +414,7 @@ namespace TelegramSearchBot.Application.Tests.Features.Messages
         {
             // Arrange
             var query = new SearchMessagesQuery("test search", null, 0, 20);
-            var searchResults = new List<MessageSearchResult>();
+            var searchResults = new List<MessageMessage>();
 
             _mockMessageSearchRepository.Setup(r => r.SearchAsync(It.Is<MessageSearchQuery>(q => q.GroupId == 1)))
                 .ReturnsAsync(searchResults);
@@ -431,7 +432,7 @@ namespace TelegramSearchBot.Application.Tests.Features.Messages
         {
             // Arrange
             var query = new SearchMessagesQuery("no results", 100L);
-            var searchResults = new List<MessageSearchResult>();
+            var searchResults = new List<MessageMessage>();
 
             _mockMessageSearchRepository.Setup(r => r.SearchAsync(It.IsAny<MessageSearchQuery>()))
                 .ReturnsAsync(searchResults);

@@ -37,6 +37,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Domain", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Search.Tests", "TelegramSearchBot.Search.Tests\TelegramSearchBot.Search.Tests.csproj", "{397B3B69-52BC-4870-8A66-68E364F7ECA0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.AI.Domain", "TelegramSearchBot.AI.Domain\TelegramSearchBot.AI.Domain.csproj", "{3AF70133-2212-491F-B90D-824EF47C5DEE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.AI.Application", "TelegramSearchBot.AI.Application\TelegramSearchBot.AI.Application.csproj", "{DC87289D-F6CB-6101-DFB7-29142BB62DD1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.AI.Infrastructure", "TelegramSearchBot.AI.Infrastructure\TelegramSearchBot.AI.Infrastructure.csproj", "{2E9F013C-AF75-375E-2DF0-3A478B8F2450}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.AI.Domain.Tests", "TelegramSearchBot.AI.Domain.Tests\TelegramSearchBot.AI.Domain.Tests.csproj", "{63DBD66D-AF62-BCF1-6386-73B6DC21C7A0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

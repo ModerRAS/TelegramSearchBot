@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -39,7 +40,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         public VectorSearchIntegrationTests()
         {
             _testDirectory = Path.Combine(Path.GetTempPath(), "VectorIntegrationTests", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_testDirectory);
+            System.IO.Directory.CreateDirectory(_testDirectory);
 
             var options = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: $"IntegrationTestDb_{Guid.NewGuid()}")
@@ -479,7 +480,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             _dbContext?.Dispose();
             
             // 清理测试目录
-            if (Directory.Exists(_testDirectory))
+            if (System.IO.Directory.Exists(_testDirectory))
             {
                 try
                 {

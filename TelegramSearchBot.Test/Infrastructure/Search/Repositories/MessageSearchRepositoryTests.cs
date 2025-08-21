@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -28,14 +29,14 @@ namespace TelegramSearchBot.Infrastructure.Tests.Search.Repositories
         #region SearchAsync Tests
 
         [Fact]
-        public async Task SearchAsync_WithValidQuery_ShouldReturnSearchResults()
+        public async Task SearchAsync_WithValidQuery_ShouldReturnMessages()
         {
             // Arrange
             var query = new MessageSearchQuery(100L, "test search", 10);
-            var luceneResults = new List<SearchResult>
+            var luceneResults = new List<Message>
             {
-                new SearchResult { GroupId = 100L, MessageId = 1000L, Content = "test search result", DateTime = DateTime.UtcNow, Score = 0.85f },
-                new SearchResult { GroupId = 100L, MessageId = 1001L, Content = "another test result", DateTime = DateTime.UtcNow, Score = 0.75f }
+                new Message { GroupId = 100L, MessageId = 1000L, Content = "test search result", DateTime = DateTime.UtcNow, Score = 0.85f },
+                new Message { GroupId = 100L, MessageId = 1001L, Content = "another test result", DateTime = DateTime.UtcNow, Score = 0.75f }
             };
 
             _mockLuceneManager.Setup(m => m.Search(query.GroupId, query.Query, query.Limit))
@@ -57,7 +58,7 @@ namespace TelegramSearchBot.Infrastructure.Tests.Search.Repositories
         {
             // Arrange
             var query = new MessageSearchQuery(100L, "no results", 10);
-            var luceneResults = new List<SearchResult>();
+            var luceneResults = new List<Message>();
 
             _mockLuceneManager.Setup(m => m.Search(query.GroupId, query.Query, query.Limit))
                 .Returns(luceneResults);
@@ -203,10 +204,10 @@ namespace TelegramSearchBot.Infrastructure.Tests.Search.Repositories
         {
             // Arrange
             var query = new MessageSearchByUserQuery(100L, 123L, 10);
-            var luceneResults = new List<SearchResult>
+            var luceneResults = new List<Message>
             {
-                new SearchResult { GroupId = 100L, MessageId = 1000L, Content = "user message 1", DateTime = DateTime.UtcNow, Score = 0.9f },
-                new SearchResult { GroupId = 100L, MessageId = 1001L, Content = "user message 2", DateTime = DateTime.UtcNow, Score = 0.8f }
+                new Message { GroupId = 100L, MessageId = 1000L, Content = "user message 1", DateTime = DateTime.UtcNow, Score = 0.9f },
+                new Message { GroupId = 100L, MessageId = 1001L, Content = "user message 2", DateTime = DateTime.UtcNow, Score = 0.8f }
             };
 
             _mockLuceneManager.Setup(m => m.Search(query.GroupId, $"from_user:{query.UserId}", query.Limit))
@@ -225,7 +226,7 @@ namespace TelegramSearchBot.Infrastructure.Tests.Search.Repositories
         {
             // Arrange
             var query = new MessageSearchByUserQuery(100L, 999L, 10);
-            var luceneResults = new List<SearchResult>();
+            var luceneResults = new List<Message>();
 
             _mockLuceneManager.Setup(m => m.Search(query.GroupId, $"from_user:{query.UserId}", query.Limit))
                 .Returns(luceneResults);
@@ -250,9 +251,9 @@ namespace TelegramSearchBot.Infrastructure.Tests.Search.Repositories
             var query = new MessageSearchByDateRangeQuery(100L, startDate, endDate, 10);
             var expectedQuery = $"date:[{startDate:yyyy-MM-dd} TO {endDate:yyyy-MM-dd}]";
             
-            var luceneResults = new List<SearchResult>
+            var luceneResults = new List<Message>
             {
-                new SearchResult { GroupId = 100L, MessageId = 1000L, Content = "message in range", DateTime = DateTime.UtcNow.AddDays(-3), Score = 0.85f }
+                new Message { GroupId = 100L, MessageId = 1000L, Content = "message in range", DateTime = DateTime.UtcNow.AddDays(-3), Score = 0.85f }
             };
 
             _mockLuceneManager.Setup(m => m.Search(query.GroupId, expectedQuery, query.Limit))
@@ -275,7 +276,7 @@ namespace TelegramSearchBot.Infrastructure.Tests.Search.Repositories
             var query = new MessageSearchByDateRangeQuery(100L, startDate, endDate, 10);
             var expectedQuery = $"date:[{startDate:yyyy-MM-dd} TO {endDate:yyyy-MM-dd}]";
             
-            var luceneResults = new List<SearchResult>();
+            var luceneResults = new List<Message>();
 
             _mockLuceneManager.Setup(m => m.Search(query.GroupId, expectedQuery, query.Limit))
                 .Returns(luceneResults);
@@ -296,7 +297,7 @@ namespace TelegramSearchBot.Infrastructure.Tests.Search.Repositories
             var query = new MessageSearchByDateRangeQuery(100L, startDate, endDate, 10);
             var expectedQuery = $"date:[{startDate:yyyy-MM-dd} TO {endDate:yyyy-MM-dd}]";
             
-            var luceneResults = new List<SearchResult>();
+            var luceneResults = new List<Message>();
 
             _mockLuceneManager.Setup(m => m.Search(query.GroupId, expectedQuery, query.Limit))
                 .Returns(luceneResults);
@@ -322,7 +323,7 @@ namespace TelegramSearchBot.Infrastructure.Tests.Search.Repositories
             
             _mockLuceneManager.Setup(m => m.Search(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<int>()))
                 .Callback(() => cancellationTokenSource.Cancel())
-                .Returns(new List<SearchResult>());
+                .Returns(new List<Message>());
 
             // Act & Assert
             await Assert.ThrowsAsync<TaskCanceledException>(() => 

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -39,7 +40,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         public FaissVectorServiceTests()
         {
             _testDirectory = Path.Combine(Path.GetTempPath(), "FaissTests", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_testDirectory);
+            System.IO.Directory.CreateDirectory(_testDirectory);
 
             var options = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")  // 每个测试实例使用唯一数据库
@@ -500,7 +501,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             _dbContext?.Dispose();
             
             // 清理测试目录
-            if (Directory.Exists(_testDirectory))
+            if (System.IO.Directory.Exists(_testDirectory))
             {
                 try
                 {

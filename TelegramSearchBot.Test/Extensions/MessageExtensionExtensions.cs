@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Domain.Tests.Extensions

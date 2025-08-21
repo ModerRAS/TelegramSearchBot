@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -67,7 +68,7 @@ namespace TelegramSearchBot.Benchmarks.Vector
             
             // 设置测试目录
             _testIndexDirectory = Path.Combine(Path.GetTempPath(), $"FaissBenchmark_{Guid.NewGuid()}");
-            Directory.CreateDirectory(_testIndexDirectory);
+            System.IO.Directory.CreateDirectory(_testIndexDirectory);
             
             // 设置模拟环境
             SetupMockEnvironment();
@@ -92,7 +93,7 @@ namespace TelegramSearchBot.Benchmarks.Vector
             // 清理测试目录
             try
             {
-                if (Directory.Exists(_testIndexDirectory))
+                if (System.IO.Directory.Exists(_testIndexDirectory))
                 {
                     Directory.Delete(_testIndexDirectory, true);
                 }
@@ -516,7 +517,7 @@ namespace TelegramSearchBot.Benchmarks.Vector
         /// <summary>
         /// 模拟向量搜索
         /// </summary>
-        private async Task<List<VectorSearchResult>> SimulateVectorSearch(string vectorPath, float[] queryVector, int topK)
+        private async Task<List<VectorMessage>> SimulateVectorSearch(string vectorPath, float[] queryVector, int topK)
         {
             // 读取模拟的向量数据
             var json = await File.ReadAllTextAsync(vectorPath);
@@ -524,7 +525,7 @@ namespace TelegramSearchBot.Benchmarks.Vector
             
             // 计算相似性并排序
             var results = vectorData
-                .Select(v => new VectorSearchResult
+                .Select(v => new VectorMessage
                 {
                     MessageId = v.MessageId,
                     Content = v.Content,
@@ -672,7 +673,7 @@ namespace TelegramSearchBot.Benchmarks.Vector
     /// <summary>
     /// 向量搜索结果
     /// </summary>
-    public class VectorSearchResult
+    public class VectorMessage
     {
         public long MessageId { get; set; }
         public string Content { get; set; }

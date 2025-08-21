@@ -5,6 +5,7 @@ using Moq;
 using StackExchange.Redis;
 using System;
 using System.Linq;
+using System.Linq;
 using System.Threading.Tasks;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;

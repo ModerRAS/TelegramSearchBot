@@ -7,6 +7,7 @@ using TelegramSearchBot.Model.AI;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Test.Data

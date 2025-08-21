@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;

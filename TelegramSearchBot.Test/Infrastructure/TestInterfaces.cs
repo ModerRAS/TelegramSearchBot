@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,7 +30,7 @@ namespace TelegramSearchBot.Test.Infrastructure
     /// </summary>
     public interface IVectorSearchService
     {
-        Task<List<VectorSearchResult>> SearchAsync(float[] queryVector, int topK = 10, CancellationToken cancellationToken = default);
+        Task<List<VectorMessage>> SearchAsync(float[] queryVector, int topK = 10, CancellationToken cancellationToken = default);
         Task<bool> IndexDocumentAsync(string id, float[] vector, Dictionary<string, string> metadata, CancellationToken cancellationToken = default);
         Task<bool> DeleteDocumentAsync(string id, CancellationToken cancellationToken = default);
         Task<bool> ClearIndexAsync(CancellationToken cancellationToken = default);
@@ -51,7 +52,7 @@ namespace TelegramSearchBot.Test.Infrastructure
     /// <summary>
     /// 向量搜索结果
     /// </summary>
-    public class VectorSearchResult
+    public class VectorMessage
     {
         public string Id { get; set; } = string.Empty;
         public float Score { get; set; }
