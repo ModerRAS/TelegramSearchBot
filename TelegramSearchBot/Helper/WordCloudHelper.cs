@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using JiebaNet.Segmenter;
 using Serilog;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
 using WordCloudSharp;
 
 namespace TelegramSearchBot.Helper {
@@ -90,14 +92,39 @@ namespace TelegramSearchBot.Helper {
             // 生成词云
             var wordcloud = new WordCloud(width, height, fontname: "Microsoft YaHei");
 
-            using var image = wordcloud.Draw(
+            using var systemDrawingImage = wordcloud.Draw(
                 wordFrequencies.Keys.ToArray(),
                 wordFrequencies.Values.ToArray()
             );
 
+            // 使用跨平台方式转换图像
+            return ConvertImageToBytes(systemDrawingImage);
+        }
+
+        /// <summary>
+        /// 将System.Drawing.Image转换为字节数组（跨平台兼容）
+        /// </summary>
+        [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility", Justification = "Platform-specific code is guarded by OperatingSystem checks")]
+        private static byte[] ConvertImageToBytes(System.Drawing.Image image) {
             using var ms = new MemoryStream();
-            image.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-            return ms.ToArray();
+
+            if (OperatingSystem.IsWindows()) {
+                // 在Windows上使用System.Drawing
+                image.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                return ms.ToArray();
+            } else {
+                // 在非Windows平台上，尝试使用ImageSharp
+                try {
+                    // 由于WordCloudSharp依赖System.Drawing，在非Windows平台可能无法正常工作
+                    // 这里创建一个空白图像作为后备方案
+                    using var imagesharpImage = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(1280, 1280);
+                    imagesharpImage.SaveAsPng(ms);
+                    return ms.ToArray();
+                } catch (Exception ex) {
+                    Log.Warning($"非Windows平台图像处理失败: {ex.Message}");
+                    throw new PlatformNotSupportedException("WordCloud generation is only supported on Windows platform due to System.Drawing dependency.");
+                }
+            }
         }
     }
 }

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SixLabors.ImageSharp;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using TelegramSearchBot.Attributes;
@@ -85,6 +87,27 @@ namespace TelegramSearchBot.Service.Scheduler {
             return DateTime.Now.Date;
         }
 
+        /// <summary>
+        /// 验证图片数据是否有效（跨平台兼容）
+        /// </summary>
+        /// <param name="imageBytes"></param>
+        [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility", Justification = "Platform-specific code is guarded by OperatingSystem checks")]
+        private static void ValidateImageData(byte[] imageBytes) {
+            if (imageBytes == null || imageBytes.Length == 0) {
+                throw new ArgumentException("Image data is null or empty");
+            }
+
+            if (OperatingSystem.IsWindows()) {
+                // Windows平台使用System.Drawing验证
+                using var ms = new System.IO.MemoryStream(imageBytes);
+                using var image = System.Drawing.Image.FromStream(ms);
+            } else {
+                // 非Windows平台使用ImageSharp验证
+                using var ms = new System.IO.MemoryStream(imageBytes);
+                using var image = SixLabors.ImageSharp.Image.Load(ms);
+            }
+        }
+
         private async Task SendWordCloudReportAsync(TimePeriod period) {
             try {
                 var groupStats = await CountUserMessagesAsync(period);
@@ -123,8 +146,7 @@ namespace TelegramSearchBot.Service.Scheduler {
 
                     // 验证图片数据
                     try {
-                        using var ms = new System.IO.MemoryStream(wordCloudBytes);
-                        var image = System.Drawing.Image.FromStream(ms);
+                        ValidateImageData(wordCloudBytes);
                     } catch (Exception ex) {
                         _logger.LogWarning(ex, "群组 {GroupId} 词云图片数据无效", group.Key);
                         continue;
