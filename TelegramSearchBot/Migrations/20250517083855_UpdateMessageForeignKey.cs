@@ -1,15 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace TelegramSearchBot.Migrations
-{
+namespace TelegramSearchBot.Migrations {
     /// <inheritdoc />
-    public partial class UpdateMessageForeignKey : Migration
-    {
+    public partial class UpdateMessageForeignKey : Migration {
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
+        protected override void Up(MigrationBuilder migrationBuilder) {
             migrationBuilder.CreateIndex(
                 name: "IX_MessageExtensions_MessageDataId",
                 table: "MessageExtensions",
@@ -25,8 +22,7 @@ namespace TelegramSearchBot.Migrations
         }
 
         /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
+        protected override void Down(MigrationBuilder migrationBuilder) {
             migrationBuilder.DropForeignKey(
                 name: "FK_MessageExtensions_Messages_MessageDataId",
                 table: "MessageExtensions");

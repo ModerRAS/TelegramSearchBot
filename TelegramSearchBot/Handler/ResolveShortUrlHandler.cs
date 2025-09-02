@@ -6,19 +6,15 @@ using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Model.Notifications;
 using TelegramSearchBot.Service.Common;
 
-namespace TelegramSearchBot.Handler
-{
-    public class ProcessUrlHandler : IRequestHandler<ProcessUrlRequest, string>
-    {
+namespace TelegramSearchBot.Handler {
+    public class ProcessUrlHandler : IRequestHandler<ProcessUrlRequest, string> {
         private readonly UrlProcessingService _urlProcessingService;
 
-        public ProcessUrlHandler(UrlProcessingService urlProcessingService)
-        {
+        public ProcessUrlHandler(UrlProcessingService urlProcessingService) {
             _urlProcessingService = urlProcessingService;
         }
 
-        public async Task<string> Handle(ProcessUrlRequest request, CancellationToken cancellationToken)
-        {
+        public async Task<string> Handle(ProcessUrlRequest request, CancellationToken cancellationToken) {
             try {
                 var result = await _urlProcessingService.ProcessUrlAsync(request.Url);
                 if (!result.Contains("b23.tv/")) {

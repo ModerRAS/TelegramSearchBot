@@ -1,19 +1,17 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using Xunit;
 
-namespace TelegramSearchBot.Test.Service.Common
-{
-    public class AppConfigurationServiceTests
-    {
+namespace TelegramSearchBot.Test.Service.Common {
+    public class AppConfigurationServiceTests {
 #pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
         private DbContextOptions<DataDbContext> _dbContextOptions;
 #pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
@@ -30,17 +28,16 @@ namespace TelegramSearchBot.Test.Service.Common
         private Mock<IServiceProvider> _mockServiceProvider;
 #pragma warning restore CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
 
-        public AppConfigurationServiceTests()
-        {
+        public AppConfigurationServiceTests() {
             // Setup InMemory database
             _dbContextOptions = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString()) // Unique name for each test
                 .Options;
 
             _mockLogger = new Mock<ILogger<AppConfigurationService>>();
-            
+
             _mockServiceProvider = new Mock<IServiceProvider>();
-            
+
             // Configure the mock service provider to return a new instance of DataDbContext
             // This ensures that each scope gets a context that uses the specified InMemory database options.
             _mockServiceProvider
@@ -54,20 +51,17 @@ namespace TelegramSearchBot.Test.Service.Common
             _mockScopeFactory.Setup(sf => sf.CreateScope()).Returns(_mockScope.Object);
         }
 
-        private AppConfigurationService CreateService()
-        {
+        private AppConfigurationService CreateService() {
             return new AppConfigurationService(_mockScopeFactory.Object, _mockLogger.Object);
         }
 
         [Fact]
-        public async Task GetConfigurationValueAsync_KeyExists_ReturnsValue()
-        {
+        public async Task GetConfigurationValueAsync_KeyExists_ReturnsValue() {
             var service = CreateService();
             var testKey = "TestKey1";
             var expectedValue = "TestValue1";
 
-            using (var context = new DataDbContext(_dbContextOptions))
-            {
+            using (var context = new DataDbContext(_dbContextOptions)) {
                 context.AppConfigurationItems.Add(new AppConfigurationItem { Key = testKey, Value = expectedValue });
                 await context.SaveChangesAsync();
             }
@@ -77,8 +71,7 @@ namespace TelegramSearchBot.Test.Service.Common
         }
 
         [Fact]
-        public async Task GetConfigurationValueAsync_KeyNotExists_ReturnsNull()
-        {
+        public async Task GetConfigurationValueAsync_KeyNotExists_ReturnsNull() {
             var service = CreateService();
             var testKey = "NonExistentKey";
 
@@ -87,8 +80,7 @@ namespace TelegramSearchBot.Test.Service.Common
         }
 
         [Fact]
-        public async Task GetConfigurationValueAsync_NullOrWhiteSpaceKey_ReturnsNull()
-        {
+        public async Task GetConfigurationValueAsync_NullOrWhiteSpaceKey_ReturnsNull() {
             var service = CreateService();
 
             Assert.Null(await service.GetConfigurationValueAsync(null));
@@ -97,16 +89,14 @@ namespace TelegramSearchBot.Test.Service.Common
         }
 
         [Fact]
-        public async Task SetConfigurationValueAsync_NewKey_AddsItem()
-        {
+        public async Task SetConfigurationValueAsync_NewKey_AddsItem() {
             var service = CreateService();
             var testKey = "NewKey";
             var testValue = "NewValue";
 
             await service.SetConfigurationValueAsync(testKey, testValue);
 
-            using (var context = new DataDbContext(_dbContextOptions))
-            {
+            using (var context = new DataDbContext(_dbContextOptions)) {
                 var item = await context.AppConfigurationItems.FindAsync(testKey);
                 Assert.NotNull(item);
                 Assert.Equal(testValue, item.Value);
@@ -114,23 +104,20 @@ namespace TelegramSearchBot.Test.Service.Common
         }
 
         [Fact]
-        public async Task SetConfigurationValueAsync_ExistingKey_UpdatesItem()
-        {
+        public async Task SetConfigurationValueAsync_ExistingKey_UpdatesItem() {
             var service = CreateService();
             var testKey = "ExistingKey";
             var initialValue = "InitialValue";
             var updatedValue = "UpdatedValue";
 
-            using (var context = new DataDbContext(_dbContextOptions))
-            {
+            using (var context = new DataDbContext(_dbContextOptions)) {
                 context.AppConfigurationItems.Add(new AppConfigurationItem { Key = testKey, Value = initialValue });
                 await context.SaveChangesAsync();
             }
 
             await service.SetConfigurationValueAsync(testKey, updatedValue);
 
-            using (var context = new DataDbContext(_dbContextOptions))
-            {
+            using (var context = new DataDbContext(_dbContextOptions)) {
                 var item = await context.AppConfigurationItems.FindAsync(testKey);
                 Assert.NotNull(item);
                 Assert.Equal(updatedValue, item.Value);
@@ -138,8 +125,7 @@ namespace TelegramSearchBot.Test.Service.Common
         }
 
         [Fact]
-        public async Task SetConfigurationValueAsync_NullOrWhiteSpaceKey_DoesNotAddItemAndLogsWarning()
-        {
+        public async Task SetConfigurationValueAsync_NullOrWhiteSpaceKey_DoesNotAddItemAndLogsWarning() {
             var service = CreateService();
             var testValue = "SomeValue";
 
@@ -147,8 +133,7 @@ namespace TelegramSearchBot.Test.Service.Common
             await service.SetConfigurationValueAsync(string.Empty, testValue);
             await service.SetConfigurationValueAsync("   ", testValue);
 
-            using (var context = new DataDbContext(_dbContextOptions))
-            {
+            using (var context = new DataDbContext(_dbContextOptions)) {
                 Assert.False(context.AppConfigurationItems.Any(), "No items should be added for null or whitespace keys.");
             }
 

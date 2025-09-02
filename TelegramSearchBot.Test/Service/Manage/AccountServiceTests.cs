@@ -1,23 +1,20 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Moq;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Moq;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Manage;
 using Xunit;
 
-namespace TelegramSearchBot.Test.Service.Manage
-{
-    public class AccountServiceTests
-    {
+namespace TelegramSearchBot.Test.Service.Manage {
+    public class AccountServiceTests {
         private readonly DbContextOptions<DataDbContext> _dbContextOptions;
         private readonly Mock<ILogger<AccountService>> _mockLogger;
 
-        public AccountServiceTests()
-        {
+        public AccountServiceTests() {
             _dbContextOptions = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
@@ -25,22 +22,19 @@ namespace TelegramSearchBot.Test.Service.Manage
             _mockLogger = new Mock<ILogger<AccountService>>();
         }
 
-        private AccountService CreateService()
-        {
+        private AccountService CreateService() {
             var context = new DataDbContext(_dbContextOptions);
             return new AccountService(context, _mockLogger.Object);
         }
 
-        private async Task<DataDbContext> GetContextAsync()
-        {
+        private async Task<DataDbContext> GetContextAsync() {
             var context = new DataDbContext(_dbContextOptions);
             await context.Database.EnsureCreatedAsync();
             return context;
         }
 
         [Fact]
-        public async Task CreateAccountBookAsync_ValidInput_CreatesAccountBook()
-        {
+        public async Task CreateAccountBookAsync_ValidInput_CreatesAccountBook() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -68,8 +62,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task CreateAccountBookAsync_DuplicateName_ReturnsFalse()
-        {
+        public async Task CreateAccountBookAsync_DuplicateName_ReturnsFalse() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -89,8 +82,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task GetAccountBooksAsync_ReturnsActiveBooks()
-        {
+        public async Task GetAccountBooksAsync_ReturnsActiveBooks() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -109,8 +101,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task SetActiveAccountBookAsync_ValidBook_SetsActive()
-        {
+        public async Task SetActiveAccountBookAsync_ValidBook_SetsActive() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -133,8 +124,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task SetActiveAccountBookAsync_InvalidBook_ReturnsFalse()
-        {
+        public async Task SetActiveAccountBookAsync_InvalidBook_ReturnsFalse() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -149,8 +139,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task AddRecordAsync_ValidInput_AddsRecord()
-        {
+        public async Task AddRecordAsync_ValidInput_AddsRecord() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -176,8 +165,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task AddRecordAsync_NoActiveBook_ReturnsFalse()
-        {
+        public async Task AddRecordAsync_NoActiveBook_ReturnsFalse() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -193,8 +181,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task GetStatisticsAsync_ReturnsCorrectStats()
-        {
+        public async Task GetStatisticsAsync_ReturnsCorrectStats() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -214,22 +201,21 @@ namespace TelegramSearchBot.Test.Service.Manage
             var stats = await service.GetStatisticsAsync(createResult.accountBook.Id);
 
             // Assert
-            Assert.Equal(1000m, (decimal)stats["totalIncome"]);
-            Assert.Equal(600m, (decimal)stats["totalExpense"]);
-            Assert.Equal(400m, (decimal)stats["balance"]);
-            Assert.Equal(4, (int)stats["recordCount"]);
+            Assert.Equal(1000m, ( decimal ) stats["totalIncome"]);
+            Assert.Equal(600m, ( decimal ) stats["totalExpense"]);
+            Assert.Equal(400m, ( decimal ) stats["balance"]);
+            Assert.Equal(4, ( int ) stats["recordCount"]);
 
-            var expenseByTag = (System.Collections.Generic.Dictionary<string, decimal>)stats["expenseByTag"];
+            var expenseByTag = ( System.Collections.Generic.Dictionary<string, decimal> ) stats["expenseByTag"];
             Assert.Equal(400m, expenseByTag["餐费"]);
             Assert.Equal(200m, expenseByTag["交通"]);
 
-            var incomeByTag = (System.Collections.Generic.Dictionary<string, decimal>)stats["incomeByTag"];
+            var incomeByTag = ( System.Collections.Generic.Dictionary<string, decimal> ) stats["incomeByTag"];
             Assert.Equal(1000m, incomeByTag["工资"]);
         }
 
         [Fact]
-        public async Task DeleteRecordAsync_ValidRecord_DeletesRecord()
-        {
+        public async Task DeleteRecordAsync_ValidRecord_DeletesRecord() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -257,8 +243,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task DeleteRecordAsync_WrongUser_ReturnsFalse()
-        {
+        public async Task DeleteRecordAsync_WrongUser_ReturnsFalse() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -290,8 +275,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         [InlineData("", false, 0, null, null)]
         [InlineData("50", false, 0, null, null)]
         public void ParseQuickRecord_VariousInputs_ReturnsExpectedResults(
-            string input, bool expectedSuccess, decimal expectedAmount, string expectedTag, string expectedDescription)
-        {
+            string input, bool expectedSuccess, decimal expectedAmount, string? expectedTag, string? expectedDescription) {
             // Arrange
             var service = CreateService();
 
@@ -300,8 +284,7 @@ namespace TelegramSearchBot.Test.Service.Manage
 
             // Assert
             Assert.Equal(expectedSuccess, result.success);
-            if (expectedSuccess)
-            {
+            if (expectedSuccess) {
                 Assert.Equal(expectedAmount, result.amount);
                 Assert.Equal(expectedTag, result.tag);
                 Assert.Equal(expectedDescription, result.description);
@@ -309,8 +292,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task DeleteAccountBookAsync_ValidBook_SetsInactive()
-        {
+        public async Task DeleteAccountBookAsync_ValidBook_SetsInactive() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -334,8 +316,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task DeleteAccountBookAsync_WrongUser_ReturnsFalse()
-        {
+        public async Task DeleteAccountBookAsync_WrongUser_ReturnsFalse() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -354,8 +335,7 @@ namespace TelegramSearchBot.Test.Service.Manage
         }
 
         [Fact]
-        public async Task GetRecordsAsync_ReturnsPagedResults()
-        {
+        public async Task GetRecordsAsync_ReturnsPagedResults() {
             // Arrange
             var service = CreateService();
             var groupId = -12345L;
@@ -366,8 +346,7 @@ namespace TelegramSearchBot.Test.Service.Manage
             await service.SetActiveAccountBookAsync(groupId, createResult.accountBook.Id);
 
             // Add multiple records
-            for (int i = 1; i <= 15; i++)
-            {
+            for (int i = 1; i <= 15; i++) {
                 await service.AddRecordAsync(groupId, userId, "user", -i, $"标签{i}");
             }
 
@@ -378,9 +357,9 @@ namespace TelegramSearchBot.Test.Service.Manage
             // Assert
             Assert.Equal(10, page1.Count);
             Assert.Equal(5, page2.Count);
-            
+
             // Records should be ordered by creation time descending
             Assert.True(page1.First().CreatedAt >= page1.Last().CreatedAt);
         }
     }
-} 
+}

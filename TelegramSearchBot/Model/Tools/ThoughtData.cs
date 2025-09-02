@@ -1,10 +1,8 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace TelegramSearchBot.Model.Tools
-{
-    public class ThoughtData
-    {
+namespace TelegramSearchBot.Model.Tools {
+    public class ThoughtData {
         [JsonPropertyName("thought")]
         public string Thought { get; set; }
 
@@ -33,8 +31,7 @@ namespace TelegramSearchBot.Model.Tools
         public bool NextThoughtNeeded { get; set; }
     }
 
-    public class SequentialThinkingResult
-    {
+    public class SequentialThinkingResult {
         [JsonPropertyName("thoughtNumber")]
         public int ThoughtNumber { get; set; }
 
@@ -51,12 +48,11 @@ namespace TelegramSearchBot.Model.Tools
         public int ThoughtHistoryLength { get; set; }
     }
 
-    public class SequentialThinkingError
-    {
+    public class SequentialThinkingError {
         [JsonPropertyName("error")]
         public string Error { get; set; }
 
         [JsonPropertyName("status")]
         public string Status { get; set; }
     }
-} 
+}

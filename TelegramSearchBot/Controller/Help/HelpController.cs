@@ -1,33 +1,28 @@
 using System;
 using System.Collections.Generic;
-using TelegramSearchBot.Interface;
+using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Service.BotAPI;
-using System.IO;
-using TelegramSearchBot.Model;
-using System.Text;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.Controller.Help {
-    public class HelpController : IOnUpdate
-    {
+    public class HelpController : IOnUpdate {
         private readonly ISendMessageService sendMessageService;
         public List<Type> Dependencies => new List<Type>();
 
-        public HelpController(ISendMessageService sendMessageService)
-        {
+        public HelpController(ISendMessageService sendMessageService) {
             this.sendMessageService = sendMessageService;
         }
 
-        public async Task ExecuteAsync(PipelineContext p) 
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
             var e = p.Update;
-            if (!string.IsNullOrEmpty(e?.Message?.Text))
-            {
-                if (e.Message.Text.Trim().Equals("帮助") || 
-                    e.Message.Text.Trim().Equals("/help"))
-                {
+            if (!string.IsNullOrEmpty(e?.Message?.Text)) {
+                if (e.Message.Text.Trim().Equals("帮助") ||
+                    e.Message.Text.Trim().Equals("/help")) {
                     // 嵌入的帮助文档内容
                     var helpText = @"# TelegramSearchBot - 用户指令与使用说明
 
@@ -53,26 +48,18 @@ namespace TelegramSearchBot.Controller.Help {
                     var sb = new StringBuilder();
                     var lines = helpText.Split('\n');
                     var indentLevel = 0;
-                    
-                    foreach (var line in lines)
-                    {
-                        if (line.StartsWith("###"))
-                        {
+
+                    foreach (var line in lines) {
+                        if (line.StartsWith("###")) {
                             indentLevel = 2;
                             sb.AppendLine(new string(' ', indentLevel * 2) + line.Substring(3).Trim());
-                        }
-                        else if (line.StartsWith("##"))
-                        {
+                        } else if (line.StartsWith("##")) {
                             indentLevel = 1;
                             sb.AppendLine(new string(' ', indentLevel * 2) + line.Substring(2).Trim());
-                        }
-                        else if (line.StartsWith("#"))
-                        {
+                        } else if (line.StartsWith("#")) {
                             indentLevel = 0;
                             sb.AppendLine(line.Substring(1).Trim());
-                        }
-                        else
-                        {
+                        } else {
                             sb.AppendLine(new string(' ', indentLevel * 2) + line);
                         }
                     }

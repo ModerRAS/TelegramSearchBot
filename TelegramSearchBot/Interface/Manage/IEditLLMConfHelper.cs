@@ -17,4 +17,4 @@ namespace TelegramSearchBot.Interface.Manage {
         Task<bool> UpdateChannel(int channelId, string? name = null, string? gateway = null, string? apiKey = null, LLMProvider? provider = null, int? parallel = null, int? priority = null);
         Task<List<string>> GetModelsByChannelId(long channelId);
     }
-} 
+}

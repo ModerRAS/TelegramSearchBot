@@ -1,29 +1,28 @@
-﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Common.Model.DO;
 using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.OCR;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
-using TelegramSearchBot.Common.Model.DO;
-using System.Text;
-using Newtonsoft.Json;
-using TelegramSearchBot.Interface.Controller;
 
 namespace TelegramSearchBot.Controller.AI.OCR {
-    public class AutoOCRController : IOnUpdate
-    {
+    public class AutoOCRController : IOnUpdate {
         private readonly IPaddleOCRService paddleOCRService;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
@@ -39,8 +38,7 @@ namespace TelegramSearchBot.Controller.AI.OCR {
             ILogger<AutoOCRController> logger,
             ISendMessageService sendMessageService,
             MessageExtensionService messageExtensionService
-            )
-        {
+            ) {
             this.paddleOCRService = paddleOCRService;
             this.messageService = messageService;
             this.botClient = botClient;
@@ -52,19 +50,16 @@ namespace TelegramSearchBot.Controller.AI.OCR {
 
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController), typeof(MessageController) };
 
-        public async Task ExecuteAsync(PipelineContext p)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
             var e = p.Update;
             if (p.BotMessageType != BotMessageType.Message) {
                 return;
             }
-            if (!Env.EnableAutoOCR)
-            {
+            if (!Env.EnableAutoOCR) {
                 return;
             }
             string OcrStr = string.Empty;
-            try
-            {
+            try {
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
@@ -73,17 +68,15 @@ namespace TelegramSearchBot.Controller.AI.OCR {
                     await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
                     p.ProcessingResults.Add($"[OCR识别结果] {OcrStr}");
                 }
-            }
-            catch (Exception ex) when (
-                  ex is CannotGetPhotoException ||
-                  ex is DirectoryNotFoundException
-                  )
-            {
+            } catch (Exception ex) when (
+                    ex is CannotGetPhotoException ||
+                    ex is DirectoryNotFoundException
+                    ) {
                 logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
             }
 
-            if ((!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Equals("打印")) ||
-                (e.Message.ReplyToMessage != null && e.Message.Text != null && e.Message.Text.Equals("打印"))) {
+            if (( !string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Equals("打印") ) ||
+                ( e.Message.ReplyToMessage != null && e.Message.Text != null && e.Message.Text.Equals("打印") )) {
                 string ocrResult = OcrStr;
 
                 // 如果是回复消息触发打印

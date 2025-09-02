@@ -1,10 +1,10 @@
-﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using TelegramSearchBot.Controller.AI.OCR;
 using TelegramSearchBot.Controller.Download;
@@ -71,8 +71,8 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 logger.LogInformation($"Cannot Get Photo: {e.Message.Chat.Id}/{e.Message.MessageId}");
             }
 
-            if ((!string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Equals("描述")) ||
-                (e.Message.ReplyToMessage != null && e.Message.Text != null && e.Message.Text.Equals("描述"))) {
+            if (( !string.IsNullOrEmpty(e.Message.Caption) && e.Message.Caption.Equals("描述") ) ||
+                ( e.Message.ReplyToMessage != null && e.Message.Text != null && e.Message.Text.Equals("描述") )) {
                 string ocrResult = OcrStr;
 
                 // 如果是回复消息触发打印

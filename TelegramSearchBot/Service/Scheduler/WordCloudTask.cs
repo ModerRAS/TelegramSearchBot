@@ -1,23 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SixLabors.ImageSharp;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.View;
-using TelegramSearchBot.Attributes;
 
-namespace TelegramSearchBot.Service.Scheduler
-{
+namespace TelegramSearchBot.Service.Scheduler {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class WordCloudTask : IScheduledTask
-    {
+    public class WordCloudTask : IScheduledTask {
         public string TaskName => "WordCloudReport";
 
         public string CronExpression => "0 5 * * *"; // 每天早上5点执行
@@ -28,21 +28,18 @@ namespace TelegramSearchBot.Service.Scheduler
         private readonly ILogger<WordCloudTask> _logger;
         private Func<Task> _heartbeatCallback;
 
-        public WordCloudTask(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<WordCloudTask> logger)
-        {
+        public WordCloudTask(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<WordCloudTask> logger) {
             _dbContext = dbContext;
             _botClient = botClient;
             _sendMessage = sendMessage;
             _logger = logger;
         }
 
-        public void SetHeartbeatCallback(Func<Task> heartbeatCallback)
-        {
+        public void SetHeartbeatCallback(Func<Task> heartbeatCallback) {
             _heartbeatCallback = heartbeatCallback;
         }
 
-        public async Task ExecuteAsync()
-        {
+        public async Task ExecuteAsync() {
             _logger.LogInformation("词云报告任务开始执行");
 
             // 检查今天是否已经成功执行过
@@ -52,8 +49,7 @@ namespace TelegramSearchBot.Service.Scheduler
                 .OrderByDescending(e => e.CompletedTime)
                 .FirstOrDefaultAsync();
 
-            if (lastSuccessfulExecution != null && lastSuccessfulExecution.CompletedTime.HasValue && lastSuccessfulExecution.CompletedTime.Value.ToUniversalTime().Date == todayUtc)
-            {
+            if (lastSuccessfulExecution != null && lastSuccessfulExecution.CompletedTime.HasValue && lastSuccessfulExecution.CompletedTime.Value.ToUniversalTime().Date == todayUtc) {
                 _logger.LogInformation("任务 {TaskName} 在 {CompletedTime} 已成功执行过，今天不再执行。", TaskName, lastSuccessfulExecution.CompletedTime.Value);
                 return;
             }
@@ -61,7 +57,7 @@ namespace TelegramSearchBot.Service.Scheduler
             var today = GetCurrentDate();
             var isWeekStart = today.DayOfWeek == DayOfWeek.Monday;
             var isMonthStart = today.Day == 1;
-            var isQuarterStart = isMonthStart && (today.Month % 3 == 1);
+            var isQuarterStart = isMonthStart && ( today.Month % 3 == 1 );
             var isYearStart = isMonthStart && today.Month == 1;
 
             // 按优先级选择报告类型：年 > 季 > 月 > 周
@@ -75,13 +71,10 @@ namespace TelegramSearchBot.Service.Scheduler
             else if (isWeekStart)
                 period = TimePeriod.Weekly;
 
-            if (period.HasValue)
-            {
+            if (period.HasValue) {
                 _logger.LogInformation("符合条件, 开始生成 {Period} 词云报告", period.Value);
                 await SendWordCloudReportAsync(period.Value);
-            }
-            else
-            {
+            } else {
                 _logger.LogInformation("今天不符合任何报告生成条件, 跳过执行");
             }
         }
@@ -90,29 +83,44 @@ namespace TelegramSearchBot.Service.Scheduler
         /// 获取当前日期（本地时间）
         /// </summary>
         /// <returns></returns>
-        private DateTime GetCurrentDate()
-        {
+        private DateTime GetCurrentDate() {
             return DateTime.Now.Date;
         }
 
-        private async Task SendWordCloudReportAsync(TimePeriod period)
-        {
-            try 
-            {
+        /// <summary>
+        /// 验证图片数据是否有效（跨平台兼容）
+        /// </summary>
+        /// <param name="imageBytes"></param>
+        [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility", Justification = "Platform-specific code is guarded by OperatingSystem checks")]
+        private static void ValidateImageData(byte[] imageBytes) {
+            if (imageBytes == null || imageBytes.Length == 0) {
+                throw new ArgumentException("Image data is null or empty");
+            }
+
+            if (OperatingSystem.IsWindows()) {
+                // Windows平台使用System.Drawing验证
+                using var ms = new System.IO.MemoryStream(imageBytes);
+                using var image = System.Drawing.Image.FromStream(ms);
+            } else {
+                // 非Windows平台使用ImageSharp验证
+                using var ms = new System.IO.MemoryStream(imageBytes);
+                using var image = SixLabors.ImageSharp.Image.Load(ms);
+            }
+        }
+
+        private async Task SendWordCloudReportAsync(TimePeriod period) {
+            try {
                 var groupStats = await CountUserMessagesAsync(period);
                 var messagesByGroup = await GetGroupMessagesWithExtensionsAsync(period);
 
-                foreach (var group in messagesByGroup)
-                {
+                foreach (var group in messagesByGroup) {
                     // 更新心跳
-                    if (_heartbeatCallback != null)
-                    {
+                    if (_heartbeatCallback != null) {
                         await _heartbeatCallback();
                     }
 
                     // 获取当前群组的统计信息
-                    if (!groupStats.TryGetValue(group.Key, out var stats))
-                    {
+                    if (!groupStats.TryGetValue(group.Key, out var stats)) {
                         continue;
                     }
 
@@ -120,11 +128,10 @@ namespace TelegramSearchBot.Service.Scheduler
                         .Where(kv => kv.Key != 0) // 排除系统用户
                         .OrderByDescending(kv => kv.Value)
                         .Take(3)
-                        .Select(kv => 
-                        {
+                        .Select(kv => {
                             var user = _dbContext.UserData.FirstOrDefault(u => u.Id == kv.Key);
-                            var name = user != null ? 
-                                $"{user.FirstName} {user.LastName}".Trim() : 
+                            var name = user != null ?
+                                $"{user.FirstName} {user.LastName}".Trim() :
                                 $"用户{kv.Key}";
                             return (Name: name, Count: kv.Value);
                         })
@@ -132,29 +139,23 @@ namespace TelegramSearchBot.Service.Scheduler
 
                     // 生成词云图片
                     var wordCloudBytes = WordCloudHelper.GenerateWordCloud(group.Value.ToArray());
-                    if (wordCloudBytes == null || wordCloudBytes.Length == 0)
-                    {
+                    if (wordCloudBytes == null || wordCloudBytes.Length == 0) {
                         _logger.LogWarning("生成群组 {GroupId} 词云失败: 图片数据为空", group.Key);
                         continue;
                     }
 
                     // 验证图片数据
-                    try 
-                    {
-                        using var ms = new System.IO.MemoryStream(wordCloudBytes);
-                        var image = System.Drawing.Image.FromStream(ms);
-                    }
-                    catch (Exception ex)
-                    {
+                    try {
+                        ValidateImageData(wordCloudBytes);
+                    } catch (Exception ex) {
                         _logger.LogWarning(ex, "群组 {GroupId} 词云图片数据无效", group.Key);
                         continue;
                     }
-                    
+
                     // 获取周期名称
-                    var periodName = period switch
-                    {
+                    var periodName = period switch {
                         TimePeriod.Weekly => "本周",
-                        TimePeriod.Monthly => "本月", 
+                        TimePeriod.Monthly => "本月",
                         TimePeriod.Quarterly => "本季度",
                         TimePeriod.Yearly => "本年",
                         _ => "近期"
@@ -162,8 +163,7 @@ namespace TelegramSearchBot.Service.Scheduler
 
                     // 计算日期范围
                     var endDate = DateTime.Today;
-                    var startDate = period switch
-                    {
+                    var startDate = period switch {
                         TimePeriod.Weekly => endDate.AddDays(-7),
                         TimePeriod.Monthly => endDate.AddMonths(-1),
                         TimePeriod.Quarterly => endDate.AddMonths(-3),
@@ -183,35 +183,27 @@ namespace TelegramSearchBot.Service.Scheduler
                         .WithChatId(group.Key)
                         .WithPhotoBytes(wordCloudBytes);
 
-                    try
-                    {
+                    try {
                         await view.Render();
                         _logger.LogInformation("成功发送群组 {GroupId} 的词云报告", group.Key);
-                    }
-                    catch (ApiRequestException apiEx) when (apiEx.ErrorCode == 403)
-                    {
+                    } catch (ApiRequestException apiEx) when (apiEx.ErrorCode == 403) {
                         // 处理机器人被踢出群组的情况
-                        if (apiEx.Message?.Contains("bot was kicked") == true || 
-                            apiEx.Message?.Contains("Forbidden") == true)
-                        {
-                            _logger.LogWarning("机器人已被踢出群组 {GroupId}，跳过词云报告发送: {ErrorMessage}", 
+                        if (apiEx.Message?.Contains("bot was kicked") == true ||
+                            apiEx.Message?.Contains("Forbidden") == true) {
+                            _logger.LogWarning("机器人已被踢出群组 {GroupId}，跳过词云报告发送: {ErrorMessage}",
                                 group.Key, apiEx.Message);
                             continue;
                         }
-                        
+
                         // 其他 403 错误重新抛出
                         throw;
-                    }
-                    catch (Exception ex)
-                    {
+                    } catch (Exception ex) {
                         _logger.LogError(ex, "发送群组 {GroupId} 词云报告失败", group.Key);
                         // 继续处理下一个群组，不中断整个任务
                         continue;
                     }
                 }
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, "生成词云报告失败");
                 throw; // 重新抛出异常，让调度器记录失败状态
             }
@@ -234,10 +226,8 @@ namespace TelegramSearchBot.Service.Scheduler
         /// - UserCounts: 用户ID到发言数量的字典
         /// - TotalCount: 总发言数量
         /// </returns>
-        public async Task<Dictionary<long, (Dictionary<long, int> UserCounts, int TotalCount)>> CountUserMessagesAsync(TimePeriod period)
-        {
-            var startDate = period switch
-            {
+        public async Task<Dictionary<long, (Dictionary<long, int> UserCounts, int TotalCount)>> CountUserMessagesAsync(TimePeriod period) {
+            var startDate = period switch {
                 TimePeriod.Daily => DateTime.UtcNow.AddDays(-1),
                 TimePeriod.Weekly => DateTime.UtcNow.AddDays(-7),
                 TimePeriod.Monthly => DateTime.UtcNow.AddMonths(-1),
@@ -272,11 +262,9 @@ namespace TelegramSearchBot.Service.Scheduler
         /// 列表包含消息内容和所有扩展值（不包含扩展名）
         /// 没有消息的群组会被自动过滤掉
         /// </returns>
-        public async Task<Dictionary<long, List<string>>> GetGroupMessagesWithExtensionsAsync(TimePeriod period)
-        {
+        public async Task<Dictionary<long, List<string>>> GetGroupMessagesWithExtensionsAsync(TimePeriod period) {
             var result = new Dictionary<long, List<string>>();
-            var startDate = period switch
-            {
+            var startDate = period switch {
                 TimePeriod.Daily => DateTime.UtcNow.AddDays(-1),
                 TimePeriod.Weekly => DateTime.UtcNow.AddDays(-7),
                 TimePeriod.Monthly => DateTime.UtcNow.AddMonths(-1),
@@ -288,34 +276,29 @@ namespace TelegramSearchBot.Service.Scheduler
             var groups = await _dbContext.GroupData
                 .Where(g => g.Id < 0) // 只处理群组(GroupId < 0)，过滤私聊
                 .ToListAsync();
-            
-            foreach (var group in groups)
-            {
+
+            foreach (var group in groups) {
                 var groupMessages = await _dbContext.Messages
                     .Where(m => m.GroupId == group.Id && m.DateTime >= startDate)
                     .Include(m => m.MessageExtensions)
                     .ToListAsync();
 
                 var groupResults = new List<string>();
-                foreach (var message in groupMessages)
-                {
+                foreach (var message in groupMessages) {
                     // 添加消息内容
-                    if (!string.IsNullOrEmpty(message.Content))
-                    {
+                    if (!string.IsNullOrEmpty(message.Content)) {
                         groupResults.Add(message.Content);
                     }
 
                     // 添加所有扩展值
-                    if (message.MessageExtensions != null)
-                    {
+                    if (message.MessageExtensions != null) {
                         groupResults.AddRange(message.MessageExtensions
                             .Select(e => e.Value)
                             .Where(v => !string.IsNullOrEmpty(v)));
                     }
                 }
 
-                if (groupResults.Any())
-                {
+                if (groupResults.Any()) {
                     result.Add(group.Id, groupResults);
                 }
             }
@@ -323,4 +306,4 @@ namespace TelegramSearchBot.Service.Scheduler
             return result;
         }
     }
-} 
+}

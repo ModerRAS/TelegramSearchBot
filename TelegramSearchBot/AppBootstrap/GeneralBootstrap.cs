@@ -1,3 +1,12 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using LiteDB;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,30 +14,21 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging; // Added for ILoggerFactory
 using Serilog;
 using StackExchange.Redis;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Net;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Executor;
+using TelegramSearchBot.Extension;
 using TelegramSearchBot.Helper;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.View;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
-using TelegramSearchBot.Service.Storage;
-using TelegramSearchBot.Extension;
-using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.Service.Scheduler;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {

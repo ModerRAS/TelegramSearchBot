@@ -1,28 +1,23 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace TelegramSearchBot.Migrations
-{
+namespace TelegramSearchBot.Migrations {
     /// <inheritdoc />
-    public partial class AddShortUrlMappingTable : Migration
-    {
+    public partial class AddShortUrlMappingTable : Migration {
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
+        protected override void Up(MigrationBuilder migrationBuilder) {
             migrationBuilder.CreateTable(
                 name: "ShortUrlMappings",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     ShortCode = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
                     LongUrl = table.Column<string>(type: "TEXT", nullable: false),
                     CreationDate = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_ShortUrlMappings", x => x.Id);
                 });
 
@@ -34,8 +29,7 @@ namespace TelegramSearchBot.Migrations
         }
 
         /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
+        protected override void Down(MigrationBuilder migrationBuilder) {
             migrationBuilder.DropTable(
                 name: "ShortUrlMappings");
         }

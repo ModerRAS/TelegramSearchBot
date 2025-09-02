@@ -5,56 +5,49 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using J2N.IO;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Tools;
-using TelegramSearchBot.Attributes;
-using J2N.IO;
 
-namespace TelegramSearchBot.Service.Tools
-{
+namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class DenoJsExecutorService : IService, IDenoJsExecutorService
-    {
+    public class DenoJsExecutorService : IService, IDenoJsExecutorService {
         private readonly IHttpClientFactory _httpClientFactory;
         internal string _denoPath;
         internal string _denoDir;
 
         public string ServiceName => "DenoJsExecutorService";
 
-        public DenoJsExecutorService(IHttpClientFactory httpClientFactory)
-        {
+        public DenoJsExecutorService(IHttpClientFactory httpClientFactory) {
             _httpClientFactory = httpClientFactory;
             _denoDir = Path.Combine(Env.WorkDir, "bin");
             _denoPath = Path.Combine(_denoDir, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "deno.exe" : "deno");
-            
-            if (!Directory.Exists(_denoDir))
-            {
+
+            if (!Directory.Exists(_denoDir)) {
                 Directory.CreateDirectory(_denoDir);
             }
         }
 
-        private async Task EnsureDenoInstalledAsync()
-        {
+        private async Task EnsureDenoInstalledAsync() {
             if (File.Exists(_denoPath)) return;
 
             var client = _httpClientFactory.CreateClient();
             client.Timeout = TimeSpan.FromMinutes(5);
-            var downloadUrl = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) 
+            var downloadUrl = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                 ? "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
                 : "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip";
 
             var tempDir = Path.Combine(Env.WorkDir, "temp");
-            if (!Directory.Exists(tempDir))
-            {
+            if (!Directory.Exists(tempDir)) {
                 Directory.CreateDirectory(tempDir);
             }
             var tempFile = Path.Combine(tempDir, $"deno-download-{Guid.NewGuid()}.tmp");
-            try
-            {
+            try {
                 // 下载文件并验证大小
                 var response = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
-                
+
                 var contentLength = response.Content.Headers.ContentLength;
                 if (contentLength == null || contentLength < 1024 * 1024) // 小于1MB视为无效
                     throw new Exception("Invalid download size detected");
@@ -79,49 +72,37 @@ namespace TelegramSearchBot.Service.Tools
                     // 验证下载完整性
                     if (contentLength.HasValue && totalRead != contentLength)
                         throw new Exception("Download incomplete");
-                };
-                
+                }
+
 
                 // 验证ZIP文件有效性
-                using (var archive = System.IO.Compression.ZipFile.OpenRead(tempFile))
-                {
+                using (var archive = System.IO.Compression.ZipFile.OpenRead(tempFile)) {
                     if (archive.Entries.Count == 0)
                         throw new Exception("Invalid ZIP file - no entries");
                 }
 
                 System.IO.Compression.ZipFile.ExtractToDirectory(tempFile, _denoDir);
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 // 清理可能损坏的文件
-                try 
-                {
-                    if (File.Exists(tempFile))
-                    {
+                try {
+                    if (File.Exists(tempFile)) {
                         await Task.Delay(100); // Wait for handles to release
                         File.Delete(tempFile);
                     }
-                    if (Directory.Exists(_denoDir))
-                    {
+                    if (Directory.Exists(_denoDir)) {
                         await Task.Delay(100);
                         Directory.Delete(_denoDir, true);
                     }
-                }
-                catch {}
-                    
+                } catch { }
+
                 throw new Exception($"Failed to install Deno: {ex.Message}", ex);
-            }
-            finally
-            {
-                try 
-                {
-                    if (File.Exists(tempFile))
-                    {
+            } finally {
+                try {
+                    if (File.Exists(tempFile)) {
                         await Task.Delay(100);
                         File.Delete(tempFile);
                     }
-                }
-                catch {}
+                } catch { }
             }
         }
 
@@ -171,24 +152,19 @@ console.log(content);
 ")]
         public async Task<string> ExecuteJs(
             [McpParameter("要执行的JavaScript代码，支持ES6+语法，通过console.log输出结果")] string jsCode,
-            [McpParameter("执行超时时间（毫秒），默认5000")] int timeoutMs = 5000)
-        {
+            [McpParameter("执行超时时间（毫秒），默认5000")] int timeoutMs = 5000) {
             var tempDir = Path.Combine(Env.WorkDir, "temp");
-            if (!Directory.Exists(tempDir))
-            {
+            if (!Directory.Exists(tempDir)) {
                 Directory.CreateDirectory(tempDir);
             }
             var tempFile = Path.Combine(tempDir, $"deno-exec-{Guid.NewGuid()}.js");
             await File.WriteAllTextAsync(tempFile, jsCode);
 
-            try
-            {
+            try {
                 await EnsureDenoInstalledAsync();
-                
-                var process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
+
+                var process = new Process {
+                    StartInfo = new ProcessStartInfo {
                         FileName = _denoPath,
                         Arguments = $"run --allow-read=. --allow-write=. --allow-net --no-prompt {tempFile}",
                         RedirectStandardOutput = true,
@@ -200,51 +176,38 @@ console.log(content);
                 };
 
                 process.Start();
-                
+
                 using var cts = new CancellationTokenSource(timeoutMs);
-                try
-                {
+                try {
                     await process.WaitForExitAsync(cts.Token);
-                }
-                catch (OperationCanceledException)
-                {
+                } catch (OperationCanceledException) {
                     string partialOutput = "";
-                    try 
-                    {
-                        if (!process.HasExited)
-                        {
+                    try {
+                        if (!process.HasExited) {
                             // Read any available output with timeout before killing
                             var outputTask = process.StandardOutput.ReadToEndAsync();
-                            if (await Task.WhenAny(outputTask, Task.Delay(500)) == outputTask)
-                            {
+                            if (await Task.WhenAny(outputTask, Task.Delay(500)) == outputTask) {
                                 partialOutput = await outputTask;
                             }
                             process.Kill(true);
                         }
-                    }
-                    catch {}
+                    } catch { }
                     throw new TimeoutException($"Deno execution timed out after {timeoutMs}ms. Partial output:\n{partialOutput}");
                 }
 
-                if (process.ExitCode != 0)
-                {
+                if (process.ExitCode != 0) {
                     var error = await process.StandardError.ReadToEndAsync();
                     throw new Exception($"Deno execution failed: {error}");
                 }
 
                 return await process.StandardOutput.ReadToEndAsync();
-            }
-            finally
-            {
-                try 
-                {
-                    if (File.Exists(tempFile))
-                    {
+            } finally {
+                try {
+                    if (File.Exists(tempFile)) {
                         await Task.Delay(100);
                         File.Delete(tempFile);
                     }
-                }
-                catch {}
+                } catch { }
             }
         }
     }

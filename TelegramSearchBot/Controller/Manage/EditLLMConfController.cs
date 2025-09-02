@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -46,8 +46,7 @@ namespace TelegramSearchBot.Controller.Manage {
             } else return;
 
             var (status, message) = await EditLLMConfService.ExecuteAsync(Command, e.Message.Chat.Id);
-            if (status)
-            {
+            if (status) {
                 await EditLLMConfView
                     .WithChatId(e.Message.Chat.Id)
                     .WithReplyTo(e.Message.MessageId)

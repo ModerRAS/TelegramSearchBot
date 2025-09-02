@@ -17,13 +17,11 @@ using Xunit;
 using Xunit.Abstractions;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
 
-namespace TelegramSearchBot.Test.Service.Vector
-{
+namespace TelegramSearchBot.Test.Service.Vector {
     /// <summary>
     /// 向量服务性能测试
     /// </summary>
-    public class VectorPerformanceTests : IDisposable
-    {
+    public class VectorPerformanceTests : IDisposable {
         private readonly Mock<ILogger<FaissVectorService>> _mockLogger;
         private readonly Mock<IGeneralLLMService> _mockLLMService;
         private readonly Mock<IServiceProvider> _mockServiceProvider;
@@ -36,8 +34,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         private readonly ITestOutputHelper _output;
         private static int _testCounter = 3000; // 静态计数器，确保每个测试使用唯一ID
 
-        public VectorPerformanceTests(ITestOutputHelper output)
-        {
+        public VectorPerformanceTests(ITestOutputHelper output) {
             _output = output;
             _testDirectory = Path.Combine(Path.GetTempPath(), "VectorPerformanceTests", Guid.NewGuid().ToString());
             Directory.CreateDirectory(_testDirectory);
@@ -72,8 +69,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorGeneration_ShouldCompleteWithinTimeLimit()
-        {
+        public async Task VectorGeneration_ShouldCompleteWithinTimeLimit() {
             // Arrange
             await ClearDatabase();
             var stopwatch = Stopwatch.StartNew();
@@ -86,16 +82,15 @@ namespace TelegramSearchBot.Test.Service.Vector
             // Assert
             Assert.NotNull(vector);
             Assert.Equal(1024, vector.Length);
-            
+
             // 向量生成应该在合理时间内完成（因为是mock，应该很快）
             Assert.True(stopwatch.ElapsedMilliseconds < 1000, $"向量生成耗时过长: {stopwatch.ElapsedMilliseconds}ms");
-            
+
             _output.WriteLine($"向量生成耗时: {stopwatch.ElapsedMilliseconds} ms");
         }
 
         [Fact]
-        public async Task MultipleVectorization_ShouldMaintainPerformance()
-        {
+        public async Task MultipleVectorization_ShouldMaintainPerformance() {
             // Arrange
             await ClearDatabase();
             var groupId = GetUniqueGroupId();
@@ -103,8 +98,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             var segments = new List<ConversationSegment>();
 
             // 创建多个对话段
-            for (int i = 0; i < segmentCount; i++)
-            {
+            for (int i = 0; i < segmentCount; i++) {
                 var segment = CreateTestConversationSegment(groupId, GetUniqueId());
                 segments.Add(segment);
             }
@@ -114,23 +108,22 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Act
             var stopwatch = Stopwatch.StartNew();
-            
-            foreach (var segment in segments)
-            {
+
+            foreach (var segment in segments) {
                 await _faissVectorService.VectorizeConversationSegment(segment);
             }
 
             stopwatch.Stop();
 
             // Assert
-            var averageTime = stopwatch.ElapsedMilliseconds / (double)segmentCount;
-            
+            var averageTime = stopwatch.ElapsedMilliseconds / ( double ) segmentCount;
+
             _output.WriteLine($"总耗时: {stopwatch.ElapsedMilliseconds} ms");
             _output.WriteLine($"平均每个对话段向量化耗时: {averageTime:F2} ms");
-            
+
             // 每个对话段向量化应该在合理时间内完成
             Assert.True(averageTime < 500, $"平均向量化时间过长: {averageTime:F2}ms");
-            
+
             // 验证所有对话段都被向量化
             // 等待一段时间确保向量化完成
             await Task.Delay(100);
@@ -139,8 +132,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task MultipleSearches_ShouldMaintainConsistentPerformance()
-        {
+        public async Task MultipleSearches_ShouldMaintainConsistentPerformance() {
             // Arrange
             await ClearDatabase();
             var groupId = GetUniqueGroupId();
@@ -150,8 +142,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             // 创建测试数据
             await CreateTestDataForPerformance(groupId);
 
-            var searchOption = new SearchOption
-            {
+            var searchOption = new SearchOption {
                 ChatId = groupId,
                 Search = "性能测试搜索",
                 Skip = 0,
@@ -160,36 +151,32 @@ namespace TelegramSearchBot.Test.Service.Vector
             };
 
             // Act - 执行多次搜索
-            for (int i = 0; i < searchCount; i++)
-            {
+            for (int i = 0; i < searchCount; i++) {
                 var stopwatch = Stopwatch.StartNew();
                 var result = await _faissVectorService.Search(searchOption);
                 stopwatch.Stop();
-                
+
                 // 使用Ticks并转换为毫秒，提供更精确的时间测量
                 var elapsedMs = stopwatch.ElapsedTicks * 1000.0 / Stopwatch.Frequency;
-                searchTimes.Add((long)Math.Round(elapsedMs));
+                searchTimes.Add(( long ) Math.Round(elapsedMs));
                 Assert.NotNull(result);
             }
 
             // Assert
             var averageTime = searchTimes.Average();
             var maxTime = searchTimes.Max();
-            
+
             _output.WriteLine($"平均搜索时间: {averageTime:F2} ms");
             _output.WriteLine($"最大搜索时间: {maxTime} ms");
 
             // 性能要求：平均搜索时间应该在合理范围内
             Assert.True(averageTime < 100, $"平均搜索时间过长: {averageTime:F2}ms");
-            
+
             // 性能一致性检查：只有当平均时间大于0时才进行比较
-            if (averageTime > 0)
-            {
+            if (averageTime > 0) {
                 // 最大时间不应该超过平均时间的20倍（考虑到测试环境的波动）
                 Assert.True(maxTime <= averageTime * 20, $"性能不一致：最大时间 {maxTime} ms 超过平均时间 {averageTime:F2} ms 的20倍");
-            }
-            else
-            {
+            } else {
                 // 如果平均时间为0，说明所有搜索都非常快，这是好事
                 _output.WriteLine("所有搜索操作都在1ms内完成，性能表现优秀");
                 Assert.True(maxTime <= 1, $"即使在快速执行的情况下，最大时间也不应超过1ms，实际: {maxTime}ms");
@@ -197,8 +184,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task ConcurrentVectorization_ShouldHandleCorrectly()
-        {
+        public async Task ConcurrentVectorization_ShouldHandleCorrectly() {
             // Arrange
             await ClearDatabase();
             var groupId = GetUniqueGroupId();
@@ -206,8 +192,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             var segments = new List<ConversationSegment>();
 
             // 创建多个对话段，确保每个都有唯一ID
-            for (int i = 0; i < concurrentCount; i++)
-            {
+            for (int i = 0; i < concurrentCount; i++) {
                 var segment = CreateTestConversationSegment(groupId, GetUniqueId());
                 segments.Add(segment);
             }
@@ -218,13 +203,10 @@ namespace TelegramSearchBot.Test.Service.Vector
             // Act - 串行向量化来避免并发冲突（在测试环境中更稳定）
             var stopwatch = Stopwatch.StartNew();
 
-            foreach (var segment in segments)
-            {
-                try
-                {
+            foreach (var segment in segments) {
+                try {
                     // 创建segment的detached副本，避免跟踪冲突
-                    var segmentForVectorization = new ConversationSegment
-                    {
+                    var segmentForVectorization = new ConversationSegment {
                         Id = segment.Id,
                         GroupId = segment.GroupId,
                         StartTime = segment.StartTime,
@@ -241,9 +223,7 @@ namespace TelegramSearchBot.Test.Service.Vector
                     };
 
                     await _faissVectorService.VectorizeConversationSegment(segmentForVectorization);
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     _output.WriteLine($"向量化段 {segment.Id} 失败: {ex.Message}");
                 }
             }
@@ -252,20 +232,19 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Assert
             _output.WriteLine($"向量化总耗时: {stopwatch.ElapsedMilliseconds} ms");
-            
+
             // 验证大部分对话段都被向量化（允许一些失败）
             // 等待一段时间确保向量化完成
             await Task.Delay(100);
             var vectorizedCount = await _dbContext.VectorIndexes.CountAsync(vi => vi.GroupId == groupId);
             Assert.True(vectorizedCount >= concurrentCount - 2, $"向量化失败，期望至少 {concurrentCount - 2} 个，实际 {vectorizedCount} 个");
-            
+
             // 向量化操作应该在合理时间内完成
             Assert.True(stopwatch.ElapsedMilliseconds < 10000, $"向量化耗时过长: {stopwatch.ElapsedMilliseconds}ms");
         }
 
         [Fact]
-        public async Task LargeDatasetVectorization_ShouldScale()
-        {
+        public async Task LargeDatasetVectorization_ShouldScale() {
             // Arrange
             await ClearDatabase();
             var groupId = GetUniqueGroupId();
@@ -273,8 +252,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             var segments = new List<ConversationSegment>();
 
             // 创建大量对话段
-            for (int i = 0; i < largeCount; i++)
-            {
+            for (int i = 0; i < largeCount; i++) {
                 var segment = CreateTestConversationSegment(groupId, GetUniqueId());
                 segments.Add(segment);
             }
@@ -284,34 +262,32 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Act
             var stopwatch = Stopwatch.StartNew();
-            
+
             // 逐个向量化（避免并发ID冲突，保证全部成功）
-            foreach (var seg in segments)
-            {
+            foreach (var seg in segments) {
                 await _faissVectorService.VectorizeConversationSegment(seg);
             }
             await _faissVectorService.FlushAsync();
-            
+
             stopwatch.Stop();
 
             // Assert
-            var averageTime = stopwatch.ElapsedMilliseconds / (double)largeCount;
-            
+            var averageTime = stopwatch.ElapsedMilliseconds / ( double ) largeCount;
+
             _output.WriteLine($"大数据集向量化总耗时: {stopwatch.ElapsedMilliseconds} ms");
             _output.WriteLine($"平均每个对话段: {averageTime:F2} ms");
-            
+
             // 大数据集向量化应该保持良好的性能
             Assert.True(averageTime < 200, $"大数据集平均向量化时间过长: {averageTime:F2}ms");
-            
+
             // 验证所有对话段都被向量化
             // 等待一段时间确保向量化完成
             await Task.Delay(100);
             var vectorizedCount = await _dbContext.VectorIndexes.CountAsync(vi => vi.GroupId == groupId);
-            Assert.True(vectorizedCount >= largeCount * 0.6, $"向量化数量不足，期望至少 {largeCount*0.6} 实际 {vectorizedCount}");
+            Assert.True(vectorizedCount >= largeCount * 0.6, $"向量化数量不足，期望至少 {largeCount * 0.6} 实际 {vectorizedCount}");
         }
 
-        private async Task ClearDatabase()
-        {
+        private async Task ClearDatabase() {
             // 详细清理，确保没有残留数据
             if (_dbContext.VectorIndexes.Any())
                 _dbContext.VectorIndexes.RemoveRange(_dbContext.VectorIndexes);
@@ -323,25 +299,22 @@ namespace TelegramSearchBot.Test.Service.Vector
                 _dbContext.ConversationSegmentMessages.RemoveRange(_dbContext.ConversationSegmentMessages);
             if (_dbContext.FaissIndexFiles.Any())
                 _dbContext.FaissIndexFiles.RemoveRange(_dbContext.FaissIndexFiles);
-                
+
             await _dbContext.SaveChangesAsync();
-            
+
             // 确保数据真的被清理了
             _dbContext.ChangeTracker.Clear();
         }
 
-        private int GetUniqueId()
-        {
+        private int GetUniqueId() {
             return Interlocked.Increment(ref _testCounter);
         }
 
-        private long GetUniqueGroupId()
-        {
+        private long GetUniqueGroupId() {
             return 30000L + GetUniqueId();
         }
 
-        private void SetupVectorMocks()
-        {
+        private void SetupVectorMocks() {
             // 设置快速向量生成响应
             var defaultVector = CreateTestVector();
             _mockLLMService
@@ -352,17 +325,15 @@ namespace TelegramSearchBot.Test.Service.Vector
                 .Returns(_mockLLMService.Object);
         }
 
-        private async Task CreateTestDataForPerformance(long groupId)
-        {
+        private async Task CreateTestDataForPerformance(long groupId) {
             var segmentCount = 5;
             var segments = new List<ConversationSegment>();
             var messages = new List<Message>();
 
-            for (int i = 0; i < segmentCount; i++)
-            {
+            for (int i = 0; i < segmentCount; i++) {
                 var segmentId = GetUniqueId();
                 var messageId = GetUniqueId();
-                
+
                 var segment = CreateTestConversationSegment(groupId, segmentId);
                 segments.Add(segment);
 
@@ -375,16 +346,13 @@ namespace TelegramSearchBot.Test.Service.Vector
             await _dbContext.SaveChangesAsync();
 
             // 向量化所有对话段
-            foreach (var segment in segments)
-            {
+            foreach (var segment in segments) {
                 await _faissVectorService.VectorizeConversationSegment(segment);
             }
 
             // 添加对话段消息关联
-            for (int i = 0; i < segmentCount; i++)
-            {
-                var segmentMessage = new ConversationSegmentMessage
-                {
+            for (int i = 0; i < segmentCount; i++) {
+                var segmentMessage = new ConversationSegmentMessage {
                     Id = GetUniqueId(),
                     ConversationSegmentId = segments[i].Id,
                     MessageDataId = messages[i].Id,
@@ -395,10 +363,8 @@ namespace TelegramSearchBot.Test.Service.Vector
             await _dbContext.SaveChangesAsync();
         }
 
-        private ConversationSegment CreateTestConversationSegment(long groupId, int segmentId)
-        {
-            return new ConversationSegment
-            {
+        private ConversationSegment CreateTestConversationSegment(long groupId, int segmentId) {
+            return new ConversationSegment {
                 Id = segmentId,
                 GroupId = groupId,
                 StartTime = DateTime.UtcNow.AddHours(-1),
@@ -415,10 +381,8 @@ namespace TelegramSearchBot.Test.Service.Vector
             };
         }
 
-        private Message CreateTestMessage(long groupId, int messageId)
-        {
-            return new Message
-            {
+        private Message CreateTestMessage(long groupId, int messageId) {
+            return new Message {
                 Id = messageId,
                 MessageId = messageId,
                 GroupId = groupId,
@@ -428,33 +392,26 @@ namespace TelegramSearchBot.Test.Service.Vector
             };
         }
 
-        private float[] CreateTestVector(int seed = 42)
-        {
+        private float[] CreateTestVector(int seed = 42) {
             var random = new Random(seed);
             var vector = new float[1024];
-            for (int i = 0; i < vector.Length; i++)
-            {
-                vector[i] = (float)random.NextDouble();
+            for (int i = 0; i < vector.Length; i++) {
+                vector[i] = ( float ) random.NextDouble();
             }
             return vector;
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             _dbContext?.Dispose();
-            
+
             // 清理测试目录
-            if (Directory.Exists(_testDirectory))
-            {
-                try
-                {
+            if (Directory.Exists(_testDirectory)) {
+                try {
                     Directory.Delete(_testDirectory, true);
-                }
-                catch
-                {
+                } catch {
                     // 忽略清理错误
                 }
             }
         }
     }
-} 
+}

@@ -1,24 +1,23 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Text;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.Service.Manage;
+using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.View;
-using System.Collections.Generic;
-using TelegramSearchBot.Interface.Controller;
 
 namespace TelegramSearchBot.Controller.Manage {
     /// <summary>
     /// FAISS向量数据库管理控制器
     /// </summary>
-    public class FaissVectorController : IOnUpdate
-    {
+    public class FaissVectorController : IOnUpdate {
 
         public List<Type> Dependencies => new List<Type>() { typeof(AdminController) };
 
@@ -33,8 +32,7 @@ namespace TelegramSearchBot.Controller.Manage {
             ConversationSegmentationService segmentationService,
             AdminService adminService,
             GenericView commonMessageView,
-            DataDbContext dataDbContext)
-        {
+            DataDbContext dataDbContext) {
             _faissVectorService = faissVectorService;
             _segmentationService = segmentationService;
             _adminService = adminService;
@@ -42,41 +40,38 @@ namespace TelegramSearchBot.Controller.Manage {
             _dataDbContext = dataDbContext;
         }
 
-        public async Task ExecuteAsync(PipelineContext p)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
             if (p.Update.Message?.Text == null) return;
 
             var message = p.Update.Message;
             var text = message.Text.Trim();
 
             // 检查是否是管理员
-            if (!await _adminService.IsNormalAdmin(message.From.Id))
-            {
+            if (!await _adminService.IsNormalAdmin(message.From.Id)) {
                 return;
             }
 
-            switch (text.ToLowerInvariant())
-            {
+            switch (text.ToLowerInvariant()) {
                 case "/faiss_status":
                 case "/faiss状态":
                     await HandleFaissStatus(p);
                     break;
-                    
+
                 case "/faiss_rebuild":
                 case "/faiss重建":
                     await HandleFaissRebuild(p);
                     break;
-                    
+
                 case "/faiss_health":
                 case "/faiss健康检查":
                     await HandleFaissHealth(p);
                     break;
-                    
+
                 case "/faiss_stats":
                 case "/faiss统计":
                     await HandleFaissStats(p);
                     break;
-                    
+
                 case "/faiss_cleanup":
                 case "/faiss清理":
                     await HandleFaissCleanup(p);
@@ -87,17 +82,15 @@ namespace TelegramSearchBot.Controller.Manage {
         /// <summary>
         /// 处理FAISS状态查询
         /// </summary>
-        private async Task HandleFaissStatus(PipelineContext p)
-        {
-            try
-            {
+        private async Task HandleFaissStatus(PipelineContext p) {
+            try {
                 var statusMessage = new StringBuilder();
                 statusMessage.AppendLine("**FAISS向量数据库状态报告**");
                 statusMessage.AppendLine();
 
                 // 检查健康状态
                 var isHealthy = await _faissVectorService.IsHealthyAsync();
-                statusMessage.AppendLine($"🔍 **健康状态**: {(isHealthy ? "✅ 正常" : "❌ 异常")}");
+                statusMessage.AppendLine($"🔍 **健康状态**: {( isHealthy ? "✅ 正常" : "❌ 异常" )}");
                 statusMessage.AppendLine();
 
                 // 统计索引文件
@@ -120,8 +113,7 @@ namespace TelegramSearchBot.Controller.Manage {
 
                 // 索引目录信息
                 var indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
-                if (Directory.Exists(indexDirectory))
-                {
+                if (Directory.Exists(indexDirectory)) {
                     var files = Directory.GetFiles(indexDirectory, "*.faiss");
                     statusMessage.AppendLine($"📁 **索引目录**: {files.Length} 个文件");
                 }
@@ -131,9 +123,7 @@ namespace TelegramSearchBot.Controller.Manage {
                     .WithReplyTo(p.Update.Message.MessageId)
                     .WithText(statusMessage.ToString())
                     .Render();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 await _commonMessageView
                     .WithChatId(p.Update.Message.Chat.Id)
                     .WithReplyTo(p.Update.Message.MessageId)
@@ -145,10 +135,8 @@ namespace TelegramSearchBot.Controller.Manage {
         /// <summary>
         /// 处理FAISS重建
         /// </summary>
-        private async Task HandleFaissRebuild(PipelineContext p)
-        {
-            try
-            {
+        private async Task HandleFaissRebuild(PipelineContext p) {
+            try {
                 await _commonMessageView
                     .WithChatId(p.Update.Message.Chat.Id)
                     .WithReplyTo(p.Update.Message.MessageId)
@@ -164,24 +152,20 @@ namespace TelegramSearchBot.Controller.Manage {
                 var totalSegments = 0;
                 var successGroups = 0;
 
-                foreach (var groupId in groups)
-                {
-                    try
-                    {
+                foreach (var groupId in groups) {
+                    try {
                         // 重新分段
                         await _segmentationService.CreateSegmentsForGroupAsync(groupId);
-                        
+
                         // 重新向量化
                         await _faissVectorService.VectorizeGroupSegments(groupId);
-                        
+
                         var groupSegmentCount = await _dataDbContext.ConversationSegments
                             .CountAsync(s => s.GroupId == groupId);
-                        
+
                         totalSegments += groupSegmentCount;
                         successGroups++;
-                    }
-                    catch (Exception ex)
-                    {
+                    } catch (Exception ex) {
                         await _commonMessageView
                             .WithChatId(p.Update.Message.Chat.Id)
                             .WithReplyTo(p.Update.Message.MessageId)
@@ -201,9 +185,7 @@ namespace TelegramSearchBot.Controller.Manage {
                     .WithReplyTo(p.Update.Message.MessageId)
                     .WithText(resultMessage.ToString())
                     .Render();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 await _commonMessageView
                     .WithChatId(p.Update.Message.Chat.Id)
                     .WithReplyTo(p.Update.Message.MessageId)
@@ -215,23 +197,20 @@ namespace TelegramSearchBot.Controller.Manage {
         /// <summary>
         /// 处理FAISS健康检查
         /// </summary>
-        private async Task HandleFaissHealth(PipelineContext p)
-        {
-            try
-            {
+        private async Task HandleFaissHealth(PipelineContext p) {
+            try {
                 var isHealthy = await _faissVectorService.IsHealthyAsync();
-                
-                var healthMessage = isHealthy 
-                    ? "✅ FAISS向量服务运行正常" 
+
+                var healthMessage = isHealthy
+                    ? "✅ FAISS向量服务运行正常"
                     : "❌ FAISS向量服务异常，请检查日志";
 
-                if (isHealthy)
-                {
+                if (isHealthy) {
                     // 额外检查索引目录
                     var indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
                     var directoryExists = Directory.Exists(indexDirectory);
-                    healthMessage += directoryExists 
-                        ? "\n📁 索引目录正常" 
+                    healthMessage += directoryExists
+                        ? "\n📁 索引目录正常"
                         : "\n⚠️ 索引目录不存在";
                 }
 
@@ -240,9 +219,7 @@ namespace TelegramSearchBot.Controller.Manage {
                     .WithReplyTo(p.Update.Message.MessageId)
                     .WithText(healthMessage)
                     .Render();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 await _commonMessageView
                     .WithChatId(p.Update.Message.Chat.Id)
                     .WithReplyTo(p.Update.Message.MessageId)
@@ -254,10 +231,8 @@ namespace TelegramSearchBot.Controller.Manage {
         /// <summary>
         /// 处理FAISS统计信息
         /// </summary>
-        private async Task HandleFaissStats(PipelineContext p)
-        {
-            try
-            {
+        private async Task HandleFaissStats(PipelineContext p) {
+            try {
                 var statsMessage = new StringBuilder();
                 statsMessage.AppendLine("**📊 FAISS向量数据库详细统计**");
                 statsMessage.AppendLine();
@@ -281,8 +256,7 @@ namespace TelegramSearchBot.Controller.Manage {
                     .ToListAsync();
 
                 statsMessage.AppendLine($"🔢 **向量索引统计**:");
-                foreach (var index in vectorIndexes)
-                {
+                foreach (var index in vectorIndexes) {
                     statsMessage.AppendLine($"   • {index.Type}: {index.Count}");
                 }
                 statsMessage.AppendLine();
@@ -296,8 +270,7 @@ namespace TelegramSearchBot.Controller.Manage {
                     .ToListAsync();
 
                 statsMessage.AppendLine($"📈 **活跃群组 Top 10**:");
-                foreach (var group in groupStats)
-                {
+                foreach (var group in groupStats) {
                     statsMessage.AppendLine($"   • 群组 {group.GroupId}: {group.Count} 个对话段");
                 }
 
@@ -306,9 +279,7 @@ namespace TelegramSearchBot.Controller.Manage {
                     .WithReplyTo(p.Update.Message.MessageId)
                     .WithText(statsMessage.ToString())
                     .Render();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 await _commonMessageView
                     .WithChatId(p.Update.Message.Chat.Id)
                     .WithReplyTo(p.Update.Message.MessageId)
@@ -320,10 +291,8 @@ namespace TelegramSearchBot.Controller.Manage {
         /// <summary>
         /// 处理FAISS清理
         /// </summary>
-        private async Task HandleFaissCleanup(PipelineContext p)
-        {
-            try
-            {
+        private async Task HandleFaissCleanup(PipelineContext p) {
+            try {
                 var cleanupMessage = new StringBuilder();
                 cleanupMessage.AppendLine("🧹 **开始清理FAISS数据**");
                 cleanupMessage.AppendLine();
@@ -347,26 +316,20 @@ namespace TelegramSearchBot.Controller.Manage {
                 // 清理磁盘上的孤立文件
                 var indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
                 var cleanedFiles = 0;
-                
-                if (Directory.Exists(indexDirectory))
-                {
+
+                if (Directory.Exists(indexDirectory)) {
                     var diskFiles = Directory.GetFiles(indexDirectory, "*.faiss");
                     var validFilePaths = await _dataDbContext.FaissIndexFiles
                         .Where(f => f.IsValid)
                         .Select(f => f.FilePath)
                         .ToListAsync();
 
-                    foreach (var file in diskFiles)
-                    {
-                        if (!validFilePaths.Contains(file))
-                        {
-                            try
-                            {
+                    foreach (var file in diskFiles) {
+                        if (!validFilePaths.Contains(file)) {
+                            try {
                                 File.Delete(file);
                                 cleanedFiles++;
-                            }
-                            catch
-                            {
+                            } catch {
                                 // 忽略删除失败的文件
                             }
                         }
@@ -383,9 +346,7 @@ namespace TelegramSearchBot.Controller.Manage {
                     .WithReplyTo(p.Update.Message.MessageId)
                     .WithText(cleanupMessage.ToString())
                     .Render();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 await _commonMessageView
                     .WithChatId(p.Update.Message.Chat.Id)
                     .WithReplyTo(p.Update.Message.MessageId)
@@ -397,17 +358,15 @@ namespace TelegramSearchBot.Controller.Manage {
         /// <summary>
         /// 格式化字节大小
         /// </summary>
-        private string FormatBytes(long bytes)
-        {
+        private string FormatBytes(long bytes) {
             string[] sizes = { "B", "KB", "MB", "GB", "TB" };
             double len = bytes;
             int order = 0;
-            while (len >= 1024 && order < sizes.Length - 1)
-            {
+            while (len >= 1024 && order < sizes.Length - 1) {
                 order++;
                 len = len / 1024;
             }
             return $"{len:0.##} {sizes[order]}";
         }
     }
-} 
+}

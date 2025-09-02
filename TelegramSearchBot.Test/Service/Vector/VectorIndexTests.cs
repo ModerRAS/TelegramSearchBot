@@ -3,21 +3,18 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using Xunit;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using Xunit;
 
-namespace TelegramSearchBot.Test.Service.Vector
-{
+namespace TelegramSearchBot.Test.Service.Vector {
     /// <summary>
     /// 向量索引数据模型单元测试
     /// </summary>
-    public class VectorIndexTests : IDisposable
-    {
+    public class VectorIndexTests : IDisposable {
         private readonly DataDbContext _dbContext;
 
-        public VectorIndexTests()
-        {
+        public VectorIndexTests() {
             var options = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
@@ -25,8 +22,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public void VectorIndex_Properties_ShouldHaveCorrectDefaultValues()
-        {
+        public void VectorIndex_Properties_ShouldHaveCorrectDefaultValues() {
             // Arrange & Act
             var vectorIndex = new VectorIndex();
 
@@ -42,11 +38,9 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorIndex_CreateAndRetrieve_ShouldWork()
-        {
+        public async Task VectorIndex_CreateAndRetrieve_ShouldWork() {
             // Arrange
-            var vectorIndex = new VectorIndex
-            {
+            var vectorIndex = new VectorIndex {
                 GroupId = 12345L,
                 VectorType = "ConversationSegment",
                 EntityId = 100L,
@@ -70,19 +64,16 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorIndex_UniqueIndex_ShouldEnforceConstraint()
-        {
+        public async Task VectorIndex_UniqueIndex_ShouldEnforceConstraint() {
             // Arrange
-            var vectorIndex1 = new VectorIndex
-            {
+            var vectorIndex1 = new VectorIndex {
                 GroupId = 12345L,
                 VectorType = "ConversationSegment",
                 EntityId = 1L,
                 FaissIndex = 1L
             };
 
-            var vectorIndex2 = new VectorIndex
-            {
+            var vectorIndex2 = new VectorIndex {
                 GroupId = 12345L,
                 VectorType = "ConversationSegment",
                 EntityId = 1L, // 相同的 GroupId, VectorType, EntityId
@@ -94,25 +85,21 @@ namespace TelegramSearchBot.Test.Service.Vector
             await _dbContext.SaveChangesAsync();
 
             _dbContext.VectorIndexes.Add(vectorIndex2);
-            
+
             // 在内存数据库中，我们检查是否只有一条记录被保存
-            try
-            {
+            try {
                 await _dbContext.SaveChangesAsync();
                 var count = await _dbContext.VectorIndexes.CountAsync();
                 // 如果唯一约束生效，应该只有一条记录，或者抛出异常
                 Assert.True(count <= 2); // 允许两种情况：约束生效(1条)或不生效(2条)
-            }
-            catch (InvalidOperationException)
-            {
+            } catch (InvalidOperationException) {
                 // 如果抛出异常，说明唯一约束生效，这是期望的行为
                 Assert.True(true);
             }
         }
 
         [Fact]
-        public async Task VectorIndex_Query_ByGroupIdAndVectorType_ShouldWork()
-        {
+        public async Task VectorIndex_Query_ByGroupIdAndVectorType_ShouldWork() {
             // Arrange
             var vectorIndexes = new[]
             {
@@ -135,8 +122,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public void FaissIndexFile_Properties_ShouldHaveCorrectDefaultValues()
-        {
+        public void FaissIndexFile_Properties_ShouldHaveCorrectDefaultValues() {
             // Arrange & Act
             var indexFile = new FaissIndexFile();
 
@@ -154,11 +140,9 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task FaissIndexFile_CreateAndRetrieve_ShouldWork()
-        {
+        public async Task FaissIndexFile_CreateAndRetrieve_ShouldWork() {
             // Arrange
-            var indexFile = new FaissIndexFile
-            {
+            var indexFile = new FaissIndexFile {
                 GroupId = 12345L,
                 IndexType = "ConversationSegment",
                 FilePath = "/path/to/index.faiss",
@@ -186,19 +170,16 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task FaissIndexFile_UniqueIndex_ShouldEnforceConstraint()
-        {
+        public async Task FaissIndexFile_UniqueIndex_ShouldEnforceConstraint() {
             // Arrange
-            var indexFile1 = new FaissIndexFile
-            {
+            var indexFile1 = new FaissIndexFile {
                 GroupId = 12345L,
                 IndexType = "ConversationSegment",
                 FilePath = "/path/to/index1.faiss",
                 Dimension = 1024
             };
 
-            var indexFile2 = new FaissIndexFile
-            {
+            var indexFile2 = new FaissIndexFile {
                 GroupId = 12345L,
                 IndexType = "ConversationSegment", // 相同的 GroupId 和 IndexType
                 FilePath = "/path/to/index2.faiss",
@@ -210,25 +191,21 @@ namespace TelegramSearchBot.Test.Service.Vector
             await _dbContext.SaveChangesAsync();
 
             _dbContext.FaissIndexFiles.Add(indexFile2);
-            
+
             // 在内存数据库中，检查约束行为
-            try
-            {
+            try {
                 await _dbContext.SaveChangesAsync();
                 var count = await _dbContext.FaissIndexFiles.CountAsync();
                 // 允许两种情况：约束生效或不生效
                 Assert.True(count <= 2);
-            }
-            catch (InvalidOperationException)
-            {
+            } catch (InvalidOperationException) {
                 // 如果抛出异常，说明唯一约束生效
                 Assert.True(true);
             }
         }
 
         [Fact]
-        public async Task FaissIndexFile_Query_OnlyValidFiles_ShouldWork()
-        {
+        public async Task FaissIndexFile_Query_OnlyValidFiles_ShouldWork() {
             // Arrange
             var indexFiles = new[]
             {
@@ -251,8 +228,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task FaissIndexFile_Query_ByGroupIdAndIndexType_ShouldWork()
-        {
+        public async Task FaissIndexFile_Query_ByGroupIdAndIndexType_ShouldWork() {
             // Arrange
             var indexFiles = new[]
             {
@@ -274,12 +250,10 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorIndex_ContentSummary_ShouldTruncateCorrectly()
-        {
+        public async Task VectorIndex_ContentSummary_ShouldTruncateCorrectly() {
             // Arrange
             var longContent = new string('测', 1500); // 超过1000字符的内容
-            var vectorIndex = new VectorIndex
-            {
+            var vectorIndex = new VectorIndex {
                 GroupId = 12345L,
                 VectorType = "ConversationSegment",
                 EntityId = 1L,
@@ -301,11 +275,9 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorIndex_UpdatedAt_ShouldUpdateOnModification()
-        {
+        public async Task VectorIndex_UpdatedAt_ShouldUpdateOnModification() {
             // Arrange
-            var vectorIndex = new VectorIndex
-            {
+            var vectorIndex = new VectorIndex {
                 GroupId = 12345L,
                 VectorType = "ConversationSegment",
                 EntityId = 1L,
@@ -332,19 +304,16 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorIndex_FaissIndex_ShouldAllowDuplicatesAcrossGroups()
-        {
+        public async Task VectorIndex_FaissIndex_ShouldAllowDuplicatesAcrossGroups() {
             // Arrange
-            var vectorIndex1 = new VectorIndex
-            {
+            var vectorIndex1 = new VectorIndex {
                 GroupId = 12345L,
                 VectorType = "ConversationSegment",
                 EntityId = 1L,
                 FaissIndex = 42L // 相同的FaissIndex
             };
 
-            var vectorIndex2 = new VectorIndex
-            {
+            var vectorIndex2 = new VectorIndex {
                 GroupId = 67890L, // 不同的GroupId
                 VectorType = "ConversationSegment",
                 EntityId = 2L,
@@ -362,9 +331,8 @@ namespace TelegramSearchBot.Test.Service.Vector
             Assert.All(results, vi => Assert.Equal(42L, vi.FaissIndex));
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             _dbContext?.Dispose();
         }
     }
-} 
+}

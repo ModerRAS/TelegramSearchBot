@@ -1,14 +1,12 @@
-using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
-namespace TelegramSearchBot.Model.Data
-{
+namespace TelegramSearchBot.Model.Data {
     /// <summary>
     /// 群组记账设置表
     /// </summary>
     [Index(nameof(GroupId), IsUnique = true)]
-    public class GroupAccountSettings
-    {
+    public class GroupAccountSettings {
         [Key]
         public long Id { get; set; }
 
@@ -28,4 +26,4 @@ namespace TelegramSearchBot.Model.Data
         /// </summary>
         public bool IsAccountingEnabled { get; set; } = true;
     }
-} 
+}

@@ -1,9 +1,9 @@
-﻿using LiteDB;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using LiteDB;
+using Newtonsoft.Json;
 
 namespace TelegramSearchBot {
     public static class Env {
@@ -32,9 +32,9 @@ namespace TelegramSearchBot {
                 OLTPName = config.OLTPName;
                 BraveApiKey = config.BraveApiKey;
                 EnableAccounting = config.EnableAccounting;
-            } catch { 
+            } catch {
             }
-            
+
         }
         public static readonly string BaseUrl;
 #pragma warning disable CS8604 // 引用类型参数可能为 null。

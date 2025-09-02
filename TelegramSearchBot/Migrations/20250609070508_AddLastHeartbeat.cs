@@ -1,16 +1,13 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace TelegramSearchBot.Migrations
-{
+namespace TelegramSearchBot.Migrations {
     /// <inheritdoc />
-    public partial class AddLastHeartbeat : Migration
-    {
+    public partial class AddLastHeartbeat : Migration {
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
+        protected override void Up(MigrationBuilder migrationBuilder) {
             migrationBuilder.AddColumn<DateTime>(
                 name: "LastHeartbeat",
                 table: "ScheduledTaskExecutions",
@@ -19,8 +16,7 @@ namespace TelegramSearchBot.Migrations
         }
 
         /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
+        protected override void Down(MigrationBuilder migrationBuilder) {
             migrationBuilder.DropColumn(
                 name: "LastHeartbeat",
                 table: "ScheduledTaskExecutions");

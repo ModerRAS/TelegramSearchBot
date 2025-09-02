@@ -3,8 +3,7 @@ using TelegramSearchBot.Model.Bilibili;
 
 namespace TelegramSearchBot.Service.Bilibili;
 
-public interface IBiliApiService
-{
+public interface IBiliApiService {
     /// <summary>
     /// Gets detailed information for a Bilibili video from its URL.
     /// </summary>

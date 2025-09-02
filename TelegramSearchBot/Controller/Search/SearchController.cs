@@ -1,17 +1,16 @@
-﻿using System.Collections.Generic;
-using TelegramSearchBot.Interface;
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Model;
-using System;
-using TelegramSearchBot.Service.Search;
-using TelegramSearchBot.Service.BotAPI;
-using TelegramSearchBot.View;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Service.Search;
+using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Controller.Search {
-    public class SearchController : IOnUpdate
-    {
+    public class SearchController : IOnUpdate {
         private readonly ISearchService searchService;
         private readonly SendService sendService;
         private readonly SearchOptionStorageService searchOptionStorageService;
@@ -24,8 +23,7 @@ namespace TelegramSearchBot.Controller.Search {
             SearchOptionStorageService searchOptionStorageService,
             CallbackDataService callbackDataService,
             SearchView searchView
-            )
-        {
+            ) {
             this.searchService = searchService;
             this.sendService = sendService;
             this.searchOptionStorageService = searchOptionStorageService;
@@ -35,42 +33,31 @@ namespace TelegramSearchBot.Controller.Search {
 
         public async Task ExecuteAsync(PipelineContext p) {
             var e = p.Update;
-            if (!string.IsNullOrEmpty(e?.Message?.Text))
-            {
-                if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 "))
-                {
+            if (!string.IsNullOrEmpty(e?.Message?.Text)) {
+                if (e.Message.Text.Length >= 4 && e.Message.Text.Substring(0, 3).Equals("搜索 ")) {
                     await HandleSearch(e.Message);
-                }
-                else if (e.Message.Text.Length >= 6 && e.Message.Text.Substring(0, 5).Equals("向量搜索 "))
-                {
+                } else if (e.Message.Text.Length >= 6 && e.Message.Text.Substring(0, 5).Equals("向量搜索 ")) {
                     await HandleVectorSearch(e.Message);
-                }
-                else if (e.Message.Text.Length >= 6 && e.Message.Text.Substring(0, 5).Equals("语法搜索 "))
-                {
+                } else if (e.Message.Text.Length >= 6 && e.Message.Text.Substring(0, 5).Equals("语法搜索 ")) {
                     await HandleSyntaxSearch(e.Message);
                 }
             }
         }
 
-        private async Task HandleSearch(Message message)
-        {
+        private async Task HandleSearch(Message message) {
             await HandleSearchInternal(message, SearchType.InvertedIndex, 3);
         }
 
-        private async Task HandleVectorSearch(Message message)
-        {
+        private async Task HandleVectorSearch(Message message) {
             await HandleSearchInternal(message, SearchType.Vector, 5);
         }
-        
-        private async Task HandleSyntaxSearch(Message message)
-        {
+
+        private async Task HandleSyntaxSearch(Message message) {
             await HandleSearchInternal(message, SearchType.SyntaxSearch, 5);
         }
 
-        private async Task HandleSearchInternal(Message message, SearchType searchType, int prefixLength)
-        {
-            var firstSearch = new SearchOption()
-            {
+        private async Task HandleSearchInternal(Message message, SearchType searchType, int prefixLength) {
+            var firstSearch = new SearchOption() {
                 Search = message.Text.Substring(prefixLength),
                 ChatId = message.Chat.Id,
                 IsGroup = message.Chat.Id < 0,
@@ -98,27 +85,24 @@ namespace TelegramSearchBot.Controller.Search {
 
             // 添加下一页按钮
             var nextPageCallback = await callbackDataService.GenerateNextPageCallbackAsync(searchOption);
-            if (nextPageCallback != null)
-            {
+            if (nextPageCallback != null) {
                 searchView.AddButton("下一页", nextPageCallback);
             }
 
             // 添加切换搜索方式按钮
-            var alternativeSearchType = searchType switch
-            {
+            var alternativeSearchType = searchType switch {
                 SearchType.InvertedIndex => SearchType.Vector,
                 SearchType.Vector => SearchType.SyntaxSearch,
                 SearchType.SyntaxSearch => SearchType.InvertedIndex,
                 _ => SearchType.InvertedIndex
             };
-            
-            var searchTypeText = alternativeSearchType switch
-            {
+
+            var searchTypeText = alternativeSearchType switch {
                 SearchType.Vector => "向量搜索",
                 SearchType.SyntaxSearch => "语法搜索",
                 _ => "倒排索引"
             };
-            
+
             var changeSearchTypeCallback = await callbackDataService.GenerateChangeSearchTypeCallbackAsync(searchOption, alternativeSearchType);
             searchView.AddButton($"切换到{searchTypeText}", changeSearchTypeCallback);
 

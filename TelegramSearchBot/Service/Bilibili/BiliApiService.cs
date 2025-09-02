@@ -2,25 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Model.Bilibili;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using TelegramSearchBot.Manager; // For Env (though BiliCookie will now come from service)
-using TelegramSearchBot.Service.Common; // For IAppConfigurationService
-using TelegramSearchBot.Helper;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Helper;
+using TelegramSearchBot.Manager; // For Env (though BiliCookie will now come from service)
+using TelegramSearchBot.Model.Bilibili;
 using TelegramSearchBot.Model.Notifications;
+using TelegramSearchBot.Service.Common; // For IAppConfigurationService
 
 namespace TelegramSearchBot.Service.Bilibili;
 
 [Injectable(ServiceLifetime.Transient)]
-public class BiliApiService : IBiliApiService
-{
+public class BiliApiService : IBiliApiService {
     private readonly HttpClient _httpClient;
     private readonly ILogger<BiliApiService> _logger;
     private readonly IAppConfigurationService _appConfigService;
@@ -31,8 +30,7 @@ public class BiliApiService : IBiliApiService
     public BiliApiService(IHttpClientFactory httpClientFactory,
                          ILogger<BiliApiService> logger,
                          IAppConfigurationService appConfigService,
-                         IMediator mediator)
-    {
+                         IMediator mediator) {
         _httpClient = httpClientFactory.CreateClient("BiliApiClient");
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
         _httpClient.DefaultRequestHeaders.Referrer = new Uri("https://www.bilibili.com/");
@@ -41,30 +39,29 @@ public class BiliApiService : IBiliApiService
         _mediator = mediator;
     }
 
-    public async Task<BiliVideoInfo> GetVideoInfoAsync(string videoUrl)
-    {
+    public async Task<BiliVideoInfo> GetVideoInfoAsync(string videoUrl) {
         _logger.LogInformation("Attempting to get video info for URL: {VideoUrl}", videoUrl);
         if (string.IsNullOrWhiteSpace(videoUrl)) { _logger.LogWarning("Video URL is null or empty."); return null; }
 
         string aid = null, bvid = null, epid = null, ssid = null;
         int page = 1; string originalUrlToParse = videoUrl;
 
-            if (videoUrl.Contains("b23.tv/")) {
-                var processedUrl = videoUrl.StartsWith("http") ? videoUrl : "https://" + videoUrl;
-                var resolvedUrl = await _mediator.Send(new ProcessUrlRequest(processedUrl, _logger));
-                if (string.IsNullOrEmpty(resolvedUrl)) {
-                    _logger.LogWarning("Failed to resolve b23.tv short URL: {VideoUrl}", videoUrl);
-                    return null;
-                }
-                originalUrlToParse = resolvedUrl;
-                _logger.LogInformation("Resolved b23.tv URL {ShortUrl} to {FullUrl}", videoUrl, originalUrlToParse);
+        if (videoUrl.Contains("b23.tv/")) {
+            var processedUrl = videoUrl.StartsWith("http") ? videoUrl : "https://" + videoUrl;
+            var resolvedUrl = await _mediator.Send(new ProcessUrlRequest(processedUrl, _logger));
+            if (string.IsNullOrEmpty(resolvedUrl)) {
+                _logger.LogWarning("Failed to resolve b23.tv short URL: {VideoUrl}", videoUrl);
+                return null;
             }
-        
+            originalUrlToParse = resolvedUrl;
+            _logger.LogInformation("Resolved b23.tv URL {ShortUrl} to {FullUrl}", videoUrl, originalUrlToParse);
+        }
+
         var match = BiliHelper.BiliUrlParseRegex.Match(originalUrlToParse);
         if (!match.Success) { _logger.LogWarning("URL did not match Bilibili video/bangumi pattern: {ParsedUrl}", originalUrlToParse); return null; }
 
         bvid = match.Groups["bvid"].Value; aid = match.Groups["aid"].Value; epid = match.Groups["epid"].Value; ssid = match.Groups["ssid"].Value;
-        if (match.Groups["page"].Success && int.TryParse(match.Groups["page"].Value, out int pVal)) 
+        if (match.Groups["page"].Success && int.TryParse(match.Groups["page"].Value, out int pVal))
             page = pVal > 0 ? pVal : 1;
 
         BiliVideoInfo videoInfo = new BiliVideoInfo { OriginalUrl = originalUrlToParse, Page = page };
@@ -101,7 +98,7 @@ public class BiliApiService : IBiliApiService
             videoInfo.Title = data["title"]?.GetValue<string>() ?? videoInfo.Title; videoInfo.Description = data["desc"]?.GetValue<string>();
             videoInfo.OwnerName = data["owner"]?["name"]?.GetValue<string>(); videoInfo.OwnerMid = data["owner"]?["mid"]?.GetValue<long>() ?? 0;
             videoInfo.CoverUrl = data["pic"]?.GetValue<string>() ?? videoInfo.CoverUrl;
-            if(data["pubdate"] is JsonValue pdNode && pdNode.TryGetValue<long>(out long pdVal)) videoInfo.PublishDateText = pdVal.ToString();
+            if (data["pubdate"] is JsonValue pdNode && pdNode.TryGetValue<long>(out long pdVal)) videoInfo.PublishDateText = pdVal.ToString();
             videoInfo.TName = data["tname"]?.GetValue<string>(); videoInfo.TotalPages = data["videos"]?.GetValue<int>() ?? 1;
 
             var pagesArray = data["pages"]?.AsArray();
@@ -114,10 +111,10 @@ public class BiliApiService : IBiliApiService
                     if (currentPageData["dimension"]?["height"] is JsonValue hNode && hNode.TryGetValue<int>(out int hVal)) videoInfo.DimensionHeight = hVal;
                 }
             } else if (videoInfo.Cid == 0) {
-                 if (data["cid"] is JsonValue cNode && cNode.TryGetValue<long>(out long cVal)) videoInfo.Cid = cVal;
-                 if (data["duration"] is JsonValue durNode && durNode.TryGetValue<int>(out int durVal)) videoInfo.Duration = durVal;
+                if (data["cid"] is JsonValue cNode && cNode.TryGetValue<long>(out long cVal)) videoInfo.Cid = cVal;
+                if (data["duration"] is JsonValue durNode && durNode.TryGetValue<int>(out int durVal)) videoInfo.Duration = durVal;
             }
-            
+
             videoInfo.FormattedContentInfo = $"{videoInfo.TName ?? "N/A"} - {data["dynamic"]?.GetValue<string>() ?? videoInfo.Description ?? "No description"}";
             videoInfo.MarkdownFormattedLink = $"[{MessageFormatHelper.EscapeMarkdownV2(videoInfo.Title ?? "Video")}]({videoInfo.OriginalUrl})";
             await GetPlayUrlInfoAsync(videoInfo);
@@ -126,8 +123,7 @@ public class BiliApiService : IBiliApiService
         } catch (Exception ex) { _logger.LogError(ex, "Error in GetVideoInfoAsync for URL: {VideoUrl}", videoUrl); return null; }
     }
 
-    public async Task<BiliOpusInfo> GetOpusInfoAsync(string opusUrl)
-    {
+    public async Task<BiliOpusInfo> GetOpusInfoAsync(string opusUrl) {
         _logger.LogInformation("Attempting to get opus info for URL: {OpusUrl}", opusUrl);
         if (string.IsNullOrWhiteSpace(opusUrl)) return null;
         var match = BiliHelper.BiliOpusUrlRegex.Match(opusUrl);
@@ -142,8 +138,7 @@ public class BiliApiService : IBiliApiService
     }
 
 
-    private async Task<JsonNode> GetBiliApiJsonAsync(string apiUrl, Dictionary<string, string> queryParams = null, bool useCookies = false)
-    {
+    private async Task<JsonNode> GetBiliApiJsonAsync(string apiUrl, Dictionary<string, string> queryParams = null, bool useCookies = false) {
         var uriBuilder = new UriBuilder(apiUrl);
         if (queryParams != null && queryParams.Any()) uriBuilder.Query = string.Join("&", queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
         try {
@@ -158,19 +153,22 @@ public class BiliApiService : IBiliApiService
         } catch (Exception ex) { _logger.LogError(ex, "BiliAPI request failed for URL: {ApiUrl}", uriBuilder.ToString()); return null; }
     }
 
-    private async Task GetPlayUrlInfoAsync(BiliVideoInfo videoInfo)
-    {
-        if (videoInfo.Cid == 0 || (string.IsNullOrWhiteSpace(videoInfo.Aid) && string.IsNullOrWhiteSpace(videoInfo.Bvid))) {
+    private async Task GetPlayUrlInfoAsync(BiliVideoInfo videoInfo) {
+        if (videoInfo.Cid == 0 || ( string.IsNullOrWhiteSpace(videoInfo.Aid) && string.IsNullOrWhiteSpace(videoInfo.Bvid) )) {
             _logger.LogWarning("Cannot fetch play URLs without Cid and (Aid or Bvid) for {VideoTitle}", videoInfo.Title); return;
         }
         string playUrlApi = $"{BiliApiBaseUrl}/x/player/playurl";
         var dashParams = new Dictionary<string, string> {
-            ["cid"] = videoInfo.Cid.ToString(), ["qn"] = "0", ["fnver"] = "0", ["fnval"] = "4048", ["fourk"] = "1"
+            ["cid"] = videoInfo.Cid.ToString(),
+            ["qn"] = "0",
+            ["fnver"] = "0",
+            ["fnval"] = "4048",
+            ["fourk"] = "1"
         };
         if (!string.IsNullOrWhiteSpace(videoInfo.Bvid)) dashParams["bvid"] = videoInfo.Bvid; else dashParams["avid"] = videoInfo.Aid;
 
-        JsonNode dashResponse = await GetBiliApiJsonAsync(playUrlApi, dashParams, useCookies: true); 
-        videoInfo.DashStreams = null; 
+        JsonNode dashResponse = await GetBiliApiJsonAsync(playUrlApi, dashParams, useCookies: true);
+        videoInfo.DashStreams = null;
 
         if (dashResponse?["code"]?.GetValue<int>() == 0 && dashResponse["data"]?["dash"] != null) {
             var dashData = dashResponse["data"]["dash"]; var videoStreams = dashData["video"]?.AsArray(); var audioStreams = dashData["audio"]?.AsArray();
@@ -184,14 +182,16 @@ public class BiliApiService : IBiliApiService
                         long videoBw = bestVideo["bandwidth"]?.GetValue<long>() ?? 0; long audioBw = bestAudio["bandwidth"]?.GetValue<long>() ?? 0; long actualDurationSeconds = 0;
                         if (dashData["duration"] is JsonValue durNode && durNode.TryGetValue<long>(out actualDurationSeconds) && actualDurationSeconds > 0) {
                             _logger.LogInformation("Using duration from DASH response ({DashDuration}s) for {VideoTitle}.", actualDurationSeconds, videoInfo.Title);
-                        } else if (videoInfo.Duration > 0) { actualDurationSeconds = videoInfo.Duration; _logger.LogInformation("Using duration from VideoInfo ({VideoInfoDuration}s) for {VideoTitle}.", actualDurationSeconds, videoInfo.Title);
+                        } else if (videoInfo.Duration > 0) {
+                            actualDurationSeconds = videoInfo.Duration; _logger.LogInformation("Using duration from VideoInfo ({VideoInfoDuration}s) for {VideoTitle}.", actualDurationSeconds, videoInfo.Title);
                         } else { actualDurationSeconds = 300; _logger.LogWarning("No duration for {VideoTitle}, defaulting to {DefaultDuration}s.", videoInfo.Title, actualDurationSeconds); }
-                        long estimatedTotalSizeBytes = (videoBw + audioBw) * actualDurationSeconds / 8;
-                        _logger.LogInformation("Estimated DASH size for {VideoTitle}: {SizeMB:F2}MB ({SizeBytes} bytes), Duration: {DurationS}s", videoInfo.Title, estimatedTotalSizeBytes / (1024.0 * 1024.0), estimatedTotalSizeBytes, actualDurationSeconds);
+                        long estimatedTotalSizeBytes = ( videoBw + audioBw ) * actualDurationSeconds / 8;
+                        _logger.LogInformation("Estimated DASH size for {VideoTitle}: {SizeMB:F2}MB ({SizeBytes} bytes), Duration: {DurationS}s", videoInfo.Title, estimatedTotalSizeBytes / ( 1024.0 * 1024.0 ), estimatedTotalSizeBytes, actualDurationSeconds);
                         videoInfo.DashStreams = new DashStreamInfo {
-                            VideoStream = new DashMedia { Url = videoBaseUrl, Codec = bestVideo["codecs"]?.GetValue<string>(), SizeBytes = (videoBw * actualDurationSeconds / 8), QualityDescription = bestVideo["id"]?.GetValue<int>().ToString() },
-                            AudioStream = new DashMedia { Url = audioBaseUrl, Codec = bestAudio["codecs"]?.GetValue<string>(), SizeBytes = (audioBw * actualDurationSeconds / 8), QualityDescription = bestAudio["id"]?.GetValue<int>().ToString() },
-                            EstimatedTotalSizeBytes = estimatedTotalSizeBytes };
+                            VideoStream = new DashMedia { Url = videoBaseUrl, Codec = bestVideo["codecs"]?.GetValue<string>(), SizeBytes = ( videoBw * actualDurationSeconds / 8 ), QualityDescription = bestVideo["id"]?.GetValue<int>().ToString() },
+                            AudioStream = new DashMedia { Url = audioBaseUrl, Codec = bestAudio["codecs"]?.GetValue<string>(), SizeBytes = ( audioBw * actualDurationSeconds / 8 ), QualityDescription = bestAudio["id"]?.GetValue<int>().ToString() },
+                            EstimatedTotalSizeBytes = estimatedTotalSizeBytes
+                        };
                         _logger.LogInformation("Processed DASH streams for {VideoTitle}", videoInfo.Title);
                     } else { _logger.LogWarning("Video or Audio DASH base URL is empty for {VideoTitle}.", videoInfo.Title); }
                 } else { _logger.LogWarning("Could not find bestVideo or bestAudio DASH streams for {VideoTitle}", videoInfo.Title); }
@@ -207,25 +207,27 @@ public class BiliApiService : IBiliApiService
         // }
 
         _logger.LogInformation("Attempting to fetch DURL streams for {VideoTitle}", videoInfo.Title);
-        videoInfo.PlayUrls.Clear(); 
+        videoInfo.PlayUrls.Clear();
         int[] preferredQualities = { 80, 64, 32, 16 };
         foreach (var qn in preferredQualities) {
             var durlParams = new Dictionary<string, string> { ["cid"] = videoInfo.Cid.ToString(), ["qn"] = qn.ToString(), ["fnver"] = "0", ["fnval"] = "16" };
             if (!string.IsNullOrWhiteSpace(videoInfo.Bvid)) durlParams["bvid"] = videoInfo.Bvid; else durlParams["avid"] = videoInfo.Aid;
-            
+
             JsonNode durlResponse = await GetBiliApiJsonAsync(playUrlApi, durlParams, useCookies: true);
-            _logger.LogDebug("DURL response for QN {QN_Log} for '{VideoTitle}': {DurlResponseJson}", qn, videoInfo.Title, durlResponse?.ToJsonString(new JsonSerializerOptions{WriteIndented=false}) ?? "null");
+            _logger.LogDebug("DURL response for QN {QN_Log} for '{VideoTitle}': {DurlResponseJson}", qn, videoInfo.Title, durlResponse?.ToJsonString(new JsonSerializerOptions { WriteIndented = false }) ?? "null");
 
             var durlDataNode = durlResponse?["data"];
             if (durlResponse?["code"]?.GetValue<int>() == 0 && durlDataNode?["durl"]?.AsArray() is JsonArray durlArray && durlArray.Count > 0) {
                 _logger.LogInformation("DURL array count for QN {QN_Log} for '{VideoTitle}': {DurlArrayCount}", qn, videoInfo.Title, durlArray.Count);
-                foreach(var durlItem in durlArray) {
+                foreach (var durlItem in durlArray) {
                     if (durlItem == null) continue;
                     long sizeBytes = 0; if (durlItem["size"] is JsonValue sizeNode) sizeNode.TryGetValue<long>(out sizeBytes);
                     int qualityInt = 0; if (durlDataNode["quality"] is JsonValue qualityNode) qualityNode.TryGetValue<int>(out qualityInt); // quality is in data node, not durlItem
                     videoInfo.PlayUrls.Add(new PlayUrlDetail {
-                        QualityNumeric = qn, QualityDescription = qualityInt > 0 ? qualityInt.ToString() : qn.ToString(),
-                        Url = durlItem["url"]?.GetValue<string>(), SizeBytes = sizeBytes,
+                        QualityNumeric = qn,
+                        QualityDescription = qualityInt > 0 ? qualityInt.ToString() : qn.ToString(),
+                        Url = durlItem["url"]?.GetValue<string>(),
+                        SizeBytes = sizeBytes,
                         BackupUrls = durlItem["backup_url"]?.AsArray().Select(b => b?.GetValue<string>()).Where(s => s != null).ToList() ?? new List<string>()
                     });
                 }
@@ -237,7 +239,7 @@ public class BiliApiService : IBiliApiService
         }
 
         if (!videoInfo.PlayUrls.Any() && videoInfo.DashStreams == null) {
-             _logger.LogWarning("Failed to get any playable streams (neither DASH nor DURL) for {VideoTitle}", videoInfo.Title);
+            _logger.LogWarning("Failed to get any playable streams (neither DASH nor DURL) for {VideoTitle}", videoInfo.Title);
         }
     }
 }

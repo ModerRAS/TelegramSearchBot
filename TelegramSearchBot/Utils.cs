@@ -1,15 +1,14 @@
-﻿using Markdig;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Net.Sockets;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
-using TelegramSearchBot.Model.Data;
+using Markdig;
 using Serilog;
+using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot
-{
+namespace TelegramSearchBot {
     class Utils {
         public static List<string> ConvertToList(IEnumerable<Message> messages, long ChatId) {
             var list = new List<string>();
@@ -92,7 +91,7 @@ namespace TelegramSearchBot
                 listener.Start();
 
                 // 获取分配的端口号
-                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                int port = ( ( IPEndPoint ) listener.LocalEndpoint ).Port;
 
                 return port;
             } catch (Exception) {

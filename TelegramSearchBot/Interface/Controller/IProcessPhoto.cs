@@ -1,9 +1,9 @@
-﻿using ImageMagick;
 using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using ImageMagick;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Exceptions;

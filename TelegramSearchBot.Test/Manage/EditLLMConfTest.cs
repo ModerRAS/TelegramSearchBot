@@ -1,21 +1,21 @@
-﻿﻿#pragma warning disable CS8602 // 解引用可能出现空引用
+#pragma warning disable CS8602 // 解引用可能出现空引用
+using System;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using StackExchange.Redis;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
+using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.Manage;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Storage;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Interface.Manage;
 using Xunit;
-using System.Linq.Expressions;
 
 namespace TelegramSearchBot.Test.Manage {
     public class EditLLMConfTest {
@@ -31,16 +31,16 @@ namespace TelegramSearchBot.Test.Manage {
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
             _context = new DataDbContext(options);
-            
+
             _redisMock = new Mock<IConnectionMultiplexer>();
             _dbMock = new Mock<IDatabase>();
             _redisMock.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))
                 .Returns(_dbMock.Object);
-            
+
             // Setup Redis mock operations
             _dbMock.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null);
-            
+
             // Setup Redis operations
             _dbMock.Setup(d => d.StringSetAsync(
                     It.IsAny<RedisKey>(),
@@ -49,12 +49,12 @@ namespace TelegramSearchBot.Test.Manage {
                     It.IsAny<When>(),
                     It.IsAny<CommandFlags>()))
                 .ReturnsAsync(true);
-            
+
             _dbMock.Setup(d => d.KeyDeleteAsync(
                     It.IsAny<RedisKey>(),
                     It.IsAny<CommandFlags>()))
                 .ReturnsAsync(true);
-            
+
             var loggerMock = new Mock<ILogger<OpenAIService>>();
             var messageExtensionServiceMock = new Mock<MessageExtensionService>(_context);
             var httpClientFactoryMock = new Mock<IHttpClientFactory>();
@@ -76,12 +76,12 @@ namespace TelegramSearchBot.Test.Manage {
             var geminiServiceMock = new Mock<GeminiService>(_context, geminiLoggerMock.Object, httpClientFactoryMock.Object);
             geminiServiceMock.Setup(g => g.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
-            
+
             var llmFactoryMock = new Mock<ILLMFactory>();
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(ollamaServiceMock.Object);
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(geminiServiceMock.Object);
-            
+
             helperMock = new Mock<IEditLLMConfHelper>();
             helperMock.Setup(h => h.AddChannel(
                 It.IsAny<string>(),
@@ -110,7 +110,7 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync((int id) => new LLMChannel { Id = id, Name = "Test Channel", Provider = LLMProvider.OpenAI });
             helperMock.Setup(h => h.RefreshAllChannel())
                 .ReturnsAsync(2);
-            
+
             _service = new EditLLMConfService(
                 helperMock.Object,
                 _context,
@@ -155,7 +155,7 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.True(result3.Item1);
             Assert.Contains("请选择渠道类型：", result3.Item2);
             Assert.Contains("1. OpenAI", result3.Item2);
-            Assert.Contains("2. Ollama", result3.Item2); 
+            Assert.Contains("2. Ollama", result3.Item2);
             Assert.Contains("3. Gemini", result3.Item2);
 
             var result4 = await _service.ExecuteAsync("1", chatId);

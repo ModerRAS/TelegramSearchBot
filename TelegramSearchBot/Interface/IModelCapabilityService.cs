@@ -4,13 +4,11 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Interface
-{
+namespace TelegramSearchBot.Interface {
     /// <summary>
     /// 模型能力管理服务接口
     /// </summary>
-    public interface IModelCapabilityService
-    {
+    public interface IModelCapabilityService {
         /// <summary>
         /// 更新指定通道的所有模型能力信息
         /// </summary>
@@ -56,4 +54,4 @@ namespace TelegramSearchBot.Interface
         /// </summary>
         Task<string> TestGetAllModelCapabilitiesAsync();
     }
-} 
+}

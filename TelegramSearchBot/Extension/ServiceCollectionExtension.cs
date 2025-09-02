@@ -1,4 +1,10 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using LiteDB;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,34 +12,28 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using StackExchange.Redis;
-using System;
-using System.IO;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.AppBootstrap;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.View;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
-using TelegramSearchBot.AppBootstrap;
-using TelegramSearchBot.Attributes;
-using System.Linq;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Extension {
     public static class ServiceCollectionExtension {
         public static IServiceCollection AddTelegramBotClient(this IServiceCollection services) {
-            return services.AddSingleton<ITelegramBotClient>(sp => 
+            return services.AddSingleton<ITelegramBotClient>(sp =>
                 new TelegramBotClient(
-                    new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl), 
+                    new TelegramBotClientOptions(Env.BotToken, Env.BaseUrl),
                     httpClient: HttpClientHelper.CreateProxyHttpClient()));
         }
 

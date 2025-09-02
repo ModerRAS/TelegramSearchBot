@@ -1,5 +1,3 @@
-﻿using FFMpegCore.Extend;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -7,12 +5,14 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using TelegramSearchBot.Manager;
-using Whisper.net.Ggml;
-using Whisper.net;
-using StackExchange.Redis;
+using FFMpegCore.Extend;
+using Microsoft.Extensions.Logging;
 using Serilog;
+using StackExchange.Redis;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Manager;
+using Whisper.net;
+using Whisper.net.Ggml;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class ASRBootstrap : AppBootstrap {

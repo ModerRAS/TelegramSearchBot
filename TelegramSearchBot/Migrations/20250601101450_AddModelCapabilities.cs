@@ -1,20 +1,16 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace TelegramSearchBot.Migrations
-{
+namespace TelegramSearchBot.Migrations {
     /// <inheritdoc />
-    public partial class AddModelCapabilities : Migration
-    {
+    public partial class AddModelCapabilities : Migration {
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
+        protected override void Up(MigrationBuilder migrationBuilder) {
             migrationBuilder.CreateTable(
                 name: "ModelCapabilities",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     ChannelWithModelId = table.Column<int>(type: "INTEGER", nullable: false),
@@ -23,8 +19,7 @@ namespace TelegramSearchBot.Migrations
                     Description = table.Column<string>(type: "TEXT", nullable: true),
                     LastUpdated = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_ModelCapabilities", x => x.Id);
                     table.ForeignKey(
                         name: "FK_ModelCapabilities_ChannelsWithModel_ChannelWithModelId",
@@ -41,8 +36,7 @@ namespace TelegramSearchBot.Migrations
         }
 
         /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
+        protected override void Down(MigrationBuilder migrationBuilder) {
             migrationBuilder.DropTable(
                 name: "ModelCapabilities");
         }

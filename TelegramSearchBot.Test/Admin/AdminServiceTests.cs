@@ -1,23 +1,22 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Service.Manage;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Moq;
 using StackExchange.Redis;
 using TelegramSearchBot.Interface; // Keep this if other interfaces from here are used
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common; // Add this for IAppConfigurationService
+using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Scheduler; // Add this for ISchedulerService
 using Xunit;
 
-namespace TelegramSearchBot.Test.Admin
-{
+namespace TelegramSearchBot.Test.Admin {
     public class AdminServiceTests {
 #pragma warning disable CS8618 // 在退出构造函数时，不可为 null 的字段必须包含非 null 值。请考虑添加 "required" 修饰符或声明为可为 null。
         private Mock<IAppConfigurationService> _mockAppConfigService;
@@ -78,14 +77,13 @@ namespace TelegramSearchBot.Test.Admin
             return loggerFactory.CreateLogger<AdminService>();
         }
 
-        private void SetupMocks()
-        {
+        private void SetupMocks() {
             _mockAppConfigService = new Mock<IAppConfigurationService>();
             _mockRedis = new Mock<IConnectionMultiplexer>();
             _mockSchedulerService = new Mock<ISchedulerService>();
             var mockDb = new Mock<IDatabase>();
             _mockRedis.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(mockDb.Object);
-            
+
             // 你可以在这里为 _mockAppConfigService 设置一些默认的 Setup，如果需要的话
             // 例如: _mockAppConfigService.Setup(s => s.GetConfigurationValueAsync(It.IsAny<string>())).ReturnsAsync("DefaultValue");
         }

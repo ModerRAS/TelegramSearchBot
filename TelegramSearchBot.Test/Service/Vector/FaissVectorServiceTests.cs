@@ -16,13 +16,11 @@ using TelegramSearchBot.Service.Vector;
 using Xunit;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
 
-namespace TelegramSearchBot.Test.Service.Vector
-{
+namespace TelegramSearchBot.Test.Service.Vector {
     /// <summary>
     /// FAISS向量服务单元测试
     /// </summary>
-    public class FaissVectorServiceTests : IDisposable
-    {
+    public class FaissVectorServiceTests : IDisposable {
         private readonly Mock<ILogger<FaissVectorService>> _mockLogger;
         private readonly Mock<IGeneralLLMService> _mockLLMService;
         private readonly Mock<IServiceProvider> _mockServiceProvider;
@@ -34,8 +32,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         private readonly string _testDirectory;
         private static int _testCounter = 0; // 静态计数器，确保每个测试使用唯一ID
 
-        public FaissVectorServiceTests()
-        {
+        public FaissVectorServiceTests() {
             _testDirectory = Path.Combine(Path.GetTempPath(), "FaissTests", Guid.NewGuid().ToString());
             Directory.CreateDirectory(_testDirectory);
 
@@ -72,8 +69,7 @@ namespace TelegramSearchBot.Test.Service.Vector
                 _mockLLMService.Object);
         }
 
-        private void SetupDefaultVectorMock()
-        {
+        private void SetupDefaultVectorMock() {
             // 设置默认向量生成响应
             var defaultVector = CreateTestVector();
             _mockLLMService
@@ -85,8 +81,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task GenerateVectorAsync_ShouldReturnVectorFromLLMService()
-        {
+        public async Task GenerateVectorAsync_ShouldReturnVectorFromLLMService() {
             // Arrange
             var testText = "测试文本";
 
@@ -99,8 +94,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorizeConversationSegment_WithNewSegment_ShouldCreateVectorIndex()
-        {
+        public async Task VectorizeConversationSegment_WithNewSegment_ShouldCreateVectorIndex() {
             // Arrange
             await ClearDatabase();
             var uniqueId = GetUniqueId();
@@ -124,20 +118,18 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorizeConversationSegment_WithExistingVector_ShouldSkipVectorization()
-        {
+        public async Task VectorizeConversationSegment_WithExistingVector_ShouldSkipVectorization() {
             // Arrange
             await ClearDatabase();
             var segmentId = GetUniqueId();
             var groupId = GetUniqueGroupId();
             var segment = CreateTestConversationSegment(groupId, segmentId);
-            
+
             // 先添加segment到数据库
             _dbContext.ConversationSegments.Add(segment);
             await _dbContext.SaveChangesAsync();
-            
-            var existingVectorIndex = new VectorIndex
-            {
+
+            var existingVectorIndex = new VectorIndex {
                 Id = GetUniqueId(),
                 GroupId = segment.GroupId,
                 VectorType = "ConversationSegment",
@@ -159,14 +151,13 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task Search_WithValidQuery_ShouldReturnResults()
-        {
+        public async Task Search_WithValidQuery_ShouldReturnResults() {
             // Arrange
             await ClearDatabase();
             var groupId = GetUniqueGroupId();
             var segmentId = GetUniqueId();
             var messageId = GetUniqueId();
-            
+
             var segment = CreateTestConversationSegment(groupId, segmentId);
             var message = CreateTestMessage(groupId, messageId);
 
@@ -178,8 +169,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             await _faissVectorService.FlushAsync();
 
             // 添加对话段消息关联
-            var segmentMessage = new ConversationSegmentMessage
-            {
+            var segmentMessage = new ConversationSegmentMessage {
                 Id = GetUniqueId(),
                 ConversationSegmentId = segment.Id,
                 MessageDataId = message.Id,
@@ -189,8 +179,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             _dbContext.ConversationSegmentMessages.Add(segmentMessage);
             await _dbContext.SaveChangesAsync();
 
-            var searchOption = new SearchOption
-            {
+            var searchOption = new SearchOption {
                 ChatId = segment.GroupId,
                 Search = "测试搜索",
                 Skip = 0,
@@ -207,25 +196,23 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorizeGroupSegments_WithMultipleSegments_ShouldVectorizeAll()
-        {
+        public async Task VectorizeGroupSegments_WithMultipleSegments_ShouldVectorizeAll() {
             // Arrange
             await ClearDatabase();
             var groupId = GetUniqueGroupId();
             var segments = new List<ConversationSegment>();
-            
-            for (int i = 0; i < 3; i++)
-            {
+
+            for (int i = 0; i < 3; i++) {
                 var segment = CreateTestConversationSegment(groupId, GetUniqueId());
                 segments.Add(segment);
             }
 
             _dbContext.ConversationSegments.AddRange(segments);
             await _dbContext.SaveChangesAsync();
-            
+
             // 确保数据已经提交到数据库
             _dbContext.ChangeTracker.Clear();
-            
+
             // 验证数据确实存在于数据库中
             var segmentsInDb = await _dbContext.ConversationSegments
                 .Where(s => s.GroupId == groupId && !s.IsVectorized)
@@ -233,8 +220,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             Assert.Equal(3, segmentsInDb.Count);
 
             // Act - 使用顺序处理而不是并发处理来避免竞态条件
-            foreach (var segment in segmentsInDb)
-            {
+            foreach (var segment in segmentsInDb) {
                 await _faissVectorService.VectorizeConversationSegment(segment);
             }
             await _faissVectorService.FlushAsync();
@@ -245,20 +231,19 @@ namespace TelegramSearchBot.Test.Service.Vector
                 .ToListAsync();
 
             // 如果向量索引数量不对，输出详细信息
-            if (vectorIndexes.Count != 3)
-            {
+            if (vectorIndexes.Count != 3) {
                 var updatedSegmentsDebug = await _dbContext.ConversationSegments
                     .Where(s => s.GroupId == groupId)
                     .ToListAsync();
-                
-                var debugInfo = string.Join("\n", updatedSegmentsDebug.Select(s => 
+
+                var debugInfo = string.Join("\n", updatedSegmentsDebug.Select(s =>
                     $"Segment {s.Id}: IsVectorized={s.IsVectorized}"));
-                
+
                 throw new Exception($"Expected 3 vector indexes but got {vectorIndexes.Count}. Segments status:\n{debugInfo}");
             }
 
             Assert.Equal(3, vectorIndexes.Count);
-            
+
             // 验证对话段的IsVectorized状态已更新
             var updatedSegments = await _dbContext.ConversationSegments
                 .Where(s => s.GroupId == groupId)
@@ -267,8 +252,7 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task IsHealthyAsync_ShouldReturnTrue_WhenServiceIsWorking()
-        {
+        public async Task IsHealthyAsync_ShouldReturnTrue_WhenServiceIsWorking() {
             // Act
             var isHealthy = await _faissVectorService.IsHealthyAsync();
 
@@ -277,12 +261,10 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task Search_WithEmptyIndex_ShouldReturnEmptyResults()
-        {
+        public async Task Search_WithEmptyIndex_ShouldReturnEmptyResults() {
             // Arrange
             await ClearDatabase();
-            var searchOption = new SearchOption
-            {
+            var searchOption = new SearchOption {
                 ChatId = GetUniqueGroupId(), // 使用唯一的群组ID
                 Search = "测试搜索",
                 Skip = 0,
@@ -300,11 +282,9 @@ namespace TelegramSearchBot.Test.Service.Vector
         }
 
         [Fact]
-        public async Task VectorizeConversationSegment_ShouldCreateIndexFile()
-        {
+        public async Task VectorizeConversationSegment_ShouldCreateIndexFile() {
             // Skip test on Linux due to FAISS native library compatibility issues
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
                 return;
             }
 
@@ -323,15 +303,14 @@ namespace TelegramSearchBot.Test.Service.Vector
             // Assert
             var indexFile = await _dbContext.FaissIndexFiles
                 .FirstOrDefaultAsync(f => f.GroupId == segment.GroupId && f.IndexType == "ConversationSegment");
-            
+
             Assert.NotNull(indexFile);
             Assert.True(indexFile.IsValid);
             Assert.True(File.Exists(indexFile.FilePath));
         }
 
         [Fact]
-        public async Task GenerateVectorsAsync_WithMultipleTexts_ShouldReturnAllVectors()
-        {
+        public async Task GenerateVectorsAsync_WithMultipleTexts_ShouldReturnAllVectors() {
             // Arrange
             var texts = new[] { "文本1", "文本2", "文本3" };
 
@@ -340,28 +319,25 @@ namespace TelegramSearchBot.Test.Service.Vector
 
             // Assert
             Assert.Equal(3, results.Length);
-            foreach (var result in results)
-            {
+            foreach (var result in results) {
                 Assert.NotNull(result);
                 Assert.Equal(1024, result.Length);
             }
         }
 
         [Fact]
-        public async Task Search_WithPagination_ShouldRespectSkipAndTake()
-        {
+        public async Task Search_WithPagination_ShouldRespectSkipAndTake() {
             // Arrange
             await ClearDatabase();
             var groupId = GetUniqueGroupId();
             var segments = new List<ConversationSegment>();
             var messages = new List<Message>();
-            
+
             // 创建多个对话段和消息
-            for (int i = 0; i < 5; i++)
-            {
+            for (int i = 0; i < 5; i++) {
                 var segmentId = GetUniqueId();
                 var messageId = GetUniqueId();
-                
+
                 var segment = CreateTestConversationSegment(groupId, segmentId);
                 segments.Add(segment);
 
@@ -374,17 +350,14 @@ namespace TelegramSearchBot.Test.Service.Vector
             await _dbContext.SaveChangesAsync();
 
             // 向量化所有对话段
-            foreach (var segment in segments)
-            {
+            foreach (var segment in segments) {
                 await _faissVectorService.VectorizeConversationSegment(segment);
             }
             await _faissVectorService.FlushAsync();
 
             // 添加对话段消息关联
-            for (int i = 0; i < 5; i++)
-            {
-                var segmentMessage = new ConversationSegmentMessage
-                {
+            for (int i = 0; i < 5; i++) {
+                var segmentMessage = new ConversationSegmentMessage {
                     Id = GetUniqueId(),
                     ConversationSegmentId = segments[i].Id,
                     MessageDataId = messages[i].Id,
@@ -394,8 +367,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             }
             await _dbContext.SaveChangesAsync();
 
-            var searchOption = new SearchOption
-            {
+            var searchOption = new SearchOption {
                 ChatId = groupId,
                 Search = "测试搜索",
                 Skip = 2,
@@ -412,8 +384,7 @@ namespace TelegramSearchBot.Test.Service.Vector
             Assert.Equal(2, searchOption.Take);
         }
 
-        private async Task ClearDatabase()
-        {
+        private async Task ClearDatabase() {
             // 详细清理，确保没有残留数据
             if (_dbContext.VectorIndexes.Any())
                 _dbContext.VectorIndexes.RemoveRange(_dbContext.VectorIndexes);
@@ -425,31 +396,27 @@ namespace TelegramSearchBot.Test.Service.Vector
                 _dbContext.ConversationSegmentMessages.RemoveRange(_dbContext.ConversationSegmentMessages);
             if (_dbContext.FaissIndexFiles.Any())
                 _dbContext.FaissIndexFiles.RemoveRange(_dbContext.FaissIndexFiles);
-                
+
             await _dbContext.SaveChangesAsync();
-            
+
             // 确保数据真的被清理了
             _dbContext.ChangeTracker.Clear();
         }
 
-        private int GetUniqueId()
-        {
+        private int GetUniqueId() {
             // 使用更安全的ID生成策略：基于时间戳和随机数
-            var timestamp = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+            var timestamp = ( int ) ( DateTime.UtcNow.Ticks % int.MaxValue );
             var random = new Random().Next(1000, 9999);
             var increment = Interlocked.Increment(ref _testCounter);
-            return Math.Abs((timestamp + random + increment) % int.MaxValue) + 1; // 确保不会是0
+            return Math.Abs(( timestamp + random + increment ) % int.MaxValue) + 1; // 确保不会是0
         }
 
-        private long GetUniqueGroupId()
-        {
+        private long GetUniqueGroupId() {
             return 10000L + GetUniqueId();
         }
 
-        private ConversationSegment CreateTestConversationSegment(long groupId, int segmentId)
-        {
-            return new ConversationSegment
-            {
+        private ConversationSegment CreateTestConversationSegment(long groupId, int segmentId) {
+            return new ConversationSegment {
                 Id = segmentId,
                 GroupId = groupId,
                 StartTime = DateTime.UtcNow.AddHours(-1),
@@ -466,10 +433,8 @@ namespace TelegramSearchBot.Test.Service.Vector
             };
         }
 
-        private Message CreateTestMessage(long groupId, int messageId)
-        {
-            return new Message
-            {
+        private Message CreateTestMessage(long groupId, int messageId) {
+            return new Message {
                 Id = messageId,
                 MessageId = messageId,
                 GroupId = groupId,
@@ -479,33 +444,26 @@ namespace TelegramSearchBot.Test.Service.Vector
             };
         }
 
-        private float[] CreateTestVector(int seed = 42)
-        {
+        private float[] CreateTestVector(int seed = 42) {
             var random = new Random(seed);
             var vector = new float[1024];
-            for (int i = 0; i < vector.Length; i++)
-            {
-                vector[i] = (float)random.NextDouble();
+            for (int i = 0; i < vector.Length; i++) {
+                vector[i] = ( float ) random.NextDouble();
             }
             return vector;
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             _dbContext?.Dispose();
-            
+
             // 清理测试目录
-            if (Directory.Exists(_testDirectory))
-            {
-                try
-                {
+            if (Directory.Exists(_testDirectory)) {
+                try {
                     Directory.Delete(_testDirectory, true);
-                }
-                catch
-                {
+                } catch {
                     // 忽略清理错误
                 }
             }
         }
     }
-} 
+}

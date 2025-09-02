@@ -1,9 +1,9 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
@@ -12,11 +12,9 @@ using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Interface.Controller;
 
-namespace TelegramSearchBot.Service.BotAPI
-{
+namespace TelegramSearchBot.Service.BotAPI {
     [Injectable(ServiceLifetime.Singleton)]
-    public class TelegramBotReceiverService : BackgroundService
-    {
+    public class TelegramBotReceiverService : BackgroundService {
         private readonly ITelegramBotClient _botClient;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<TelegramBotReceiverService> _logger;
@@ -24,20 +22,17 @@ namespace TelegramSearchBot.Service.BotAPI
         public TelegramBotReceiverService(
             ITelegramBotClient botClient,
             IServiceProvider serviceProvider,
-            ILogger<TelegramBotReceiverService> logger)
-        {
+            ILogger<TelegramBotReceiverService> logger) {
             _botClient = botClient;
             _serviceProvider = serviceProvider;
             _logger = logger;
         }
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        {
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
             await Task.Delay(5000);
             _logger.LogInformation("Telegram Bot Receiver Service is starting.");
 
-            try
-            {
+            try {
                 _botClient.StartReceiving(
                     updateHandler: HandleUpdateAsync,
                     errorHandler: HandleErrorAsync,
@@ -45,31 +40,23 @@ namespace TelegramSearchBot.Service.BotAPI
                     cancellationToken: stoppingToken);
 
                 _logger.LogInformation("Telegram Bot Receiver Service has started.");
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogCritical(ex, "Telegram Bot Receiver Service failed to start.");
             }
         }
 
-        private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
-        {
-            try
-            {
+        private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) {
+            try {
                 using var scope = _serviceProvider.CreateScope();
                 var executor = new ControllerExecutor(scope.ServiceProvider.GetServices<IOnUpdate>());
                 await executor.ExecuteControllers(update);
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, "Error handling update {UpdateId}", update.Id);
             }
         }
 
-        private Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
-        {
-            var errorMessage = exception switch
-            {
+        private Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
+            var errorMessage = exception switch {
                 ApiRequestException apiRequestException => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
                 _ => exception.ToString()
             };
@@ -78,4 +65,4 @@ namespace TelegramSearchBot.Service.BotAPI
             return Task.CompletedTask;
         }
     }
-} 
+}

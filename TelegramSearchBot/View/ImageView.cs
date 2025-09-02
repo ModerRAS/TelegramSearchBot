@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.IO;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -11,10 +11,8 @@ using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 
-namespace TelegramSearchBot.View
-{
-    public class ImageView : IView
-    {
+namespace TelegramSearchBot.View {
+    public class ImageView : IView {
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
 
@@ -26,57 +24,48 @@ namespace TelegramSearchBot.View
         private bool _disableNotification;
         private InputFile _photo;
 
-        public ImageView(ITelegramBotClient botClient, SendMessage sendMessage) 
-        {
+        public ImageView(ITelegramBotClient botClient, SendMessage sendMessage) {
             _botClient = botClient;
             _sendMessage = sendMessage;
         }
 
-        public class ViewButton
-        {
+        public class ViewButton {
             public string Text { get; set; }
             public string CallbackData { get; set; }
-            
-            public ViewButton(string text, string callbackData)
-            {
+
+            public ViewButton(string text, string callbackData) {
                 Text = text;
                 CallbackData = callbackData;
             }
         }
 
         // Fluent API methods
-        public ImageView WithChatId(long chatId)
-        {
+        public ImageView WithChatId(long chatId) {
             _chatId = chatId;
             return this;
         }
 
-        public ImageView WithReplyTo(int messageId)
-        {
+        public ImageView WithReplyTo(int messageId) {
             _replyToMessageId = messageId;
             return this;
         }
 
-        public ImageView WithCaption(string caption)
-        {
+        public ImageView WithCaption(string caption) {
             _caption = MessageFormatHelper.ConvertMarkdownToTelegramHtml(caption);
             return this;
         }
 
-        public ImageView DisableNotification(bool disable = true)
-        {
+        public ImageView DisableNotification(bool disable = true) {
             _disableNotification = disable;
             return this;
         }
 
-        public ImageView AddButton(string text, string callbackData)
-        {
+        public ImageView AddButton(string text, string callbackData) {
             _buttons.Add(new ViewButton(text, callbackData));
             return this;
         }
 
-        public ImageView WithPhoto(string dataUri)
-        {
+        public ImageView WithPhoto(string dataUri) {
             var parts = dataUri.Split(new[] { ',' }, 2);
             if (parts.Length != 2)
                 throw new ArgumentException("Invalid data URI format");
@@ -91,26 +80,23 @@ namespace TelegramSearchBot.View
             return this;
         }
 
-        public ImageView WithPhotoBytes(byte[] imageBytes)
-        {
+        public ImageView WithPhotoBytes(byte[] imageBytes) {
             if (imageBytes == null || imageBytes.Length == 0)
                 throw new ArgumentException("Image bytes cannot be null or empty");
-                
+
             _photo = InputFile.FromStream(new MemoryStream(imageBytes), "photo.png");
             return this;
         }
 
-        public async Task Render()
-        {
-            var replyParameters = new Telegram.Bot.Types.ReplyParameters
-            {
+        public async Task Render() {
+            var replyParameters = new Telegram.Bot.Types.ReplyParameters {
                 MessageId = _replyToMessageId
             };
 
-            var inlineButtons = _buttons?.Select(b => 
+            var inlineButtons = _buttons?.Select(b =>
                 InlineKeyboardButton.WithCallbackData(b.Text, b.CallbackData)).ToList();
 
-            var replyMarkup = inlineButtons != null && inlineButtons.Any() ? 
+            var replyMarkup = inlineButtons != null && inlineButtons.Any() ?
                 new InlineKeyboardMarkup(inlineButtons) : null;
 
             await _sendMessage.AddTaskWithResult(async () => await _botClient.SendPhoto(

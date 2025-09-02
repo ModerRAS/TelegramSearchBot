@@ -5,26 +5,24 @@ using System.IO;
 using System.Linq; // Added for Any()
 using System.Net.Http;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Manager; // For Env.WorkDir
 using FFMpegCore; // Added for FFMpeg manipulation
 using FFMpegCore.Enums; // Added for SpeedArgument (may not be needed now)
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Manager; // For Env.WorkDir
 
 namespace TelegramSearchBot.Service.Bilibili;
 
 [Injectable(ServiceLifetime.Transient)]
-public class DownloadService : IDownloadService
-{
+public class DownloadService : IDownloadService {
     private readonly HttpClient _httpClient;
     private readonly ILogger<DownloadService> _logger;
     private readonly string _tempFileDirectory;
 
-    public DownloadService(IHttpClientFactory httpClientFactory, ILogger<DownloadService> logger)
-    {
+    public DownloadService(IHttpClientFactory httpClientFactory, ILogger<DownloadService> logger) {
         // Use a dedicated client or BiliApiClient
-        _httpClient = httpClientFactory.CreateClient("BiliApiClient"); 
+        _httpClient = httpClientFactory.CreateClient("BiliApiClient");
         _logger = logger;
 
         // Ensure a temporary directory for downloads exists
@@ -36,10 +34,8 @@ public class DownloadService : IDownloadService
         // GlobalFFOptions.Configure(new FFOptions { BinaryFolder = "/path/to/ffmpeg/bin" }); 
     }
 
-    public async Task<string> DownloadFileAsync(string url, string referer, string suggestedFileName)
-    {
-        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(suggestedFileName))
-        {
+    public async Task<string> DownloadFileAsync(string url, string referer, string suggestedFileName) {
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(suggestedFileName)) {
             _logger.LogWarning("URL or suggested file name is empty for download.");
             return null;
         }
@@ -48,15 +44,12 @@ public class DownloadService : IDownloadService
         var safeFileName = string.Join("_", suggestedFileName.Split(Path.GetInvalidFileNameChars()));
         var filePath = Path.Combine(_tempFileDirectory, $"{Guid.NewGuid()}_{safeFileName}");
 
-        try
-        {
+        try {
             _logger.LogInformation("Starting download: {Url} to {FilePath}", url, filePath);
             var request = new HttpRequestMessage(HttpMethod.Get, url);
-            if (!string.IsNullOrWhiteSpace(referer))
-            {
+            if (!string.IsNullOrWhiteSpace(referer)) {
                 // Attempt to create a Uri to check if it has a scheme
-                if (!Uri.TryCreate(referer, UriKind.Absolute, out Uri refererUri) || string.IsNullOrEmpty(refererUri.Scheme))
-                {
+                if (!Uri.TryCreate(referer, UriKind.Absolute, out Uri refererUri) || string.IsNullOrEmpty(refererUri.Scheme)) {
                     // If no scheme or invalid URI, prepend https://
                     referer = "https://" + referer;
                 }
@@ -77,35 +70,29 @@ public class DownloadService : IDownloadService
 
             _logger.LogInformation("Download completed: {FilePath}", filePath);
             return filePath;
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             _logger.LogError(ex, "Error downloading file from {Url} to {FilePath}", url, filePath);
             // Clean up partially downloaded file
-            if (System.IO.File.Exists(filePath)) 
-            {
+            if (System.IO.File.Exists(filePath)) {
                 try { System.IO.File.Delete(filePath); } catch { /* Ignore delete error */ }
             }
             return null;
         }
     }
 
-    public async Task<string> DownloadAndMergeDashStreamsAsync(string videoStreamUrl, string audioStreamUrl, string referer, string outputFileName)
-    {
-        if (string.IsNullOrWhiteSpace(videoStreamUrl) || string.IsNullOrWhiteSpace(audioStreamUrl) || string.IsNullOrWhiteSpace(outputFileName))
-        {
+    public async Task<string> DownloadAndMergeDashStreamsAsync(string videoStreamUrl, string audioStreamUrl, string referer, string outputFileName) {
+        if (string.IsNullOrWhiteSpace(videoStreamUrl) || string.IsNullOrWhiteSpace(audioStreamUrl) || string.IsNullOrWhiteSpace(outputFileName)) {
             _logger.LogWarning("One or more required parameters for DASH stream download/merge are empty.");
             return null;
         }
-        
+
         // Sanitize output filename
         var safeOutputFileName = string.Join("_", outputFileName.Split(Path.GetInvalidFileNameChars()));
         var mergedFilePath = Path.Combine(_tempFileDirectory, $"{Guid.NewGuid()}_{safeOutputFileName}");
         string tempVideoFile = null;
         string tempAudioFile = null;
 
-        try
-        {
+        try {
             // Download video and audio streams
             _logger.LogInformation("Downloading DASH video stream: {VideoStreamUrl}", videoStreamUrl);
             tempVideoFile = await DownloadFileAsync(videoStreamUrl, referer, "temp_video.m4s"); // Use appropriate extension if known
@@ -126,35 +113,27 @@ public class DownloadService : IDownloadService
                     .WithCustomArgument("-c:a copy")) // Copy audio stream without re-encoding
                 .ProcessAsynchronously();
 
-            if (!success)
-            {
+            if (!success) {
                 _logger.LogError("FFMpegCore merge process failed for output: {MergedFilePath}", mergedFilePath);
                 throw new Exception("FFMpegCore failed to merge streams.");
             }
 
             _logger.LogInformation("FFMpegCore merge completed successfully: {MergedFilePath}", mergedFilePath);
             return mergedFilePath;
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             _logger.LogError(ex, "Error in DownloadAndMergeDashStreamsAsync for output {OutputFileName}", outputFileName);
             // Clean up merged file if it exists from a failed attempt
-            if (System.IO.File.Exists(mergedFilePath)) 
-            {
-                 try { System.IO.File.Delete(mergedFilePath); } catch { /* Ignore delete error */ }
+            if (System.IO.File.Exists(mergedFilePath)) {
+                try { System.IO.File.Delete(mergedFilePath); } catch { /* Ignore delete error */ }
             }
             return null;
-        }
-        finally
-        {
+        } finally {
             // Clean up temporary downloaded stream files
-            if (tempVideoFile != null && System.IO.File.Exists(tempVideoFile)) 
-            {
+            if (tempVideoFile != null && System.IO.File.Exists(tempVideoFile)) {
                 try { System.IO.File.Delete(tempVideoFile); } catch { /* Ignore delete error */ }
             }
-            if (tempAudioFile != null && System.IO.File.Exists(tempAudioFile)) 
-            {
-                 try { System.IO.File.Delete(tempAudioFile); } catch { /* Ignore delete error */ }
+            if (tempAudioFile != null && System.IO.File.Exists(tempAudioFile)) {
+                try { System.IO.File.Delete(tempAudioFile); } catch { /* Ignore delete error */ }
             }
         }
     }

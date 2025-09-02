@@ -1,13 +1,13 @@
-﻿using Markdig.Helpers;
-using Microsoft.EntityFrameworkCore.Internal;
-using Microsoft.Extensions.Logging;
-using Serilog;
-using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Markdig.Helpers;
+using Microsoft.EntityFrameworkCore.Internal;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using StackExchange.Redis;
 using TelegramSearchBot.Manager;
 
 namespace TelegramSearchBot.AppBootstrap {
@@ -28,9 +28,9 @@ namespace TelegramSearchBot.AppBootstrap {
                 string response = string.Empty;
                 try {
                     response = await qr.ExecuteAsync(photoPath);
-                } catch (Exception ex) { 
+                } catch (Exception ex) {
                 }
-                
+
                 db.StringSet($"QRResult-{task}", response);
             }
         }

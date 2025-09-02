@@ -1,22 +1,20 @@
 #pragma warning disable CS8602 // 解引用可能出现空引用
-using Microsoft.Extensions.Logging;
-using Moq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
-using TelegramSearchBot.Service.AI.LLM;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Moq;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Service.AI.LLM;
 using Xunit;
 
-namespace TelegramSearchBot.Test.Service.AI.LLM
-{
+namespace TelegramSearchBot.Test.Service.AI.LLM {
     // --- Helper Classes/Methods for Testing ---
-    public class TestToolProvider
-    {
+    public class TestToolProvider {
         public static bool StaticMethodCalled { get; set; } = false;
         public bool InstanceMethodCalled { get; set; } = false;
         public static string? LastStaticArg { get; set; }
@@ -107,8 +105,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         [McpTool("A simple static tool.")]
         public static string StaticTool(
             [McpParameter("A string argument.")] string arg1,
-            [McpParameter("An optional int.", IsRequired = false)] int arg2 = 5)
-        {
+            [McpParameter("An optional int.", IsRequired = false)] int arg2 = 5) {
             StaticMethodCalled = true;
             LastStaticArg = arg1;
             LastStaticIntArg = arg2;
@@ -117,8 +114,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
         [McpTool("An instance tool.")]
         public virtual bool InstanceTool( // Ensure virtual
-             [McpParameter("A required boolean.")] bool input)
-        {
+             [McpParameter("A required boolean.")] bool input) {
             InstanceMethodCalled = true;
             LastInstanceBoolArg = input;
             return !input;
@@ -126,38 +122,34 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
         [McpTool("An async instance tool.")]
         public virtual async Task<string> InstanceToolAsync( // Ensure virtual
-            [McpParameter("Some text.")] string text)
-        {
+            [McpParameter("Some text.")] string text) {
             await Task.Delay(1); // Simulate async work
             InstanceMethodCalled = true;
             LastInstanceArg = text;
             return $"Async processed: {text}";
         }
-        
+
         // Tool with complex parameter (for JSON test)
-         public class ComplexParam
-         {
-             public string? Name { get; set; }
-             public int Value { get; set; }
+        public class ComplexParam {
+            public string? Name { get; set; }
+            public int Value { get; set; }
 
-             // Added for proper comparison in Moq.It.Is<T>
-             public override bool Equals(object? obj)
-             {
-                 return obj is ComplexParam other &&
-                        EqualityComparer<string?>.Default.Equals(Name, other.Name) &&
-                        Value == other.Value;
-             }
+            // Added for proper comparison in Moq.It.Is<T>
+            public override bool Equals(object? obj) {
+                return obj is ComplexParam other &&
+                       EqualityComparer<string?>.Default.Equals(Name, other.Name) &&
+                       Value == other.Value;
+            }
 
-             public override int GetHashCode()
-             {
-                 return HashCode.Combine(Name, Value);
-             }
-         }
-         [McpTool("Tool with complex parameter.")]
-         public virtual string ComplexParamTool([McpParameter("Complex object.")] ComplexParam data) // Ensure virtual
-         {
-             return $"Complex: {data?.Name} = {data?.Value}";
-         }
+            public override int GetHashCode() {
+                return HashCode.Combine(Name, Value);
+            }
+        }
+        [McpTool("Tool with complex parameter.")]
+        public virtual string ComplexParamTool([McpParameter("Complex object.")] ComplexParam data) // Ensure virtual
+        {
+            return $"Complex: {data?.Name} = {data?.Value}";
+        }
 
         // Method *not* marked as a tool
         public void NotATool() { }
@@ -186,26 +178,23 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             [McpParameter("The branch identifier.", IsRequired = false)] string? branchId = null,
             [McpParameter("Whether more thoughts are needed.", IsRequired = false)] bool needsMoreThoughts = false,
             [McpParameter("Whether this is a revision.", IsRequired = false)] bool isRevision = false,
-            [McpParameter("The thought number this revises.", IsRequired = false)] int? revisesThought = null)
-        { }
+            [McpParameter("The thought number this revises.", IsRequired = false)] int? revisesThought = null) { }
     }
 
     // --- Test Class ---
-    public class McpToolHelperTests
-    {
-        #pragma warning disable CS8618 // 单元测试中字段会在初始化方法中赋值
+    public class McpToolHelperTests {
+#pragma warning disable CS8618 // 单元测试中字段会在初始化方法中赋值
         // 移除构造函数中的静态字段和 Mock 成员，改为在测试方法内部声明和设置
         // private Mock<ILogger> _mockLogger = null!;
         // private Mock<IServiceProvider> _mockServiceProvider = null!;
         // private Mock<TestToolProvider> _mockToolProviderInstance = null!;
-        #pragma warning restore CS8618
+#pragma warning restore CS8618
 
         private Mock<ILogger> _mockLogger;
         private Mock<IServiceProvider> _mockServiceProvider;
         private Mock<TestToolProvider> _mockToolProviderInstance;
 
-        public McpToolHelperTests()
-        {
+        public McpToolHelperTests() {
             _mockLogger = new Mock<ILogger>();
             _mockLogger.Setup(x => x.IsEnabled(LogLevel.Debug)).Returns(true);
             _mockLogger.Setup(x => x.Log(
@@ -214,15 +203,14 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
                 It.IsAny<object>(),
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<object, Exception?, string>>()))
-                .Callback<LogLevel, EventId, object, Exception?, Func<object, Exception?, string>>((level, eventId, state, exception, formatter) =>
-                {
+                .Callback<LogLevel, EventId, object, Exception?, Func<object, Exception?, string>>((level, eventId, state, exception, formatter) => {
                     var message = formatter(state, exception);
                     Console.WriteLine($"[DEBUG] {message}");
                 });
 
             _mockServiceProvider = new Mock<IServiceProvider>();
             _mockToolProviderInstance = new Mock<TestToolProvider> { CallBase = true };
-            
+
             // Explicitly setup the service provider to return the mocked instance
             _mockServiceProvider
                 .Setup(sp => sp.GetService(typeof(TestToolProvider)))
@@ -241,8 +229,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public void CleanLlmResponse_RemovesThinkTags()
-        {
+        public void CleanLlmResponse_RemovesThinkTags() {
             var raw = "Some text <think>This is thinking</think> more text.";
             var expected = "Some text more text.";
             var actual = McpToolHelper.CleanLlmResponse(raw);
@@ -250,8 +237,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public void CleanLlmResponse_RemovesMultipleThinkTags()
-        {
+        public void CleanLlmResponse_RemovesMultipleThinkTags() {
             var raw = "<think>First thought.</think>Response<think>Second thought\nmulti-line</think>";
             var expected = "Response";
             var actual = McpToolHelper.CleanLlmResponse(raw);
@@ -259,8 +245,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public void CleanLlmResponse_HandlesNoThinkTags()
-        {
+        public void CleanLlmResponse_HandlesNoThinkTags() {
             var raw = "Just plain text.";
             var expected = "Just plain text.";
             var actual = McpToolHelper.CleanLlmResponse(raw);
@@ -268,15 +253,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public void CleanLlmResponse_HandlesEmptyInput()
-        {
+        public void CleanLlmResponse_HandlesEmptyInput() {
             Assert.Equal("", McpToolHelper.CleanLlmResponse(""));
             Assert.Null(McpToolHelper.CleanLlmResponse(null));
         }
 
         [Fact]
-        public void CleanLlmResponse_TrimsResult()
-        {
+        public void CleanLlmResponse_TrimsResult() {
             var raw = "  <think> pensée </think>   Result   ";
             var expected = "Result";
             var actual = McpToolHelper.CleanLlmResponse(raw);
@@ -284,8 +267,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public void TryParseToolCalls_DirectParams_ParsesSingleToolCorrectly()
-        {
+        public void TryParseToolCalls_DirectParams_ParsesSingleToolCorrectly() {
             var xml = "<StaticTool><arg1>hello</arg1><arg2>10</arg2></StaticTool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
@@ -299,8 +281,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public void TryParseToolCalls_NestedParams_ParsesSingleToolCorrectly()
-        {
+        public void TryParseToolCalls_NestedParams_ParsesSingleToolCorrectly() {
             var xml = "<tool name=\"InstanceTool\"><parameters><parameter name=\"input\">true</parameter></parameters></tool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
@@ -308,45 +289,41 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             Assert.Single(parsedToolCalls);
             var firstTool = parsedToolCalls.First();
             Assert.Equal("InstanceTool", firstTool.toolName);
-            Assert.Equal(1, firstTool.arguments.Count);
+            Assert.Single(firstTool.arguments);
             Assert.Equal("true", firstTool.arguments["input"]);
         }
-        
+
         [Fact]
-        public void TryParseToolCalls_NestedParams_HandlesMissingParametersTagForSingleTool()
-        {
+        public void TryParseToolCalls_NestedParams_HandlesMissingParametersTagForSingleTool() {
             var xml = "<tool name=\"InstanceTool\"><parameter name=\"input\">false</parameter></tool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
-            Assert.True(result); 
+            Assert.True(result);
             Assert.Single(parsedToolCalls);
             var firstTool = parsedToolCalls.First();
             Assert.Equal("InstanceTool", firstTool.toolName);
-            Assert.Equal(1, firstTool.arguments.Count);
+            Assert.Single(firstTool.arguments);
             Assert.Equal("false", firstTool.arguments["input"]);
         }
 
         [Fact]
-        public void TryParseToolCalls_InvalidXml_ReturnsFalse()
-        {
+        public void TryParseToolCalls_InvalidXml_ReturnsFalse() {
             var xml = "<StaticTool><arg1>hello</arg1"; // Malformed
             bool result = McpToolHelper.TryParseToolCalls(xml, out _);
             Assert.False(result);
         }
 
         [Fact]
-        public void TryParseToolCalls_UnregisteredTool_ReturnsFalseOrEmpty() 
-        {
+        public void TryParseToolCalls_UnregisteredTool_ReturnsFalseOrEmpty() {
             var xml = "<NotARealTool><arg1>hello</arg1></NotARealTool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
-            
+
             Assert.False(parsedToolCalls.Any());
             Assert.False(result);
         }
-        
+
         [Fact]
-        public void TryParseToolCalls_WithMarkdownFences_ParsesSingleToolCorrectly()
-        {
+        public void TryParseToolCalls_WithMarkdownFences_ParsesSingleToolCorrectly() {
             var xml = "```xml\n<StaticTool><arg1>fenced</arg1></StaticTool>\n```";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
@@ -354,35 +331,31 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             Assert.Single(parsedToolCalls);
             var firstTool = parsedToolCalls.First();
             Assert.Equal("StaticTool", firstTool.toolName);
-            Assert.Equal(1, firstTool.arguments.Count);
+            Assert.Single(firstTool.arguments);
             Assert.Equal("fenced", firstTool.arguments["arg1"]);
         }
 
         [Fact]
-        public void TryParseToolCalls_MultipleRootElements_ParsesAll()
-        {
+        public void TryParseToolCalls_MultipleRootElements_ParsesAll() {
             var xml = "<StaticTool><arg1>first</arg1></StaticTool><InstanceTool><input>true</input></InstanceTool>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
             Assert.True(result);
             Assert.Equal(2, parsedToolCalls.Count);
-            
+
             var firstTool = parsedToolCalls.FirstOrDefault(t => t.toolName == "StaticTool");
-            Assert.NotNull(firstTool);
             Assert.Equal("StaticTool", firstTool.toolName);
-            Assert.Equal(1, firstTool.arguments.Count);
+            Assert.Single(firstTool.arguments);
             Assert.Equal("first", firstTool.arguments["arg1"]);
 
             var secondTool = parsedToolCalls.FirstOrDefault(t => t.toolName == "InstanceTool");
-            Assert.NotNull(secondTool);
             Assert.Equal("InstanceTool", secondTool.toolName);
-            Assert.Equal(1, secondTool.arguments.Count);
+            Assert.Single(secondTool.arguments);
             Assert.Equal("true", secondTool.arguments["input"]);
         }
-        
+
         [Fact]
-        public void TryParseToolCalls_MultipleNestedToolElements_ParsesAll()
-        {
+        public void TryParseToolCalls_MultipleNestedToolElements_ParsesAll() {
             var xml = "<tools_wrapper><tool name=\"StaticTool\"><parameters><arg1>val1</arg1></parameters></tool><tool name=\"InstanceTool\"><parameters><input>true</input></parameters></tool></tools_wrapper>";
             bool result = McpToolHelper.TryParseToolCalls(xml, out var parsedToolCalls);
 
@@ -391,15 +364,14 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
 
             Assert.Equal("StaticTool", parsedToolCalls[0].toolName);
             Assert.Equal("val1", parsedToolCalls[0].arguments["arg1"]);
-            
+
             Assert.Equal("InstanceTool", parsedToolCalls[1].toolName);
             Assert.Equal("true", parsedToolCalls[1].arguments["input"]);
         }
 
         // 新增测试方法
         [Fact]
-        public void TryParseToolCalls_ShouldParseSimpleToolCall()
-        {
+        public void TryParseToolCalls_ShouldParseSimpleToolCall() {
             // Arrange
             var mockLogger = new Mock<ILogger>();
             var mockServiceProvider = new Mock<IServiceProvider>();
@@ -429,8 +401,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public void TryParseToolCalls_ShouldParseCDataContent()
-        {
+        public void TryParseToolCalls_ShouldParseCDataContent() {
             // Arrange
             var mockLogger = new Mock<ILogger>();
             var mockServiceProvider = new Mock<IServiceProvider>();
@@ -466,8 +437,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public async Task ExecuteRegisteredToolAsync_StaticMethod_Executes()
-        {
+        public async Task ExecuteRegisteredToolAsync_StaticMethod_Executes() {
             // Arrange
             var args = new Dictionary<string, string> { { "arg1", "test static" }, { "arg2", "99" } };
 
@@ -480,10 +450,9 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             Assert.Equal(99, TestToolProvider.LastStaticIntArg);
             Assert.Equal("Static received: test static, 99", result);
         }
-        
+
         [Fact]
-        public async Task ExecuteRegisteredToolAsync_StaticMethod_UsesDefaultParam()
-        {
+        public async Task ExecuteRegisteredToolAsync_StaticMethod_UsesDefaultParam() {
             // Arrange
             var args = new Dictionary<string, string> { { "arg1", "default test" } }; // Omit arg2
 
@@ -498,8 +467,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public async Task ExecuteRegisteredToolAsync_InstanceMethod_ViaDI_Executes()
-        {
+        public async Task ExecuteRegisteredToolAsync_InstanceMethod_ViaDI_Executes() {
             // Arrange
             // Create local mocks for this test
             var localMockLogger = new Mock<ILogger>();
@@ -533,10 +501,9 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             // Verify the return value
             Assert.Equal("True", result.ToString()); // InstanceTool returns !input, so if input is false, it returns true.
         }
-        
+
         [Fact]
-        public async Task ExecuteRegisteredToolAsync_InstanceMethod_ViaActivator_Executes()
-        {
+        public async Task ExecuteRegisteredToolAsync_InstanceMethod_ViaActivator_Executes() {
             // Arrange
             // Create local mocks for this test
             var localMockLogger = new Mock<ILogger>();
@@ -572,8 +539,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public async Task ExecuteRegisteredToolAsync_AsyncInstanceMethod_Executes()
-        {
+        public async Task ExecuteRegisteredToolAsync_AsyncInstanceMethod_Executes() {
             // Arrange
             // Create local mocks for this test
             var localMockLogger = new Mock<ILogger>();
@@ -607,10 +573,9 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             // Verify the return value
             Assert.Equal("Async processed: async test", result);
         }
-        
+
         [Fact]
-        public async Task ExecuteRegisteredToolAsync_ComplexParam_DeserializesAndExecutes()
-        {
+        public async Task ExecuteRegisteredToolAsync_ComplexParam_DeserializesAndExecutes() {
             // Arrange
             // Create local mocks for this test
             var localMockLogger = new Mock<ILogger>();
@@ -650,8 +615,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public async Task ExecuteRegisteredToolAsync_MissingRequiredArg_ThrowsArgumentException()
-        {
+        public async Task ExecuteRegisteredToolAsync_MissingRequiredArg_ThrowsArgumentException() {
             // Arrange
             var args = new Dictionary<string, string>(); // Missing arg1 for StaticTool
 
@@ -662,8 +626,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public async Task ExecuteRegisteredToolAsync_UnregisteredTool_ThrowsArgumentException()
-        {
+        public async Task ExecuteRegisteredToolAsync_UnregisteredTool_ThrowsArgumentException() {
             // Arrange
             var args = new Dictionary<string, string>();
 
@@ -674,8 +637,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
         }
 
         [Fact]
-        public void TryParseToolCalls_ShouldParseComplexMultiToolCommand()
-        {
+        public void TryParseToolCalls_ShouldParseComplexMultiToolCommand() {
             // Arrange
             var input = TestToolProvider.TestDecodeCommand;
             // 移除工具字符串分割处理，直接使用原始输入测试
@@ -686,8 +648,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM
             Assert.Equal(4, parsedToolCalls.Count);
 
             // Then verify each tool's details
-            foreach (var (toolName, arguments) in parsedToolCalls)
-            {
+            foreach (var (toolName, arguments) in parsedToolCalls) {
                 Assert.NotNull(toolName);
                 Assert.NotNull(arguments);
                 // 移除对固定参数的断言，改为检查特定工具的参数

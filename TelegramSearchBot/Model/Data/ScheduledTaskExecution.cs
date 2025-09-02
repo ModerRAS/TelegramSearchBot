@@ -2,15 +2,13 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 
-namespace TelegramSearchBot.Model.Data
-{
+namespace TelegramSearchBot.Model.Data {
     /// <summary>
     /// 定时任务执行记录表
     /// 用于跟踪定时任务的执行状态，防止重复执行
     /// </summary>
     [Index(nameof(TaskName), IsUnique = true)]
-    public class ScheduledTaskExecution
-    {
+    public class ScheduledTaskExecution {
         [Key]
         public long Id { get; set; }
 
@@ -64,11 +62,10 @@ namespace TelegramSearchBot.Model.Data
     /// <summary>
     /// 任务执行状态枚举
     /// </summary>
-    public static class TaskExecutionStatus
-    {
+    public static class TaskExecutionStatus {
         public const string Pending = "Pending";
         public const string Running = "Running";
         public const string Completed = "Completed";
         public const string Failed = "Failed";
     }
-} 
+}

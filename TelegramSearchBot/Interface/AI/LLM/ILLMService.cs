@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.AI;
 using System.Threading;
+using System.Threading.Tasks;
+using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Interface.AI.LLM {
     public interface ILLMService {

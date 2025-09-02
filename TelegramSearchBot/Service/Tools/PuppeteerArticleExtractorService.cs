@@ -1,31 +1,26 @@
-using System.Threading.Tasks;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using PuppeteerSharp;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Tools;
-using TelegramSearchBot.Attributes;
 
-namespace TelegramSearchBot.Service.Tools
-{
+namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class PuppeteerArticleExtractorService : IService, IPuppeteerArticleExtractorService
-    {
+    public class PuppeteerArticleExtractorService : IService, IPuppeteerArticleExtractorService {
         public string ServiceName => "PuppeteerArticleExtractorService";
         private readonly string _toolDir = Path.Combine(Env.WorkDir, "Tool");
 
-        public PuppeteerArticleExtractorService()
-        {
-            if (!Directory.Exists(_toolDir))
-            {
+        public PuppeteerArticleExtractorService() {
+            if (!Directory.Exists(_toolDir)) {
                 Directory.CreateDirectory(_toolDir);
             }
         }
 
         [McpTool("使用Puppeteer提取网页文章内容")]
         public async Task<string> ExtractArticleContent(
-            [McpParameter("网页URL")] string url)
-        {
+            [McpParameter("网页URL")] string url) {
             const string chromiumRevision = "125.0.6422.76"; // Puppeteer 默认支持的稳定版本
 
             var fetcher = new BrowserFetcher(new BrowserFetcherOptions {

@@ -1,13 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
-using Telegram.Bot.Types;
 using Newtonsoft.Json;
+using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.Model
-{
-    public enum SearchType
-    {
+namespace TelegramSearchBot.Model {
+    public enum SearchType {
         /// <summary>
         /// 倒排索引搜索（Lucene）
         /// </summary>

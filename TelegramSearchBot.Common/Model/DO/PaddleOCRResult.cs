@@ -1,12 +1,10 @@
-﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json;
 
-namespace TelegramSearchBot.Common.Model.DO
-{
-    public class PaddleOCRResult
-    {
+namespace TelegramSearchBot.Common.Model.DO {
+    public class PaddleOCRResult {
         [JsonProperty("msg")]
         public string Message { get; set; }
         [JsonProperty("results")]

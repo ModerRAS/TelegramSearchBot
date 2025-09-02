@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Controller.AI.ASR;
 using TelegramSearchBot.Controller.AI.LLM;
 using TelegramSearchBot.Controller.AI.OCR;
@@ -14,12 +12,13 @@ using TelegramSearchBot.Controller.Help;
 using TelegramSearchBot.Controller.Manage;
 using TelegramSearchBot.Controller.Search;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Controller.Storage {
-    public class LuceneIndexController : IOnUpdate
-    {
+    public class LuceneIndexController : IOnUpdate {
         private readonly MessageService _messageService;
-        public List<Type> Dependencies => new List<Type> { 
+        public List<Type> Dependencies => new List<Type> {
             typeof(MessageController),
             typeof(AutoASRController),
             typeof(AltPhotoController),
@@ -39,17 +38,14 @@ namespace TelegramSearchBot.Controller.Storage {
             typeof(SearchNextPageController)
         };
 
-        public LuceneIndexController(MessageService messageService)
-        {
+        public LuceneIndexController(MessageService messageService) {
             _messageService = messageService;
         }
 
-        public async Task ExecuteAsync(PipelineContext p)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
             if (p.Update.Message == null) return;
 
-            var messageOption = new MessageOption
-            {
+            var messageOption = new MessageOption {
                 MessageDataId = p.MessageDataId,
                 ChatId = p.Update.Message.Chat.Id,
                 MessageId = p.Update.Message.MessageId,

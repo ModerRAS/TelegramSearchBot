@@ -3,8 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace TelegramSearchBot.Model.Data;
 
-public class TelegramFileCacheEntry
-{
+public class TelegramFileCacheEntry {
     [Key]
     public string CacheKey { get; set; }
 

@@ -1,24 +1,23 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.ChatExport;
 using TelegramSearchBot.Model.Data;
 using DataMessage = TelegramSearchBot.Model.Data.Message;
 using ExportMessage = TelegramSearchBot.Model.ChatExport.Message;
-using Newtonsoft.Json;
-using System.Linq;
-using Microsoft.Extensions.Logging;
-using Microsoft.EntityFrameworkCore;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface.Controller;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class ChatImportService : IService
-    {
+    public class ChatImportService : IService {
         public string ServiceName => "ChatImportService";
         private readonly ILogger<ChatImportService> _logger;
         private readonly SendMessage _send;
@@ -28,8 +27,7 @@ namespace TelegramSearchBot.Service.Manage {
         public ChatImportService(
             ILogger<ChatImportService> logger,
             SendMessage send,
-            DataDbContext context)
-        {
+            DataDbContext context) {
             _logger = logger;
             _send = send;
             _context = context;
@@ -37,17 +35,14 @@ namespace TelegramSearchBot.Service.Manage {
             Directory.CreateDirectory(_importDir);
         }
 
-        public async Task ImportFromFileAsync(string filePath)
-        {
-            try
-            {
+        public async Task ImportFromFileAsync(string filePath) {
+            try {
                 var json = await File.ReadAllTextAsync(filePath);
                 var chatExport = JsonConvert.DeserializeObject<ChatExport>(json);
 
                 await _send.Log($"开始导入聊天记录: {chatExport.Name}");
 
-                foreach (var message in chatExport.Messages)
-                {
+                foreach (var message in chatExport.Messages) {
                     // 检查数据库中是否已存在相同MessageId的消息
                     var existingMessages = await _context.Messages
                         .Where(m => m.MessageId == message.Id && m.GroupId == chatExport.Id)
@@ -56,8 +51,7 @@ namespace TelegramSearchBot.Service.Manage {
                         .ToListAsync();
 
                     var dbMessage = existingMessages.FirstOrDefault();
-                    if (dbMessage == null)
-                    {
+                    if (dbMessage == null) {
                         dbMessage = new DataMessage();
                     }
 
@@ -73,45 +67,37 @@ namespace TelegramSearchBot.Service.Manage {
                     var jsonDir = Path.GetDirectoryName(filePath);
 
                     // 处理照片
-                    if (!string.IsNullOrEmpty(message.Photo))
-                    {
+                    if (!string.IsNullOrEmpty(message.Photo)) {
                         var photoPath = Path.Combine(Env.WorkDir, "Photos", $"{chatExport.Id}");
                         Directory.CreateDirectory(photoPath);
                         var sourcePhotoPath = Path.Combine(jsonDir, message.Photo);
                         var extension = Path.GetExtension(message.Photo) ?? ".jpg";
                         var photoFile = Path.Combine(photoPath, $"{message.Id}{extension}");
-                        if (!File.Exists(photoFile))
-                        {
+                        if (!File.Exists(photoFile)) {
                             File.Copy(sourcePhotoPath, photoFile, true);
                         }
                     }
 
                     // 处理文件
-                    if (!string.IsNullOrEmpty(message.File))
-                    {
-                        if (!message.File.StartsWith("(File not included."))
-                        {
+                    if (!string.IsNullOrEmpty(message.File)) {
+                        if (!message.File.StartsWith("(File not included.")) {
                             var sourceFilePath = Path.Combine(jsonDir, message.File);
-                            if (!File.Exists(sourceFilePath))
-                            {
+                            if (!File.Exists(sourceFilePath)) {
                                 _logger.LogWarning($"文件不存在: {sourceFilePath}");
-                            }
-                            else
-                            {
+                            } else {
                                 var extension = Path.GetExtension(message.File) ?? ".dat";
-                                
+
                                 // 根据文件类型保存到不同目录
-                                var destPath = IProcessVideo.IsVideo(message.File) 
+                                var destPath = IProcessVideo.IsVideo(message.File)
                                     ? Path.Combine(Env.WorkDir, "Videos", $"{chatExport.Id}")
                                     : IProcessAudio.IsAudio(message.File)
                                         ? Path.Combine(Env.WorkDir, "Audios", $"{chatExport.Id}")
                                         : Path.Combine(Env.WorkDir, "Files", $"{chatExport.Id}");
-                                
+
                                 Directory.CreateDirectory(destPath);
                                 var destFile = Path.Combine(destPath, $"{message.Id}{extension}");
-                                
-                                if (!File.Exists(destFile))
-                                {
+
+                                if (!File.Exists(destFile)) {
                                     File.Copy(sourceFilePath, destFile, true);
                                 }
                             }
@@ -123,23 +109,17 @@ namespace TelegramSearchBot.Service.Manage {
 
                 await _context.SaveChangesAsync();
                 await _send.Log($"导入完成，共导入{chatExport.Messages.Count}条消息");
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, "导入聊天记录失败");
                 await _send.Log($"导入失败: {ex.Message}");
             }
         }
 
-        private string GetMessageText(ExportMessage message)
-        {
-            if (message.Text_Entities != null && message.Text_Entities.Count > 0)
-            {
+        private string GetMessageText(ExportMessage message) {
+            if (message.Text_Entities != null && message.Text_Entities.Count > 0) {
                 var result = new System.Text.StringBuilder();
-                foreach (var entity in message.Text_Entities)
-                {
-                    switch (entity.Type)
-                    {
+                foreach (var entity in message.Text_Entities) {
+                    switch (entity.Type) {
                         case "plain":
                             result.Append(entity.Text);
                             break;
@@ -192,13 +172,10 @@ namespace TelegramSearchBot.Service.Manage {
             return string.Empty;
         }
 
-        public async Task ExecuteAsync(string command)
-        {
-            if (command == "导入聊天记录")
-            {
+        public async Task ExecuteAsync(string command) {
+            if (command == "导入聊天记录") {
                 var files = Directory.GetFiles(_importDir, "*.json");
-                foreach (var file in files)
-                {
+                foreach (var file in files) {
                     await ImportFromFileAsync(file);
                 }
             }

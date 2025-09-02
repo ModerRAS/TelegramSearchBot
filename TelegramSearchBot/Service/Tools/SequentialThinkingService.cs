@@ -9,10 +9,8 @@ using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
 
-namespace TelegramSearchBot.Service.Tools
-{
-    public class ThoughtData
-    {
+namespace TelegramSearchBot.Service.Tools {
+    public class ThoughtData {
         [JsonPropertyName("thought")]
         public string Thought { get; set; }
 
@@ -41,8 +39,7 @@ namespace TelegramSearchBot.Service.Tools
         public bool NextThoughtNeeded { get; set; }
     }
 
-    public class SequentialThinkingResult
-    {
+    public class SequentialThinkingResult {
         [JsonPropertyName("thoughtNumber")]
         public int ThoughtNumber { get; set; }
 
@@ -59,8 +56,7 @@ namespace TelegramSearchBot.Service.Tools
         public int ThoughtHistoryLength { get; set; }
     }
 
-    public class SequentialThinkingError
-    {
+    public class SequentialThinkingError {
         [JsonPropertyName("error")]
         public string Error { get; set; }
 
@@ -69,36 +65,28 @@ namespace TelegramSearchBot.Service.Tools
     }
 
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class SequentialThinkingService : IService, ISequentialThinkingService
-    {
+    public class SequentialThinkingService : IService, ISequentialThinkingService {
         public string ServiceName => "SequentialThinkingService";
 
         private readonly List<ThoughtData> _thoughtHistory = new List<ThoughtData>();
         private readonly Dictionary<string, List<ThoughtData>> _branches = new Dictionary<string, List<ThoughtData>>();
 
-        private ThoughtData ValidateThoughtData(string input)
-        {
-            try
-            {
+        private ThoughtData ValidateThoughtData(string input) {
+            try {
                 var data = JsonSerializer.Deserialize<ThoughtData>(input);
 
-                if (string.IsNullOrEmpty(data.Thought))
-                {
+                if (string.IsNullOrEmpty(data.Thought)) {
                     throw new Exception("Invalid thought: must be a string");
                 }
-                if (data.ThoughtNumber < 1)
-                {
+                if (data.ThoughtNumber < 1) {
                     throw new Exception("Invalid thoughtNumber: must be a positive number");
                 }
-                if (data.TotalThoughts < 1)
-                {
+                if (data.TotalThoughts < 1) {
                     throw new Exception("Invalid totalThoughts: must be a positive number");
                 }
 
                 return data;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 throw new Exception($"Invalid thought data: {ex.Message}");
             }
         }
@@ -159,7 +147,7 @@ You should:
 11. Only set next_thought_needed to false when truly done and a satisfactory answer is reached")]
         public async Task<object> ProcessThoughtAsync(
             ToolContext toolContext,
-            [McpParameter(@"Your current thinking step")] string input, 
+            [McpParameter(@"Your current thinking step")] string input,
             [McpParameter("Whether another thought step is needed", IsRequired = false)] bool? nextThoughtNeeded = null,
             [McpParameter("Current thought number", IsRequired = false)] int? thoughtNumber = null,
             [McpParameter("Estimated total thoughts needed", IsRequired = false)] int? totalThoughts = null,
@@ -167,30 +155,24 @@ You should:
             [McpParameter("Which thought is being reconsidered", IsRequired = false)] int? revisesThought = null,
             [McpParameter("Branching point thought number", IsRequired = false)] int? branchFromThought = null,
             [McpParameter("Branch identifier", IsRequired = false)] string branchId = null,
-            [McpParameter("If more thoughts are needed", IsRequired = false)] bool? needsMoreThoughts = null)
-        {
-            try
-            {
+            [McpParameter("If more thoughts are needed", IsRequired = false)] bool? needsMoreThoughts = null) {
+            try {
                 var validatedInput = ValidateThoughtData(input);
 
-                if (validatedInput.ThoughtNumber > validatedInput.TotalThoughts)
-                {
+                if (validatedInput.ThoughtNumber > validatedInput.TotalThoughts) {
                     validatedInput.TotalThoughts = validatedInput.ThoughtNumber;
                 }
 
                 _thoughtHistory.Add(validatedInput);
 
-                if (validatedInput.BranchFromThought.HasValue && !string.IsNullOrEmpty(validatedInput.BranchId))
-                {
-                    if (!_branches.ContainsKey(validatedInput.BranchId))
-                    {
+                if (validatedInput.BranchFromThought.HasValue && !string.IsNullOrEmpty(validatedInput.BranchId)) {
+                    if (!_branches.ContainsKey(validatedInput.BranchId)) {
                         _branches[validatedInput.BranchId] = new List<ThoughtData>();
                     }
                     _branches[validatedInput.BranchId].Add(validatedInput);
                 }
 
-                var result = new SequentialThinkingResult
-                {
+                var result = new SequentialThinkingResult {
                     ThoughtNumber = validatedInput.ThoughtNumber,
                     TotalThoughts = validatedInput.TotalThoughts,
                     NextThoughtNeeded = validatedInput.NextThoughtNeeded,
@@ -199,11 +181,8 @@ You should:
                 };
 
                 return JsonSerializer.Serialize(result);
-            }
-            catch (Exception ex)
-            {
-                var error = new SequentialThinkingError
-                {
+            } catch (Exception ex) {
+                var error = new SequentialThinkingError {
                     Error = ex.Message,
                     Status = "failed"
                 };

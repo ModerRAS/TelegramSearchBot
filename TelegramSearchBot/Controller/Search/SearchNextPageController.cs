@@ -1,24 +1,23 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using Telegram.Bot;
-using TelegramSearchBot.Interface;
-using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
-using Telegram.Bot.Types;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Manager;
-using TelegramSearchBot.Service.Search;
-using TelegramSearchBot.Service.BotAPI;
-using TelegramSearchBot.Model;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using TelegramSearchBot.View;
+using Telegram.Bot;
+using Telegram.Bot.Types;
+using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Manager;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Service.Search;
+using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Controller.Search {
-    public class SearchNextPageController : IOnUpdate
-    {
+    public class SearchNextPageController : IOnUpdate {
         private readonly SendMessage Send;
         private readonly DataDbContext _dbContext;
         private readonly ILogger logger;
@@ -37,8 +36,7 @@ namespace TelegramSearchBot.Controller.Search {
             SearchOptionStorageService searchOptionStorageService,
             CallbackDataService callbackDataService,
             SearchView searchView
-            )
-        {
+            ) {
             this.searchService = searchService;
             this.Send = Send;
             _dbContext = dbContext;
@@ -54,13 +52,11 @@ namespace TelegramSearchBot.Controller.Search {
             //Console.WriteLine(e.CallbackQuery.Message.Text);
             //Console.WriteLine(e.CallbackQuery.Id);
             //Console.WriteLine(e.CallbackQuery.Data);//这才是关键的东西，就是上面在按钮上写的那个sendmessage
-            if (e.CallbackQuery == null)
-            {
+            if (e.CallbackQuery == null) {
                 return;
             }
             var ChatId = e?.CallbackQuery?.Message?.Chat.Id;
-            if (ChatId == null)
-            {
+            if (ChatId == null) {
                 return;
             }
             logger.LogInformation($"CallbackQuery is: {e.CallbackQuery}, ChatId is: {ChatId}");
@@ -68,23 +64,21 @@ namespace TelegramSearchBot.Controller.Search {
 #pragma warning disable CS8602 // 解引用可能出现空引用。
             await botClient.AnswerCallbackQuery(e.CallbackQuery.Id, "处理中。。。");
 #pragma warning restore CS8602 // 解引用可能出现空引用。
-            try
-            {
+            try {
                 var searchOption = await callbackDataService.ParseCallbackDataAsync(e.CallbackQuery.Data);
 
                 searchOption.ToDelete.Add(e.CallbackQuery.Message.MessageId);
                 searchOption.ReplyToMessageId = e.CallbackQuery.Message.MessageId;
                 searchOption.Chat = e.CallbackQuery.Message.Chat;
 
-                if (searchOption.ToDeleteNow)
-                {
+                if (searchOption.ToDeleteNow) {
                     await HandleDeleteHistory(searchOption, ChatId, IsGroup);
                     return;
                 }
 
                 // 执行搜索（使用searchOption中指定的搜索类型）
                 searchOption = await searchService.Search(searchOption);
-                
+
                 // 生成新的按钮
                 searchView
                     .WithChatId(searchOption.ChatId)
@@ -97,8 +91,7 @@ namespace TelegramSearchBot.Controller.Search {
 
                 // 添加下一页按钮
                 var nextPageCallback = await callbackDataService.GenerateNextPageCallbackAsync(searchOption);
-                if (nextPageCallback != null)
-                {
+                if (nextPageCallback != null) {
                     searchView.AddButton("下一页", nextPageCallback);
                 }
 
@@ -114,29 +107,19 @@ namespace TelegramSearchBot.Controller.Search {
 
                 await searchView.Render();
 
-            }
-            catch (KeyNotFoundException)
-            {
+            } catch (KeyNotFoundException) {
                 logger.LogWarning("搜索选项未找到");
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 logger.LogWarning("无效的回调数据");
             }
         }
 
-        private async Task HandleDeleteHistory(SearchOption searchOption, long? ChatId, bool? IsGroup)
-        {
-            foreach (var i in searchOption.ToDelete)
-            {
-                await Send.AddTask(async () =>
-                {
-                    try
-                    {
-                        await botClient.DeleteMessage(ChatId, (int)i);
-                    }
-                    catch (AggregateException)
-                    {
+        private async Task HandleDeleteHistory(SearchOption searchOption, long? ChatId, bool? IsGroup) {
+            foreach (var i in searchOption.ToDelete) {
+                await Send.AddTask(async () => {
+                    try {
+                        await botClient.DeleteMessage(ChatId, ( int ) i);
+                    } catch (AggregateException) {
                         logger.LogError("删除了不存在的消息");
                     }
                 }, IsGroup ?? false);

@@ -1,18 +1,17 @@
-﻿using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.AI;
-using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore; // For AnyAsync()
-
-using TelegramSearchBot.Interface.AI.LLM;
+using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped)]

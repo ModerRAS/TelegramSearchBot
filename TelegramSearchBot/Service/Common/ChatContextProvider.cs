@@ -1,30 +1,24 @@
-using System.Threading;
 using System; // For InvalidOperationException
+using System.Threading;
 
-namespace TelegramSearchBot.Service.Common
-{
+namespace TelegramSearchBot.Service.Common {
     [Obsolete("ChatContextProvider is deprecated. Use ToolContext instead for passing ChatId to tools.")]
-    public static class ChatContextProvider
-    {
+    public static class ChatContextProvider {
         private static readonly AsyncLocal<long?> _currentChatId = new AsyncLocal<long?>();
 
-        public static void SetCurrentChatId(long chatId)
-        {
+        public static void SetCurrentChatId(long chatId) {
             _currentChatId.Value = chatId;
         }
 
-        public static long GetCurrentChatId(bool throwIfNotFound = true)
-        {
+        public static long GetCurrentChatId(bool throwIfNotFound = true) {
             var chatId = _currentChatId.Value;
-            if (chatId == null && throwIfNotFound)
-            {
+            if (chatId == null && throwIfNotFound) {
                 throw new InvalidOperationException("ChatId not found in the current context. Ensure SetCurrentChatId was called.");
             }
             return chatId.GetValueOrDefault();
         }
 
-        public static void Clear()
-        {
+        public static void Clear() {
             _currentChatId.Value = null;
         }
     }

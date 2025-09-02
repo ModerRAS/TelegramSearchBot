@@ -1,13 +1,11 @@
-﻿using StackExchange.Redis;
 using System.Threading.Tasks;
+using StackExchange.Redis;
+using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Interface.AI.ASR;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.Abstract;
 
-using TelegramSearchBot.Interface.AI.ASR;
-using TelegramSearchBot.Attributes;
-
-namespace TelegramSearchBot.Service.AI.ASR
-{
+namespace TelegramSearchBot.Service.AI.ASR {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public class AutoASRService : SubProcessService, IAutoASRService {
 

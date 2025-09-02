@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Interface
-{
-    public interface IAccountService : IService
-    {
+namespace TelegramSearchBot.Interface {
+    public interface IAccountService : IService {
         /// <summary>
         /// 创建账本
         /// </summary>
@@ -62,4 +60,4 @@ namespace TelegramSearchBot.Interface
         /// </summary>
         (bool success, decimal amount, string tag, string description) ParseQuickRecord(string command);
     }
-} 
+}
