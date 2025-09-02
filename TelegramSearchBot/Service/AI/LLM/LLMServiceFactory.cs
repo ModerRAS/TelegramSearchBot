@@ -30,7 +30,7 @@ namespace TelegramSearchBot.Service.AI.LLM
         {
             _logger = logger;
             _legacyService = legacyService;
-            _extensionsAIService = (IGeneralLLMService)extensionsAIService;
+            _extensionsAIService = extensionsAIService; // 直接赋值，因为 OpenAIExtensionsAIService 实现了 IGeneralLLMService
         }
 
         /// <summary>

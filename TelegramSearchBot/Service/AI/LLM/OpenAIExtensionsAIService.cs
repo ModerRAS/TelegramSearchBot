@@ -30,7 +30,7 @@ namespace TelegramSearchBot.Service.AI.LLM
     /// 这是一个真正的实现，使用Microsoft.Extensions.AI抽象层
     /// </summary>
     [Injectable(ServiceLifetime.Transient)]
-    public class OpenAIExtensionsAIService : IService, ILLMService
+    public class OpenAIExtensionsAIService : IService, ILLMService, IGeneralLLMService
     {
         public string ServiceName => "OpenAIExtensionsAIService";
 
@@ -301,5 +301,173 @@ namespace TelegramSearchBot.Service.AI.LLM
                 return false;
             }
         }
+
+        #region IGeneralLLMService Implementation
+
+        /// <summary>
+        /// 获取指定模型的可用渠道
+        /// </summary>
+        public async Task<List<LLMChannel>> GetChannelsAsync(string modelName)
+        {
+            // 简化实现：返回所有OpenAI渠道
+            var channels = await _dbContext.LLMChannels
+                .Where(c => c.Provider == LLMProvider.OpenAI)
+                .ToListAsync();
+            return channels;
+        }
+
+        /// <summary>
+        /// 执行消息处理（简化版本）
+        /// </summary>
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            // 获取模型名称
+            var modelName = await _dbContext.GroupSettings
+                .Where(s => s.GroupId == ChatId)
+                .Select(s => s.LLMModelName)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrEmpty(modelName))
+            {
+                _logger.LogWarning("未找到模型配置");
+                yield break;
+            }
+
+            // 获取渠道
+            var channels = await GetChannelsAsync(modelName);
+            if (!channels.Any())
+            {
+                _logger.LogWarning($"未找到模型 {modelName} 的可用渠道");
+                yield break;
+            }
+
+            // 使用第一个可用渠道
+            var channel = channels.First();
+            await foreach (var response in ExecAsync(message, ChatId, modelName, channel, cancellationToken))
+            {
+                yield return response;
+            }
+        }
+
+        /// <summary>
+        /// 执行消息处理（带服务和渠道参数的重载）
+        /// </summary>
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, ILLMService service, LLMChannel channel,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellation = default)
+        {
+            // 直接调用内部的ExecAsync方法
+            await foreach (var response in ExecAsync(message, ChatId, modelName, channel, cancellation))
+            {
+                yield return response;
+            }
+        }
+
+        /// <summary>
+        /// 执行操作（委托给ExecAsync）
+        /// </summary>
+        public async IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(
+            Func<ILLMService, LLMChannel, CancellationToken, IAsyncEnumerable<TResult>> operation,
+            string modelName,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var channels = await GetChannelsAsync(modelName);
+            if (!channels.Any())
+            {
+                _logger.LogWarning($"未找到模型 {modelName} 的可用渠道");
+                yield break;
+            }
+
+            var channel = channels.First();
+            await foreach (var result in operation(this, channel, cancellationToken))
+            {
+                yield return result;
+            }
+        }
+
+        /// <summary>
+        /// 分析图像（简化版本）
+        /// </summary>
+        public async Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default)
+        {
+            var modelName = await _dbContext.GroupSettings
+                .Where(s => s.GroupId == ChatId)
+                .Select(s => s.LLMModelName)
+                .FirstOrDefaultAsync() ?? "gpt-4-vision-preview";
+
+            var channels = await GetChannelsAsync(modelName);
+            if (!channels.Any())
+            {
+                throw new Exception($"未找到模型 {modelName} 的可用渠道");
+            }
+
+            var channel = channels.First();
+            return await AnalyzeImageAsync(PhotoPath, modelName, channel);
+        }
+
+        /// <summary>
+        /// 分析图像 - 带服务和渠道参数的重载
+        /// </summary>
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var result = await AnalyzeImageAsync(PhotoPath, modelName, channel);
+            yield return result;
+        }
+
+        /// <summary>
+        /// 生成消息嵌入向量
+        /// </summary>
+        public async Task<float[]> GenerateEmbeddingsAsync(Model.Data.Message message, long ChatId)
+        {
+            var text = message.Content ?? "";
+            return await GenerateEmbeddingsAsync(text, CancellationToken.None);
+        }
+
+        /// <summary>
+        /// 生成文本嵌入向量（简化版本）
+        /// </summary>
+        public async Task<float[]> GenerateEmbeddingsAsync(string message, CancellationToken cancellationToken = default)
+        {
+            var modelName = "text-embedding-ada-002"; // 默认嵌入模型
+            var channels = await GetChannelsAsync(modelName);
+            if (!channels.Any())
+            {
+                throw new Exception($"未找到嵌入模型 {modelName} 的可用渠道");
+            }
+
+            var channel = channels.First();
+            return await GenerateEmbeddingsAsync(message, modelName, channel);
+        }
+
+        /// <summary>
+        /// 生成嵌入向量 - 带服务和渠道参数的重载
+        /// </summary>
+        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var result = await GenerateEmbeddingsAsync(message, modelName, channel);
+            yield return result;
+        }
+
+        /// <summary>
+        /// 获取AltPhoto可用容量
+        /// </summary>
+        public Task<int> GetAltPhotoAvailableCapacityAsync()
+        {
+            // 简化实现：返回固定值
+            return Task.FromResult(100);
+        }
+
+        /// <summary>
+        /// 获取可用容量
+        /// </summary>
+        public Task<int> GetAvailableCapacityAsync(string modelName = "gpt-3.5-turbo")
+        {
+            // 简化实现：返回固定值
+            return Task.FromResult(1000);
+        }
+
+        #endregion
     }
 }
