@@ -11,12 +11,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Manager
 {
     public class LuceneManager {
+        // 预编译的正则表达式，提高性能
+        private static readonly Regex PhraseRegex = new Regex("\"([^\"]+)\"", RegexOptions.Compiled);
+        private static readonly Regex FieldRegex = new Regex(@"(\w+):([^\s]+)", RegexOptions.Compiled);
+        private static readonly Regex ExcludeRegex = new Regex(@"-([^\s]+)", RegexOptions.Compiled);
+        
         private SendMessage Send;
         private readonly UnifiedTokenizer _tokenizer;
         private readonly ExtFieldQueryOptimizer _extOptimizer;
@@ -296,8 +302,10 @@ namespace TelegramSearchBot.Manager
         // Ext字段查询优化器 - 优化Ext字段搜索性能，避免每次遍历所有字段
         private class ExtFieldQueryOptimizer
         {
-            private readonly ConcurrentDictionary<long, string[]> _fieldCache = new();
+            private readonly ConcurrentDictionary<long, (string[] Fields, DateTime CachedAt)> _fieldCache = new();
             private readonly Action<string> _logAction;
+            private const int MaxCacheSize = 100; // 最大缓存条目数
+            private static readonly TimeSpan CacheExpiry = TimeSpan.FromHours(1); // 缓存过期时间
 
             public ExtFieldQueryOptimizer(Action<string> logAction = null)
             {
@@ -378,24 +386,63 @@ namespace TelegramSearchBot.Manager
                 return excludeQuery;
             }
 
-            // 获取Ext字段列表（带缓存）
+            // 获取Ext字段列表（带缓存和过期机制）
             private string[] GetExtFields(IndexReader reader, long groupId)
             {
-                return _fieldCache.GetOrAdd(groupId, _ => 
+                // 清理过期缓存
+                CleanupExpiredCache();
+                
+                // 检查缓存
+                if (_fieldCache.TryGetValue(groupId, out var cachedData))
                 {
-                    try
+                    if (DateTime.Now - cachedData.CachedAt < CacheExpiry)
                     {
-                        var fields = MultiFields.GetIndexedFields(reader);
-                        var extFields = fields.Where(f => f.StartsWith("Ext_")).ToArray();
-                        _logAction?.Invoke($"GroupId {groupId}: 发现 {extFields.Length} 个Ext字段");
-                        return extFields;
+                        return cachedData.Fields;
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        _logAction?.Invoke($"获取Ext字段失败: {ex.Message}");
-                        return Array.Empty<string>();
+                        // 缓存过期，移除
+                        _fieldCache.TryRemove(groupId, out _);
                     }
-                });
+                }
+                
+                // 获取并缓存新数据
+                try
+                {
+                    var fields = MultiFields.GetIndexedFields(reader);
+                    var extFields = fields.Where(f => f.StartsWith("Ext_")).ToArray();
+                    
+                    // 检查缓存大小，如果超过限制则清理最旧的条目
+                    if (_fieldCache.Count >= MaxCacheSize)
+                    {
+                        var oldestKey = _fieldCache.OrderBy(kv => kv.Value.CachedAt).First().Key;
+                        _fieldCache.TryRemove(oldestKey, out _);
+                    }
+                    
+                    _fieldCache.TryAdd(groupId, (extFields, DateTime.Now));
+                    _logAction?.Invoke($"GroupId {groupId}: 发现 {extFields.Length} 个Ext字段");
+                    return extFields;
+                }
+                catch (Exception ex)
+                {
+                    _logAction?.Invoke($"获取Ext字段失败: {ex.Message}");
+                    return Array.Empty<string>();
+                }
+            }
+            
+            // 清理过期缓存条目
+            private void CleanupExpiredCache()
+            {
+                var now = DateTime.Now;
+                var expiredKeys = _fieldCache
+                    .Where(kv => now - kv.Value.CachedAt >= CacheExpiry)
+                    .Select(kv => kv.Key)
+                    .ToList();
+                    
+                foreach (var key in expiredKeys)
+                {
+                    _fieldCache.TryRemove(key, out _);
+                }
             }
 
             // 为指定字段构建短语查询
@@ -456,9 +503,9 @@ namespace TelegramSearchBot.Manager
             public List<FieldSpec> ParseFieldSpecifications(string query)
             {
                 var fieldSpecs = new List<FieldSpec>();
-                var fieldMatches = System.Text.RegularExpressions.Regex.Matches(query, @"(\w+):([^\s]+)");
+                var fieldMatches = FieldRegex.Matches(query); // 使用预编译的正则表达式
 
-                foreach (System.Text.RegularExpressions.Match match in fieldMatches)
+                foreach (Match match in fieldMatches)
                 {
                     var fieldSpec = ParseFieldSpecification(match.Value);
                     if (fieldSpec != null)
@@ -568,8 +615,8 @@ namespace TelegramSearchBot.Manager
                 var remainingQuery = query;
 
                 // 处理引号包裹的精确匹配
-                var phraseMatches = System.Text.RegularExpressions.Regex.Matches(query, "\"([^\"]+)\"");
-                foreach (System.Text.RegularExpressions.Match match in phraseMatches)
+                var phraseMatches = PhraseRegex.Matches(query); // 使用预编译的正则表达式
+                foreach (Match match in phraseMatches)
                 {
                     try
                     {
@@ -634,7 +681,7 @@ namespace TelegramSearchBot.Manager
 
             public List<string> Tokenize(string text)
             {
-                var keywords = new List<string>();
+                var keywords = new HashSet<string>(); // 使用HashSet避免重复，提高性能
                 try
                 {
                     using (var ts = _analyzer.GetTokenStream(null, text))
@@ -645,10 +692,7 @@ namespace TelegramSearchBot.Manager
                         while (ts.IncrementToken())
                         {
                             var keyword = ct.ToString();
-                            if (!keywords.Contains(keyword))
-                            {
-                                keywords.Add(keyword);
-                            }
+                            keywords.Add(keyword); // HashSet自动处理重复项
                         }
                     }
                 }
@@ -659,7 +703,7 @@ namespace TelegramSearchBot.Manager
                     keywords.Add(text);
                 }
 
-                return keywords;
+                return keywords.ToList();
             }
 
             // 安全的分词方法，带有降级处理
@@ -683,15 +727,14 @@ namespace TelegramSearchBot.Manager
             }
         }
 
-        // 保留原有的GetKeyWords方法作为简化实现，但内部使用UnifiedTokenizer
+        // 保留原有的GetKeyWords方法作为简化实现，但内部使用现有的_tokenizer实例
         // 🔧 代码简化说明：
         // 原本实现：直接在GetKeyWords方法中实现分词逻辑，错误处理不够完善
-        // 简化实现：使用UnifiedTokenizer类封装分词逻辑，提供更好的错误处理和降级机制
+        // 简化实现：重用已初始化的_tokenizer实例，避免重复创建，提高性能
         // 简化实现的代码文件：TelegramSearchBot/Manager/LuceneManager.cs
         // 简化实现的相关函数方法：GetKeyWords方法
         private List<string> GetKeyWords(string q) {
-            var tokenizer = new UnifiedTokenizer(msg => Send?.Log(msg));
-            return tokenizer.SafeTokenize(q);
+            return _tokenizer.SafeTokenize(q);
         }
 
         // 简单搜索方法 - 搜索Content字段和Ext字段
@@ -762,9 +805,9 @@ namespace TelegramSearchBot.Manager
             q = remainingQueryAfterFields;
 
             // 处理排除关键词 -keyword
-            var excludeMatches = System.Text.RegularExpressions.Regex.Matches(q, @"-([^\s]+)");
+            var excludeMatches = ExcludeRegex.Matches(q); // 使用预编译的正则表达式
             var excludeTermsList = new List<string>();
-            foreach (System.Text.RegularExpressions.Match match in excludeMatches) {
+            foreach (Match match in excludeMatches) {
                 var excludeValue = match.Groups[1].Value;
                 // 对排除关键词也进行分词处理
                 var excludeTerms = GetKeyWords(excludeValue);
