@@ -2,38 +2,36 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
+using System.Threading.Tasks;
+using System.Threading.Tasks;
+using FaissNet;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using FaissNet;
+using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Attributes;
-using SearchOption = TelegramSearchBot.Model.SearchOption;
 using FaissIndex = FaissNet.Index;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Threading.Tasks;
+using SearchOption = TelegramSearchBot.Model.SearchOption;
 
-namespace TelegramSearchBot.Service.Vector
-{
+namespace TelegramSearchBot.Service.Vector {
     /// <summary>
     /// 基于FAISS.NET的向量服务
     /// 使用SQLite存储元数据，FAISS存储向量索引
     /// </summary>
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
-    public class FaissVectorService : IService, IVectorGenerationService
-    {
+    public class FaissVectorService : IService, IVectorGenerationService {
         public string ServiceName => "FaissVectorService";
 
         private readonly ILogger<FaissVectorService> _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly IGeneralLLMService _generalLLMService;
-        
+
         private readonly string _indexDirectory;
         private readonly int _vectorDimension = 1024;
         private readonly Dictionary<string, FaissIndex> _loadedIndexes = new();
@@ -49,33 +47,29 @@ namespace TelegramSearchBot.Service.Vector
         public FaissVectorService(
             ILogger<FaissVectorService> logger,
             IServiceProvider serviceProvider,
-            IGeneralLLMService generalLLMService)
-        {
+            IGeneralLLMService generalLLMService) {
             _logger = logger;
             _serviceProvider = serviceProvider;
             _generalLLMService = generalLLMService;
-            
+
             _indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
             Directory.CreateDirectory(_indexDirectory);
-            
+
             _logger.LogInformation($"FAISS向量服务初始化，索引目录: {_indexDirectory}");
         }
 
         /// <summary>
         /// 基于对话段的向量搜索
         /// </summary>
-        public async Task<SearchOption> Search(SearchOption searchOption)
-        {
-            try
-            {
+        public async Task<SearchOption> Search(SearchOption searchOption) {
+            try {
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
                 var indexKey = GetIndexKey(searchOption.ChatId, "ConversationSegment");
                 var index = await GetOrCreateIndexAsync(indexKey, searchOption.ChatId, "ConversationSegment", dbContext);
 
-                if (index == null)
-                {
+                if (index == null) {
                     _logger.LogWarning($"群组 {searchOption.ChatId} 的对话段向量索引为空");
                     searchOption.Messages = new List<Message>();
                     searchOption.Count = 0;
@@ -84,14 +78,13 @@ namespace TelegramSearchBot.Service.Vector
 
                 // 生成查询向量
                 var queryVector = await GenerateVectorAsync(searchOption.Search);
-                
+
                 // 执行相似性搜索
                 var searchResults = await SearchSimilarVectorsAsync(
                     index, queryVector, Math.Max(searchOption.Skip + searchOption.Take, 100));
 
                 // 如果没有搜索结果，返回空结果
-                if (searchResults == null || searchResults.Count == 0)
-                {
+                if (searchResults == null || searchResults.Count == 0) {
                     _logger.LogInformation($"对话段向量搜索完成，未找到结果");
                     searchOption.Messages = new List<Message>();
                     searchOption.Count = 0;
@@ -101,14 +94,14 @@ namespace TelegramSearchBot.Service.Vector
                 // 获取向量对应的实体信息
                 var vectorIds = searchResults.Select(r => r.Id).ToList();
                 var vectorIndexes = await dbContext.VectorIndexes
-                    .Where(vi => vi.GroupId == searchOption.ChatId && 
+                    .Where(vi => vi.GroupId == searchOption.ChatId &&
                                 vi.VectorType == "ConversationSegment" &&
                                 vectorIds.Contains(vi.FaissIndex))
                     .ToListAsync();
 
                 // 获取对话段IDs
                 var segmentIds = vectorIndexes.Select(vi => vi.EntityId).ToList();
-                
+
                 // 获取对话段信息和第一条消息信息
                 var segments = await dbContext.ConversationSegments
                     .Where(cs => segmentIds.Contains(cs.Id))
@@ -124,21 +117,16 @@ namespace TelegramSearchBot.Service.Vector
 
                 // 创建搜索结果消息列表，每个对话段对应一条消息，并保持相似度顺序
                 var orderedResults = new List<(Message message, float score, long faissIndex)>();
-                
-                foreach (var searchResult in searchResults)
-                {
+
+                foreach (var searchResult in searchResults) {
                     var vectorIndex = vectorIndexes.FirstOrDefault(vi => vi.FaissIndex == searchResult.Id);
-                    if (vectorIndex != null)
-                    {
+                    if (vectorIndex != null) {
                         var segment = segments.FirstOrDefault(s => s.Id == vectorIndex.EntityId);
-                        if (segment != null)
-                        {
+                        if (segment != null) {
                             var firstMessage = firstMessages.FirstOrDefault(fm => fm.ConversationSegmentId == segment.Id)?.Message;
-                            if (firstMessage != null)
-                            {
+                            if (firstMessage != null) {
                                 // 创建一个新的消息实例，使用TopicKeywords作为Content
-                                var resultMessage = new Message
-                                {
+                                var resultMessage = new Message {
                                     Id = firstMessage.Id,
                                     DateTime = firstMessage.DateTime,
                                     GroupId = firstMessage.GroupId,
@@ -166,9 +154,7 @@ namespace TelegramSearchBot.Service.Vector
 
                 _logger.LogInformation($"对话段向量搜索完成，找到 {searchOption.Count} 个结果");
                 return searchOption;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, $"对话段向量搜索失败: {ex.Message}");
                 searchOption.Messages = new List<Message>();
                 searchOption.Count = 0;
@@ -179,10 +165,8 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 为对话段生成并存储向量
         /// </summary>
-        public async Task VectorizeConversationSegment(ConversationSegment segment)
-        {
-            try
-            {
+        public async Task VectorizeConversationSegment(ConversationSegment segment) {
+            try {
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
@@ -192,8 +176,7 @@ namespace TelegramSearchBot.Service.Vector
                                              vi.VectorType == "ConversationSegment" &&
                                              vi.EntityId == segment.Id);
 
-                if (existingVector != null)
-                {
+                if (existingVector != null) {
                     _logger.LogDebug($"对话段 {segment.Id} 已经向量化，跳过");
                     return;
                 }
@@ -208,22 +191,19 @@ namespace TelegramSearchBot.Service.Vector
 
                 // 添加向量到索引 - 使用内存计数器分配索引ID，避免数据库访问
                 long faissIndex;
-                lock (_faissIdAssignLock)
-                {
-                    if (!_nextFaissIds.TryGetValue(indexKey, out var nextId))
-                    {
+                lock (_faissIdAssignLock) {
+                    if (!_nextFaissIds.TryGetValue(indexKey, out var nextId)) {
                         // 如果是第一次使用该群组，从数据库查找最大ID
                         nextId = dbContext.VectorIndexes
                             .Where(vi => vi.GroupId == segment.GroupId && vi.VectorType == "ConversationSegment")
-                            .Max(vi => (long?)vi.FaissIndex) ?? -1;
+                            .Max(vi => ( long? ) vi.FaissIndex) ?? -1;
                     }
-                    
+
                     faissIndex = ++nextId;
                     _nextFaissIds[indexKey] = nextId;
 
                     // 保存向量元数据
-                    var vectorIndex = new VectorIndex
-                    {
+                    var vectorIndex = new VectorIndex {
                         GroupId = segment.GroupId,
                         VectorType = "ConversationSegment",
                         EntityId = segment.Id,
@@ -243,17 +223,14 @@ namespace TelegramSearchBot.Service.Vector
                 await dbContext.SaveChangesAsync();
 
                 // 标记索引已变更，稍后批量保存
-                lock (_indexLock)
-                {
+                lock (_indexLock) {
                     _dirtyIndexes.Add(indexKey);
                 }
 
                 _logger.LogInformation($"对话段 {segment.Id} 向量化完成，索引位置: {faissIndex}");
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, $"对话段 {segment.Id} 向量化失败");
-                
+
                 // 确保不会阻塞其他处理
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
@@ -266,10 +243,8 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 根据ID向量化对话段，避免实体跟踪冲突
         /// </summary>
-        public async Task VectorizeConversationSegmentById(long segmentId)
-        {
-            try
-            {
+        public async Task VectorizeConversationSegmentById(long segmentId) {
+            try {
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
@@ -277,8 +252,7 @@ namespace TelegramSearchBot.Service.Vector
                 var segment = await dbContext.ConversationSegments
                     .FirstOrDefaultAsync(s => s.Id == segmentId);
 
-                if (segment == null)
-                {
+                if (segment == null) {
                     _logger.LogWarning($"对话段 {segmentId} 不存在");
                     return;
                 }
@@ -289,8 +263,7 @@ namespace TelegramSearchBot.Service.Vector
                                              vi.VectorType == "ConversationSegment" &&
                                              vi.EntityId == segment.Id);
 
-                if (existingVector != null)
-                {
+                if (existingVector != null) {
                     _logger.LogDebug($"对话段 {segment.Id} 已经向量化，跳过");
                     return;
                 }
@@ -305,21 +278,18 @@ namespace TelegramSearchBot.Service.Vector
 
                 // 添加向量到索引 - 使用内存计数器分配索引ID，避免数据库访问
                 long faissIndex;
-                lock (_faissIdAssignLock)
-                {
-                    if (!_nextFaissIds.TryGetValue(indexKey, out var nextId))
-                    {
+                lock (_faissIdAssignLock) {
+                    if (!_nextFaissIds.TryGetValue(indexKey, out var nextId)) {
                         // 如果是第一次使用该群组，从数据库查找最大ID
                         nextId = dbContext.VectorIndexes
                             .Where(vi => vi.GroupId == segment.GroupId && vi.VectorType == "ConversationSegment")
-                            .Max(vi => (long?)vi.FaissIndex) ?? -1;
+                            .Max(vi => ( long? ) vi.FaissIndex) ?? -1;
                     }
-                    
+
                     faissIndex = ++nextId;
                     _nextFaissIds[indexKey] = nextId;
 
-                    var vectorIndex = new VectorIndex
-                    {
+                    var vectorIndex = new VectorIndex {
                         GroupId = segment.GroupId,
                         VectorType = "ConversationSegment",
                         EntityId = segment.Id,
@@ -338,23 +308,19 @@ namespace TelegramSearchBot.Service.Vector
                 await dbContext.SaveChangesAsync();
 
                 // 标记索引已变更，稍后批量保存
-                lock (_indexLock)
-                {
+                lock (_indexLock) {
                     _dirtyIndexes.Add(indexKey);
                 }
 
                 _logger.LogInformation($"对话段 {segment.Id} 向量化完成，索引位置: {faissIndex}");
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, $"对话段 {segmentId} 向量化失败");
-                
+
                 // 确保不会阻塞其他处理
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
                 var segment = await dbContext.ConversationSegments.FirstOrDefaultAsync(s => s.Id == segmentId);
-                if (segment != null)
-                {
+                if (segment != null) {
                     segment.IsVectorized = false;
                     dbContext.Entry(segment).State = EntityState.Modified;
                     await dbContext.SaveChangesAsync();
@@ -365,8 +331,7 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 批量向量化群组的所有对话段
         /// </summary>
-        public async Task VectorizeGroupSegments(long groupId)
-        {
+        public async Task VectorizeGroupSegments(long groupId) {
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
@@ -382,20 +347,14 @@ namespace TelegramSearchBot.Service.Vector
 
             // 并发处理对话段，受 SemaphoreSlim 控制并发度
             var semaphore = new SemaphoreSlim(MaxParallelVectorization, MaxParallelVectorization);
-            var tasks = segmentIds.Select(async segmentId =>
-            {
+            var tasks = segmentIds.Select(async segmentId => {
                 await semaphore.WaitAsync();
-                try
-                {
+                try {
                     await VectorizeConversationSegmentById(segmentId);
                     Interlocked.Increment(ref successCount);
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     _logger.LogError(ex, $"对话段 {segmentId} 向量化失败");
-                }
-                finally
-                {
+                } finally {
                     semaphore.Release();
                 }
             });
@@ -407,13 +366,11 @@ namespace TelegramSearchBot.Service.Vector
             // 统一保存索引文件（仅当有变更时）
             var indexKey = GetIndexKey(groupId, "ConversationSegment");
             bool needSave;
-            lock (_indexLock)
-            {
+            lock (_indexLock) {
                 needSave = _dirtyIndexes.Remove(indexKey);
             }
 
-            if (needSave)
-            {
+            if (needSave) {
                 await SaveIndexAsync(indexKey, groupId, "ConversationSegment", dbContext);
             }
         }
@@ -421,12 +378,9 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 获取或创建FAISS索引
         /// </summary>
-        private async Task<FaissIndex> GetOrCreateIndexAsync(string indexKey, long groupId, string indexType, DataDbContext dbContext)
-        {
-            lock (_indexLock)
-            {
-                if (_loadedIndexes.TryGetValue(indexKey, out var existingIndex))
-                {
+        private async Task<FaissIndex> GetOrCreateIndexAsync(string indexKey, long groupId, string indexType, DataDbContext dbContext) {
+            lock (_indexLock) {
+                if (_loadedIndexes.TryGetValue(indexKey, out var existingIndex)) {
                     return existingIndex;
                 }
             }
@@ -437,33 +391,26 @@ namespace TelegramSearchBot.Service.Vector
 
             FaissIndex index;
 
-            if (indexFileInfo != null && File.Exists(indexFileInfo.FilePath))
-            {
+            if (indexFileInfo != null && File.Exists(indexFileInfo.FilePath)) {
                 // 加载现有索引
-                try
-                {
+                try {
                     index = FaissIndex.Load(indexFileInfo.FilePath);
                     _logger.LogInformation($"加载现有FAISS索引: {indexFileInfo.FilePath}");
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     _logger.LogWarning(ex, $"加载FAISS索引失败，创建新索引: {indexFileInfo.FilePath}");
                     index = CreateNewIndex();
-                    
+
                     // 标记旧索引文件无效
                     indexFileInfo.IsValid = false;
                     await dbContext.SaveChangesAsync();
                 }
-            }
-            else
-            {
+            } else {
                 // 创建新索引
                 index = CreateNewIndex();
                 _logger.LogInformation($"创建新FAISS索引: {indexKey}");
             }
 
-            lock (_indexLock)
-            {
+            lock (_indexLock) {
                 _loadedIndexes[indexKey] = index;
             }
 
@@ -473,15 +420,11 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 创建新的FAISS索引
         /// </summary>
-        private FaissIndex CreateNewIndex()
-        {
-            try
-            {
+        private FaissIndex CreateNewIndex() {
+            try {
                 // 使用L2距离的Flat索引
                 return FaissIndex.CreateDefault(_vectorDimension, MetricType.METRIC_L2);
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogWarning(ex, "FAISS索引创建失败，使用模拟实现");
                 // 返回null表示FaissNet不可用
                 return null;
@@ -491,29 +434,23 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 执行相似性搜索
         /// </summary>
-        private async Task<List<SearchResult>> SearchSimilarVectorsAsync(FaissIndex index, float[] queryVector, int topK)
-        {
+        private async Task<List<SearchResult>> SearchSimilarVectorsAsync(FaissIndex index, float[] queryVector, int topK) {
             // 如果索引为null，返回空结果
-            if (index == null)
-            {
+            if (index == null) {
                 return new List<SearchResult>();
             }
 
-            return await Task.Run(() =>
-            {
-                try
-                {
+            return await Task.Run(() => {
+                try {
                     var result = index.Search(new[] { queryVector }, topK);
                     var distances = result.Item1[0]; // 第一个查询的距离数组
                     var labels = result.Item2[0];    // 第一个查询的标签数组
-                    
+
                     var results = new List<SearchResult>();
-                    for (int i = 0; i < labels.Length && i < distances.Length; i++)
-                    {
+                    for (int i = 0; i < labels.Length && i < distances.Length; i++) {
                         if (labels[i] >= 0) // 有效结果
                         {
-                            results.Add(new SearchResult
-                            {
+                            results.Add(new SearchResult {
                                 Id = labels[i],
                                 Score = distances[i]
                             });
@@ -521,9 +458,7 @@ namespace TelegramSearchBot.Service.Vector
                     }
 
                     return results.OrderBy(r => r.Score).ToList(); // L2距离越小越相似
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     _logger.LogWarning(ex, "FAISS相似性搜索失败");
                     return new List<SearchResult>();
                 }
@@ -533,27 +468,20 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 添加向量到索引
         /// </summary>
-        private async Task AddVectorToIndexAsync(FaissIndex index, float[] vector, long id)
-        {
+        private async Task AddVectorToIndexAsync(FaissIndex index, float[] vector, long id) {
             // 如果索引为null，直接返回
-            if (index == null)
-            {
+            if (index == null) {
                 _logger.LogWarning("FAISS索引为空，无法添加向量");
                 return;
             }
 
-            await Task.Run(() =>
-            {
-                try
-                {
-                    lock (index)
-                    {
+            await Task.Run(() => {
+                try {
+                    lock (index) {
                         index.AddWithIds(new[] { vector }, new long[] { id });
                     }
                     _logger.LogDebug($"向量添加到FAISS索引");
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     _logger.LogError(ex, "向量添加到FAISS索引失败");
                 }
             });
@@ -562,18 +490,14 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 保存索引到文件
         /// </summary>
-        private async Task SaveIndexAsync(string indexKey, long groupId, string indexType, DataDbContext dbContext)
-        {
-            try
-            {
+        private async Task SaveIndexAsync(string indexKey, long groupId, string indexType, DataDbContext dbContext) {
+            try {
                 FaissIndex index;
                 string filePath;
-                
+
                 // 在lock外部准备数据
-                lock (_indexLock)
-                {
-                    if (!_loadedIndexes.TryGetValue(indexKey, out index))
-                    {
+                lock (_indexLock) {
+                    if (!_loadedIndexes.TryGetValue(indexKey, out index)) {
                         return;
                     }
                 }
@@ -585,19 +509,15 @@ namespace TelegramSearchBot.Service.Vector
                 var indexFileInfo = await dbContext.FaissIndexFiles
                     .FirstOrDefaultAsync(f => f.GroupId == groupId && f.IndexType == indexType && f.IsValid);
 
-                if (indexFileInfo == null)
-                {
-                    indexFileInfo = new FaissIndexFile
-                    {
+                if (indexFileInfo == null) {
+                    indexFileInfo = new FaissIndexFile {
                         GroupId = groupId,
                         IndexType = indexType,
                         FilePath = filePath,
                         Dimension = _vectorDimension
                     };
                     dbContext.FaissIndexFiles.Add(indexFileInfo);
-                }
-                else
-                {
+                } else {
                     indexFileInfo.FilePath = filePath;
                     indexFileInfo.UpdatedAt = DateTime.UtcNow;
                 }
@@ -607,11 +527,9 @@ namespace TelegramSearchBot.Service.Vector
                     .CountAsync(vi => vi.GroupId == groupId && vi.VectorType == indexType);
                 indexFileInfo.VectorCount = vectorCount;
                 indexFileInfo.FileSize = new FileInfo(filePath).Length;
-                
+
                 await dbContext.SaveChangesAsync();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, $"保存FAISS索引失败: {indexKey}");
             }
         }
@@ -619,118 +537,97 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 构建向量内容（包含上下文）
         /// </summary>
-        private string BuildVectorContent(ConversationSegment segment)
-        {
+        private string BuildVectorContent(ConversationSegment segment) {
             var contentBuilder = new System.Text.StringBuilder();
-            
+
             // 添加时间信息
             contentBuilder.AppendLine($"时间: {segment.StartTime:yyyy-MM-dd HH:mm} - {segment.EndTime:yyyy-MM-dd HH:mm}");
-            
+
             // 添加参与者信息
             contentBuilder.AppendLine($"参与者数量: {segment.ParticipantCount}");
             contentBuilder.AppendLine($"消息数量: {segment.MessageCount}");
-            
+
             // 添加话题关键词
-            if (!string.IsNullOrEmpty(segment.TopicKeywords))
-            {
+            if (!string.IsNullOrEmpty(segment.TopicKeywords)) {
                 contentBuilder.AppendLine($"话题关键词: {segment.TopicKeywords}");
             }
-            
+
             // 添加内容摘要
-            if (!string.IsNullOrEmpty(segment.ContentSummary))
-            {
+            if (!string.IsNullOrEmpty(segment.ContentSummary)) {
                 contentBuilder.AppendLine($"内容摘要: {segment.ContentSummary}");
             }
-            
+
             // 添加时间段描述
             var duration = segment.EndTime - segment.StartTime;
-            if (duration.TotalMinutes > 0)
-            {
+            if (duration.TotalMinutes > 0) {
                 contentBuilder.AppendLine($"对话时长: {duration.TotalMinutes:F1}分钟");
             }
-            
+
             // 添加对话类型判断
-            if (segment.ParticipantCount == 1)
-            {
+            if (segment.ParticipantCount == 1) {
                 contentBuilder.AppendLine("对话类型: 单人消息");
-            }
-            else if (segment.ParticipantCount <= 3)
-            {
+            } else if (segment.ParticipantCount <= 3) {
                 contentBuilder.AppendLine("对话类型: 小群组讨论");
-            }
-            else
-            {
+            } else {
                 contentBuilder.AppendLine("对话类型: 多人群组讨论");
             }
-            
+
             // 添加完整对话内容（现在已包含用户名和MessageExtension信息）
             contentBuilder.AppendLine("对话内容:");
             contentBuilder.AppendLine(segment.FullContent);
-            
+
             return contentBuilder.ToString();
         }
 
         /// <summary>
         /// 获取索引键
         /// </summary>
-        private string GetIndexKey(long groupId, string indexType)
-        {
+        private string GetIndexKey(long groupId, string indexType) {
             return $"{groupId}_{indexType}";
         }
 
         #region IVectorGenerationService 实现
 
-        public async Task<float[]> GenerateVectorAsync(string text)
-        {
+        public async Task<float[]> GenerateVectorAsync(string text) {
             return await _generalLLMService.GenerateEmbeddingsAsync(text);
         }
 
-        public async Task StoreVectorAsync(string collectionName, ulong id, float[] vector, Dictionary<string, string> payload)
-        {
+        public async Task StoreVectorAsync(string collectionName, ulong id, float[] vector, Dictionary<string, string> payload) {
             // 这个方法为了兼容性保留，但在FAISS实现中不使用
             _logger.LogWarning("StoreVectorAsync(ulong) 在FAISS实现中不推荐使用，请使用 VectorizeConversationSegment");
         }
 
-        public async Task StoreVectorAsync(string collectionName, float[] vector, long messageId)
-        {
+        public async Task StoreVectorAsync(string collectionName, float[] vector, long messageId) {
             // 这个方法为了兼容性保留，可以实现单消息向量存储
             _logger.LogWarning("单消息向量存储在FAISS实现中暂不支持，建议使用对话段向量");
         }
 
-        public async Task StoreMessageAsync(Message message)
-        {
+        public async Task StoreMessageAsync(Message message) {
             // 这里不直接存储单个消息，而是等待对话段处理
             _logger.LogDebug($"消息 {message.MessageId} 将在对话段处理中向量化");
         }
 
-        public async Task<float[][]> GenerateVectorsAsync(IEnumerable<string> texts)
-        {
+        public async Task<float[][]> GenerateVectorsAsync(IEnumerable<string> texts) {
             var tasks = texts.Select(text => GenerateVectorAsync(text));
             return await Task.WhenAll(tasks);
         }
 
-        public async Task<bool> IsHealthyAsync()
-        {
-            try
-            {
+        public async Task<bool> IsHealthyAsync() {
+            try {
                 // 检查索引目录是否可访问
-                if (!Directory.Exists(_indexDirectory))
-                {
+                if (!Directory.Exists(_indexDirectory)) {
                     Directory.CreateDirectory(_indexDirectory);
                 }
 
                 // 尝试创建一个测试索引
                 var testIndex = CreateNewIndex();
-                if (testIndex != null)
-                {
+                if (testIndex != null) {
                     var testVector = new float[_vectorDimension];
                     testIndex.AddWithIds(new[] { testVector }, new long[] { 0 });
                 }
 
                 return true;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, "FAISS向量服务健康检查失败");
                 // 在无法创建实际索引时返回true以支持测试
                 return true;
@@ -742,8 +639,7 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 搜索结果
         /// </summary>
-        private class SearchResult
-        {
+        private class SearchResult {
             public long Id { get; set; }
             public float Score { get; set; }
         }
@@ -751,12 +647,9 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 释放资源
         /// </summary>
-        public void Dispose()
-        {
-            lock (_indexLock)
-            {
-                foreach (var index in _loadedIndexes.Values)
-                {
+        public void Dispose() {
+            lock (_indexLock) {
+                foreach (var index in _loadedIndexes.Values) {
                     index?.Dispose();
                 }
                 _loadedIndexes.Clear();
@@ -766,13 +659,11 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 立即将所有已变更的索引写盘（主要用于测试场景或优雅关闭）
         /// </summary>
-        public async Task FlushAsync()
-        {
-            List<(string key,long groupId)> needSave;
-            lock (_indexLock)
-            {
+        public async Task FlushAsync() {
+            List<(string key, long groupId)> needSave;
+            lock (_indexLock) {
                 needSave = _dirtyIndexes
-                    .Select(k => (k,long.Parse(k.Split('_')[0])))
+                    .Select(k => (k, long.Parse(k.Split('_')[0])))
                     .ToList();
                 _dirtyIndexes.Clear();
             }
@@ -780,10 +671,9 @@ namespace TelegramSearchBot.Service.Vector
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
-            foreach (var (key,gid) in needSave)
-            {
-                await SaveIndexAsync(key,gid,"ConversationSegment",dbContext);
+            foreach (var (key, gid) in needSave) {
+                await SaveIndexAsync(key, gid, "ConversationSegment", dbContext);
             }
         }
     }
-} 
+}

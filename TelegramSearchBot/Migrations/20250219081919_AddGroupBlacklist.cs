@@ -1,15 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace TelegramSearchBot.Migrations
-{
+namespace TelegramSearchBot.Migrations {
     /// <inheritdoc />
-    public partial class AddGroupBlacklist : Migration
-    {
+    public partial class AddGroupBlacklist : Migration {
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
+        protected override void Up(MigrationBuilder migrationBuilder) {
             migrationBuilder.AddColumn<bool>(
                 name: "IsBlacklist",
                 table: "GroupData",
@@ -19,8 +16,7 @@ namespace TelegramSearchBot.Migrations
         }
 
         /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
+        protected override void Down(MigrationBuilder migrationBuilder) {
             migrationBuilder.DropColumn(
                 name: "IsBlacklist",
                 table: "GroupData");

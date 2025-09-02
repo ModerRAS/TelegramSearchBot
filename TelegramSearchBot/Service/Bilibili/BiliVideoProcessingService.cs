@@ -11,10 +11,8 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model.Bilibili;
 using TelegramSearchBot.Service.Common;
 
-namespace TelegramSearchBot.Service.Bilibili
-{
-    public class BiliVideoProcessingService : IService
-    {
+namespace TelegramSearchBot.Service.Bilibili {
+    public class BiliVideoProcessingService : IService {
         private readonly IBiliApiService _biliApiService;
         private readonly IDownloadService _downloadService;
         private readonly ITelegramFileCacheService _fileCacheService;
@@ -26,8 +24,7 @@ namespace TelegramSearchBot.Service.Bilibili
             IDownloadService downloadService,
             ITelegramFileCacheService fileCacheService,
             ILogger<BiliVideoProcessingService> logger,
-            IAppConfigurationService appConfigurationService)
-        {
+            IAppConfigurationService appConfigurationService) {
             _biliApiService = biliApiService;
             _downloadService = downloadService;
             _fileCacheService = fileCacheService;
@@ -37,29 +34,22 @@ namespace TelegramSearchBot.Service.Bilibili
 
         public string ServiceName => "BiliVideoProcessingService";
 
-        public async Task CacheFileIdAsync(string cacheKey, string fileId)
-        {
+        public async Task CacheFileIdAsync(string cacheKey, string fileId) {
             await _fileCacheService.CacheFileIdAsync(cacheKey, fileId);
         }
 
-        public async Task<VideoProcessingResult> ProcessVideoAsync(BiliVideoInfo videoInfo)
-        {
+        public async Task<VideoProcessingResult> ProcessVideoAsync(BiliVideoInfo videoInfo) {
             var result = new VideoProcessingResult();
-            try
-            {
+            try {
                 long defaultMaxFileSizeMB = 48;
                 long maxFileSizeMB = defaultMaxFileSizeMB;
 
-                try
-                {
+                try {
                     string configuredMaxSizeMB = await _appConfigurationService.GetConfigurationValueAsync(AppConfigurationService.BiliMaxDownloadSizeMBKey);
-                    if (!string.IsNullOrWhiteSpace(configuredMaxSizeMB) && long.TryParse(configuredMaxSizeMB, out long parsedMB) && parsedMB > 0)
-                    {
+                    if (!string.IsNullOrWhiteSpace(configuredMaxSizeMB) && long.TryParse(configuredMaxSizeMB, out long parsedMB) && parsedMB > 0) {
                         maxFileSizeMB = parsedMB;
                     }
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     _logger.LogError(ex, "Error reading BiliMaxDownloadSizeMB configuration");
                 }
 
@@ -69,37 +59,30 @@ namespace TelegramSearchBot.Service.Bilibili
                 string sourceUrl = null;
                 bool useDash = false;
 
-                if (videoInfo.DashStreams?.VideoStream != null && videoInfo.DashStreams?.AudioStream != null && 
-                    videoInfo.DashStreams.EstimatedTotalSizeBytes < maxFileSize)
-                {
+                if (videoInfo.DashStreams?.VideoStream != null && videoInfo.DashStreams?.AudioStream != null &&
+                    videoInfo.DashStreams.EstimatedTotalSizeBytes < maxFileSize) {
                     useDash = true;
                     videoFileToCacheKey = $"{videoInfo.OriginalUrl}_dash_{videoInfo.DashStreams.VideoStream.QualityDescription}";
-                }
-                else if (videoInfo.PlayUrls.Any())
-                {
+                } else if (videoInfo.PlayUrls.Any()) {
                     var bestPlayUrl = videoInfo.PlayUrls
                         .Where(p => p.SizeBytes < maxFileSize)
                         .OrderByDescending(p => p.QualityNumeric)
                         .FirstOrDefault();
 
-                    if (bestPlayUrl != null)
-                    {
+                    if (bestPlayUrl != null) {
                         sourceUrl = bestPlayUrl.Url;
                         videoFileToCacheKey = $"{videoInfo.OriginalUrl}_durl_{bestPlayUrl.QualityNumeric}";
                     }
                 }
 
-                if (!string.IsNullOrWhiteSpace(videoFileToCacheKey))
-                {
+                if (!string.IsNullOrWhiteSpace(videoFileToCacheKey)) {
                     string cachedFileId = await _fileCacheService.GetCachedFileIdAsync(videoFileToCacheKey);
-                    if (!string.IsNullOrWhiteSpace(cachedFileId))
-                    {
+                    if (!string.IsNullOrWhiteSpace(cachedFileId)) {
                         result.VideoInputFile = InputFile.FromFileId(cachedFileId);
                     }
                 }
 
-                if (result.VideoInputFile == null && (!string.IsNullOrWhiteSpace(sourceUrl) || useDash))
-                {
+                if (result.VideoInputFile == null && ( !string.IsNullOrWhiteSpace(sourceUrl) || useDash )) {
                     string downloadedVideoPath = useDash ?
                         await _downloadService.DownloadAndMergeDashStreamsAsync(
                             videoInfo.DashStreams.VideoStream.Url,
@@ -111,24 +94,20 @@ namespace TelegramSearchBot.Service.Bilibili
                             videoInfo.OriginalUrl,
                             $"{videoInfo.Bvid ?? videoInfo.Aid}_p{videoInfo.Page}_{videoFileToCacheKey?.Split('_').LastOrDefault() ?? "durl"}.mp4");
 
-                    if (!string.IsNullOrWhiteSpace(downloadedVideoPath))
-                    {
+                    if (!string.IsNullOrWhiteSpace(downloadedVideoPath)) {
                         result.VideoFileStream = new FileStream(downloadedVideoPath, FileMode.Open, FileAccess.Read, FileShare.Read);
                         result.VideoInputFile = InputFile.FromStream(result.VideoFileStream, Path.GetFileName(downloadedVideoPath));
                         result.TempFiles.Add(downloadedVideoPath);
                     }
                 }
 
-                if (!string.IsNullOrWhiteSpace(videoInfo.CoverUrl))
-                {
+                if (!string.IsNullOrWhiteSpace(videoInfo.CoverUrl)) {
                     string downloadedThumbnailPath = await _downloadService.DownloadFileAsync(
                         videoInfo.CoverUrl, videoInfo.OriginalUrl, "thumb.jpg");
 
-                    if (!string.IsNullOrWhiteSpace(downloadedThumbnailPath))
-                    {
+                    if (!string.IsNullOrWhiteSpace(downloadedThumbnailPath)) {
                         result.ThumbnailMemoryStream = new MemoryStream();
-                        await using (var ts = new FileStream(downloadedThumbnailPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                        {
+                        await using (var ts = new FileStream(downloadedThumbnailPath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
                             await ts.CopyToAsync(result.ThumbnailMemoryStream);
                         }
                         result.ThumbnailMemoryStream.Position = 0;
@@ -146,9 +125,7 @@ namespace TelegramSearchBot.Service.Bilibili
 
                 result.VideoFileToCacheKey = videoFileToCacheKey;
                 result.Success = true;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, "Error processing video info for {VideoTitle}", videoInfo.Title);
                 result.ErrorMessage = $"处理视频时出错: {MessageFormatHelper.EscapeMarkdownV2(ex.Message)}";
             }

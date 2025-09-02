@@ -1,6 +1,6 @@
-﻿using StackExchange.Redis;
 using System;
 using System.Threading.Tasks;
+using StackExchange.Redis;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface.AI.QR;

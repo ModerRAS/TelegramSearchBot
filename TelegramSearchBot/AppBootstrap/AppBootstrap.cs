@@ -1,6 +1,3 @@
-﻿using Microsoft.Win32.SafeHandles;
-using Nito.AsyncEx;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -13,6 +10,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
+using Nito.AsyncEx;
+using Serilog;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class AppBootstrap {
@@ -35,7 +35,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 var extendedInfoPtr = Marshal.AllocHGlobal(length);
                 Marshal.StructureToPtr(extendedInfo, extendedInfoPtr, false);
 
-                if (!SetInformationJobObject(_handle, JobObjectInfoType.ExtendedLimitInformation, extendedInfoPtr, (uint)length)) {
+                if (!SetInformationJobObject(_handle, JobObjectInfoType.ExtendedLimitInformation, extendedInfoPtr, ( uint ) length)) {
                     throw new InvalidOperationException("Unable to set information", new Win32Exception());
                 }
             }
@@ -176,7 +176,7 @@ namespace TelegramSearchBot.AppBootstrap {
                     }
                 } else {
                     Fork(args);
-                    ForkLock.Add(args[0],DateTime.UtcNow);
+                    ForkLock.Add(args[0], DateTime.UtcNow);
                 }
             }
         }

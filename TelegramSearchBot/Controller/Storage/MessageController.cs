@@ -1,26 +1,24 @@
-﻿using System.Threading.Tasks;
-using Telegram.Bot.Types;
-using TelegramSearchBot.Model;
 using System;
 using System.Collections.Generic;
 using System.Linq; // Added for Enumerable.Any
-using TelegramSearchBot.Service.Storage;
+using System.Threading.Tasks;
 using MediatR; // Added for IMediator
-using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
+using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Controller.Storage {
-    public class MessageController : IOnUpdate
-    {
+    public class MessageController : IOnUpdate {
         private readonly MessageService _messageService;
         private readonly IMediator _mediator;
         public List<Type> Dependencies => new List<Type>();
 
         public MessageController(
             MessageService messageService,
-            IMediator mediator)
-        {
+            IMediator mediator) {
             _messageService = messageService;
             _mediator = mediator;
         }
@@ -28,10 +26,10 @@ namespace TelegramSearchBot.Controller.Storage {
         public async Task ExecuteAsync(PipelineContext p) {
             var e = p.Update;
             string ToAdd = e?.Message?.Text ?? e?.Message?.Caption ?? string.Empty;
-            if (e.CallbackQuery != null) { 
+            if (e.CallbackQuery != null) {
                 p.BotMessageType = BotMessageType.CallbackQuery;
                 return;
-            } else if (e.Message != null) { 
+            } else if (e.Message != null) {
                 p.BotMessageType = BotMessageType.Message;
             } else {
                 p.BotMessageType = BotMessageType.Unknown;
@@ -49,6 +47,6 @@ namespace TelegramSearchBot.Controller.Storage {
             });
             p.ProcessingResults.Add(ToAdd);
         }
-        
+
     }
 }

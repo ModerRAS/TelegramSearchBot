@@ -1,35 +1,33 @@
 #pragma warning disable CS8602 // 解引用可能出现空引用
+using System;
+using System.IO; // Added for MemoryStream
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using LiteDB; // Added for LiteDatabase
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using StackExchange.Redis;
 using Moq;
 using Nito.AsyncEx;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using LiteDB; // Added for LiteDatabase
-using System.IO; // Added for MemoryStream
+using StackExchange.Redis;
 using Telegram.Bot; // Added for ITelegramBotClient
-using MediatR;
-using System.Threading;
-using TelegramSearchBot.Model.Notifications;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Model.Notifications;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Vector;
-using User = Telegram.Bot.Types.User; // Alias for Telegram.Bot.Types.User
+using Xunit;
 using Chat = Telegram.Bot.Types.Chat; // Alias for Telegram.Bot.Types.Chat
 using Message = TelegramSearchBot.Model.Data.Message;
-using Xunit;
+using User = Telegram.Bot.Types.User; // Alias for Telegram.Bot.Types.User
 
-namespace TelegramSearchBot.Test.Service.Storage
-{
-    public class MessageServiceTests
-    {
+namespace TelegramSearchBot.Test.Service.Storage {
+    public class MessageServiceTests {
         private DbContextOptions<DataDbContext>? _dbContextOptions;
         private Mock<ILogger<MessageService>>? _mockLogger;
         private Mock<ITelegramBotClient>? _mockTelegramBotClient; // Added
@@ -41,8 +39,7 @@ namespace TelegramSearchBot.Test.Service.Storage
         // Note: Testing LiteDB part is tricky due to static Env.Database. 
         // These tests will focus on Sqlite and Lucene interactions.
 
-        public MessageServiceTests()
-        {
+        public MessageServiceTests() {
             _dbContextOptions = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
@@ -96,24 +93,21 @@ namespace TelegramSearchBot.Test.Service.Storage
 
             // Setup specific mediator behavior for vector generation notification
             _mockMediator.Setup(m => m.Publish(
-                It.Is<MessageVectorGenerationNotification>(n => 
-                    n.Message.MessageId == It.IsAny<long>() && 
+                It.Is<MessageVectorGenerationNotification>(n =>
+                    n.Message.MessageId == It.IsAny<long>() &&
                     n.Message.GroupId == It.IsAny<long>()),
                 It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
         }
-        
-        private MessageService CreateService()
-        {
+
+        private MessageService CreateService() {
             // Pass a new context for each service instance to ensure isolation if needed,
             // though for these tests, direct context manipulation is also done via _context.
             return new MessageService(_mockLogger.Object, _mockLuceneManager.Object, _mockSendMessage.Object, new DataDbContext(_dbContextOptions), _mockMediator.Object);
         }
 
-        private MessageOption CreateSampleMessageOption(long userId, long chatId, int messageId, string content, long replyToMessageId = 0)
-        {
-            return new MessageOption
-            {
+        private MessageOption CreateSampleMessageOption(long userId, long chatId, int messageId, string content, long replyToMessageId = 0) {
+            return new MessageOption {
                 UserId = userId,
                 User = new User { Id = userId, FirstName = "Test", LastName = "User", Username = "testuser" },
                 ChatId = chatId,
@@ -126,8 +120,7 @@ namespace TelegramSearchBot.Test.Service.Storage
         }
 
         [Fact]
-        public async Task AddToSqlite_NewUserAndGroup_AddsAllData()
-        {
+        public async Task AddToSqlite_NewUserAndGroup_AddsAllData() {
             var service = CreateService();
             var messageOption = CreateSampleMessageOption(1L, 100L, 1000, "Hello World");
 
@@ -146,11 +139,10 @@ namespace TelegramSearchBot.Test.Service.Storage
         }
 
         [Fact]
-        public async Task AddToSqlite_ExistingUserAndGroup_DoesNotDuplicateUserOrGroupData()
-        {
+        public async Task AddToSqlite_ExistingUserAndGroup_DoesNotDuplicateUserOrGroupData() {
             var service = CreateService();
             var messageOption1 = CreateSampleMessageOption(1L, 100L, 1000, "First message");
-            
+
             // Initial add
             await service.AddToSqlite(messageOption1);
             var initialUserCount = await _context.UserData.CountAsync();
@@ -160,7 +152,7 @@ namespace TelegramSearchBot.Test.Service.Storage
             // Second message from same user in same group
             var messageOption2 = CreateSampleMessageOption(1L, 100L, 1001, "Second message");
             // Ensure User and Chat objects are the same or equivalent for this test
-            messageOption2.User = messageOption1.User; 
+            messageOption2.User = messageOption1.User;
             messageOption2.Chat = messageOption1.Chat;
 
             // Need a new service instance with a fresh context for the "act" part if service holds state or context internally
@@ -169,7 +161,7 @@ namespace TelegramSearchBot.Test.Service.Storage
             // For simplicity in this test setup, we'll use the same service instance but be mindful of context state.
             // A better approach for service tests is to ensure the DbContext used by the service is fresh or controlled.
             // Here, the service gets a new DataDbContext(_dbContextOptions) each time CreateService() is called.
-            
+
             // Let's re-create the service to ensure it gets a fresh context instance for the operation,
             // but it will point to the same InMemory database defined by _dbContextOptions.
             var serviceForSecondCall = new MessageService(_mockLogger.Object, _mockLuceneManager.Object, _mockSendMessage.Object, new DataDbContext(_dbContextOptions), _mockMediator.Object);
@@ -180,13 +172,12 @@ namespace TelegramSearchBot.Test.Service.Storage
             Assert.Equal(initialUserGroupLinkCount, await _context.UsersWithGroup.CountAsync());
             Assert.Equal(2, await _context.Messages.CountAsync());
         }
-        
+
         [Fact]
-        public async Task AddToSqlite_MessageWithReplyTo_SavesReplyToMessageId()
-        {
+        public async Task AddToSqlite_MessageWithReplyTo_SavesReplyToMessageId() {
             var service = CreateService();
             var messageOption = CreateSampleMessageOption(1L, 100L, 1002, "Reply message", 1000);
-            
+
             await service.AddToSqlite(messageOption);
 
             var msg = await _context.Messages.FirstOrDefaultAsync(m => m.MessageId == 1002);
@@ -195,8 +186,7 @@ namespace TelegramSearchBot.Test.Service.Storage
         }
 
         [Fact]
-        public async Task AddToLucene_CallsLuceneManagerWriteDocumentAsync()
-        {
+        public async Task AddToLucene_CallsLuceneManagerWriteDocumentAsync() {
             var service = CreateService();
             var messageOption = CreateSampleMessageOption(1L, 100L, 1000, "Test Lucene");
 
@@ -215,15 +205,14 @@ namespace TelegramSearchBot.Test.Service.Storage
         }
 
         [Fact]
-        public async Task ExecuteAsync_CallsSqliteLuceneAndLiteDbMethods()
-        {
+        public async Task ExecuteAsync_CallsSqliteLuceneAndLiteDbMethods() {
             // For this test, we need to mock AddToSqlite, AddToLiteDB, AddToLucene
             // However, AddToLiteDB is hard to mock due to static Env.Database.
             // We will mock the service itself for these calls, or verify their side-effects.
             // Let's verify LuceneManager and check DB state for Sqlite.
 
             var messageOption = CreateSampleMessageOption(1L, 100L, 2000, "ExecuteAsync Test");
-            
+
             // We need a way to verify AddToLiteDB. Since it's static, we can't easily mock it.
             // We'll assume it's called and focus on others.
             // For a more thorough test, Env.Database would need to be injectable/mockable.
@@ -233,13 +222,13 @@ namespace TelegramSearchBot.Test.Service.Storage
 
             // Verify Sqlite call (by checking data)
             Assert.Equal(1, await _context.Messages.CountAsync(m => m.MessageId == 2000));
-            
+
             // Verify Lucene call - As above, direct verification is not possible.
             // We check that no ArgumentNullException was logged by LuceneManager via SendMessage.
             // Since SendMessage.Log is not virtual, this Verify call will fail. Removing it.
             // _mockSendMessage.Verify(s => s.Log(It.IsAny<string>()), Times.Never,
             //    "Send.Log should not be called from LuceneManager if ExecuteAsync's Lucene part is successful.");
-            
+
             // Logger verification (optional, but good for important logs)
             _mockLogger.Verify(
                 logger => logger.Log(
@@ -252,8 +241,7 @@ namespace TelegramSearchBot.Test.Service.Storage
         }
 
         [Fact]
-        public async Task ExecuteAsync_AddToSqliteFailsOnce_RetriesAndSucceeds()
-        {
+        public async Task ExecuteAsync_AddToSqliteFailsOnce_RetriesAndSucceeds() {
             var messageOption = CreateSampleMessageOption(1L, 100L, 3000, "Retry Test");
 
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
@@ -296,13 +284,12 @@ namespace TelegramSearchBot.Test.Service.Storage
             //    .Returns(Task.CompletedTask);
             // await mockService.Object.ExecuteAsync(messageOption);
             // mockService.Verify(s => s.AddToSqlite(It.IsAny<MessageOption>()), Times.Exactly(2));
-            
+
             // This test is more of an integration test for the happy path of ExecuteAsync.
         }
 
         [Fact]
-        public async Task ExecuteAsync_AddToSqliteThrowsExceptionAfterRetry_LogsError()
-        {
+        public async Task ExecuteAsync_AddToSqliteThrowsExceptionAfterRetry_LogsError() {
             // Arrange
             var messageOption = CreateSampleMessageOption(1L, 100L, 4000, "Retry Fail Test");
 
@@ -316,7 +303,7 @@ namespace TelegramSearchBot.Test.Service.Storage
             // and verifying that the logger recorded the expected error message.
             var service = CreateService();
             await service.ExecuteAsync(messageOption); // Should not throw unhandled.
-            
+
             // Verify the logger was called with an error related to retry failure
             // This requires setting up the mock logger to capture log messages.
             // Example (requires changes to TestInitialize to make _mockLogger capture calls):
@@ -331,8 +318,7 @@ namespace TelegramSearchBot.Test.Service.Storage
         }
 
         [Fact]
-        public async Task ExecuteAsync_AddToLuceneThrowsException_LogsError()
-        {
+        public async Task ExecuteAsync_AddToLuceneThrowsException_LogsError() {
             // This test is very hard to implement with the current design due to the static LiteDB dependency
             // and non-virtual methods.
             // We can simulate the LuceneManager throwing an exception, but verifying the logger
@@ -343,7 +329,7 @@ namespace TelegramSearchBot.Test.Service.Storage
             // for the specific error message related to Lucene failure.
             var service = CreateService();
             await service.AddToLucene(CreateSampleMessageOption(1L, 100L, 5000, "Lucene Fail Test")); // Should not throw unhandled.
-            
+
             // Verify the logger was called with an error related to Lucene failure
             // This requires setting up the mock logger to capture log messages.
             // Example (requires changes to TestInitialize to make _mockLogger capture calls):

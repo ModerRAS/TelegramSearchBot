@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -14,7 +14,7 @@ namespace TelegramSearchBot.Model.Data {
         [ForeignKey("LLMChannel")]
         public int LLMChannelId { get; set; }
         public virtual LLMChannel LLMChannel { get; set; }
-        
+
         /// <summary>
         /// 关联的模型能力信息
         /// </summary>

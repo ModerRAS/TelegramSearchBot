@@ -1,20 +1,16 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace TelegramSearchBot.Migrations
-{
+namespace TelegramSearchBot.Migrations {
     /// <inheritdoc />
-    public partial class AddAccountingTables : Migration
-    {
+    public partial class AddAccountingTables : Migration {
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
+        protected override void Up(MigrationBuilder migrationBuilder) {
             migrationBuilder.CreateTable(
                 name: "AccountBooks",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     GroupId = table.Column<long>(type: "INTEGER", nullable: false),
@@ -24,30 +20,26 @@ namespace TelegramSearchBot.Migrations
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     IsActive = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_AccountBooks", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
                 name: "GroupAccountSettings",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     GroupId = table.Column<long>(type: "INTEGER", nullable: false),
                     ActiveAccountBookId = table.Column<long>(type: "INTEGER", nullable: true),
                     IsAccountingEnabled = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_GroupAccountSettings", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
                 name: "AccountRecords",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     AccountBookId = table.Column<long>(type: "INTEGER", nullable: false),
@@ -58,8 +50,7 @@ namespace TelegramSearchBot.Migrations
                     CreatedByUsername = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_AccountRecords", x => x.Id);
                     table.ForeignKey(
                         name: "FK_AccountRecords_AccountBooks_AccountBookId",
@@ -93,8 +84,7 @@ namespace TelegramSearchBot.Migrations
         }
 
         /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
+        protected override void Down(MigrationBuilder migrationBuilder) {
             migrationBuilder.DropTable(
                 name: "AccountRecords");
 

@@ -1,13 +1,11 @@
 using System;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Service.Scheduler
-{
+namespace TelegramSearchBot.Service.Scheduler {
     /// <summary>
     /// 定时任务接口
     /// </summary>
-    public interface IScheduledTask
-    {
+    public interface IScheduledTask {
         /// <summary>
         /// 任务名称
         /// </summary>
@@ -30,4 +28,4 @@ namespace TelegramSearchBot.Service.Scheduler
         /// <param name="heartbeatCallback">心跳更新回调</param>
         void SetHeartbeatCallback(Func<Task> heartbeatCallback);
     }
-} 
+}

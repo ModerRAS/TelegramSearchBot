@@ -6,10 +6,8 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 
-namespace TelegramSearchBot.View
-{
-    public class WordCloudView : ImageView
-    {
+namespace TelegramSearchBot.View {
+    public class WordCloudView : ImageView {
         private DateTime _date;
         private int _userCount;
         private int _messageCount;
@@ -18,43 +16,36 @@ namespace TelegramSearchBot.View
         private DateTime _startDate;
         private DateTime _endDate;
 
-        public WordCloudView(ITelegramBotClient botClient, SendMessage sendMessage) 
-            : base(botClient, sendMessage)
-        {
+        public WordCloudView(ITelegramBotClient botClient, SendMessage sendMessage)
+            : base(botClient, sendMessage) {
         }
 
-        public WordCloudView WithDate(DateTime date)
-        {
+        public WordCloudView WithDate(DateTime date) {
             _date = date;
             return this;
         }
 
-        public WordCloudView WithUserCount(int userCount)
-        {
+        public WordCloudView WithUserCount(int userCount) {
             _userCount = userCount;
             return this;
         }
 
-        public WordCloudView WithMessageCount(int messageCount)
-        {
+        public WordCloudView WithMessageCount(int messageCount) {
             _messageCount = messageCount;
             return this;
         }
 
-        public WordCloudView WithTopUsers(List<(string Name, int Count)> topUsers)
-        {
+        public WordCloudView WithTopUsers(List<(string Name, int Count)> topUsers) {
             _topUsers = topUsers;
             return this;
         }
 
-        public WordCloudView WithPeriod(string period)
-        {
+        public WordCloudView WithPeriod(string period) {
             _period = period;
             return this;
         }
 
-        public WordCloudView WithDateRange(DateTime startDate, DateTime endDate)
-        {
+        public WordCloudView WithDateRange(DateTime startDate, DateTime endDate) {
             _startDate = startDate;
             _endDate = endDate;
             return this;
@@ -75,17 +66,15 @@ namespace TelegramSearchBot.View
 🎉感谢这些朋友的分享!🎉
 ";
 
-        public WordCloudView BuildCaption()
-        {
+        public WordCloudView BuildCaption() {
             var template = Template.Parse(TemplateString);
             var now = DateTime.Now;
-            
+
             // 如果用户少于10个就全部显示，否则只显示前10名
             var displayCount = _topUsers.Count < 10 ? _topUsers.Count : Math.Min(10, _topUsers.Count);
-            
+
             var users = new List<object>();
-            for (int i = 0; i < displayCount; i++)
-            {
+            for (int i = 0; i < displayCount; i++) {
                 users.Add(new {
                     index = i,
                     rank = i + 1,  // 排名从1开始
@@ -104,7 +93,7 @@ namespace TelegramSearchBot.View
                 top_users = users
             });
 
-            return (WordCloudView)WithCaption(caption);
+            return ( WordCloudView ) WithCaption(caption);
         }
     }
 }

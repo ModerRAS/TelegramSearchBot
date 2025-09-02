@@ -3,8 +3,7 @@ using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Service.Bilibili;
 
-public interface IDownloadService
-{
+public interface IDownloadService {
     /// <summary>
     /// Downloads a file from the specified URL.
     /// </summary>

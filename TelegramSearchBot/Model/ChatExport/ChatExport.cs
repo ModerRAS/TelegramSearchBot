@@ -2,18 +2,15 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 
-namespace TelegramSearchBot.Model.ChatExport
-{
-    public class ChatExport
-    {
+namespace TelegramSearchBot.Model.ChatExport {
+    public class ChatExport {
         public string Name { get; set; }
         public string Type { get; set; }
         public long Id { get; set; }
         public List<Message> Messages { get; set; }
     }
 
-    public class Message
-    {
+    public class Message {
         public int Id { get; set; }
         public string Type { get; set; }
         public DateTime Date { get; set; }
@@ -45,16 +42,14 @@ namespace TelegramSearchBot.Model.ChatExport
         public int? DurationSeconds { get; set; }
     }
 
-    public class TextItem
-    {
+    public class TextItem {
         public string Type { get; set; }
         public string Text { get; set; }
         public string Href { get; set; }
         public string Language { get; set; }
     }
 
-    public class TextEntity
-    {
+    public class TextEntity {
         public string Type { get; set; }
         public string Text { get; set; }
         public string Href { get; set; }

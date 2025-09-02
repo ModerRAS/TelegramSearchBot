@@ -1,15 +1,15 @@
 using System;
-using System.Net.Http;
-using System.Threading.Tasks;
-using System.Text;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model.Tools;
-using System.Net.Http.Headers;
-using System.Net;
 using TelegramSearchBot.Service.AI.LLM; // 添加MCP工具支持
-using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -41,7 +41,7 @@ namespace TelegramSearchBot.Service.Tools {
             if (LanguageCodeMap.TryGetValue(inputCode, out var mappedCode)) {
                 return mappedCode;
             }
-            
+
             // 处理一些常见的别名
             return inputCode switch {
                 "chs" or "zh-cn" or "zh_cn" or "cn" => "zh-hans",
@@ -66,7 +66,7 @@ namespace TelegramSearchBot.Service.Tools {
             [McpParameter("Search language code. Must be exact: en, zh-hans, zh-hant, ja, ko, fr, de, es, ru, etc. Use 'zh-hans' for Simplified Chinese, 'zh-hant' for Traditional Chinese. Defaults to 'en'.", IsRequired = false)] string searchLang = "en") {
             const int maxRetries = 3;
             const int delayMs = 1000;
-            
+
             // 验证API密钥
             // 注意：在测试环境中，我们允许空的API密钥，但在实际使用中应该配置API密钥
             if (string.IsNullOrEmpty(_apiKey) && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TEST_ENV"))) {
@@ -77,26 +77,26 @@ namespace TelegramSearchBot.Service.Tools {
             if (string.IsNullOrWhiteSpace(query)) {
                 throw new ArgumentException("Query cannot be null or empty", nameof(query));
             }
-            
+
             if (count <= 0 || count > 20) {
                 throw new ArgumentException("Count must be between 1 and 20", nameof(count));
             }
 
-// 构建请求URL
+            // 构建请求URL
             var url = $"https://api.search.brave.com/res/v1/web/search";
             var queryParams = new StringBuilder();
             queryParams.Append($"?q={Uri.EscapeDataString(query.Trim())}");
             queryParams.Append($"&count={Math.Min(count, 20)}"); // 确保count不超过20
-            
+
             // 只在page > 1时添加offset，避免page=1时出现offset=0
             if (page > 1) {
-                queryParams.Append($"&offset={(page - 1) * count}");
+                queryParams.Append($"&offset={( page - 1 ) * count}");
             }
-            
+
             // 确保country和search_lang是有效格式
             var validCountry = string.IsNullOrWhiteSpace(country) ? "us" : country.ToLowerInvariant().Trim();
             var validSearchLang = MapLanguageCode(string.IsNullOrWhiteSpace(searchLang) ? "en" : searchLang.ToLowerInvariant().Trim());
-            
+
             queryParams.Append($"&country={validCountry}");
             queryParams.Append($"&search_lang={validSearchLang}");
 
@@ -112,7 +112,7 @@ namespace TelegramSearchBot.Service.Tools {
                 try {
                     // 发送请求
                     var response = await _httpClient.GetAsync(requestUrl);
-                    
+
                     // 处理不同的HTTP状态码
                     switch (response.StatusCode) {
                         case HttpStatusCode.OK:
@@ -125,14 +125,14 @@ namespace TelegramSearchBot.Service.Tools {
                         case HttpStatusCode.TooManyRequests:
                             if (retry < maxRetries) {
                                 // 等待后重试
-                                await Task.Delay(delayMs * (retry + 1)); // 指数退避
+                                await Task.Delay(delayMs * ( retry + 1 )); // 指数退避
                                 continue;
                             }
                             throw new InvalidOperationException("Brave Search API rate limit exceeded");
                         case HttpStatusCode.BadRequest:
                             var badRequestContent = await response.Content.ReadAsStringAsync();
                             throw new InvalidOperationException($"Brave Search API bad request - invalid parameters: {badRequestContent}");
-                        case (HttpStatusCode)422:
+                        case ( HttpStatusCode ) 422:
                             var content422 = await response.Content.ReadAsStringAsync();
                             throw new InvalidOperationException($"Brave Search API validation error (422): {content422}. Request URL: {requestUrl}");
                         default:
@@ -142,14 +142,14 @@ namespace TelegramSearchBot.Service.Tools {
                 } catch (HttpRequestException ex) {
                     if (retry < maxRetries) {
                         // 等待后重试
-                        await Task.Delay(delayMs * (retry + 1)); // 指数退避
+                        await Task.Delay(delayMs * ( retry + 1 )); // 指数退避
                         continue;
                     }
                     throw new InvalidOperationException($"Network error while calling Brave Search API: {ex.Message}", ex);
                 } catch (TaskCanceledException ex) {
                     if (retry < maxRetries) {
                         // 等待后重试
-                        await Task.Delay(delayMs * (retry + 1)); // 指数退避
+                        await Task.Delay(delayMs * ( retry + 1 )); // 指数退避
                         continue;
                     }
                     throw new InvalidOperationException("Request timeout while calling Brave Search API", ex);
@@ -158,7 +158,7 @@ namespace TelegramSearchBot.Service.Tools {
                     throw new InvalidOperationException($"Error parsing Brave Search API response: {ex.Message}", ex);
                 }
             }
-            
+
             return null; // 这行不会执行，仅为编译器满意
         }
     }

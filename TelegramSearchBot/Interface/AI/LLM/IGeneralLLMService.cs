@@ -2,12 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Interface.AI.LLM {
-    public interface IGeneralLLMService
-    {
+    public interface IGeneralLLMService {
         string ServiceName { get; }
 
         Task<List<LLMChannel>> GetChannelsAsync(string modelName);

@@ -3,13 +3,11 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace TelegramSearchBot.Model.Data
-{
+namespace TelegramSearchBot.Model.Data {
     /// <summary>
     /// 对话段模型 - 表示一段连续的对话
     /// </summary>
-    public class ConversationSegment
-    {
+    public class ConversationSegment {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
@@ -88,8 +86,7 @@ namespace TelegramSearchBot.Model.Data
     /// <summary>
     /// 对话段包含的消息关联表
     /// </summary>
-    public class ConversationSegmentMessage
-    {
+    public class ConversationSegmentMessage {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
@@ -119,4 +116,4 @@ namespace TelegramSearchBot.Model.Data
         /// </summary>
         public virtual Message Message { get; set; }
     }
-} 
+}

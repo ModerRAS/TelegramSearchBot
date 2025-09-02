@@ -1,14 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Search {
     /// <summary>
@@ -149,7 +149,7 @@ namespace TelegramSearchBot.Service.Search {
                     .Where(c => c.CreatedTime < cutoffTime);
 
                 int deletedCount = await oldCaches.CountAsync().ConfigureAwait(false);
-                
+
                 if (deletedCount > 0) {
                     _dataDbContext.SearchPageCaches.RemoveRange(oldCaches);
                     await _dataDbContext.SaveChangesAsync().ConfigureAwait(false);

@@ -3,21 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.View;
-using Microsoft.Extensions.Logging;
 using Message = Telegram.Bot.Types.Message;
-using TelegramSearchBot.Interface.Controller;
 
 namespace TelegramSearchBot.Controller.Common {
-    public class CommandUrlProcessingController : IOnUpdate
-    {
+    public class CommandUrlProcessingController : IOnUpdate {
         private readonly IShortUrlMappingService _shortUrlMappingService;
         private readonly UrlProcessingService _urlProcessingService;
         private readonly ITelegramBotClient _botClient;
@@ -40,8 +39,7 @@ namespace TelegramSearchBot.Controller.Common {
 
         public List<Type> Dependencies => new List<Type>();
 
-        public async Task ExecuteAsync(PipelineContext p)
-        {
+        public async Task ExecuteAsync(PipelineContext p) {
             var message = p.Update.Message;
             if (message == null) return;
 
@@ -54,38 +52,30 @@ namespace TelegramSearchBot.Controller.Common {
             bool isCommand = false;
             string args = string.Empty;
 
-            if (commandEntity != null)
-            {
+            if (commandEntity != null) {
                 string fullCommand = commandText.Substring(commandEntity.Offset, commandEntity.Length);
                 string baseCommand = fullCommand.Split('@')[0];
 
-                if (baseCommand.Equals(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase))
-                {
+                if (baseCommand.Equals(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase)) {
                     isCommand = true;
                     args = commandText.Substring(commandEntity.Offset + commandEntity.Length).Trim();
                 }
             }
             // 回退简单命令检测
-            else if (commandText.Trim().StartsWith(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase))
-            {
+            else if (commandText.Trim().StartsWith(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase)) {
                 string firstWord = commandText.Trim().Split(' ')[0];
-                if (firstWord.Equals(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase))
-                {
+                if (firstWord.Equals(ResolveUrlsCommand, StringComparison.OrdinalIgnoreCase)) {
                     isCommand = true;
                     args = commandText.Trim().Substring(ResolveUrlsCommand.Length).Trim();
                 }
             }
 
-            if (isCommand)
-            {
+            if (isCommand) {
                 string? textToProcess = null;
-                
-                if (!string.IsNullOrWhiteSpace(args))
-                {
+
+                if (!string.IsNullOrWhiteSpace(args)) {
                     textToProcess = args;
-                }
-                else if (message.ReplyToMessage != null && !string.IsNullOrWhiteSpace(message.ReplyToMessage.Text))
-                {
+                } else if (message.ReplyToMessage != null && !string.IsNullOrWhiteSpace(message.ReplyToMessage.Text)) {
                     textToProcess = message.ReplyToMessage.Text;
                 }
 
@@ -94,26 +84,21 @@ namespace TelegramSearchBot.Controller.Common {
             }
         }
 
-        private async Task<List<UrlProcessResult>> GetAllUrlProcessingResults(PipelineContext p, string? additionalText = null)
-        {
+        private async Task<List<UrlProcessResult>> GetAllUrlProcessingResults(PipelineContext p, string? additionalText = null) {
             var processingResults = new List<UrlProcessResult>();
-            
+
             // 处理PipelineContext中的结果
-            foreach (var result in p.ProcessingResults)
-            {
+            foreach (var result in p.ProcessingResults) {
                 var urls = await _urlProcessingService.ProcessUrlsInTextAsync(result);
-                if (urls != null)
-                {
+                if (urls != null) {
                     processingResults.AddRange(urls);
                 }
             }
 
             // 处理额外文本（来自命令参数或回复消息）
-            if (!string.IsNullOrWhiteSpace(additionalText))
-            {
+            if (!string.IsNullOrWhiteSpace(additionalText)) {
                 var liveResults = await _urlProcessingService.ProcessUrlsInTextAsync(additionalText);
-                if (liveResults != null)
-                {
+                if (liveResults != null) {
                     processingResults.AddRange(liveResults);
                 }
             }
@@ -121,10 +106,8 @@ namespace TelegramSearchBot.Controller.Common {
             return processingResults;
         }
 
-        private async Task ProcessResolveUrlsCommand(Message message, IEnumerable<UrlProcessResult> results)
-        {
-            if (!results.Any())
-            {
+        private async Task ProcessResolveUrlsCommand(Message message, IEnumerable<UrlProcessResult> results) {
+            if (!results.Any()) {
                 await _genericView
                     .WithChatId(message.Chat.Id)
                     .WithReplyTo(message.MessageId)
@@ -142,30 +125,20 @@ namespace TelegramSearchBot.Controller.Common {
             var storedMappings = await _shortUrlMappingService.GetUrlMappingsAsync(distinctUrls, CancellationToken.None);
 
             var replyMessages = new List<string>();
-            foreach (var result in results)
-            {
+            foreach (var result in results) {
                 if (string.IsNullOrWhiteSpace(result.OriginalUrl)) continue;
 
                 if (storedMappings.TryGetValue(result.OriginalUrl, out var expandedUrl) &&
-                    !string.IsNullOrWhiteSpace(expandedUrl))
-                {
-                    if (result.OriginalUrl != expandedUrl)
-                    {
+                    !string.IsNullOrWhiteSpace(expandedUrl)) {
+                    if (result.OriginalUrl != expandedUrl) {
                         replyMessages.Add($"{result.OriginalUrl}\n-> {expandedUrl} (来自数据库)");
-                    }
-                    else
-                    {
+                    } else {
                         replyMessages.Add($"{result.OriginalUrl} (无变化, 来自数据库)");
                     }
-                }
-                else if (!string.IsNullOrWhiteSpace(result.ProcessedUrl))
-                {
-                    if (result.OriginalUrl != result.ProcessedUrl)
-                    {
+                } else if (!string.IsNullOrWhiteSpace(result.ProcessedUrl)) {
+                    if (result.OriginalUrl != result.ProcessedUrl) {
                         replyMessages.Add($"{result.OriginalUrl}\n-> {result.ProcessedUrl} (实时处理)");
-                    }
-                    else
-                    {
+                    } else {
                         replyMessages.Add($"{result.OriginalUrl} (无变化, 实时处理)");
                     }
                 }

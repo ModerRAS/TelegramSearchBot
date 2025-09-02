@@ -1,20 +1,16 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace TelegramSearchBot.Migrations
-{
+namespace TelegramSearchBot.Migrations {
     /// <inheritdoc />
-    public partial class AddConversationSegments : Migration
-    {
+    public partial class AddConversationSegments : Migration {
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
+        protected override void Up(MigrationBuilder migrationBuilder) {
             migrationBuilder.CreateTable(
                 name: "ConversationSegments",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     GroupId = table.Column<long>(type: "INTEGER", nullable: false),
@@ -31,23 +27,20 @@ namespace TelegramSearchBot.Migrations
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     IsVectorized = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_ConversationSegments", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
                 name: "ConversationSegmentMessages",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     ConversationSegmentId = table.Column<long>(type: "INTEGER", nullable: false),
                     MessageDataId = table.Column<long>(type: "INTEGER", nullable: false),
                     SequenceOrder = table.Column<int>(type: "INTEGER", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_ConversationSegmentMessages", x => x.Id);
                     table.ForeignKey(
                         name: "FK_ConversationSegmentMessages_ConversationSegments_ConversationSegmentId",
@@ -80,8 +73,7 @@ namespace TelegramSearchBot.Migrations
         }
 
         /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
+        protected override void Down(MigrationBuilder migrationBuilder) {
             migrationBuilder.DropTable(
                 name: "ConversationSegmentMessages");
 

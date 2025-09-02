@@ -1,9 +1,9 @@
-﻿using Serilog;
-using Serilog.Events;
-using Serilog.Sinks.OpenTelemetry;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.OpenTelemetry;
 using TelegramSearchBot.AppBootstrap;
 
 namespace TelegramSearchBot {
@@ -13,7 +13,7 @@ namespace TelegramSearchBot {
             .MinimumLevel.Information() // 设置最低日志级别
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Debug) // SQL 语句只在 Debug 级别输出
             .WriteTo.Console(
-                restrictedToMinimumLevel: LogEventLevel.Information, 
+                restrictedToMinimumLevel: LogEventLevel.Information,
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
               rollingInterval: RollingInterval.Day,
@@ -39,7 +39,7 @@ namespace TelegramSearchBot {
             } else {
                 Log.Error("参数数量无效。");
             }
-            
+
         }
     }
 }

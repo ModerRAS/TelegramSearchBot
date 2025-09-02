@@ -6,8 +6,7 @@ namespace TelegramSearchBot.Attributes // New namespace
     /// Marks a method as an MCP tool that can be called by the LLM.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
-    public sealed class McpToolAttribute : Attribute
-    {
+    public sealed class McpToolAttribute : Attribute {
         /// <summary>
         /// A description of what the tool does.
         /// </summary>
@@ -18,8 +17,7 @@ namespace TelegramSearchBot.Attributes // New namespace
         /// </summary>
         public string Name { get; set; }
 
-        public McpToolAttribute(string description)
-        {
+        public McpToolAttribute(string description) {
             Description = description;
         }
     }
@@ -28,8 +26,7 @@ namespace TelegramSearchBot.Attributes // New namespace
     /// Describes a parameter of an McpTool.
     /// </summary>
     [AttributeUsage(AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
-    public sealed class McpParameterAttribute : Attribute
-    {
+    public sealed class McpParameterAttribute : Attribute {
         /// <summary>
         /// A description of the parameter.
         /// </summary>
@@ -40,8 +37,7 @@ namespace TelegramSearchBot.Attributes // New namespace
         /// </summary>
         public bool IsRequired { get; set; } = true;
 
-        public McpParameterAttribute(string description)
-        {
+        public McpParameterAttribute(string description) {
             Description = description;
         }
     }

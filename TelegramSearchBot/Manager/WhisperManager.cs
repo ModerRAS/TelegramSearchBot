@@ -1,11 +1,11 @@
-﻿using FFMpegCore.Extend;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using FFMpegCore.Extend;
+using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Helper;
 using Whisper.net;
 using Whisper.net.Ggml;
@@ -42,7 +42,7 @@ namespace TelegramSearchBot.Manager {
         }
 
         public async Task<string> DetectAsync(Stream wavStream) {
-            
+
             TimeSpan timeTaken;
             var startTime = DateTime.UtcNow;
             if (!File.Exists(modelPath)) {
@@ -76,7 +76,7 @@ namespace TelegramSearchBot.Manager {
             // This section processes the audio file and prints the results (start time, end time and text) to the console.
             var startId = 1;
             string lastText = string.Empty;
-            var repeatCount = 0; 
+            var repeatCount = 0;
             var cts = new CancellationTokenSource();
             var token = cts.Token;
             try {
@@ -98,13 +98,13 @@ namespace TelegramSearchBot.Manager {
                         cts.Cancel();
                     }
                 }
-            } catch (TaskCanceledException ex) { 
+            } catch (TaskCanceledException ex) {
                 logger.LogError(ex.ToString());
             }
-            
+
 
             logger.LogInformation("⟫ Completed Whisper processing...");
-            
+
             return string.Join("\n", ToReturn);
         }
         public async Task<string> ExecuteAsync(Stream wavStream) {

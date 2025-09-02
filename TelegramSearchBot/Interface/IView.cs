@@ -1,6 +1,4 @@
-namespace TelegramSearchBot.Interface
-{
-    public interface IView
-    {
+namespace TelegramSearchBot.Interface {
+    public interface IView {
     }
 }

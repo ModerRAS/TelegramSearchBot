@@ -5,8 +5,7 @@ namespace TelegramSearchBot.Model.Bilibili;
 /// <summary>
 /// Represents detailed information about a Bilibili Opus (Dynamic/Feed item).
 /// </summary>
-public class BiliOpusInfo
-{
+public class BiliOpusInfo {
     public string OriginalUrl { get; set; }
     public long DynamicId { get; set; }
     public string UserName { get; set; }
@@ -30,8 +29,7 @@ public class BiliOpusInfo
 /// <summary>
 /// Represents the original resource if an Opus is a share (e.g., a video, article).
 /// </summary>
-public class OpusOriginalResourceInfo
-{
+public class OpusOriginalResourceInfo {
     public string Type { get; set; } // e.g., "video", "article", "music", "live"
     public string Title { get; set; }
     public string Url { get; set; }

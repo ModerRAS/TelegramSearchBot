@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -6,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -13,15 +13,11 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 
-namespace TelegramSearchBot.Service.BotAPI
-{
-    public partial class SendMessageService
-    {
+namespace TelegramSearchBot.Service.BotAPI {
+    public partial class SendMessageService {
         #region Standard Send Methods
-        public async Task SendVideoAsync(InputFile video, string caption, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2)
-        {
-            await Send.AddTask(async () =>
-            {
+        public async Task SendVideoAsync(InputFile video, string caption, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2) {
+            await Send.AddTask(async () => {
                 await botClient.SendVideo(
                     chatId: chatId,
                     video: video,
@@ -32,10 +28,8 @@ namespace TelegramSearchBot.Service.BotAPI
             }, chatId < 0);
         }
 
-        public async Task SendMediaGroupAsync(IEnumerable<IAlbumInputMedia> mediaGroup, long chatId, int replyTo)
-        {
-            await Send.AddTask(async () =>
-            {
+        public async Task SendMediaGroupAsync(IEnumerable<IAlbumInputMedia> mediaGroup, long chatId, int replyTo) {
+            await Send.AddTask(async () => {
                 await botClient.SendMediaGroup(
                     chatId: chatId,
                     media: mediaGroup,
@@ -44,10 +38,8 @@ namespace TelegramSearchBot.Service.BotAPI
             }, chatId < 0);
         }
 
-        public async Task SendDocument(InputFile inputFile, long ChatId, int replyTo)
-        {
-            await Send.AddTask(async () =>
-            {
+        public async Task SendDocument(InputFile inputFile, long ChatId, int replyTo) {
+            await Send.AddTask(async () => {
                 var message = await botClient.SendDocument(
                     chatId: ChatId,
                     document: inputFile,
@@ -60,10 +52,8 @@ namespace TelegramSearchBot.Service.BotAPI
         public Task SendDocument(string inputFile, string FileName, long ChatId, int replyTo) => SendDocument(InputFile.FromStream(new MemoryStream(Encoding.UTF8.GetBytes(inputFile)), FileName), ChatId, replyTo);
 
         public Task SendMessage(string Text, Chat ChatId, int replyTo) => SendMessage(Text, ChatId.Id, replyTo);
-        public async Task SendMessage(string Text, long ChatId, int replyTo)
-        {
-            await Send.AddTask(async () =>
-            {
+        public async Task SendMessage(string Text, long ChatId, int replyTo) {
+            await Send.AddTask(async () => {
                 await botClient.SendMessage(
                     chatId: ChatId,
                     disableNotification: true,
@@ -72,10 +62,8 @@ namespace TelegramSearchBot.Service.BotAPI
                     );
             }, ChatId < 0);
         }
-        public async Task SendMessage(string Text, long ChatId)
-        {
-            await Send.AddTask(async () =>
-            {
+        public async Task SendMessage(string Text, long ChatId) {
+            await Send.AddTask(async () => {
                 await botClient.SendMessage(
                     chatId: ChatId,
                     disableNotification: true,

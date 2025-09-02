@@ -2,24 +2,21 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Telegram.Bot;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Service.BotAPI;
-using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Manager;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.View;
 using Xunit;
 
-namespace TelegramSearchBot.Test.View
-{
-    public class SearchViewTests
-    {
+namespace TelegramSearchBot.Test.View {
+    public class SearchViewTests {
         private Mock<SendMessage> _sendMessageMock;
         private Mock<ITelegramBotClient> _botClientMock;
         private Mock<ILogger<SendMessage>> _loggerMock;
         private SearchView _searchView;
 
-        public SearchViewTests()
-        {
+        public SearchViewTests() {
             _botClientMock = new Mock<ITelegramBotClient>();
             _loggerMock = new Mock<ILogger<SendMessage>>();
             _sendMessageMock = new Mock<SendMessage>(
@@ -29,8 +26,7 @@ namespace TelegramSearchBot.Test.View
             _searchView = new SearchView(_sendMessageMock.Object, _botClientMock.Object);
         }
         [Fact]
-        public void RenderSearchResults_WithResults_ReturnsFormattedString()
-        {
+        public void RenderSearchResults_WithResults_ReturnsFormattedString() {
             // Arrange
             var messages = new List<Message>
             {
@@ -46,8 +42,7 @@ namespace TelegramSearchBot.Test.View
                 }
             };
 
-            var searchOption = new TelegramSearchBot.Model.SearchOption
-            {
+            var searchOption = new TelegramSearchBot.Model.SearchOption {
                 Count = 2,
                 Skip = 0,
                 Take = 2
@@ -66,12 +61,10 @@ namespace TelegramSearchBot.Test.View
         }
 
         [Fact]
-        public void RenderSearchResults_NoResults_ReturnsNoResultsMessage()
-        {
+        public void RenderSearchResults_NoResults_ReturnsNoResultsMessage() {
             // Arrange
             var messages = new List<Message>();
-            var searchOption = new TelegramSearchBot.Model.SearchOption
-            {
+            var searchOption = new TelegramSearchBot.Model.SearchOption {
                 Count = 0,
                 Skip = 0,
                 Take = 10
@@ -86,8 +79,7 @@ namespace TelegramSearchBot.Test.View
         }
 
         [Fact]
-        public void ConvertToMarkdownLinks_ReturnsCorrectLinks()
-        {
+        public void ConvertToMarkdownLinks_ReturnsCorrectLinks() {
             // Arrange
             var messages = new List<Message>
             {
@@ -115,8 +107,7 @@ namespace TelegramSearchBot.Test.View
         }
 
         [Fact]
-        public void ConvertToMarkdownLinks_WithNewlines_RemovesNewlines()
-        {
+        public void ConvertToMarkdownLinks_WithNewlines_RemovesNewlines() {
             // Arrange
             var messages = new List<Message>
             {

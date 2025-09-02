@@ -1,18 +1,18 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using StackExchange.Redis;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
+using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Storage;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Manage {
@@ -32,25 +32,25 @@ namespace TelegramSearchBot.Test.Manage {
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
             _context = new DataDbContext(options);
-            
+
             // Setup common mocks
             _redisMock = new Mock<IConnectionMultiplexer>();
             _dbMock = new Mock<IDatabase>();
             _redisMock.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))
                 .Returns(_dbMock.Object);
-            
+
             var httpClientFactoryMock = new Mock<IHttpClientFactory>();
             var openAiLogger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<OpenAIService>();
             var ollamaLogger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<OllamaService>();
             var serviceProviderMock = new Mock<IServiceProvider>();
             _messageExtensionServiceMock = new Mock<MessageExtensionService>(_context);
-            
+
             // Setup ModelCapabilityService mock
             _modelCapabilityServiceMock = new Mock<IModelCapabilityService>();
             _modelCapabilityServiceMock
                 .Setup(m => m.UpdateChannelModelCapabilities(It.IsAny<int>()))
                 .ReturnsAsync(true);
-            
+
             // Setup mock LLM services
             _ollamaServiceMock = new Mock<OllamaService>(
                 _context,
@@ -90,7 +90,7 @@ namespace TelegramSearchBot.Test.Manage {
                 llmFactoryMock.Object,
                 _modelCapabilityServiceMock.Object,
                 loggerMock.Object);
-            
+
             _messageExtensionServiceMock.Setup(m => m.AddOrUpdateAsync(It.IsAny<MessageExtension>()))
                 .Returns(Task.CompletedTask);
             _geminiServiceMock.Setup(g => g.GetAllModels(It.IsAny<LLMChannel>()))
@@ -303,8 +303,7 @@ namespace TelegramSearchBot.Test.Manage {
 
             // Assert
             Assert.Equal(3, result.Count);
-            foreach (var c in result)
-            {
+            foreach (var c in result) {
                 Assert.Contains("Test", c.Name);
             }
         }

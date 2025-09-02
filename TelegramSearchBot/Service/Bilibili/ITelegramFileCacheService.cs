@@ -2,8 +2,7 @@ using System.Threading.Tasks;
 
 namespace TelegramSearchBot.Service.Bilibili;
 
-public interface ITelegramFileCacheService
-{
+public interface ITelegramFileCacheService {
     /// <summary>
     /// Gets a cached Telegram file_id for a given key (e.g., original media URL or a unique filename).
     /// </summary>

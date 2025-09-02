@@ -1,17 +1,15 @@
-using Microsoft.EntityFrameworkCore;
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
-namespace TelegramSearchBot.Model.Data
-{
+namespace TelegramSearchBot.Model.Data {
     /// <summary>
     /// 记账记录表
     /// </summary>
     [Index(nameof(AccountBookId), nameof(CreatedAt))]
     [Index(nameof(Tag))]
-    public class AccountRecord
-    {
+    public class AccountRecord {
         [Key]
         public long Id { get; set; }
 
@@ -64,4 +62,4 @@ namespace TelegramSearchBot.Model.Data
         [ForeignKey(nameof(AccountBookId))]
         public virtual AccountBook AccountBook { get; set; }
     }
-} 
+}

@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using SkiaSharp;
 using StackExchange.Redis;
 using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Service.Abstract;
 using TelegramSearchBot.Interface.AI.OCR;
+using TelegramSearchBot.Service.Abstract;
 
 namespace TelegramSearchBot.Service.AI.OCR {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]

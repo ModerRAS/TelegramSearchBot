@@ -1,12 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Attributes;
 
 namespace TelegramSearchBot.Service.Storage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -31,7 +31,7 @@ namespace TelegramSearchBot.Service.Storage {
         public virtual async Task AddOrUpdateAsync(MessageExtension extension) {
             var existing = await _context.MessageExtensions
                 .FirstOrDefaultAsync(x => x.MessageDataId == extension.MessageDataId && x.Name == extension.Name);
-            
+
             if (existing != null) {
                 existing.Value = extension.Value;
                 _context.MessageExtensions.Update(existing);
@@ -45,7 +45,7 @@ namespace TelegramSearchBot.Service.Storage {
         public virtual async Task AddOrUpdateAsync(long messageDataId, string name, string value) {
             var existing = await _context.MessageExtensions
                 .FirstOrDefaultAsync(x => x.MessageDataId == messageDataId && x.Name == name);
-            
+
             if (existing != null) {
                 existing.Value = value;
                 _context.MessageExtensions.Update(existing);
@@ -77,7 +77,7 @@ namespace TelegramSearchBot.Service.Storage {
         public async Task<long?> GetMessageIdByMessageIdAndGroupId(long messageId, long groupId) {
             var message = await _context.Messages
                 .FirstOrDefaultAsync(m => m.MessageId == messageId && m.GroupId == groupId);
-            
+
             return message?.Id;
         }
     }

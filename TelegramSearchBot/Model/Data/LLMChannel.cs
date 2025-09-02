@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
@@ -23,6 +23,6 @@ namespace TelegramSearchBot.Model.Data {
         /// </summary>
         public int Priority { get; set; }
 
-        public virtual ICollection<ChannelWithModel> Models { get; set; } 
+        public virtual ICollection<ChannelWithModel> Models { get; set; }
     }
 }

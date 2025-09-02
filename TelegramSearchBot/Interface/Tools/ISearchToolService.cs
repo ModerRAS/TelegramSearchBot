@@ -4,10 +4,8 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Tools;
 
-namespace TelegramSearchBot.Interface.Tools
-{
-    public interface ISearchToolService
-    {
+namespace TelegramSearchBot.Interface.Tools {
+    public interface ISearchToolService {
         Task<SearchToolResult> SearchMessagesInCurrentChatAsync(
             string query,
             ToolContext toolContext,
@@ -24,4 +22,4 @@ namespace TelegramSearchBot.Interface.Tools
             int page = 1,
             int pageSize = 10);
     }
-} 
+}

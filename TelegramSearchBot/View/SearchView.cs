@@ -10,17 +10,14 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.BotAPI;
 
-namespace TelegramSearchBot.View
-{
-    public class SearchView : IView
-    {
+namespace TelegramSearchBot.View {
+    public class SearchView : IView {
         private readonly SendMessage _sendMessage;
         private readonly ITelegramBotClient _botClient;
 
         public SearchView(
             SendMessage sendMessage,
-            ITelegramBotClient botClient)
-        {
+            ITelegramBotClient botClient) {
             _sendMessage = sendMessage;
             _botClient = botClient;
         }
@@ -28,76 +25,64 @@ namespace TelegramSearchBot.View
 
         private long ChatId { get; set; }
         private int ReplyToMessageId { get; set; }
-        private bool IsGroup { get => ChatId < 0;}
+        private bool IsGroup { get => ChatId < 0; }
         private List<Message> Messages { get; set; }
         private int Count { get; set; }
         private int Skip { get; set; }
         private int Take { get; set; }
         private SearchType SearchType { get; set; } = SearchType.InvertedIndex;
         private List<Button> Buttons { get; set; } = new List<Button>();
-        public class Button
-        {
+        public class Button {
             public string Text { get; set; }
             public string CallbackData { get; set; }
-            public Button(string text, string callbackData)
-            {
+            public Button(string text, string callbackData) {
                 Text = text;
                 CallbackData = callbackData;
             }
         }
 
-        public SearchView WithChatId(long chatId)
-        {
+        public SearchView WithChatId(long chatId) {
             ChatId = chatId;
             return this;
         }
 
-        public SearchView WithReplyTo(int messageId)
-        {
+        public SearchView WithReplyTo(int messageId) {
             ReplyToMessageId = messageId;
             return this;
         }
 
-        public SearchView WithMessages(List<Message> messages)
-        {
+        public SearchView WithMessages(List<Message> messages) {
             Messages = messages;
             return this;
         }
 
-        public SearchView WithCount(int count)
-        {
+        public SearchView WithCount(int count) {
             Count = count;
             return this;
         }
 
-        public SearchView WithSkip(int skip)
-        {
+        public SearchView WithSkip(int skip) {
             Skip = skip;
             return this;
         }
 
-        public SearchView WithTake(int take)
-        {
+        public SearchView WithTake(int take) {
             Take = take;
             return this;
         }
 
-        public SearchView WithSearchType(SearchType searchType)
-        {
+        public SearchView WithSearchType(SearchType searchType) {
             SearchType = searchType;
             return this;
         }
 
-        public SearchView AddButton(string text, string callbackData)
-        {
+        public SearchView AddButton(string text, string callbackData) {
             Buttons.Add(new Button(text, callbackData));
             return this;
         }
 
-        public async Task Render()
-        {
-            var messageText = RenderSearchResults(new SearchOption
-            {
+        public async Task Render() {
+            var messageText = RenderSearchResults(new SearchOption {
                 ChatId = this.ChatId,
                 ReplyToMessageId = this.ReplyToMessageId,
                 IsGroup = this.IsGroup,
@@ -108,8 +93,7 @@ namespace TelegramSearchBot.View
                 SearchType = this.SearchType
             });
 
-            var replyParameters = new Telegram.Bot.Types.ReplyParameters
-            {
+            var replyParameters = new Telegram.Bot.Types.ReplyParameters {
                 MessageId = this.ReplyToMessageId
             };
 
@@ -148,35 +132,29 @@ namespace TelegramSearchBot.View
 {{- end -}}
 ";
 
-        public string RenderSearchResults(SearchOption searchOption)
-        {
+        public string RenderSearchResults(SearchOption searchOption) {
             var template = Template.Parse(SearchResultTemplate);
-            return template.Render(new
-            {
+            return template.Render(new {
                 messages = searchOption.Messages,
-                search_option = new
-                {
+                search_option = new {
                     count = searchOption.Count,
                     skip = searchOption.Skip,
                     take = searchOption.Take,
-                    search_type = (int)searchOption.SearchType
+                    search_type = ( int ) searchOption.SearchType
                 }
             });
         }
 
-        public async Task SendSearchResults(SearchView viewModel)
-        {
+        public async Task SendSearchResults(SearchView viewModel) {
             await viewModel.Render();
         }
 
 
-        public List<string> ConvertToMarkdownLinks(IEnumerable<Model.Data.Message> messages)
-        {
+        public List<string> ConvertToMarkdownLinks(IEnumerable<Model.Data.Message> messages) {
             var template = Template.Parse("[{{content | string.truncate 30 | string.replace '\n' '' | string.replace '\r' ''}}](https://t.me/c/{{group_id | string.slice 4}}/{{message_id}})");
 
             var result = new List<string>();
-            foreach (var message in messages)
-            {
+            foreach (var message in messages) {
                 result.Add(template.Render(message));
             }
             return result;

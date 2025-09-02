@@ -8,10 +8,8 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Model;
 
-namespace TelegramSearchBot.Interface
-{
-    public interface ISendMessageService : IService
-    {
+namespace TelegramSearchBot.Interface {
+    public interface ISendMessageService : IService {
         #region Fallback Methods
         Task TrySendMessageWithFallback(
             long chatId,
@@ -70,4 +68,4 @@ namespace TelegramSearchBot.Interface
             CancellationToken cancellationToken = default);
         #endregion
     }
-} 
+}

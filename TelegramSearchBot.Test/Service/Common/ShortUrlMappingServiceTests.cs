@@ -4,36 +4,31 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Common;
 using Xunit;
 
-namespace TelegramSearchBot.Test.Service.Common
-{
-    public class ShortUrlMappingServiceTests : IDisposable
-    {
+namespace TelegramSearchBot.Test.Service.Common {
+    public class ShortUrlMappingServiceTests : IDisposable {
         private readonly DataDbContext _dbContext;
         private readonly ShortUrlMappingService _service;
 
-        public ShortUrlMappingServiceTests()
-        {
+        public ShortUrlMappingServiceTests() {
             var options = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
-            
+
             _dbContext = new DataDbContext(options);
             _service = new ShortUrlMappingService(_dbContext);
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             _dbContext.Dispose();
         }
 
         [Fact]
-        public async Task SaveUrlMappingsAsync_ShouldSaveNewMappings()
-        {
+        public async Task SaveUrlMappingsAsync_ShouldSaveNewMappings() {
             // Arrange
             var mappings = new List<ShortUrlMapping>
             {
@@ -50,8 +45,7 @@ namespace TelegramSearchBot.Test.Service.Common
         }
 
         [Fact]
-        public async Task SaveUrlMappingsAsync_ShouldNotSaveDuplicates()
-        {
+        public async Task SaveUrlMappingsAsync_ShouldNotSaveDuplicates() {
             // Arrange
             var existing = new ShortUrlMapping { OriginalUrl = "short1", ExpandedUrl = "long1" };
             await _dbContext.ShortUrlMappings.AddAsync(existing);
@@ -72,8 +66,7 @@ namespace TelegramSearchBot.Test.Service.Common
         }
 
         [Fact]
-        public async Task GetUrlMappingsAsync_ShouldReturnCorrectMappings()
-        {
+        public async Task GetUrlMappingsAsync_ShouldReturnCorrectMappings() {
             // Arrange
             await _dbContext.ShortUrlMappings.AddRangeAsync(new[]
             {
@@ -93,8 +86,7 @@ namespace TelegramSearchBot.Test.Service.Common
         }
 
         [Fact]
-        public async Task GetUrlMappingsAsync_ShouldIgnoreEmptyExpandedUrls()
-        {
+        public async Task GetUrlMappingsAsync_ShouldIgnoreEmptyExpandedUrls() {
             // Arrange
             await _dbContext.ShortUrlMappings.AddRangeAsync(new[]
             {

@@ -1,9 +1,9 @@
-﻿using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Serilog;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;

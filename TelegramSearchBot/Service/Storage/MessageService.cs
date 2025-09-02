@@ -1,25 +1,23 @@
-﻿using System.Linq;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using ICU4N.Text;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Nito.AsyncEx;
+using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
-using ICU4N.Text;
-using System;
-using Telegram.Bot.Types.Enums;
-using System.Collections.Generic;
-using Nito.AsyncEx;
-using Microsoft.Extensions.Logging;
-using MediatR;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Notifications;
-using TelegramSearchBot.Attributes;
-using Microsoft.EntityFrameworkCore;
 
-namespace TelegramSearchBot.Service.Storage
-{
+namespace TelegramSearchBot.Service.Storage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class MessageService : IMessageService, IService
-    {
+    public class MessageService : IMessageService, IService {
         protected readonly LuceneManager lucene;
         protected readonly SendMessage Send;
         protected readonly DataDbContext DataContext;
@@ -28,8 +26,7 @@ namespace TelegramSearchBot.Service.Storage
         private static readonly AsyncLock _asyncLock = new AsyncLock();
         public string ServiceName => "MessageService";
 
-        public MessageService(ILogger<MessageService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context, IMediator mediator)
-        {
+        public MessageService(ILogger<MessageService> logger, LuceneManager lucene, SendMessage Send, DataDbContext context, IMediator mediator) {
             this.lucene = lucene;
             this.Send = Send;
             DataContext = context;
@@ -37,32 +34,25 @@ namespace TelegramSearchBot.Service.Storage
             _mediator = mediator;
         }
 
-        public async Task AddToLucene(MessageOption messageOption)
-        {
+        public async Task AddToLucene(MessageOption messageOption) {
             var message = await DataContext.Messages
                 .Include(m => m.MessageExtensions)
                 .FirstOrDefaultAsync(m => m.Id == messageOption.MessageDataId);
-            
-            if (message != null)
-            {
+
+            if (message != null) {
                 await lucene.WriteDocumentAsync(message);
-            }
-            else
-            {
+            } else {
                 Logger.LogWarning($"Message not found in database: {messageOption.MessageDataId}");
             }
         }
 
-        public async Task<long> AddToSqlite(MessageOption messageOption)
-        {
+        public async Task<long> AddToSqlite(MessageOption messageOption) {
             var UserIsInGroup = from s in DataContext.UsersWithGroup
                                 where s.UserId == messageOption.UserId &&
                                       s.GroupId == messageOption.ChatId
                                 select s;
-            if (!UserIsInGroup.Any())
-            {
-                await DataContext.UsersWithGroup.AddAsync(new UserWithGroup()
-                {
+            if (!UserIsInGroup.Any()) {
+                await DataContext.UsersWithGroup.AddAsync(new UserWithGroup() {
                     GroupId = messageOption.ChatId,
                     UserId = messageOption.UserId
                 });
@@ -71,10 +61,8 @@ namespace TelegramSearchBot.Service.Storage
             var UserDataExists = from s in DataContext.UserData
                                  where s.Id == messageOption.User.Id
                                  select s;
-            if (!UserDataExists.Any() && messageOption.User != null)
-            {
-                await DataContext.UserData.AddAsync(new UserData()
-                {
+            if (!UserDataExists.Any() && messageOption.User != null) {
+                await DataContext.UserData.AddAsync(new UserData() {
                     Id = messageOption.User.Id,
                     IsBot = messageOption.User.IsBot,
                     FirstName = messageOption.User.FirstName,
@@ -87,10 +75,8 @@ namespace TelegramSearchBot.Service.Storage
             var GroupDataExists = from s in DataContext.GroupData
                                   where s.Id == messageOption.Chat.Id
                                   select s;
-            if (!GroupDataExists.Any() && messageOption.Chat != null)
-            {
-                await DataContext.GroupData.AddAsync(new GroupData()
-                {
+            if (!GroupDataExists.Any() && messageOption.Chat != null) {
+                await DataContext.GroupData.AddAsync(new GroupData() {
                     Id = messageOption.Chat.Id,
                     IsForum = messageOption.Chat.IsForum,
                     Title = messageOption.Chat.Title,
@@ -104,24 +90,19 @@ namespace TelegramSearchBot.Service.Storage
                 Content = messageOption.Content,
                 DateTime = messageOption.DateTime,
             };
-            if (messageOption.ReplyTo != 0)
-            {
+            if (messageOption.ReplyTo != 0) {
                 message.ReplyToMessageId = messageOption.ReplyTo;
                 await DataContext.Messages.AddAsync(message);
-            }
-            else
-            {
+            } else {
                 await DataContext.Messages.AddAsync(message);
             }
             await DataContext.SaveChangesAsync();
             return message.Id;
         }
 
-        public async Task<long> ExecuteAsync(MessageOption messageOption)
-        {
+        public async Task<long> ExecuteAsync(MessageOption messageOption) {
             Logger.LogInformation($"UserId: {messageOption.UserId}\nUserName: {messageOption.User.Username} {messageOption.User.FirstName} {messageOption.User.LastName}\nChatId: {messageOption.ChatId}\nChatName: {messageOption.Chat.Username}\nMessage: {messageOption.MessageId} {messageOption.Content}");
-            using (await _asyncLock.LockAsync())
-            {
+            using (await _asyncLock.LockAsync()) {
                 return await AddToSqlite(messageOption);
             }
         }

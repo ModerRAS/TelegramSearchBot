@@ -2,8 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace TelegramSearchBot.Model.Data;
 
-public class AppConfigurationItem
-{
+public class AppConfigurationItem {
     [Key]
     public string Key { get; set; }
 

@@ -2,10 +2,8 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Tools;
 
-namespace TelegramSearchBot.Interface.Tools
-{
-    public interface ISequentialThinkingService
-    {
+namespace TelegramSearchBot.Interface.Tools {
+    public interface ISequentialThinkingService {
         Task<object> ProcessThoughtAsync(
             ToolContext toolContext,
             string input,
@@ -18,4 +16,4 @@ namespace TelegramSearchBot.Interface.Tools
             string branchId = null,
             bool? needsMoreThoughts = null);
     }
-} 
+}

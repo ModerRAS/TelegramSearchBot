@@ -1,21 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Text;
-using Microsoft.Extensions.Logging;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface.AI.LLM;
 
-namespace TelegramSearchBot.Service.Vector
-{
+namespace TelegramSearchBot.Service.Vector {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
-    public class ConversationSegmentationService : IService
-    {
+    public class ConversationSegmentationService : IService {
         public string ServiceName => "ConversationSegmentationService";
 
         private readonly DataDbContext _dbContext;
@@ -32,8 +30,7 @@ namespace TelegramSearchBot.Service.Vector
         public ConversationSegmentationService(
             DataDbContext dbContext,
             ILogger<ConversationSegmentationService> logger,
-            IGeneralLLMService llmService)
-        {
+            IGeneralLLMService llmService) {
             _dbContext = dbContext;
             _logger = logger;
             _llmService = llmService;
@@ -42,20 +39,17 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 为指定群组创建对话段
         /// </summary>
-        public async Task<List<ConversationSegment>> CreateSegmentsForGroupAsync(long groupId, DateTime? startTime = null)
-        {
+        public async Task<List<ConversationSegment>> CreateSegmentsForGroupAsync(long groupId, DateTime? startTime = null) {
             var query = _dbContext.Messages
                 .Where(m => m.GroupId == groupId);
 
-            if (startTime.HasValue)
-            {
+            if (startTime.HasValue) {
                 query = query.Where(m => m.DateTime >= startTime.Value);
             }
 
             var messages = await query.OrderBy(m => m.DateTime).ToListAsync();
-            
-            if (messages.Count < MinMessagesPerSegment)
-            {
+
+            if (messages.Count < MinMessagesPerSegment) {
                 _logger.LogInformation($"群组 {groupId} 的消息数量不足，跳过分段");
                 return new List<ConversationSegment>();
             }
@@ -63,40 +57,37 @@ namespace TelegramSearchBot.Service.Vector
             _logger.LogInformation($"开始为群组 {groupId} 分段，消息数量: {messages.Count}");
 
             var segments = await SegmentMessages(messages);
-            
+
             // 保存分段到数据库
             await SaveSegmentsToDatabase(segments);
-            
+
             _logger.LogInformation($"群组 {groupId} 分段完成，生成了 {segments.Count} 个对话段");
-            
+
             return segments;
         }
 
         /// <summary>
         /// 将消息列表分段
         /// </summary>
-        private async Task<List<ConversationSegment>> SegmentMessages(List<Message> messages)
-        {
+        private async Task<List<ConversationSegment>> SegmentMessages(List<Message> messages) {
             var segments = new List<ConversationSegment>();
             var currentSegmentMessages = new List<Message>();
             var lastMessageTime = DateTime.MinValue;
             var currentTopicKeywords = new HashSet<string>();
 
-            foreach (var message in messages)
-            {
+            foreach (var message in messages) {
                 // 检查是否需要开始新的段
                 bool shouldStartNewSegment = ShouldStartNewSegment(
-                    currentSegmentMessages, 
-                    message, 
-                    lastMessageTime, 
+                    currentSegmentMessages,
+                    message,
+                    lastMessageTime,
                     currentTopicKeywords);
 
-                if (shouldStartNewSegment && currentSegmentMessages.Count >= MinMessagesPerSegment)
-                {
+                if (shouldStartNewSegment && currentSegmentMessages.Count >= MinMessagesPerSegment) {
                     // 创建当前段
                     var segment = await CreateSegmentFromMessages(currentSegmentMessages);
                     segments.Add(segment);
-                    
+
                     // 重置当前段
                     currentSegmentMessages.Clear();
                     currentTopicKeywords.Clear();
@@ -104,18 +95,16 @@ namespace TelegramSearchBot.Service.Vector
 
                 currentSegmentMessages.Add(message);
                 lastMessageTime = message.DateTime;
-                
+
                 // 更新话题关键词
                 var messageKeywords = ExtractKeywords(message.Content);
-                foreach (var keyword in messageKeywords)
-                {
+                foreach (var keyword in messageKeywords) {
                     currentTopicKeywords.Add(keyword);
                 }
             }
 
             // 处理最后一段
-            if (currentSegmentMessages.Count >= MinMessagesPerSegment)
-            {
+            if (currentSegmentMessages.Count >= MinMessagesPerSegment) {
                 var finalSegment = await CreateSegmentFromMessages(currentSegmentMessages);
                 segments.Add(finalSegment);
             }
@@ -127,11 +116,10 @@ namespace TelegramSearchBot.Service.Vector
         /// 判断是否应该开始新的段
         /// </summary>
         private bool ShouldStartNewSegment(
-            List<Message> currentMessages, 
-            Message newMessage, 
+            List<Message> currentMessages,
+            Message newMessage,
             DateTime lastMessageTime,
-            HashSet<string> currentTopicKeywords)
-        {
+            HashSet<string> currentTopicKeywords) {
             if (currentMessages.Count == 0)
                 return false;
 
@@ -145,13 +133,12 @@ namespace TelegramSearchBot.Service.Vector
                 return true;
 
             // 3. 字符数达到上限
-            var totalLength = currentMessages.Sum(m => m.Content?.Length ?? 0) + (newMessage.Content?.Length ?? 0);
+            var totalLength = currentMessages.Sum(m => m.Content?.Length ?? 0) + ( newMessage.Content?.Length ?? 0 );
             if (totalLength > MaxSegmentLengthChars)
                 return true;
 
             // 4. 话题发生明显变化
-            if (currentMessages.Count >= MinMessagesPerSegment)
-            {
+            if (currentMessages.Count >= MinMessagesPerSegment) {
                 var newMessageKeywords = ExtractKeywords(newMessage.Content);
                 if (HasTopicChanged(currentTopicKeywords, newMessageKeywords))
                     return true;
@@ -167,85 +154,78 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 从消息列表创建对话段
         /// </summary>
-        private async Task<ConversationSegment> CreateSegmentFromMessages(List<Message> messages)
-        {
+        private async Task<ConversationSegment> CreateSegmentFromMessages(List<Message> messages) {
             var firstMessage = messages.First();
             var lastMessage = messages.Last();
             var participants = messages.Select(m => m.FromUserId).Distinct().Count();
-            
+
             // 获取用户信息和消息扩展信息
             var userIds = messages.Select(m => m.FromUserId).Distinct().ToList();
             var users = await _dbContext.UserData
                 .Where(u => userIds.Contains(u.Id))
                 .ToDictionaryAsync(u => u.Id, u => u);
-            
+
             var messageIds = messages.Select(m => m.Id).ToList();
             var messageExtensions = await _dbContext.MessageExtensions
                 .Where(me => messageIds.Contains(me.MessageDataId))
                 .ToListAsync();
-            
+
             var messageExtensionsByMessageId = messageExtensions
                 .GroupBy(me => me.MessageDataId)
                 .ToDictionary(g => g.Key, g => g.ToList());
-            
+
             // 构建完整的对话内容，包含用户名和扩展信息
             var contentBuilder = new StringBuilder();
-            foreach (var message in messages)
-            {
-                var userName = users.TryGetValue(message.FromUserId, out var user) 
-                    ? $"{user.FirstName} {user.LastName}".Trim() 
+            foreach (var message in messages) {
+                var userName = users.TryGetValue(message.FromUserId, out var user)
+                    ? $"{user.FirstName} {user.LastName}".Trim()
                     : $"User({message.FromUserId})";
-                
+
                 contentBuilder.AppendLine($"{userName}: {message.Content}");
-                
+
                 // 添加消息扩展信息
-                if (messageExtensionsByMessageId.TryGetValue(message.Id, out var extensions))
-                {
-                    foreach (var extension in extensions)
-                    {
+                if (messageExtensionsByMessageId.TryGetValue(message.Id, out var extensions)) {
+                    foreach (var extension in extensions) {
                         contentBuilder.AppendLine($"[{extension.Name}]: {extension.Value}");
                     }
                 }
             }
-            
+
             var fullContent = contentBuilder.ToString();
-            
+
             // 提取话题关键词
             var allKeywords = messages.SelectMany(m => ExtractKeywords(m.Content)).Distinct().ToList();
-            
+
             // 如果没有提取到关键词，使用备用策略
-            if (!allKeywords.Any())
-            {
+            if (!allKeywords.Any()) {
                 // 使用最常见的词汇作为关键词，不过滤停用词
-                var allWords = messages.SelectMany(m => 
-                    (m.Content ?? "").Split(new char[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                var allWords = messages.SelectMany(m =>
+                    ( m.Content ?? "" ).Split(new char[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
                     .Where(w => w.Length > 1)
                     .Select(w => w.Trim().ToLower())
                 ).Where(w => !string.IsNullOrEmpty(w));
-                
+
                 allKeywords = allWords.GroupBy(w => w)
                     .OrderByDescending(g => g.Count())
                     .Take(10)
                     .Select(g => g.Key)
                     .ToList();
             }
-            
+
             // 如果还是没有关键词，使用时间和参与者信息作为关键词
-            if (!allKeywords.Any())
-            {
+            if (!allKeywords.Any()) {
                 var dateKeyword = firstMessage.DateTime.ToString("yyyy-MM-dd");
                 var timeKeyword = firstMessage.DateTime.ToString("HH时");
                 var participantKeyword = $"{participants}人对话";
                 allKeywords = new List<string> { dateKeyword, timeKeyword, participantKeyword };
             }
-            
+
             var topicKeywords = string.Join(",", allKeywords.Take(10)); // 取前10个关键词
 
             // 生成内容摘要
             var contentSummary = await GenerateContentSummary(fullContent);
 
-            var segment = new ConversationSegment
-            {
+            var segment = new ConversationSegment {
                 GroupId = firstMessage.GroupId,
                 StartTime = firstMessage.DateTime,
                 EndTime = lastMessage.DateTime,
@@ -257,8 +237,7 @@ namespace TelegramSearchBot.Service.Vector
                 TopicKeywords = topicKeywords,
                 FullContent = fullContent,
                 VectorId = Guid.NewGuid().ToString(),
-                Messages = messages.Select((m, index) => new ConversationSegmentMessage
-                {
+                Messages = messages.Select((m, index) => new ConversationSegmentMessage {
                     MessageDataId = m.Id,
                     SequenceOrder = index + 1
                 }).ToList()
@@ -270,19 +249,18 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 提取关键词
         /// </summary>
-        private List<string> ExtractKeywords(string content)
-        {
+        private List<string> ExtractKeywords(string content) {
             if (string.IsNullOrWhiteSpace(content))
                 return new List<string>();
 
             // 简单的关键词提取，支持中英文分词
             var separators = new char[] {
-                ' ', '\n', '\r', '\t', '。', '，', '？', '！', '、', '：', '；', 
+                ' ', '\n', '\r', '\t', '。', '，', '？', '！', '、', '：', '；',
                 '"', '"', '\'', '\'', '(', ')', '[', ']', '{', '}', '|',
-                '\\', '/', '=', '+', '-', '*', '&', '%', '$', '#', '@', '~', '`' 
+                '\\', '/', '=', '+', '-', '*', '&', '%', '$', '#', '@', '~', '`'
             };
             var words = content.Split(separators, StringSplitOptions.RemoveEmptyEntries);
-            
+
             var keywords = words
                 .Where(w => w.Length >= 2 && w.Length < 30) // 放宽长度限制
                 .Where(w => !IsStopWord(w)) // 过滤停用词
@@ -290,10 +268,9 @@ namespace TelegramSearchBot.Service.Vector
                 .Where(w => !string.IsNullOrEmpty(w))
                 .Distinct()
                 .ToList();
-            
+
             // 如果关键词太少，降低门槛
-            if (keywords.Count < 3)
-            {
+            if (keywords.Count < 3) {
                 keywords = words
                     .Where(w => w.Length >= 1 && w.Length < 30) // 进一步放宽
                     .Where(w => !IsCommonStopWord(w)) // 只过滤最常见的停用词
@@ -302,15 +279,14 @@ namespace TelegramSearchBot.Service.Vector
                     .Distinct()
                     .ToList();
             }
-            
+
             return keywords;
         }
 
         /// <summary>
         /// 检查是否为停用词
         /// </summary>
-        private bool IsStopWord(string word)
-        {
+        private bool IsStopWord(string word) {
             var stopWords = new HashSet<string>
             {
                 "的", "了", "在", "是", "我", "你", "他", "她", "它", "我们", "你们", "他们",
@@ -321,36 +297,34 @@ namespace TelegramSearchBot.Service.Vector
                 "but", "or", "not", "if", "when", "where", "how", "why", "what", "who", "which",
                 "this", "that", "these", "those", "here", "there", "now", "then", "yes", "no"
             };
-            
+
             return stopWords.Contains(word.ToLower());
         }
 
         /// <summary>
         /// 检查是否为最常见的停用词（更严格的过滤）
         /// </summary>
-        private bool IsCommonStopWord(string word)
-        {
+        private bool IsCommonStopWord(string word) {
             var commonStopWords = new HashSet<string>
             {
                 "的", "了", "在", "是", "我", "你", "他", "它", "这", "那", "什么",
                 "and", "the", "a", "an", "is", "are", "was", "were", "to", "for", "of", "with", "by"
             };
-            
+
             return commonStopWords.Contains(word.ToLower());
         }
 
         /// <summary>
         /// 检查话题是否发生变化
         /// </summary>
-        private bool HasTopicChanged(HashSet<string> currentKeywords, List<string> newKeywords)
-        {
+        private bool HasTopicChanged(HashSet<string> currentKeywords, List<string> newKeywords) {
             if (currentKeywords.Count == 0 || newKeywords.Count == 0)
                 return false;
 
             // 计算关键词重叠率
             var intersection = currentKeywords.Intersect(newKeywords).Count();
             var union = currentKeywords.Union(newKeywords).Count();
-            var similarity = (double)intersection / union;
+            var similarity = ( double ) intersection / union;
 
             return similarity < TopicSimilarityThreshold;
         }
@@ -358,10 +332,9 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 检测话题转换信号
         /// </summary>
-        private bool HasTopicTransitionSignal(Message message)
-        {
+        private bool HasTopicTransitionSignal(Message message) {
             var content = message.Content?.ToLower() ?? "";
-            
+
             // 检测转换信号
             var transitionSignals = new[]
             {
@@ -376,10 +349,8 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 生成内容摘要
         /// </summary>
-        private async Task<string> GenerateContentSummary(string fullContent)
-        {
-            try
-            {
+        private async Task<string> GenerateContentSummary(string fullContent) {
+            try {
                 // 如果内容较短，直接截取
                 if (fullContent.Length <= 100)
                     return fullContent;
@@ -390,9 +361,7 @@ namespace TelegramSearchBot.Service.Vector
                     summary += "...";
 
                 return summary;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 _logger.LogError(ex, "生成内容摘要失败");
                 return fullContent.Substring(0, Math.Min(50, fullContent.Length)) + "...";
             }
@@ -401,21 +370,18 @@ namespace TelegramSearchBot.Service.Vector
         /// <summary>
         /// 保存分段到数据库
         /// </summary>
-        private async Task SaveSegmentsToDatabase(List<ConversationSegment> segments)
-        {
-            foreach (var segment in segments)
-            {
+        private async Task SaveSegmentsToDatabase(List<ConversationSegment> segments) {
+            foreach (var segment in segments) {
                 _dbContext.ConversationSegments.Add(segment);
             }
-            
+
             await _dbContext.SaveChangesAsync();
         }
 
         /// <summary>
         /// 获取需要重新分段的群组（有新消息的群组）
         /// </summary>
-        public async Task<List<long>> GetGroupsNeedingResegmentation()
-        {
+        public async Task<List<long>> GetGroupsNeedingResegmentation() {
             /*
              * 旧实现使用 Any 子查询逐条比对，SQLite/SQL Server 都会做嵌套循环，
              * 在百万级 Messages 表上极慢且可能长时间持有锁。
@@ -443,17 +409,14 @@ namespace TelegramSearchBot.Service.Vector
             // STEP 3：比对
             var needResegmentation = new List<long>();
 
-            foreach (var msg in lastMsgTimes)
-            {
-                if (!segDict.TryGetValue(msg.GroupId, out var lastEnd))
-                {
+            foreach (var msg in lastMsgTimes) {
+                if (!segDict.TryGetValue(msg.GroupId, out var lastEnd)) {
                     // 该群组没有任何分段
                     needResegmentation.Add(msg.GroupId);
                     continue;
                 }
 
-                if (msg.LastMsgTime > lastEnd)
-                {
+                if (msg.LastMsgTime > lastEnd) {
                     // 有新消息超出最后一个段的范围
                     needResegmentation.Add(msg.GroupId);
                 }
@@ -462,4 +425,4 @@ namespace TelegramSearchBot.Service.Vector
             return needResegmentation;
         }
     }
-} 
+}

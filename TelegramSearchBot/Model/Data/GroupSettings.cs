@@ -1,17 +1,15 @@
-﻿using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 
-namespace TelegramSearchBot.Model.Data
-{
+namespace TelegramSearchBot.Model.Data {
 
     [Index(nameof(GroupId), IsUnique = true)]
-    public class GroupSettings
-    {
+    public class GroupSettings {
         [Key]
         public long Id { get; set; }
         [Required]

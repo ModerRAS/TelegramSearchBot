@@ -1,17 +1,15 @@
-using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
-namespace TelegramSearchBot.Model.Data
-{
+namespace TelegramSearchBot.Model.Data {
     /// <summary>
     /// 账本表
     /// </summary>
     [Index(nameof(GroupId), nameof(Name), IsUnique = true)]
-    public class AccountBook
-    {
+    public class AccountBook {
         [Key]
         public long Id { get; set; }
 
@@ -55,4 +53,4 @@ namespace TelegramSearchBot.Model.Data
         /// </summary>
         public virtual ICollection<AccountRecord> Records { get; set; } = new List<AccountRecord>();
     }
-} 
+}

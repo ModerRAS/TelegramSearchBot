@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,14 +6,14 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.Manage;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface.Manage;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -56,16 +56,16 @@ namespace TelegramSearchBot.Service.Manage {
 
                 await DataContext.LLMChannels.AddAsync(channel);
                 await DataContext.SaveChangesAsync();
-                
+
                 _logger.LogInformation("成功添加新通道: {ChannelName} ({Provider})", Name, Provider);
-                
+
                 IEnumerable<string> models;
                 var service = _LLMFactory.GetLLMService(Provider);
                 if (service == null) {
                     _logger.LogWarning("未找到提供商 {Provider} 的LLM服务", Provider);
                     return -1;
                 }
-                
+
                 models = await service.GetAllModels(channel);
                 var list = new List<ChannelWithModel>();
                 foreach (var e in models) {
@@ -73,19 +73,19 @@ namespace TelegramSearchBot.Service.Manage {
                 }
                 await DataContext.ChannelsWithModel.AddRangeAsync(list);
                 await DataContext.SaveChangesAsync();
-                
+
                 _logger.LogInformation("为新通道 {ChannelName} 添加了 {Count} 个模型", Name, list.Count);
-                
+
                 // 获取并存储模型能力信息
                 _logger.LogInformation("正在获取通道 {ChannelName} 的模型能力信息...", Name);
                 bool capabilityUpdateSuccess = await _modelCapabilityService.UpdateChannelModelCapabilities(channel.Id);
-                
+
                 if (capabilityUpdateSuccess) {
                     _logger.LogInformation("成功获取通道 {ChannelName} 的模型能力信息", Name);
                 } else {
                     _logger.LogWarning("获取通道 {ChannelName} 的模型能力信息失败", Name);
                 }
-                
+
                 return channel.Id;
             } catch (Exception ex) {
                 _logger.LogError(ex, "添加通道 {Name} ({Provider}) 时出错", Name, Provider);
@@ -98,18 +98,18 @@ namespace TelegramSearchBot.Service.Manage {
             var channels = from s in DataContext.LLMChannels
                            select s;
             IEnumerable<string> models;
-            
+
             _logger.LogInformation("开始刷新所有通道的模型和能力信息...");
-            
+
             foreach (var channel in channels) {
                 var service = _LLMFactory.GetLLMService(channel.Provider);
                 if (service == null) {
                     _logger.LogWarning("未找到通道 {ChannelName} ({Provider}) 的LLM服务", channel.Name, channel.Provider);
                     continue;
                 }
-                
+
                 _logger.LogInformation("正在刷新通道: {ChannelName} ({Provider})", channel.Name, channel.Provider);
-                
+
                 try {
                     models = await service.GetAllModels(channel);
 
@@ -132,21 +132,20 @@ namespace TelegramSearchBot.Service.Manage {
                         count += list.Count;
                         _logger.LogInformation("为通道 {ChannelName} 添加了 {Count} 个新模型", channel.Name, list.Count);
                     }
-                    
+
                     // 保存新模型到数据库
                     await DataContext.SaveChangesAsync();
-                    
+
                     // 刷新此通道的模型能力信息
                     _logger.LogInformation("正在更新通道 {ChannelName} 的模型能力信息...", channel.Name);
                     bool capabilityUpdateSuccess = await _modelCapabilityService.UpdateChannelModelCapabilities(channel.Id);
-                    
+
                     if (capabilityUpdateSuccess) {
                         _logger.LogInformation("成功更新通道 {ChannelName} 的模型能力信息", channel.Name);
                     } else {
                         _logger.LogWarning("更新通道 {ChannelName} 的模型能力信息失败", channel.Name);
                     }
-                }
-                catch (Exception ex) {
+                } catch (Exception ex) {
                     _logger.LogError(ex, "刷新通道 {ChannelName} ({Provider}) 时出错", channel.Name, channel.Provider);
                 }
             }
@@ -381,8 +380,7 @@ namespace TelegramSearchBot.Service.Manage {
             }
         }
 
-        public async Task<List<string>> GetModelsByChannelId(long channelId)
-        {
+        public async Task<List<string>> GetModelsByChannelId(long channelId) {
             var models = await DataContext.ChannelsWithModel
                 .Where(c => c.LLMChannelId == channelId)
                 .Select(c => c.ModelName)

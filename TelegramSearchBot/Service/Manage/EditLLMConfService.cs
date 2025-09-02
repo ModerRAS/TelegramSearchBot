@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
@@ -7,14 +7,14 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Interface.Manage;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface.Manage;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -286,26 +286,23 @@ namespace TelegramSearchBot.Service.Manage {
             var data = await redis.GetDataAsync();
             var parts = data.Split('|');
 
-            if (parts.Length < 2)
-            {
+            if (parts.Length < 2) {
                 return (false, "内部错误：模型数据格式不正确");
             }
 
             var removeChannelId = int.Parse(parts[0]);
             var modelList = parts[1].Split(',');
 
-            if (modelList.Length == 0 || (modelList.Length == 1 && string.IsNullOrEmpty(modelList[0])))
-            {
-                 return (true, "该渠道下没有可移除的模型");
+            if (modelList.Length == 0 || ( modelList.Length == 1 && string.IsNullOrEmpty(modelList[0]) )) {
+                return (true, "该渠道下没有可移除的模型");
             }
 
             if (!int.TryParse(command, out var modelIndex) || modelIndex < 1 || modelIndex > modelList.Length) {
                 return (true, "请输入有效的模型序号");
             }
 
-            if (modelIndex - 1 < 0 || modelIndex - 1 >= modelList.Length)
-            {
-                 return (true, "内部错误：无效的模型序号");
+            if (modelIndex - 1 < 0 || modelIndex - 1 >= modelList.Length) {
+                return (true, "内部错误：无效的模型序号");
             }
 
             var modelName = modelList[modelIndex - 1];
@@ -377,13 +374,12 @@ namespace TelegramSearchBot.Service.Manage {
 
             try {
                 var updateResult = await updater(editId, command);
-                
+
                 // 清理状态
                 await redis.DeleteKeysAsync();
 
                 return (true, updateResult ? "更新成功" : "更新失败");
-            }
-            catch (Exception) {
+            } catch (Exception) {
                 // 清理状态
                 await redis.DeleteKeysAsync();
                 return (true, "更新过程中发生错误");
@@ -437,7 +433,7 @@ namespace TelegramSearchBot.Service.Manage {
         public async Task<(bool, string)> ExecuteAsync(string Command, long ChatId) {
             var redis = new EditLLMConfRedisHelper(connectionMultiplexer, ChatId);
             var currentState = await redis.GetStateAsync();
-            
+
             // 处理直接命令
             var directCommandResult = await HandleDirectCommandsAsync(redis, Command);
             if (directCommandResult.HasValue) {
@@ -466,54 +462,54 @@ namespace TelegramSearchBot.Service.Manage {
 
         private async Task<(bool, string)?> HandleDirectCommandsAsync(EditLLMConfRedisHelper redis, string command) {
             var cmd = command.Trim();
-            
+
             if (cmd.Equals("刷新所有渠道", StringComparison.OrdinalIgnoreCase)) {
                 var count = await Helper.RefreshAllChannel();
                 return (true, $"已添加{count}个模型");
             }
-            
+
             if (cmd.Equals("设置重试次数", StringComparison.OrdinalIgnoreCase)) {
                 await redis.SetStateAsync(LLMConfState.SettingMaxRetry.GetDescription());
                 return (true, "请输入最大重试次数(默认100):");
             }
-            
+
             if (cmd.Equals("设置图片重试次数", StringComparison.OrdinalIgnoreCase)) {
                 await redis.SetStateAsync(LLMConfState.SettingMaxImageRetry.GetDescription());
                 return (true, "请输入图片处理最大重试次数(默认1000):");
             }
-            
+
             if (cmd.Equals("设置图片模型", StringComparison.OrdinalIgnoreCase)) {
                 await redis.SetStateAsync(LLMConfState.SettingAltPhotoModel.GetDescription());
                 return (true, "请输入图片分析使用的模型名称:");
             }
-            
+
             return null;
         }
 
         private async Task<(bool, string)?> HandleStateBasedCommandsAsync(EditLLMConfRedisHelper redis, string command) {
             var cmd = command.Trim();
-            
+
             if (cmd.Equals("新建渠道", StringComparison.OrdinalIgnoreCase)) {
                 await redis.SetStateAsync(LLMConfState.AwaitingName.GetDescription());
                 return (true, "请输入渠道的名称");
             }
-            
+
             if (cmd.Equals("编辑渠道", StringComparison.OrdinalIgnoreCase)) {
                 return await HandleEditChannelCommandAsync(redis);
             }
-            
+
             if (cmd.Equals("添加模型", StringComparison.OrdinalIgnoreCase)) {
                 return await HandleAddModelCommandAsync(redis);
             }
-            
+
             if (cmd.Equals("移除模型", StringComparison.OrdinalIgnoreCase)) {
                 return await HandleRemoveModelCommandAsync(redis);
             }
-            
+
             if (cmd.Equals("查看模型", StringComparison.OrdinalIgnoreCase)) {
                 return await HandleViewModelCommandAsync(redis);
             }
-            
+
             return null;
         }
 

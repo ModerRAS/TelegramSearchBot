@@ -1,8 +1,3 @@
-﻿using OpenCvSharp;
-using Sdcb.PaddleInference;
-using Sdcb.PaddleOCR;
-using Sdcb.PaddleOCR.Models;
-using Sdcb.PaddleOCR.Models.Local;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -11,6 +6,11 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using OpenCvSharp;
+using Sdcb.PaddleInference;
+using Sdcb.PaddleOCR;
+using Sdcb.PaddleOCR.Models;
+using Sdcb.PaddleOCR.Models.Local;
 using TelegramSearchBot.Common.Model;
 using TelegramSearchBot.Common.Model.DO;
 
@@ -41,7 +41,7 @@ namespace TelegramSearchBot.Manager {
                 results.Add(new Result {
                     Text = region.Text,
                     TextRegion = region.Rect.Points().Select(point => {
-                        return new List<int>() { (int)point.X, (int)point.Y };
+                        return new List<int>() { ( int ) point.X, ( int ) point.Y };
                     }).ToList(),
                     Confidence = float.IsNaN(region.Score) ? 0 : region.Score,
                 });
@@ -54,7 +54,7 @@ namespace TelegramSearchBot.Manager {
                     .Select(GetOcrResult)
                     .Select(ConvertToResults)
                     .ToList();
-            return new PaddleOCRResult() { 
+            return new PaddleOCRResult() {
                 Results = results,
                 Status = "0",
                 Message = "",
@@ -65,6 +65,6 @@ namespace TelegramSearchBot.Manager {
             var results = await Task.Run<PaddleOCRResult>(() => Execute(images));
             semaphore.Release();
             return results;
-        } 
+        }
     }
 }
