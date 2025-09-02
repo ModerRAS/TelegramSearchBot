@@ -66,6 +66,9 @@ namespace TelegramSearchBot.Manager
                     writer.AddDocument(doc);
                     writer.Flush(triggerMerge: true, applyAllDeletes: true);
                     writer.Commit();
+                    
+                    // 清理Ext字段缓存，确保下次搜索时获取最新字段信息
+                    _extOptimizer.ClearCache(message.GroupId);
                 } catch (ArgumentNullException ex) {
                     await Send.Log(ex.Message);
                     await Send.Log($"{message.GroupId},{message.MessageId},{message.Content}");
@@ -122,12 +125,36 @@ namespace TelegramSearchBot.Manager
                     }
                     writer.Flush(triggerMerge: true, applyAllDeletes: true);
                     writer.Commit();
+                    
+                    // 清理Ext字段缓存，确保下次搜索时获取最新字段信息
+                    _extOptimizer.ClearCache(e);
                 }
             });
             
         }
         private FSDirectory GetFSDirectory(long GroupId) {
             return FSDirectory.Open(Path.Combine(Env.WorkDir, "Index_Data", $"{GroupId}"));
+        }
+        
+        // 安全获取IndexReader，包含错误处理
+        private DirectoryReader SafeGetIndexReader(long groupId)
+        {
+            try
+            {
+                var directory = GetFSDirectory(groupId);
+                if (!DirectoryReader.IndexExists(directory))
+                {
+                    Send?.Log($"索引不存在: GroupId={groupId}");
+                    return null;
+                }
+                
+                return DirectoryReader.Open(directory);
+            }
+            catch (Exception ex)
+            {
+                Send?.Log($"获取索引读取器失败: GroupId={groupId}, Error={ex.Message}");
+                return null;
+            }
         }
         private IndexWriter GetIndexWriter(long GroupId) {
             var dir = GetFSDirectory(GroupId);
@@ -286,17 +313,16 @@ namespace TelegramSearchBot.Manager
                 if (extFields.Length == 0)
                     return query;
 
-                // 使用优化的查询构建方式，减少嵌套层级
+                // 优化查询构建：为所有字段和关键词创建一个扁平化的查询结构
                 foreach (var keyword in keywords)
                 {
                     if (!string.IsNullOrWhiteSpace(keyword))
                     {
-                        var keywordQuery = new BooleanQuery();
                         foreach (var field in extFields)
                         {
-                            keywordQuery.Add(new TermQuery(new Term(field, keyword)), Occur.SHOULD);
+                            var termQuery = new TermQuery(new Term(field, keyword));
+                            query.Add(termQuery, Occur.SHOULD);
                         }
-                        query.Add(keywordQuery, Occur.SHOULD);
                     }
                 }
 
@@ -331,7 +357,7 @@ namespace TelegramSearchBot.Manager
                 if (extFields.Length == 0)
                     return excludeQuery;
 
-                // 为每个排除关键词构建Ext字段排除查询
+                // 为每个排除关键词在所有Ext字段中构建SHOULD查询，然后整体作为MUST_NOT
                 foreach (var keyword in excludeKeywords)
                 {
                     if (!string.IsNullOrWhiteSpace(keyword))
@@ -341,7 +367,11 @@ namespace TelegramSearchBot.Manager
                         {
                             keywordExcludeQuery.Add(new TermQuery(new Term(field, keyword)), Occur.SHOULD);
                         }
-                        excludeQuery.Add(keywordExcludeQuery, Occur.MUST_NOT);
+                        // 只有当关键词查询有内容时才添加
+                        if (keywordExcludeQuery.Clauses.Count > 0)
+                        {
+                            excludeQuery.Add(keywordExcludeQuery, Occur.SHOULD);
+                        }
                     }
                 }
 
@@ -532,7 +562,7 @@ namespace TelegramSearchBot.Manager
             }
 
             // 从查询字符串中提取和处理短语查询
-            public (List<BooleanQuery> PhraseQueries, string RemainingQuery) ExtractPhraseQueries(string query)
+            public (List<BooleanQuery> PhraseQueries, string RemainingQuery) ExtractPhraseQueries(string query, IndexReader reader = null, long groupId = 0)
             {
                 var phraseQueries = new List<BooleanQuery>();
                 var remainingQuery = query;
@@ -552,6 +582,10 @@ namespace TelegramSearchBot.Manager
                             // 为Content字段创建短语查询
                             var contentPhraseQuery = BuildPhraseQueryForField("Content", terms);
                             phraseQuery.Add(contentPhraseQuery, Occur.SHOULD);
+                            
+                            // 为Ext字段创建短语查询
+                            var extPhraseQuery = _extOptimizer.BuildOptimizedExtPhraseQuery(terms, reader, groupId);
+                            phraseQuery.Add(extPhraseQuery, Occur.SHOULD);
                             
                             phraseQueries.Add(phraseQuery);
                             _logAction?.Invoke($"提取短语查询: \"{phraseText}\" -> {terms.Count} 个分词");
@@ -688,7 +722,7 @@ namespace TelegramSearchBot.Manager
             Action<string> _logAction = msg => Send?.Log(msg);
             
             // 使用短语查询处理器提取和处理短语查询
-            var (phraseQueries, remainingQuery) = _phraseProcessor.ExtractPhraseQueries(q);
+            var (phraseQueries, remainingQuery) = _phraseProcessor.ExtractPhraseQueries(q, reader, groupId);
             
             // 添加提取出的短语查询
             foreach (var phraseQuery in phraseQueries)
@@ -756,6 +790,16 @@ namespace TelegramSearchBot.Manager
                 var termQuery = new TermQuery(new Term("Content", term));
                 query.Add(termQuery, Occur.MUST_NOT);
             }
+            
+            // 添加排除关键词查询（Ext字段）
+            if (excludeTermsList.Count > 0)
+            {
+                var extExcludeQuery = _extOptimizer.BuildOptimizedExtExcludeQuery(excludeTermsList, reader, groupId);
+                if (extExcludeQuery.Clauses.Count > 0)
+                {
+                    query.Add(extExcludeQuery, Occur.MUST_NOT);
+                }
+            }
 
             return (query, remainingTerms);
         }
@@ -768,79 +812,86 @@ namespace TelegramSearchBot.Manager
         public (int, List<Message>) SimpleSearch(string q, long GroupId, int Skip, int Take) {
             try 
             {
-                var reader = DirectoryReader.Open(GetFSDirectory(GroupId));
-                var searcher = new IndexSearcher(reader);
-
-                var (query, searchTerms) = ParseSimpleQuery(q, reader);
-                
-                // 使用优化器构建Ext字段查询，替换原有的遍历逻辑
-                if (searchTerms != null && searchTerms.Length > 0)
+                using (var reader = SafeGetIndexReader(GroupId))
                 {
-                    var extQuery = _extOptimizer.BuildOptimizedExtQuery(searchTerms.ToList(), reader, GroupId);
+                    if (reader == null)
+                    {
+                        Send?.Log($"SimpleSearch失败: 无法访问索引, GroupId={GroupId}");
+                        return (0, new List<Message>());
+                    }
                     
-                    // 将Ext字段查询添加到主查询中
-                    if (query is BooleanQuery booleanQuery)
+                    var searcher = new IndexSearcher(reader);
+                    var (query, searchTerms) = ParseSimpleQuery(q, reader);
+                    
+                    // 使用优化器构建Ext字段查询，替换原有的遍历逻辑
+                    if (searchTerms != null && searchTerms.Length > 0)
                     {
-                        booleanQuery.Add(extQuery, Occur.SHOULD);
-                    }
-                    else
-                    {
-                        var newQuery = new BooleanQuery();
-                        newQuery.Add(query, Occur.SHOULD);
-                        newQuery.Add(extQuery, Occur.SHOULD);
-                        query = newQuery;
-                    }
-                }
-
-                var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
-                var total = top.TotalHits;
-                var hits = top.ScoreDocs;
-
-                var messages = new List<Message>();
-                var id = 0;
-                foreach (var hit in hits) {
-                    if (id++ < Skip) continue;
-                    var document = searcher.Doc(hit.Doc);
-                    var message = new Message() {
-                        Id = id,
-                        MessageId = long.Parse(document.Get("MessageId")),
-                        GroupId = long.Parse(document.Get("GroupId")),
-                        Content = document.Get("Content")
-                    };
-
-                    // 安全解析可能缺失的字段
-                    if (document.Get("DateTime") != null) {
-                        message.DateTime = DateTime.Parse(document.Get("DateTime"));
-                    }
-                    if (document.Get("FromUserId") != null) {
-                        message.FromUserId = long.Parse(document.Get("FromUserId"));
-                    }
-                    if (document.Get("ReplyToUserId") != null) {
-                        message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
-                    }
-                    if (document.Get("ReplyToMessageId") != null) {
-                        message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
-                    }
-
-                    // 获取扩展字段
-                    var extensions = new List<MessageExtension>();
-                    foreach (var field in document.Fields) {
-                        if (field.Name.StartsWith("Ext_")) {
-                            extensions.Add(new MessageExtension {
-                                Name = field.Name.Substring(4),
-                                Value = field.GetStringValue()
-                            });
+                        var extQuery = _extOptimizer.BuildOptimizedExtQuery(searchTerms.ToList(), reader, GroupId);
+                        
+                        // 将Ext字段查询添加到主查询中
+                        if (query is BooleanQuery booleanQuery)
+                        {
+                            booleanQuery.Add(extQuery, Occur.SHOULD);
+                        }
+                        else
+                        {
+                            var newQuery = new BooleanQuery();
+                            newQuery.Add(query, Occur.SHOULD);
+                            newQuery.Add(extQuery, Occur.SHOULD);
+                            query = newQuery;
                         }
                     }
-                    if (extensions.Any()) {
-                        message.MessageExtensions = extensions;
-                    }
 
-                    messages.Add(message);
+                    var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
+                    var total = top.TotalHits;
+                    var hits = top.ScoreDocs;
+
+                    var messages = new List<Message>();
+                    var id = 0;
+                    foreach (var hit in hits) {
+                        if (id++ < Skip) continue;
+                        var document = searcher.Doc(hit.Doc);
+                        var message = new Message() {
+                            Id = id,
+                            MessageId = long.Parse(document.Get("MessageId")),
+                            GroupId = long.Parse(document.Get("GroupId")),
+                            Content = document.Get("Content")
+                        };
+
+                        // 安全解析可能缺失的字段
+                        if (document.Get("DateTime") != null) {
+                            message.DateTime = DateTime.Parse(document.Get("DateTime"));
+                        }
+                        if (document.Get("FromUserId") != null) {
+                            message.FromUserId = long.Parse(document.Get("FromUserId"));
+                        }
+                        if (document.Get("ReplyToUserId") != null) {
+                            message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
+                        }
+                        if (document.Get("ReplyToMessageId") != null) {
+                            message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
+                        }
+
+                        // 获取扩展字段
+                        var extensions = new List<MessageExtension>();
+                        foreach (var field in document.Fields) {
+                            if (field.Name.StartsWith("Ext_")) {
+                                extensions.Add(new MessageExtension {
+                                    Name = field.Name.Substring(4),
+                                    Value = field.GetStringValue()
+                                });
+                            }
+                        }
+                        if (extensions.Any()) {
+                            message.MessageExtensions = extensions;
+                        }
+
+                        messages.Add(message);
+                    }
+                    
+                    Send?.Log($"SimpleSearch完成: GroupId={GroupId}, Query={q}, Results={total},耗时={DateTime.Now:HH:mm:ss.fff}");
+                    return (total, messages);
                 }
-                
-                Send?.Log($"SimpleSearch完成: GroupId={GroupId}, Query={q}, Results={total},耗时={DateTime.Now:HH:mm:ss.fff}");
-                return (total, messages);
             }
             catch (Exception ex)
             {
@@ -858,79 +909,87 @@ namespace TelegramSearchBot.Manager
         public (int, List<Message>) SyntaxSearch(string q, long GroupId, int Skip, int Take) {
             try 
             {
-                var reader = DirectoryReader.Open(GetFSDirectory(GroupId));
-                var searcher = new IndexSearcher(reader);
-
-                var (query, searchTerms) = ParseQuery(q, reader, GroupId);
-                
-                // 使用优化器构建Ext字段查询，替换原有的遍历逻辑
-                if (searchTerms != null && searchTerms.Length > 0)
+                using (var reader = SafeGetIndexReader(GroupId))
                 {
-                    var extQuery = _extOptimizer.BuildOptimizedExtQuery(searchTerms.ToList(), reader, GroupId);
+                    if (reader == null)
+                    {
+                        Send?.Log($"SyntaxSearch失败: 无法访问索引, GroupId={GroupId}");
+                        return (0, new List<Message>());
+                    }
                     
-                    // 将Ext字段查询添加到主查询中
-                    if (query is BooleanQuery booleanQuery)
+                    var searcher = new IndexSearcher(reader);
+
+                    var (query, searchTerms) = ParseQuery(q, reader, GroupId);
+                    
+                    // 使用优化器构建Ext字段查询，替换原有的遍历逻辑
+                    if (searchTerms != null && searchTerms.Length > 0)
                     {
-                        booleanQuery.Add(extQuery, Occur.SHOULD);
-                    }
-                    else
-                    {
-                        var newQuery = new BooleanQuery();
-                        newQuery.Add(query, Occur.SHOULD);
-                        newQuery.Add(extQuery, Occur.SHOULD);
-                        query = newQuery;
-                    }
-                }
-
-                var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
-                var total = top.TotalHits;
-                var hits = top.ScoreDocs;
-
-                var messages = new List<Message>();
-                var id = 0;
-                foreach (var hit in hits) {
-                    if (id++ < Skip) continue;
-                    var document = searcher.Doc(hit.Doc);
-                    var message = new Message() {
-                        Id = id,
-                        MessageId = long.Parse(document.Get("MessageId")),
-                        GroupId = long.Parse(document.Get("GroupId")),
-                        Content = document.Get("Content")
-                    };
-
-                    // 安全解析可能缺失的字段
-                    if (document.Get("DateTime") != null) {
-                        message.DateTime = DateTime.Parse(document.Get("DateTime"));
-                    }
-                    if (document.Get("FromUserId") != null) {
-                        message.FromUserId = long.Parse(document.Get("FromUserId"));
-                    }
-                    if (document.Get("ReplyToUserId") != null) {
-                        message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
-                    }
-                    if (document.Get("ReplyToMessageId") != null) {
-                        message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
-                    }
-
-                    // 获取扩展字段
-                    var extensions = new List<MessageExtension>();
-                    foreach (var field in document.Fields) {
-                        if (field.Name.StartsWith("Ext_")) {
-                            extensions.Add(new MessageExtension {
-                                Name = field.Name.Substring(4),
-                                Value = field.GetStringValue()
-                            });
+                        var extQuery = _extOptimizer.BuildOptimizedExtQuery(searchTerms.ToList(), reader, GroupId);
+                        
+                        // 将Ext字段查询添加到主查询中
+                        if (query is BooleanQuery booleanQuery)
+                        {
+                            booleanQuery.Add(extQuery, Occur.SHOULD);
+                        }
+                        else
+                        {
+                            var newQuery = new BooleanQuery();
+                            newQuery.Add(query, Occur.SHOULD);
+                            newQuery.Add(extQuery, Occur.SHOULD);
+                            query = newQuery;
                         }
                     }
-                    if (extensions.Any()) {
-                        message.MessageExtensions = extensions;
-                    }
 
-                    messages.Add(message);
+                    var top = searcher.Search(query, Skip + Take, new Sort(new SortField("MessageId", SortFieldType.INT64, true)));
+                    var total = top.TotalHits;
+                    var hits = top.ScoreDocs;
+
+                    var messages = new List<Message>();
+                    var id = 0;
+                    foreach (var hit in hits) {
+                        if (id++ < Skip) continue;
+                        var document = searcher.Doc(hit.Doc);
+                        var message = new Message() {
+                            Id = id,
+                            MessageId = long.Parse(document.Get("MessageId")),
+                            GroupId = long.Parse(document.Get("GroupId")),
+                            Content = document.Get("Content")
+                        };
+
+                        // 安全解析可能缺失的字段
+                        if (document.Get("DateTime") != null) {
+                            message.DateTime = DateTime.Parse(document.Get("DateTime"));
+                        }
+                        if (document.Get("FromUserId") != null) {
+                            message.FromUserId = long.Parse(document.Get("FromUserId"));
+                        }
+                        if (document.Get("ReplyToUserId") != null) {
+                            message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
+                        }
+                        if (document.Get("ReplyToMessageId") != null) {
+                            message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
+                        }
+
+                        // 获取扩展字段
+                        var extensions = new List<MessageExtension>();
+                        foreach (var field in document.Fields) {
+                            if (field.Name.StartsWith("Ext_")) {
+                                extensions.Add(new MessageExtension {
+                                    Name = field.Name.Substring(4),
+                                    Value = field.GetStringValue()
+                                });
+                            }
+                        }
+                        if (extensions.Any()) {
+                            message.MessageExtensions = extensions;
+                        }
+
+                        messages.Add(message);
+                    }
+                    
+                    Send?.Log($"SyntaxSearch完成: GroupId={GroupId}, Query={q}, Results={total},耗时={DateTime.Now:HH:mm:ss.fff}");
+                    return (total, messages);
                 }
-                
-                Send?.Log($"SyntaxSearch完成: GroupId={GroupId}, Query={q}, Results={total},耗时={DateTime.Now:HH:mm:ss.fff}");
-                return (total, messages);
             }
             catch (Exception ex)
             {
