@@ -72,7 +72,7 @@ namespace TelegramSearchBot.Service.Tools {
                     // 验证下载完整性
                     if (contentLength.HasValue && totalRead != contentLength)
                         throw new Exception("Download incomplete");
-                };
+                }
 
 
                 // 验证ZIP文件有效性
