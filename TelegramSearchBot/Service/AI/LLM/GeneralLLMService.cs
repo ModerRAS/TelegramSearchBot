@@ -6,9 +6,10 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore; // For AnyAsync()
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Microsoft.Extensions.DependencyInjection;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
@@ -22,7 +23,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly OllamaService _ollamaService;
         private readonly GeminiService _geminiService;
         private readonly ILogger<GeneralLLMService> _logger;
-        private readonly ILLMFactory _LLMFactory;
+        private readonly IServiceProvider _serviceProvider;
 
         public string ServiceName => "GeneralLLMService";
 
@@ -40,17 +41,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
             OllamaService ollamaService,
             OpenAIService openAIService,
             GeminiService geminiService,
-            ILLMFactory _LLMFactory
+            IServiceProvider serviceProvider
             ) {
             this.connectionMultiplexer = connectionMultiplexer;
             _dbContext = dbContext;
             _logger = logger;
+            _serviceProvider = serviceProvider;
 
             // Initialize services with default values
             _openAIService = openAIService;
             _ollamaService = ollamaService;
             _geminiService = geminiService;
-            this._LLMFactory = _LLMFactory;
         }
         public async Task<List<LLMChannel>> GetChannelsAsync(string modelName) {
             // 2. 查询ChannelWithModel获取关联的LLMChannel
@@ -140,7 +141,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     var redisKey = $"llm:channel:{channel.Id}:semaphore";
                     var currentCount = await redisDb.StringGetAsync(redisKey);
                     int count = currentCount.HasValue ? ( int ) currentCount : 0;
-                    var service = _LLMFactory.GetLLMService(channel.Provider);
+                    var llmFactory = _serviceProvider.GetRequiredService<ILLMFactory>();
+                    var service = llmFactory.GetLLMService(channel.Provider);
 
                     if (count < channel.Parallel) {
                         // 获取锁并增加计数
