@@ -268,7 +268,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 _chatSessions[ChatId] = chatSession;
             }
 
-            int maxToolCycles = 5;
+            int maxToolCycles = Env.MaxToolCycles;
             var currentMessageBuilder = new StringBuilder();
             for (int cycle = 0; cycle < maxToolCycles; cycle++) {
                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();

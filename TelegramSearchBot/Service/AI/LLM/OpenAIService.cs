@@ -589,7 +589,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
 
             try {
-                int maxToolCycles = 5;
+                int maxToolCycles = Env.MaxToolCycles;
                 var currentMessageContentBuilder = new StringBuilder(); // Used to build the current full message for yielding
 
                 for (int cycle = 0; cycle < maxToolCycles; cycle++) {
