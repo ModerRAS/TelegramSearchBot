@@ -121,7 +121,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             try {
                 string nextMessageToSend = message.Content;
-                int maxToolCycles = 5;
+                int maxToolCycles = Env.MaxToolCycles;
                 var currentLlmResponseBuilder = new StringBuilder(); // Accumulates tokens for the current LLM response
 
                 for (int cycle = 0; cycle < maxToolCycles; cycle++) {
