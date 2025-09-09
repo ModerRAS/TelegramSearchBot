@@ -82,6 +82,6 @@ namespace TelegramSearchBot {
         public string OLTPName { get; set; }
         public string BraveApiKey { get; set; }
         public bool EnableAccounting { get; set; } = false;
-        public int MaxToolCycles { get; set; } = 5;
+        public int MaxToolCycles { get; set; } = 25;
     }
 }
