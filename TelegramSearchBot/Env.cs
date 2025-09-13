@@ -33,6 +33,7 @@ namespace TelegramSearchBot {
                 BraveApiKey = config.BraveApiKey;
                 EnableAccounting = config.EnableAccounting;
                 MaxToolCycles = config.MaxToolCycles;
+                UseMicrosoftExtensionsAI = config.UseMicrosoftExtensionsAI;
             } catch {
             }
 
@@ -59,7 +60,8 @@ namespace TelegramSearchBot {
         public static string OLTPName { get; set; }
         public static string BraveApiKey { get; set; }
         public static bool EnableAccounting { get; set; } = false;
-        public static int MaxToolCycles { get; set; }
+        public static int MaxToolCycles { get; set; } = 25;
+        public static bool UseMicrosoftExtensionsAI { get; set; } = false;
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
     }
@@ -83,5 +85,6 @@ namespace TelegramSearchBot {
         public string BraveApiKey { get; set; }
         public bool EnableAccounting { get; set; } = false;
         public int MaxToolCycles { get; set; } = 25;
+        public bool UseMicrosoftExtensionsAI { get; set; } = false;
     }
 }
