@@ -7,6 +7,7 @@ using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.Service.Search {
