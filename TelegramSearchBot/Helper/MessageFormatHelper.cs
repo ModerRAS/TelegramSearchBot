@@ -144,6 +144,56 @@ namespace TelegramSearchBot.Helper {
             return result.Trim();
         }
 
+        /// <summary>
+        /// 从内容中提取以 filter 为中心的片段，片段总长度为 totalSnippet（包含 filter 本身）。
+        /// 若 filter 为空或未命中，返回最多 60 字的前缀（超出则加省略号），与现有逻辑保持一致。
+        /// </summary>
+        public static string ExtractSnippetAroundFilter(string content, string filter, int totalSnippet = 30) {
+            if (string.IsNullOrEmpty(content)) return string.Empty;
+            // 统一：无论有无 filter，默认显示长度使用 totalSnippet（包含 filter 本身）
+            var previewLength = totalSnippet;
+            if (string.IsNullOrEmpty(filter)) {
+                var take = Math.Min(content.Length, previewLength);
+                return content.Length <= previewLength ? content : content.Substring(0, take) + "...";
+            }
+
+            var index = content.IndexOf(filter, StringComparison.OrdinalIgnoreCase);
+            if (index < 0) {
+                var take = Math.Min(content.Length, previewLength);
+                return content.Length <= previewLength ? content : content.Substring(0, take) + "...";
+            }
+
+            var contentLen = content.Length;
+            var filterLen = filter.Length;
+            if (filterLen >= totalSnippet) {
+                // filter 本身较长，尽量从 filter 开始截取 totalSnippet
+                var start = index;
+                if (start + totalSnippet > contentLen) start = Math.Max(0, contentLen - totalSnippet);
+                var length = Math.Min(totalSnippet, contentLen - start);
+                return (start > 0 ? "..." : "") + content.Substring(start, length) + (start + length < contentLen ? "..." : "");
+            }
+
+            var remaining = totalSnippet - filterLen;
+            var left = remaining / 2;
+            var right = remaining - left;
+
+            var startPos = index - left;
+            var endPos = index + filterLen + right;
+
+            if (startPos < 0) {
+                endPos = Math.Min(contentLen, endPos - startPos);
+                startPos = 0;
+            }
+            if (endPos > contentLen) {
+                var overflow = endPos - contentLen;
+                endPos = contentLen;
+                startPos = Math.Max(0, startPos - overflow);
+            }
+
+            var len = endPos - startPos;
+            return (startPos > 0 ? "..." : "") + content.Substring(startPos, len) + (endPos < contentLen ? "..." : "");
+        }
+
         public static List<string> SplitMarkdownIntoChunks(string markdown, int maxLength) {
             var chunks = new List<string>();
             if (string.IsNullOrEmpty(markdown)) return chunks;

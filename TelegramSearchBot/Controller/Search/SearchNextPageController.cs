@@ -87,6 +87,7 @@ namespace TelegramSearchBot.Controller.Search {
                     .WithTake(searchOption.Take)
                     .WithSearchType(searchOption.SearchType)
                     .WithMessages(searchOption.Messages)
+                    .WithKeyword(searchOption.Search)
                     .WithReplyTo(searchOption.ReplyToMessageId);
 
                 // 添加下一页按钮
