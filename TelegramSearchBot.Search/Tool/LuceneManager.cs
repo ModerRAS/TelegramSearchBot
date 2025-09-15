@@ -494,23 +494,6 @@ namespace TelegramSearchBot.Manager {
             }
         }
 
-        // 字段规范数据模型
-        private class FieldSpec {
-            public string FieldName { get; set; }
-            public string FieldValue { get; set; }
-            public bool IsExtField => FieldName.StartsWith("Ext_");
-            public bool IsContentField => FieldName.Equals("Content", StringComparison.OrdinalIgnoreCase);
-
-            public FieldSpec(string fieldName, string fieldValue) {
-                FieldName = fieldName;
-                FieldValue = fieldValue;
-            }
-
-            public override string ToString() {
-                return $"{FieldName}:{FieldValue}";
-            }
-        }
-
         // 短语查询处理器 - 确保短语查询正确处理Content和Ext字段
         private class PhraseQueryProcessor {
             private readonly UnifiedTokenizer _tokenizer;
