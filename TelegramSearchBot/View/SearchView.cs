@@ -10,6 +10,7 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Search;
+using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.View {

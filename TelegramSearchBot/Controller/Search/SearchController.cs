@@ -5,6 +5,7 @@ using Telegram.Bot.Types;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.View;
