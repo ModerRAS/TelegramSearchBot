@@ -22,4 +22,8 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
+  </ItemGroup>
+
 </Project>
