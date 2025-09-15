@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Controller.AI.OCR;
 using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;

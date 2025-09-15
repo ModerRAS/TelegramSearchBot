@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using StackExchange.Redis;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface;
 

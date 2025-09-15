@@ -2,10 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using LiteDB;
 using Newtonsoft.Json;
 
-namespace TelegramSearchBot {
+namespace TelegramSearchBot.Common {
     public static class Env {
         static Env() {
             WorkDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TelegramSearchBot");

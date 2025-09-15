@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FFMpegCore.Extend;
 using Microsoft.Extensions.Logging;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Helper;
 using Whisper.net;
 using Whisper.net.Ggml;

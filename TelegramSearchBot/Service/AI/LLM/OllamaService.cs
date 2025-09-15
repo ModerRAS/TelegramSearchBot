@@ -17,6 +17,7 @@ using OllamaSharp.Models;
 using OllamaSharp.Models.Chat;
 using SkiaSharp;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM; // For ILLMService
 using TelegramSearchBot.Model;

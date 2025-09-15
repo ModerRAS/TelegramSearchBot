@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model.Tools;
 using TelegramSearchBot.Service.AI.LLM; // 添加MCP工具支持

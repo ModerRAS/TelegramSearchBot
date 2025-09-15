@@ -19,6 +19,7 @@ using OpenAI.Chat;
 using OpenAI.Embeddings;
 using SkiaSharp; // Added for image processing
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;

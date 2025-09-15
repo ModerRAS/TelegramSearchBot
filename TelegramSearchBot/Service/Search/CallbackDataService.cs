@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Search.Model;
 
 namespace TelegramSearchBot.Service.Search {
     public enum CallbackActionType {

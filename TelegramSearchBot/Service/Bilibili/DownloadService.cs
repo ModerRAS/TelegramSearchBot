@@ -10,6 +10,7 @@ using FFMpegCore.Enums; // Added for SpeedArgument (may not be needed now)
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Manager; // For Env.WorkDir
 
 namespace TelegramSearchBot.Service.Bilibili;

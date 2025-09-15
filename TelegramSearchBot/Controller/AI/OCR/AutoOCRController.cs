@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Common.Model.DO;
 using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage;

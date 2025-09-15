@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
-using TelegramSearchBot.Search.Model;
 
-namespace TelegramSearchBot.Model.Search;
+namespace TelegramSearchBot.Search.Model;
 
 public class SearchMessageVO {
     public long ChatId { get; set; }
