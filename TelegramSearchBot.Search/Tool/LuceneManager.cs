@@ -741,12 +741,12 @@ namespace TelegramSearchBot.Manager {
         // 简化实现：使用ExtFieldQueryOptimizer优化Ext字段查询，提升性能并减少代码重复
         // 简化实现的代码文件：TelegramSearchBot/Manager/LuceneManager.cs
         // 简化实现的相关函数方法：SimpleSearch方法
-        public (int, List<MessageDTO>) SimpleSearch(string q, long GroupId, int Skip, int Take) {
+        public (int, List<long>) SimpleSearch(string q, long GroupId, int Skip, int Take) {
             try {
                 using (var reader = SafeGetIndexReader(GroupId)) {
                     if (reader == null) {
                         Log($"SimpleSearch失败: 无法访问索引, GroupId={GroupId}");
-                        return (0, new List<MessageDTO>());
+                        return (0, new List<long>());
                     }
 
                     var searcher = new IndexSearcher(reader);
@@ -771,47 +771,13 @@ namespace TelegramSearchBot.Manager {
                     var total = top.TotalHits;
                     var hits = top.ScoreDocs;
 
-                    var messages = new List<MessageDTO>();
+                    var messages = new List<long>();
                     var id = 0;
                     foreach (var hit in hits) {
                         if (id++ < Skip) continue;
+                        if (id > Skip + Take) break;
                         var document = searcher.Doc(hit.Doc);
-                        var message = new MessageDTO() {
-                            Id = id,
-                            MessageId = long.Parse(document.Get("MessageId")),
-                            GroupId = long.Parse(document.Get("GroupId")),
-                            Content = document.Get("Content")
-                        };
-
-                        // 安全解析可能缺失的字段
-                        if (document.Get("DateTime") != null) {
-                            message.DateTime = DateTime.Parse(document.Get("DateTime"));
-                        }
-                        if (document.Get("FromUserId") != null) {
-                            message.FromUserId = long.Parse(document.Get("FromUserId"));
-                        }
-                        if (document.Get("ReplyToUserId") != null) {
-                            message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
-                        }
-                        if (document.Get("ReplyToMessageId") != null) {
-                            message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
-                        }
-
-                        // 获取扩展字段
-                        var extensions = new List<MessageExtensionDTO>();
-                        foreach (var field in document.Fields) {
-                            if (field.Name.StartsWith("Ext_")) {
-                                extensions.Add(new MessageExtensionDTO {
-                                    Name = field.Name.Substring(4),
-                                    Value = field.GetStringValue()
-                                });
-                            }
-                        }
-                        if (extensions.Any()) {
-                            message.MessageExtensions = extensions;
-                        }
-
-                        messages.Add(message);
+                        messages.Add(long.Parse(document.Get("Id")));
                     }
 
                     Log($"SimpleSearch完成: GroupId={GroupId}, Query={q}, Results={total},耗时={DateTime.Now:HH:mm:ss.fff}");
@@ -819,7 +785,7 @@ namespace TelegramSearchBot.Manager {
                 }
             } catch (Exception ex) {
                 Log($"SimpleSearch失败: {ex.Message}, GroupId={GroupId}, Query={q}");
-                return (0, new List<MessageDTO>());
+                return (0, new List<long>());
             }
         }
 
@@ -829,12 +795,12 @@ namespace TelegramSearchBot.Manager {
         // 简化实现：使用ExtFieldQueryOptimizer优化Ext字段查询，增强排除关键词处理，提升性能
         // 简化实现的代码文件：TelegramSearchBot/Manager/LuceneManager.cs
         // 简化实现的相关函数方法：SyntaxSearch方法
-        public (int, List<MessageDTO>) SyntaxSearch(string q, long GroupId, int Skip, int Take) {
+        public (int, List<long>) SyntaxSearch(string q, long GroupId, int Skip, int Take) {
             try {
                 using (var reader = SafeGetIndexReader(GroupId)) {
                     if (reader == null) {
                         Log($"SyntaxSearch失败: 无法访问索引, GroupId={GroupId}");
-                        return (0, new List<MessageDTO>());
+                        return (0, new List<long>());
                     }
 
                     var searcher = new IndexSearcher(reader);
@@ -860,47 +826,13 @@ namespace TelegramSearchBot.Manager {
                     var total = top.TotalHits;
                     var hits = top.ScoreDocs;
 
-                    var messages = new List<MessageDTO>();
+                    var messages = new List<long>();
                     var id = 0;
                     foreach (var hit in hits) {
                         if (id++ < Skip) continue;
+                        if (id > Skip + Take) break;
                         var document = searcher.Doc(hit.Doc);
-                        var message = new MessageDTO() {
-                            Id = id,
-                            MessageId = long.Parse(document.Get("MessageId")),
-                            GroupId = long.Parse(document.Get("GroupId")),
-                            Content = document.Get("Content")
-                        };
-
-                        // 安全解析可能缺失的字段
-                        if (document.Get("DateTime") != null) {
-                            message.DateTime = DateTime.Parse(document.Get("DateTime"));
-                        }
-                        if (document.Get("FromUserId") != null) {
-                            message.FromUserId = long.Parse(document.Get("FromUserId"));
-                        }
-                        if (document.Get("ReplyToUserId") != null) {
-                            message.ReplyToUserId = long.Parse(document.Get("ReplyToUserId"));
-                        }
-                        if (document.Get("ReplyToMessageId") != null) {
-                            message.ReplyToMessageId = long.Parse(document.Get("ReplyToMessageId"));
-                        }
-
-                        // 获取扩展字段
-                        var extensions = new List<MessageExtensionDTO>();
-                        foreach (var field in document.Fields) {
-                            if (field.Name.StartsWith("Ext_")) {
-                                extensions.Add(new MessageExtensionDTO {
-                                    Name = field.Name.Substring(4),
-                                    Value = field.GetStringValue()
-                                });
-                            }
-                        }
-                        if (extensions.Any()) {
-                            message.MessageExtensions = extensions;
-                        }
-
-                        messages.Add(message);
+                        messages.Add(long.Parse(document.Get("Id")));
                     }
 
                     Log($"SyntaxSearch完成: GroupId={GroupId}, Query={q}, Results={total},耗时={DateTime.Now:HH:mm:ss.fff}");
@@ -908,12 +840,12 @@ namespace TelegramSearchBot.Manager {
                 }
             } catch (Exception ex) {
                 Log($"SyntaxSearch失败: {ex.Message}, GroupId={GroupId}, Query={q}");
-                return (0, new List<MessageDTO>());
+                return (0, new List<long>());
             }
         }
 
         // 默认搜索方法 - 保持向后兼容，实际调用简单搜索
-        public (int, List<MessageDTO>) Search(string q, long GroupId, int Skip, int Take) {
+        public (int, List<long>) Search(string q, long GroupId, int Skip, int Take) {
             return SimpleSearch(q, GroupId, Skip, Take);
         }
     }
