@@ -51,6 +51,7 @@ namespace TelegramSearchBot.Manager {
                 try {
                     Document doc = new Document();
                     // 基础字段
+                    doc.Add(new Int64Field("Id", message.Id, Field.Store.YES));
                     doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
                     doc.Add(new Int64Field("MessageId", message.MessageId, Field.Store.YES));
                     doc.Add(new StringField("DateTime", message.DateTime.ToString("o"), Field.Store.YES));
@@ -104,6 +105,7 @@ namespace TelegramSearchBot.Manager {
                         }
                         try {
                             // 基础字段
+                            doc.Add(new Int64Field("Id", message.Id, Field.Store.YES));
                             doc.Add(new Int64Field("GroupId", message.GroupId, Field.Store.YES));
                             doc.Add(new Int64Field("MessageId", message.MessageId, Field.Store.YES));
                             doc.Add(new StringField("DateTime", message.DateTime.ToString("o"), Field.Store.YES));
