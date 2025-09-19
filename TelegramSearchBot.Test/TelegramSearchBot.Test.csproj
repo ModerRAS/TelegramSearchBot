@@ -27,6 +27,7 @@
     <ProjectReference Include="..\TelegramSearchBot\TelegramSearchBot.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Magick.NET-Q16-HDRI-AnyCPU" Version="14.8.2" />
     <EmbeddedResource Include="TestData\EmptyResults.html" />
     <EmbeddedResource Include="TestData\SpecialCharsResults.html" />
   </ItemGroup>
