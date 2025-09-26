@@ -24,6 +24,8 @@ using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.AI.QR;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Helper;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -35,8 +37,7 @@ namespace TelegramSearchBot.Service.Manage {
         private readonly MessageExtensionService _messageExtensionService;
         private readonly IPaddleOCRService _paddleOCRService;
         private readonly AutoQRService _autoQRService;
-        private readonly IGeneralLLMService _generalLLMService;
-        private readonly IMediator _mediator;
+    private readonly IGeneralLLMService _generalLLMService;
         private readonly FaissVectorService _faissVectorService;
         private readonly ConversationSegmentationService _conversationSegmentationService;
 
@@ -60,7 +61,6 @@ namespace TelegramSearchBot.Service.Manage {
             _paddleOCRService = paddleOCRService;
             _autoQRService = autoQRService;
             _generalLLMService = generalLLMService;
-            _mediator = mediator;
             _faissVectorService = faissVectorService;
             _conversationSegmentationService = conversationSegmentationService;
         }
@@ -78,7 +78,7 @@ namespace TelegramSearchBot.Service.Manage {
             var Messages = DataContext.Messages;
             long count = Messages.LongCount();
             await Send.Log($"共{count}条消息，现在开始重建索引");
-            lucene.WriteDocuments(Messages.ToList());
+            lucene.WriteDocuments(MessageDtoMapper.ToDtoList(Messages.ToList()));
             await Send.Log($"重建完成");
         }
 

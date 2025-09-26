@@ -14,6 +14,8 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Notifications;
+using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Helper;
 
 namespace TelegramSearchBot.Service.Storage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -40,7 +42,8 @@ namespace TelegramSearchBot.Service.Storage {
                 .FirstOrDefaultAsync(m => m.Id == messageOption.MessageDataId);
 
             if (message != null) {
-                await lucene.WriteDocumentAsync(message);
+                var dto = MessageDtoMapper.ToDto(message);
+                await lucene.WriteDocumentAsync(dto);
             } else {
                 Logger.LogWarning($"Message not found in database: {messageOption.MessageDataId}");
             }

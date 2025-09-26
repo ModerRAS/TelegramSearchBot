@@ -15,8 +15,8 @@ namespace TelegramSearchBot.Search.Model {
         public long FromUserId { get; set; }
         public long ReplyToUserId { get; set; }
         public long ReplyToMessageId { get; set; }
-        public string Content { get; set; }
+    public string Content { get; set; } = string.Empty;
 
-        public List<MessageExtensionDTO> MessageExtensions { get; set; }
+    public List<MessageExtensionDTO> MessageExtensions { get; set; } = new();
     }
 }

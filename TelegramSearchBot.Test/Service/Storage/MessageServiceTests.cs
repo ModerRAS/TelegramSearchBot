@@ -21,6 +21,7 @@ using TelegramSearchBot.Model.Notifications;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Search.Tool;
 using Xunit;
 using Chat = Telegram.Bot.Types.Chat; // Alias for Telegram.Bot.Types.Chat
 using Message = TelegramSearchBot.Model.Data.Message;
@@ -62,7 +63,7 @@ namespace TelegramSearchBot.Test.Service.Storage {
             // Note: Since LuceneManager.WriteDocumentAsync is not virtual, we cannot Verify its call on the mock.
             // We are essentially testing with a real (but potentially non-functional if dependencies are shallow mocked) LuceneManager.
             // For true unit testing of MessageService, ILuceneManager would be preferred.
-            _mockLuceneManager = new Mock<LuceneManager>(_mockSendMessage.Object);
+            _mockLuceneManager = new Mock<LuceneManager>((Func<string, Task>)(_ => Task.CompletedTask));
             _mockMediator = new Mock<IMediator>();
 
             // Create mocks for all LLM services

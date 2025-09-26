@@ -28,6 +28,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.View;
+using TelegramSearchBot.Search.Tool;
 
 namespace TelegramSearchBot.Extension {
     public static class ServiceCollectionExtension {
@@ -61,6 +62,7 @@ namespace TelegramSearchBot.Extension {
                 .AddSingleton<SendMessage>()
                 .AddHostedService<TelegramCommandRegistryService>()
                 .AddHostedService<SendMessage>()
+                .AddSingleton<Func<string, Task>>(sp => sp.GetRequiredService<SendMessage>().Log)
                 .AddSingleton<LuceneManager>()
                 .AddSingleton<PaddleOCR>()
                 .AddSingleton<WhisperManager>();
