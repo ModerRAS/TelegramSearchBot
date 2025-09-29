@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
@@ -74,14 +75,11 @@ namespace TelegramSearchBot.Controller.Search {
 
             var searchOption = await searchService.Search(firstSearch);
 
+            var searchViewModel = SearchMessageVoMapper.FromSearchOption(searchOption);
+
             // 生成按钮
             searchView
-                .WithChatId(searchOption.ChatId)
-                .WithCount(searchOption.Count)
-                .WithSkip(searchOption.Skip)
-                .WithTake(searchOption.Take)
-                .WithSearchType(searchOption.SearchType)
-                .WithMessages(searchOption.Messages)
+                .WithSearchResult(searchViewModel)
                 .WithKeyword(searchOption.Search)
                 .WithReplyTo(searchOption.ReplyToMessageId);
 

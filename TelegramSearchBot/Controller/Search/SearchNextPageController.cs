@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
@@ -80,14 +81,11 @@ namespace TelegramSearchBot.Controller.Search {
                 // 执行搜索（使用searchOption中指定的搜索类型）
                 searchOption = await searchService.Search(searchOption);
 
+                var searchViewModel = SearchMessageVoMapper.FromSearchOption(searchOption);
+
                 // 生成新的按钮
                 searchView
-                    .WithChatId(searchOption.ChatId)
-                    .WithCount(searchOption.Count)
-                    .WithSkip(searchOption.Skip)
-                    .WithTake(searchOption.Take)
-                    .WithSearchType(searchOption.SearchType)
-                    .WithMessages(searchOption.Messages)
+                    .WithSearchResult(searchViewModel)
                     .WithKeyword(searchOption.Search)
                     .WithReplyTo(searchOption.ReplyToMessageId);
 

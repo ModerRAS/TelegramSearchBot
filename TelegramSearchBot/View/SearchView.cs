@@ -35,6 +35,7 @@ namespace TelegramSearchBot.View {
         private int Take { get; set; }
         private string Keyword { get; set; }
         private SearchType SearchType { get; set; } = SearchType.InvertedIndex;
+        private SearchMessageVO SearchMessageResult { get; set; }
         private List<Button> Buttons { get; set; } = new List<Button>();
         public class Button {
             public string Text { get; set; }
@@ -55,8 +56,24 @@ namespace TelegramSearchBot.View {
             return this;
         }
 
+        [Obsolete("Use WithSearchResult(SearchMessageVO) instead")]
         public SearchView WithMessages(List<Message> messages) {
             Messages = messages;
+            return this;
+        }
+
+        public SearchView WithSearchResult(SearchMessageVO searchMessageVO) {
+            if (searchMessageVO == null) {
+                throw new ArgumentNullException(nameof(searchMessageVO));
+            }
+
+            searchMessageVO.Messages ??= new List<MessageVO>();
+            SearchMessageResult = searchMessageVO;
+            ChatId = searchMessageVO.ChatId;
+            Count = searchMessageVO.Count;
+            Skip = searchMessageVO.Skip;
+            Take = searchMessageVO.Take;
+            SearchType = searchMessageVO.SearchType;
             return this;
         }
 
@@ -91,14 +108,18 @@ namespace TelegramSearchBot.View {
         }
 
         public async Task Render() {
-            var messageText = RenderSearchResults(new SearchMessageVO {
+            var searchMessageVO = SearchMessageResult ?? new SearchMessageVO {
                 ChatId = this.ChatId,
                 Count = this.Count,
                 Skip = this.Skip,
                 Take = this.Take,
-                Messages = this.Messages?.Select(m => new MessageVO(m)).ToList() ?? new List<MessageVO>(),
-                SearchType = this.SearchType
-            });
+                SearchType = this.SearchType,
+                Messages = this.Messages?.Select(message => new MessageVO(message, this.Keyword)).ToList() ?? new List<MessageVO>()
+            };
+
+            searchMessageVO.Messages ??= new List<MessageVO>();
+
+            var messageText = RenderSearchResults(searchMessageVO);
 
             var replyParameters = new Telegram.Bot.Types.ReplyParameters {
                 MessageId = this.ReplyToMessageId
