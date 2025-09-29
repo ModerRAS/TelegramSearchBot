@@ -13,6 +13,7 @@ using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Search.Model;
 using Xunit;
 using Xunit.Abstractions;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
