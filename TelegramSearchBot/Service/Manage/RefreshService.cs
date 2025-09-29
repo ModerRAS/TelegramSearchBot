@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.ASR;
@@ -17,6 +19,7 @@ using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Search.Tool;
 using TelegramSearchBot.Service.AI.ASR;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.AI.OCR;
@@ -35,7 +38,6 @@ namespace TelegramSearchBot.Service.Manage {
         private readonly IPaddleOCRService _paddleOCRService;
         private readonly AutoQRService _autoQRService;
         private readonly IGeneralLLMService _generalLLMService;
-        private readonly IMediator _mediator;
         private readonly FaissVectorService _faissVectorService;
         private readonly ConversationSegmentationService _conversationSegmentationService;
 
@@ -59,7 +61,6 @@ namespace TelegramSearchBot.Service.Manage {
             _paddleOCRService = paddleOCRService;
             _autoQRService = autoQRService;
             _generalLLMService = generalLLMService;
-            _mediator = mediator;
             _faissVectorService = faissVectorService;
             _conversationSegmentationService = conversationSegmentationService;
         }
@@ -77,7 +78,7 @@ namespace TelegramSearchBot.Service.Manage {
             var Messages = DataContext.Messages;
             long count = Messages.LongCount();
             await Send.Log($"共{count}条消息，现在开始重建索引");
-            lucene.WriteDocuments(Messages.ToList());
+            lucene.WriteDocuments(MessageDtoMapper.ToDtoList(Messages.ToList()));
             await Send.Log($"重建完成");
         }
 

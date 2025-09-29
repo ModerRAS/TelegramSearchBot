@@ -5,12 +5,14 @@ using System.Linq;
 using System.Threading.Tasks; // For async operations
 using Microsoft.EntityFrameworkCore; // For EF Core operations
 using TelegramSearchBot.Attributes; // For DateTime parsing
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface; // Added for IService
 using TelegramSearchBot.Interface.Tools;
-using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model; // For DataDbContext
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Tools;
+using TelegramSearchBot.Search.Model;
+using TelegramSearchBot.Search.Tool;
 using TelegramSearchBot.Service.AI.LLM; // For McpTool attributes
 using TelegramSearchBot.Service.Storage; // For MessageExtensionService
 
@@ -44,7 +46,7 @@ namespace TelegramSearchBot.Service.Tools {
             int skip = ( page - 1 ) * pageSize;
             int take = pageSize;
 
-            (int totalHits, List<Message> messages) searchResult;
+            (int totalHits, List<TelegramSearchBot.Search.Model.MessageDTO> messageDtos) searchResult;
             try {
                 searchResult = _luceneManager.Search(query, chatId, skip, take);
             } catch (System.IO.DirectoryNotFoundException) {
@@ -54,8 +56,9 @@ namespace TelegramSearchBot.Service.Tools {
             }
 
             var resultItems = new List<SearchResultItem>();
+            var messages = MessageDtoMapper.ToEntityList(searchResult.messageDtos);
 
-            foreach (var msg in searchResult.messages) {
+            foreach (var msg in messages) {
                 // Get context messages
                 var messagesBefore = await _dbContext.Messages
                     .Include(m => m.MessageExtensions)

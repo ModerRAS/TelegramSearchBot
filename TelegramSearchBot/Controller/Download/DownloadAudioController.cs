@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Exceptions;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;

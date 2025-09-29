@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Helper {
     public static class JiebaResourceDownloader {

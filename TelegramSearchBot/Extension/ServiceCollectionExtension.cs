@@ -18,12 +18,14 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.AppBootstrap;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Search.Tool;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.View;
@@ -60,6 +62,7 @@ namespace TelegramSearchBot.Extension {
                 .AddSingleton<SendMessage>()
                 .AddHostedService<TelegramCommandRegistryService>()
                 .AddHostedService<SendMessage>()
+                .AddSingleton<Func<string, Task>>(sp => sp.GetRequiredService<SendMessage>().Log)
                 .AddSingleton<LuceneManager>()
                 .AddSingleton<PaddleOCR>()
                 .AddSingleton<WhisperManager>();

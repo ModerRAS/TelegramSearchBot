@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using J2N.IO;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Tools;
 

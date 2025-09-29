@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Service;
 
 namespace TelegramSearchBot.Manager {

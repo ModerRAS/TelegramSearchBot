@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,6 +9,8 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Model.Search;
+using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.View {
@@ -30,7 +33,9 @@ namespace TelegramSearchBot.View {
         private int Count { get; set; }
         private int Skip { get; set; }
         private int Take { get; set; }
+        private string Keyword { get; set; }
         private SearchType SearchType { get; set; } = SearchType.InvertedIndex;
+        private SearchMessageVO SearchMessageResult { get; set; }
         private List<Button> Buttons { get; set; } = new List<Button>();
         public class Button {
             public string Text { get; set; }
@@ -51,8 +56,24 @@ namespace TelegramSearchBot.View {
             return this;
         }
 
+        [Obsolete("Use WithSearchResult(SearchMessageVO) instead")]
         public SearchView WithMessages(List<Message> messages) {
             Messages = messages;
+            return this;
+        }
+
+        public SearchView WithSearchResult(SearchMessageVO searchMessageVO) {
+            if (searchMessageVO == null) {
+                throw new ArgumentNullException(nameof(searchMessageVO));
+            }
+
+            searchMessageVO.Messages ??= new List<MessageVO>();
+            SearchMessageResult = searchMessageVO;
+            ChatId = searchMessageVO.ChatId;
+            Count = searchMessageVO.Count;
+            Skip = searchMessageVO.Skip;
+            Take = searchMessageVO.Take;
+            SearchType = searchMessageVO.SearchType;
             return this;
         }
 
@@ -76,22 +97,29 @@ namespace TelegramSearchBot.View {
             return this;
         }
 
+        public SearchView WithKeyword(string keyword) {
+            Keyword = keyword;
+            return this;
+        }
+
         public SearchView AddButton(string text, string callbackData) {
             Buttons.Add(new Button(text, callbackData));
             return this;
         }
 
         public async Task Render() {
-            var messageText = RenderSearchResults(new SearchOption {
+            var searchMessageVO = SearchMessageResult ?? new SearchMessageVO {
                 ChatId = this.ChatId,
-                ReplyToMessageId = this.ReplyToMessageId,
-                IsGroup = this.IsGroup,
-                Messages = this.Messages,
                 Count = this.Count,
                 Skip = this.Skip,
                 Take = this.Take,
-                SearchType = this.SearchType
-            });
+                SearchType = this.SearchType,
+                Messages = this.Messages?.Select(message => new MessageVO(message, this.Keyword)).ToList() ?? new List<MessageVO>()
+            };
+
+            searchMessageVO.Messages ??= new List<MessageVO>();
+
+            var messageText = RenderSearchResults(searchMessageVO);
 
             var replyParameters = new Telegram.Bot.Types.ReplyParameters {
                 MessageId = this.ReplyToMessageId
@@ -132,15 +160,15 @@ namespace TelegramSearchBot.View {
 {{- end -}}
 ";
 
-        public string RenderSearchResults(SearchOption searchOption) {
+        public string RenderSearchResults(SearchMessageVO searchMessageVO) {
             var template = Template.Parse(SearchResultTemplate);
             return template.Render(new {
-                messages = searchOption.Messages,
+                messages = searchMessageVO.Messages,
                 search_option = new {
-                    count = searchOption.Count,
-                    skip = searchOption.Skip,
-                    take = searchOption.Take,
-                    search_type = ( int ) searchOption.SearchType
+                    count = searchMessageVO.Count,
+                    skip = searchMessageVO.Skip,
+                    take = searchMessageVO.Take,
+                    search_type = ( int ) searchMessageVO.SearchType
                 }
             });
         }
@@ -149,7 +177,7 @@ namespace TelegramSearchBot.View {
             await viewModel.Render();
         }
 
-
+        [Obsolete("Use RenderSearchResults instead")]
         public List<string> ConvertToMarkdownLinks(IEnumerable<Model.Data.Message> messages) {
             var template = Template.Parse("[{{content | string.truncate 30 | string.replace '\n' '' | string.replace '\r' ''}}](https://t.me/c/{{group_id | string.slice 4}}/{{message_id}})");
 

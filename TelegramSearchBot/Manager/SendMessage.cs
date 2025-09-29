@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using RateLimiter;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Manager {
     public class SendMessage : BackgroundService {

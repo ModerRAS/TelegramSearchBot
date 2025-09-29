@@ -5,6 +5,7 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.OpenTelemetry;
 using TelegramSearchBot.AppBootstrap;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot {
     class Program {

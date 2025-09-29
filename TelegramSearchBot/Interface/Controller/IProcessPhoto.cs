@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ImageMagick;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Exceptions;
 using File = System.IO.File;
 

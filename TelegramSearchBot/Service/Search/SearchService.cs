@@ -2,11 +2,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Search.Model;
+using TelegramSearchBot.Search.Tool;
 using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.Service.Search {
@@ -41,7 +44,9 @@ namespace TelegramSearchBot.Service.Search {
 
         private async Task<SearchOption> LuceneSearch(SearchOption searchOption) {
             if (searchOption.IsGroup) {
-                (searchOption.Count, searchOption.Messages) = lucene.Search(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                var (count, messageDtos) = lucene.Search(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                searchOption.Count = count;
+                searchOption.Messages = MessageDtoMapper.ToEntityList(messageDtos);
             } else {
                 var UserInGroups = dbContext.Set<UserWithGroup>()
                     .Where(user => searchOption.ChatId.Equals(user.UserId))
@@ -50,7 +55,7 @@ namespace TelegramSearchBot.Service.Search {
                 searchOption.Messages = new List<Message>();
                 foreach (var Group in UserInGroups) {
                     var (count, messages) = lucene.Search(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
-                    searchOption.Messages.AddRange(messages);
+                    searchOption.Messages.AddRange(MessageDtoMapper.ToEntityList(messages));
                     searchOption.Count += count;
                 }
             }
@@ -60,7 +65,9 @@ namespace TelegramSearchBot.Service.Search {
         // 语法搜索方法 - 使用支持语法的新搜索实现
         private async Task<SearchOption> LuceneSyntaxSearch(SearchOption searchOption) {
             if (searchOption.IsGroup) {
-                (searchOption.Count, searchOption.Messages) = lucene.SyntaxSearch(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                var (count, messageDtos) = lucene.SyntaxSearch(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
+                searchOption.Count = count;
+                searchOption.Messages = MessageDtoMapper.ToEntityList(messageDtos);
             } else {
                 var UserInGroups = dbContext.Set<UserWithGroup>()
                     .Where(user => searchOption.ChatId.Equals(user.UserId))
@@ -69,7 +76,7 @@ namespace TelegramSearchBot.Service.Search {
                 searchOption.Messages = new List<Message>();
                 foreach (var Group in UserInGroups) {
                     var (count, messages) = lucene.SyntaxSearch(searchOption.Search, Group.GroupId, searchOption.Skip / GroupsLength, searchOption.Take / GroupsLength);
-                    searchOption.Messages.AddRange(messages);
+                    searchOption.Messages.AddRange(MessageDtoMapper.ToEntityList(messages));
                     searchOption.Count += count;
                 }
             }

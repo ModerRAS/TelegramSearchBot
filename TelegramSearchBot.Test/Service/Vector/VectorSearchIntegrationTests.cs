@@ -12,6 +12,7 @@ using Moq;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.Service.Vector;
 using Xunit;
@@ -30,7 +31,6 @@ namespace TelegramSearchBot.Test.Service.Vector {
         private readonly Mock<IServiceScopeFactory> _mockServiceScopeFactory;
         private readonly DataDbContext _dbContext;
         private readonly FaissVectorService _faissVectorService;
-        private readonly SearchService _searchService;
         private readonly string _testDirectory;
         private static int _testCounter = 1000; // 静态计数器，确保每个测试使用唯一ID
 
@@ -70,10 +70,6 @@ namespace TelegramSearchBot.Test.Service.Vector {
                 _mockServiceProvider.Object,
                 _mockLLMService.Object);
 
-            // 创建SearchService - 这里简化创建，只传递必要的参数进行向量搜索测试
-            var mockSearchLogger = new Mock<ILogger<SearchService>>();
-            // 注意：由于SearchService构造函数需要LuceneManager，我们这里使用FaissVectorService进行直接测试
-            _searchService = null; // 暂时不创建SearchService，直接使用FaissVectorService测试
         }
 
         [Fact]

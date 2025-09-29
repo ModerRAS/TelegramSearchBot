@@ -1,10 +1,13 @@
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Telegram.Bot;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Model.Search;
+using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.View;
 using Xunit;
@@ -42,15 +45,17 @@ namespace TelegramSearchBot.Test.View {
                 }
             };
 
-            var searchOption = new TelegramSearchBot.Model.SearchOption {
+            var searchMessage = new SearchMessageVO {
+                ChatId = messages[0].GroupId,
                 Count = 2,
                 Skip = 0,
-                Take = 2
+                Take = 2,
+                SearchType = SearchType.InvertedIndex,
+                Messages = messages.Select(m => new MessageVO(m)).ToList()
             };
 
             // Act
-            searchOption.Messages = messages;
-            var result = _searchView.RenderSearchResults(searchOption);
+            var result = _searchView.RenderSearchResults(searchMessage);
 
             // Assert
             Assert.Contains("共找到 2 项结果", result);
@@ -64,22 +69,25 @@ namespace TelegramSearchBot.Test.View {
         public void RenderSearchResults_NoResults_ReturnsNoResultsMessage() {
             // Arrange
             var messages = new List<Message>();
-            var searchOption = new TelegramSearchBot.Model.SearchOption {
+            var searchMessage = new SearchMessageVO {
+                ChatId = -100123456789,
                 Count = 0,
                 Skip = 0,
-                Take = 10
+                Take = 10,
+                SearchType = SearchType.InvertedIndex,
+                Messages = new List<MessageVO>()
             };
 
             // Act
-            searchOption.Messages = messages;
-            var result = _searchView.RenderSearchResults(searchOption);
+            var result = _searchView.RenderSearchResults(searchMessage);
 
             // Assert
-            Assert.Equal("<b>搜索方式</b>: 倒排索引未找到结果。\n", result);
+            Assert.Contains("<b>搜索方式</b>: 倒排索引", result);
+            Assert.Contains("未找到结果。", result);
         }
 
         [Fact]
-        public void ConvertToMarkdownLinks_ReturnsCorrectLinks() {
+        public void RenderSearchResults_BuildsLinksForMessages() {
             // Arrange
             var messages = new List<Message>
             {
@@ -95,35 +103,50 @@ namespace TelegramSearchBot.Test.View {
                 }
             };
 
-            // Act
-            var result = _searchView.ConvertToMarkdownLinks(messages);
-
-            // Assert
-            Assert.Equal(2, result.Count);
-            Assert.Contains("Test content 1", result[0]);
-            Assert.Contains("t.me/c/123456789/123", result[0]);
-            Assert.Contains("Test content 2", result[1]);
-            Assert.Contains("t.me/c/987654321/456", result[1]);
-        }
-
-        [Fact]
-        public void ConvertToMarkdownLinks_WithNewlines_RemovesNewlines() {
-            // Arrange
-            var messages = new List<Message>
-            {
-                new Message {
-                    Content = "Line1\nLine2\rLine3",
-                    GroupId = -100123456789,
-                    MessageId = 123
-                }
+            var searchMessage = new SearchMessageVO {
+                ChatId = messages[0].GroupId,
+                Count = 2,
+                Skip = 0,
+                Take = 2,
+                SearchType = SearchType.InvertedIndex,
+                Messages = messages.Select(m => new MessageVO(m)).ToList()
             };
 
             // Act
-            var result = _searchView.ConvertToMarkdownLinks(messages);
+            var result = _searchView.RenderSearchResults(searchMessage);
 
             // Assert
-            Assert.DoesNotContain("\n", result[0]);
-            Assert.DoesNotContain("\r", result[0]);
+            Assert.Contains("t.me/c/123456789/123", result);
+            Assert.Contains("t.me/c/987654321/456", result);
+            Assert.Contains("Test content 1", result);
+            Assert.Contains("Test content 2", result);
+        }
+
+        [Fact]
+        public void RenderSearchResults_WithNewlines_RemovesNewlinesInContent() {
+            // Arrange
+            var message = new Message {
+                Content = "Line1\nLine2\rLine3",
+                GroupId = -100123456789,
+                MessageId = 123
+            };
+
+            var searchMessage = new SearchMessageVO {
+                ChatId = message.GroupId,
+                Count = 1,
+                Skip = 0,
+                Take = 1,
+                SearchType = SearchType.InvertedIndex,
+                Messages = new List<MessageVO> { new MessageVO(message) }
+            };
+
+            // Act
+            var result = _searchView.RenderSearchResults(searchMessage);
+
+            // Assert
+            Assert.Contains("Line1Line2Line3", result);
+            Assert.DoesNotContain("Line1\n", result);
+            Assert.DoesNotContain("Line2\r", result);
         }
     }
 }
