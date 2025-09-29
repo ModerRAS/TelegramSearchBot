@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.ASR;
@@ -18,14 +19,13 @@ using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Search.Tool;
 using TelegramSearchBot.Service.AI.ASR;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.AI.QR;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Vector;
-using TelegramSearchBot.Search.Tool;
-using TelegramSearchBot.Helper;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -37,7 +37,7 @@ namespace TelegramSearchBot.Service.Manage {
         private readonly MessageExtensionService _messageExtensionService;
         private readonly IPaddleOCRService _paddleOCRService;
         private readonly AutoQRService _autoQRService;
-    private readonly IGeneralLLMService _generalLLMService;
+        private readonly IGeneralLLMService _generalLLMService;
         private readonly FaissVectorService _faissVectorService;
         private readonly ConversationSegmentationService _conversationSegmentationService;
 

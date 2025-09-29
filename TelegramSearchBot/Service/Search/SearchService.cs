@@ -2,15 +2,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Search.Model;
-using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.Search.Tool;
-using TelegramSearchBot.Helper;
+using TelegramSearchBot.Service.Vector;
 
 namespace TelegramSearchBot.Service.Search {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

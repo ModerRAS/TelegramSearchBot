@@ -170,7 +170,7 @@ namespace TelegramSearchBot.Helper {
                 var start = index;
                 if (start + totalSnippet > contentLen) start = Math.Max(0, contentLen - totalSnippet);
                 var length = Math.Min(totalSnippet, contentLen - start);
-                return (start > 0 ? "..." : "") + content.Substring(start, length) + (start + length < contentLen ? "..." : "");
+                return ( start > 0 ? "..." : "" ) + content.Substring(start, length) + ( start + length < contentLen ? "..." : "" );
             }
 
             var remaining = totalSnippet - filterLen;
@@ -191,7 +191,7 @@ namespace TelegramSearchBot.Helper {
             }
 
             var len = endPos - startPos;
-            return (startPos > 0 ? "..." : "") + content.Substring(startPos, len) + (endPos < contentLen ? "..." : "");
+            return ( startPos > 0 ? "..." : "" ) + content.Substring(startPos, len) + ( endPos < contentLen ? "..." : "" );
         }
 
         public static List<string> SplitMarkdownIntoChunks(string markdown, int maxLength) {

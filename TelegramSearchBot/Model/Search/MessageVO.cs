@@ -1,7 +1,7 @@
 using System;
-using TelegramSearchBot.Model.Data;
 using System.Linq;
 using TelegramSearchBot.Helper;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Model.Search;
 
@@ -12,7 +12,7 @@ public class MessageVO {
     public MessageVO(Message message, string filter = null) {
         GroupId = message.GroupId;
         MessageId = message.MessageId;
-            if (string.IsNullOrEmpty(message.Content)) {
+        if (string.IsNullOrEmpty(message.Content)) {
             // 如果 message.Content 为空，那么从 message.MessageExtensions 中寻找 filter 的匹配词
             const int totalSnippet = 30;
             if (message.MessageExtensions != null && message.MessageExtensions.Any()) {
@@ -23,7 +23,7 @@ public class MessageVO {
                         Content = MessageFormatHelper.ExtractSnippetAroundFilter(match.Value, filter, totalSnippet);
                     } else {
                         // 未命中任何扩展，回退到把所有扩展拼接后的预览
-                        var all = string.Join(" ", message.MessageExtensions.Select(e => (string.IsNullOrEmpty(e.Name) ? "" : e.Name + ": ") + (e.Value ?? "")).Where(s => !string.IsNullOrEmpty(s)));
+                        var all = string.Join(" ", message.MessageExtensions.Select(e => ( string.IsNullOrEmpty(e.Name) ? "" : e.Name + ": " ) + ( e.Value ?? "" )).Where(s => !string.IsNullOrEmpty(s)));
                         Content = string.IsNullOrEmpty(all) ? string.Empty : MessageFormatHelper.ExtractSnippetAroundFilter(all, null, totalSnippet);
                     }
                 } else {
@@ -31,7 +31,7 @@ public class MessageVO {
                     var first = message.MessageExtensions.FirstOrDefault(e => !string.IsNullOrEmpty(e.Value));
                     if (first != null) Content = MessageFormatHelper.ExtractSnippetAroundFilter(first.Value, null, totalSnippet);
                     else {
-                        var all = string.Join(" ", message.MessageExtensions.Select(e => (string.IsNullOrEmpty(e.Name) ? "" : e.Name + ": ") + (e.Value ?? "")).Where(s => !string.IsNullOrEmpty(s)));
+                        var all = string.Join(" ", message.MessageExtensions.Select(e => ( string.IsNullOrEmpty(e.Name) ? "" : e.Name + ": " ) + ( e.Value ?? "" )).Where(s => !string.IsNullOrEmpty(s)));
                         Content = string.IsNullOrEmpty(all) ? string.Empty : MessageFormatHelper.ExtractSnippetAroundFilter(all, null, totalSnippet);
                     }
                 }

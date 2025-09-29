@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Lucene.Net.Analysis;
 using Lucene.Net.Analysis.Cn.Smart;
 using Lucene.Net.Analysis.TokenAttributes;
 using Lucene.Net.Util;
-using System.IO;
 
 namespace TelegramSearchBot.Search.Tokenizer {
     /// <summary>

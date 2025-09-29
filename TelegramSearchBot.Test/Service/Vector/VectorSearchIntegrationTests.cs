@@ -12,9 +12,9 @@ using Moq;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.Service.Vector;
-using TelegramSearchBot.Search.Model;
 using Xunit;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
 

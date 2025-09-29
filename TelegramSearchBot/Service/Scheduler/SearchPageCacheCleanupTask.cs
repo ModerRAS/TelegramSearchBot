@@ -11,7 +11,7 @@ namespace TelegramSearchBot.Service.Scheduler {
     public class SearchPageCacheCleanupTask : IScheduledTask {
         public string TaskName => "SearchPageCacheCleanup";
 
-    public string CronExpression => "0 4 1 * *"; // 每月1日凌晨4点执行，避开业务高峰
+        public string CronExpression => "0 4 1 * *"; // 每月1日凌晨4点执行，避开业务高峰
 
         private readonly DataDbContext _dbContext;
         private readonly ILogger<SearchPageCacheCleanupTask> _logger;

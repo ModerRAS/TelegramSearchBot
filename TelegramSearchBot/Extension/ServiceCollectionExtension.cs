@@ -25,10 +25,10 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Search.Tool;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.View;
-using TelegramSearchBot.Search.Tool;
 
 namespace TelegramSearchBot.Extension {
     public static class ServiceCollectionExtension {

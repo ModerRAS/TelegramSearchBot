@@ -5,16 +5,16 @@ using System.Linq;
 using System.Threading.Tasks; // For async operations
 using Microsoft.EntityFrameworkCore; // For EF Core operations
 using TelegramSearchBot.Attributes; // For DateTime parsing
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface; // Added for IService
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model; // For DataDbContext
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Tools;
+using TelegramSearchBot.Search.Model;
+using TelegramSearchBot.Search.Tool;
 using TelegramSearchBot.Service.AI.LLM; // For McpTool attributes
 using TelegramSearchBot.Service.Storage; // For MessageExtensionService
-using TelegramSearchBot.Search.Tool;
-using TelegramSearchBot.Helper;
-using TelegramSearchBot.Search.Model;
 
 namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

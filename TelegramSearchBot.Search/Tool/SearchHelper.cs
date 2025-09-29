@@ -10,28 +10,28 @@ using TelegramSearchBot.Search.Exception;
 
 namespace TelegramSearchBot.Search.Tool {
     public static class SearchHelper {
-    /// <summary>
-    /// 在给定的 <paramref name="text"/> 中，根据用户输入的单条查询 <paramref name="query"/>（主要为中文）
-    /// 寻找最匹配的 token 或连续子串，并返回一个长度不超过 <paramref name="totalLength"/> 的原文片段。
-    /// 匹配优先级：
-    /// 1. 优先匹配 query 在 text 中出现的最长连续子串（长度需 >= 2）；
-    /// 2. 若不存在，则匹配与 query 分词后任一 token 完全相同的 text token；
-    /// 3. 最后按 token 间最长公共子串长度选择（长度需 >= 2）。
-    /// 方法仅返回单个最匹配的片段；若未找到匹配，返回 <see cref="string.Empty"/>。
-    /// </summary>
-    /// <param name="text">被搜索的原始文本（不可为 null 或空）。</param>
-    /// <param name="query">用户输入的单条查询字符串（不可为 null 或空，主要为中文），方法会对其进行分词。</param>
-    /// <param name="totalLength">返回片段的最大总长度（必须大于 0）。若小于匹配 token 长度，则至少返回包含完整 token 的最短片段。</param>
-    /// <returns>
-    /// 匹配成功时返回裁切后的原文片段（长度 <= <paramref name="totalLength"/>，或等于匹配 token 长度当 totalLength 小于 token 长度）。
-    /// 未找到匹配时返回 <see cref="string.Empty"/>。
-    /// </returns>
-    /// <exception cref="TelegramSearchBot.Search.Exception.InvalidSearchInputException">
-    /// 当 <paramref name="text"/> 或 <paramref name="query"/> 为 null/空，或 <paramref name="totalLength"/> <= 0 时抛出。
-    /// </exception>
-    /// <exception cref="TelegramSearchBot.Search.Exception.SearchProcessingException">
-    /// 当分词或内部处理发生异常（例如 SmartChineseAnalyzer 抛出异常）时抛出，inner exception 包含底层错误信息。
-    /// </exception>
+        /// <summary>
+        /// 在给定的 <paramref name="text"/> 中，根据用户输入的单条查询 <paramref name="query"/>（主要为中文）
+        /// 寻找最匹配的 token 或连续子串，并返回一个长度不超过 <paramref name="totalLength"/> 的原文片段。
+        /// 匹配优先级：
+        /// 1. 优先匹配 query 在 text 中出现的最长连续子串（长度需 >= 2）；
+        /// 2. 若不存在，则匹配与 query 分词后任一 token 完全相同的 text token；
+        /// 3. 最后按 token 间最长公共子串长度选择（长度需 >= 2）。
+        /// 方法仅返回单个最匹配的片段；若未找到匹配，返回 <see cref="string.Empty"/>。
+        /// </summary>
+        /// <param name="text">被搜索的原始文本（不可为 null 或空）。</param>
+        /// <param name="query">用户输入的单条查询字符串（不可为 null 或空，主要为中文），方法会对其进行分词。</param>
+        /// <param name="totalLength">返回片段的最大总长度（必须大于 0）。若小于匹配 token 长度，则至少返回包含完整 token 的最短片段。</param>
+        /// <returns>
+        /// 匹配成功时返回裁切后的原文片段（长度 <= <paramref name="totalLength"/>，或等于匹配 token 长度当 totalLength 小于 token 长度）。
+        /// 未找到匹配时返回 <see cref="string.Empty"/>。
+        /// </returns>
+        /// <exception cref="TelegramSearchBot.Search.Exception.InvalidSearchInputException">
+        /// 当 <paramref name="text"/> 或 <paramref name="query"/> 为 null/空，或 <paramref name="totalLength"/> <= 0 时抛出。
+        /// </exception>
+        /// <exception cref="TelegramSearchBot.Search.Exception.SearchProcessingException">
+        /// 当分词或内部处理发生异常（例如 SmartChineseAnalyzer 抛出异常）时抛出，inner exception 包含底层错误信息。
+        /// </exception>
         public static string FindBestSnippet(string text, string query, int totalLength) {
             if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(query) || totalLength <= 0) {
                 throw new InvalidSearchInputException("Text/query must be non-empty and totalLength > 0.");
@@ -180,15 +180,15 @@ namespace TelegramSearchBot.Search.Tool {
             return null;
         }
 
-    private static (int start, int end, string term)? FindLongestCommonSubstrMatch(
-            List<(int start, int end, string term)> textTokens,
-            List<string> queryTokens) {
+        private static (int start, int end, string term)? FindLongestCommonSubstrMatch(
+                List<(int start, int end, string term)> textTokens,
+                List<string> queryTokens) {
             int bestScore = 0;
             (int start, int end, string term)? best = null;
             foreach (var t in textTokens) {
                 foreach (var q in queryTokens) {
                     var score = LongestCommonSubstringLength(t.term, q);
-            if (score > bestScore && score >= 2) {
+                    if (score > bestScore && score >= 2) {
                         bestScore = score;
                         best = t;
                     }

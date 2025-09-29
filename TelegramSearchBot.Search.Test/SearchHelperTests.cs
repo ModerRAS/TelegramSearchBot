@@ -1,6 +1,6 @@
 using System;
-using TelegramSearchBot.Search.Tool;
 using TelegramSearchBot.Search.Exception;
+using TelegramSearchBot.Search.Tool;
 
 namespace TelegramSearchBot.Search.Test {
     public class SearchHelperTests {
