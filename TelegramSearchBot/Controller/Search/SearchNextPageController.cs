@@ -13,7 +13,9 @@ using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Search.Lucene.Model;
+using TelegramSearchBot.Model.Search;
+using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
+using ModelSearchType = TelegramSearchBot.Model.Search.SearchType;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.View;
@@ -96,8 +98,17 @@ namespace TelegramSearchBot.Controller.Search {
                 }
 
                 // 添加切换搜索方式按钮
-                var alternativeSearchType = searchOption.SearchType == SearchType.InvertedIndex ? SearchType.Vector : SearchType.InvertedIndex;
-                var searchTypeText = alternativeSearchType == SearchType.Vector ? "向量搜索" : "倒排索引";
+                var alternativeSearchType = searchOption.SearchType switch {
+                    ModelSearchType.InvertedIndex => ModelSearchType.Vector,
+                    ModelSearchType.Vector => ModelSearchType.SyntaxSearch,
+                    ModelSearchType.SyntaxSearch => ModelSearchType.InvertedIndex,
+                    _ => ModelSearchType.InvertedIndex
+                };
+                var searchTypeText = alternativeSearchType switch {
+                    ModelSearchType.Vector => "向量搜索",
+                    ModelSearchType.SyntaxSearch => "语法搜索",
+                    _ => "倒排索引"
+                };
                 var changeSearchTypeCallback = await callbackDataService.GenerateChangeSearchTypeCallbackAsync(searchOption, alternativeSearchType);
                 searchView.AddButton($"切换到{searchTypeText}", changeSearchTypeCallback);
 
@@ -114,7 +125,7 @@ namespace TelegramSearchBot.Controller.Search {
             }
         }
 
-        private async Task HandleDeleteHistory(SearchOption searchOption, long? ChatId, bool? IsGroup) {
+    private async Task HandleDeleteHistory(ModelSearchOption searchOption, long? ChatId, bool? IsGroup) {
             foreach (var i in searchOption.ToDelete) {
                 await Send.AddTask(async () => {
                     try {

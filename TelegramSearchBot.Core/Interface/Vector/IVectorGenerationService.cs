@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
 
 namespace TelegramSearchBot.Interface.Vector {
     public interface IVectorGenerationService {
-        Task<SearchOption> Search(SearchOption searchOption);
+        Task<ModelSearchOption> Search(ModelSearchOption searchOption);
         Task<float[]> GenerateVectorAsync(string text);
         Task StoreVectorAsync(string collectionName, ulong id, float[] vector, Dictionary<string, string> Payload);
         Task StoreVectorAsync(string collectionName, float[] vector, long MessageId);
