@@ -12,23 +12,23 @@ namespace TelegramSearchBot.Model.Data {
         public long ChatId { get; set; }
 
         [Required]
-        public string Name { get; set; }
+        public string Name { get; set; } = null!;
 
         [Required]
-        public string EntityType { get; set; }
+        public string EntityType { get; set; } = null!;
 
-        public string Observations { get; set; }
+        public string? Observations { get; set; }
 
-        public string FromEntity { get; set; }
+        public string? FromEntity { get; set; }
 
-        public string ToEntity { get; set; }
+        public string? ToEntity { get; set; }
 
-        public string RelationType { get; set; }
+        public string? RelationType { get; set; }
 
         [Required]
         public DateTime CreatedTime { get; set; } = DateTime.UtcNow;
 
         [Required]
-        public string ItemType { get; set; } // "entity" or "relation"
+        public string ItemType { get; set; } = null!; // "entity" or "relation"
     }
 }

@@ -50,22 +50,22 @@ namespace TelegramSearchBot.Model.Data {
         /// <summary>
         /// 对话内容摘要
         /// </summary>
-        public string ContentSummary { get; set; }
+        public string? ContentSummary { get; set; }
 
         /// <summary>
         /// 话题关键词（用逗号分隔）
         /// </summary>
-        public string TopicKeywords { get; set; }
+        public string? TopicKeywords { get; set; }
 
         /// <summary>
         /// 对话段的完整文本内容
         /// </summary>
-        public string FullContent { get; set; }
+        public string? FullContent { get; set; }
 
         /// <summary>
         /// 向量存储的ID（在FAISS中的索引位置）
         /// </summary>
-        public string VectorId { get; set; }
+        public string? VectorId { get; set; }
 
         /// <summary>
         /// 创建时间
@@ -80,7 +80,7 @@ namespace TelegramSearchBot.Model.Data {
         /// <summary>
         /// 对话段包含的消息列表
         /// </summary>
-        public virtual ICollection<ConversationSegmentMessage> Messages { get; set; }
+        public virtual ICollection<ConversationSegmentMessage> Messages { get; set; } = new List<ConversationSegmentMessage>();
     }
 
     /// <summary>
@@ -109,11 +109,11 @@ namespace TelegramSearchBot.Model.Data {
         /// <summary>
         /// 对话段导航属性
         /// </summary>
-        public virtual ConversationSegment ConversationSegment { get; set; }
+    public virtual ConversationSegment? ConversationSegment { get; set; }
 
         /// <summary>
         /// 消息导航属性
         /// </summary>
-        public virtual Message Message { get; set; }
+    public virtual Message? Message { get; set; }
     }
 }

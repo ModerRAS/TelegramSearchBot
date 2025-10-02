@@ -23,14 +23,14 @@ namespace TelegramSearchBot.Model.Data {
         /// 账本名称
         /// </summary>
         [Required]
-        [StringLength(100)]
-        public string Name { get; set; }
+    [StringLength(100)]
+    public string Name { get; set; } = null!;
 
         /// <summary>
         /// 账本描述
         /// </summary>
-        [StringLength(500)]
-        public string Description { get; set; }
+    [StringLength(500)]
+    public string? Description { get; set; }
 
         /// <summary>
         /// 创建者ID

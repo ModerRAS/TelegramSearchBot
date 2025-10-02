@@ -30,14 +30,14 @@ namespace TelegramSearchBot.Model.Data {
         /// 标签/分类
         /// </summary>
         [Required]
-        [StringLength(50)]
-        public string Tag { get; set; }
+    [StringLength(50)]
+    public string Tag { get; set; } = null!;
 
         /// <summary>
         /// 描述
         /// </summary>
-        [StringLength(500)]
-        public string Description { get; set; }
+    [StringLength(500)]
+    public string? Description { get; set; }
 
         /// <summary>
         /// 创建者ID
@@ -48,8 +48,8 @@ namespace TelegramSearchBot.Model.Data {
         /// <summary>
         /// 创建者用户名
         /// </summary>
-        [StringLength(100)]
-        public string CreatedByUsername { get; set; }
+    [StringLength(100)]
+    public string? CreatedByUsername { get; set; }
 
         /// <summary>
         /// 创建时间
@@ -60,6 +60,6 @@ namespace TelegramSearchBot.Model.Data {
         /// 关联的账本
         /// </summary>
         [ForeignKey(nameof(AccountBookId))]
-        public virtual AccountBook AccountBook { get; set; }
+    public virtual AccountBook AccountBook { get; set; } = null!;
     }
 }
