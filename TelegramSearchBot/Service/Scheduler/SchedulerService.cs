@@ -143,8 +143,11 @@ namespace TelegramSearchBot.Service.Scheduler {
                 // 确定上次执行的基准时间
                 DateTime lastRunTime;
                 if (lastExecution == null) {
-                    // 如果从未执行过，使用当前UTC时间作为基准
-                    lastRunTime = DateTime.UtcNow;
+                    // 如果从未执行过，使用稍早于当前时间的基准，避免首次执行被跳过
+                    var baselineOffset = _checkInterval > TimeSpan.Zero
+                        ? _checkInterval
+                        : TimeSpan.FromMinutes(1);
+                    lastRunTime = DateTime.UtcNow - baselineOffset;
                 } else if (lastExecution.CompletedTime.HasValue) {
                     // 如果有完成时间，使用完成时间作为基准
                     // 从数据库读取的时间 Kind 可能是 Unspecified，需要指定为 Utc
