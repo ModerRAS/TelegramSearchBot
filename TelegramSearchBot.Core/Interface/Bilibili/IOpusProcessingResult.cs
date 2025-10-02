@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.Interface.Bilibili {
+namespace TelegramSearchBot.Core.Interface.Bilibili {
     public interface IOpusProcessingResult {
         string MainCaption { get; set; }
         List<IAlbumInputMedia> MediaGroup { get; set; }

@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Core.Model {
     [Obsolete]
     public class ExportModel {
         public List<Message> Messages { get; set; }

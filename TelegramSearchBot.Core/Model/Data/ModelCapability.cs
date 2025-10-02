@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Model.Data {
+namespace TelegramSearchBot.Core.Model.Data {
     /// <summary>
     /// 存储LLM模型的能力信息，如工具调用、视觉处理、嵌入等
     /// </summary>

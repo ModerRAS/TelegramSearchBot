@@ -2,9 +2,9 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Newtonsoft.Json;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 
-namespace TelegramSearchBot.Model.Data {
+namespace TelegramSearchBot.Core.Model.Data {
     public class SearchPageCache {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();

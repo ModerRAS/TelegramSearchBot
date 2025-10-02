@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 
-namespace TelegramSearchBot.Model.ChatExport {
+namespace TelegramSearchBot.Core.Model.ChatExport {
     public class ChatExport {
         public string Name { get; set; }
         public string Type { get; set; }

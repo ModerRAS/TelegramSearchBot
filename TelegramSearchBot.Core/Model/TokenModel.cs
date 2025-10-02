@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Core.Model {
     public class TokenModel {
         [Key]
         public int Id { get; set; }

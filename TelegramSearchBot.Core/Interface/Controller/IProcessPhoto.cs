@@ -10,7 +10,7 @@ using TelegramSearchBot.Common;
 using TelegramSearchBot.Exceptions;
 using File = System.IO.File;
 
-namespace TelegramSearchBot.Interface.Controller {
+namespace TelegramSearchBot.Core.Interface.Controller {
     public interface IProcessPhoto {
         public static bool IsPhoto(string Name) {
             if (string.IsNullOrEmpty(Name)) {

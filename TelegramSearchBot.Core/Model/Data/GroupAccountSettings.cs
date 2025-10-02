@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 
-namespace TelegramSearchBot.Model.Data {
+namespace TelegramSearchBot.Core.Model.Data {
     /// <summary>
     /// 群组记账设置表
     /// </summary>

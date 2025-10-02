@@ -1,6 +1,6 @@
 using System;
 
-namespace TelegramSearchBot.Model.Search;
+namespace TelegramSearchBot.Core.Model.Search;
 
 [Obsolete("写多了的")]
 public class SearchMessageDTO {

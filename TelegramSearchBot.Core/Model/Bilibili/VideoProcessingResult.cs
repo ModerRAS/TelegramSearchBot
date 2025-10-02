@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.Model.Bilibili {
+namespace TelegramSearchBot.Core.Model.Bilibili {
     public class VideoProcessingResult {
         public bool Success { get; set; }
         public string ErrorMessage { get; set; }

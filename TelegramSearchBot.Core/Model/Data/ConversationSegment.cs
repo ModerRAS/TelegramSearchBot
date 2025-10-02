@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace TelegramSearchBot.Model.Data {
+namespace TelegramSearchBot.Core.Model.Data {
     /// <summary>
     /// 对话段模型 - 表示一段连续的对话
     /// </summary>

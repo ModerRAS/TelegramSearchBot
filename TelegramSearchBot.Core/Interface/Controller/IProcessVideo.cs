@@ -12,7 +12,7 @@ using TelegramSearchBot.Common;
 using TelegramSearchBot.Exceptions;
 using File = System.IO.File;
 
-namespace TelegramSearchBot.Interface.Controller {
+namespace TelegramSearchBot.Core.Interface.Controller {
     public interface IProcessVideo {
         public static bool IsVideo(string Name) {
             if (string.IsNullOrEmpty(Name)) {

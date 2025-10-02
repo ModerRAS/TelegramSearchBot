@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using TelegramSearchBot.Common;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Core.Model {
     public class DataDbContextFactory : IDesignTimeDbContextFactory<DataDbContext> {
         public DataDbContext CreateDbContext(string[] args) {
             var optionsBuilder = new DbContextOptionsBuilder<DataDbContext>();

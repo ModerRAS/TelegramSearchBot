@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace TelegramSearchBot.Model.Bilibili;
+namespace TelegramSearchBot.Core.Model.Bilibili;
 
 /// <summary>
 /// Represents detailed information about a Bilibili Opus (Dynamic/Feed item).

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Model.Tools {
+namespace TelegramSearchBot.Core.Model.Tools {
     public class SearchToolResult {
         public string Query { get; set; }
         public int TotalFound { get; set; }

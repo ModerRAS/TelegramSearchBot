@@ -16,9 +16,9 @@ using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(ServiceLifetime.Transient)]

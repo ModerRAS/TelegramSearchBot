@@ -1,9 +1,9 @@
 using System;
 using System.Linq;
-using TelegramSearchBot.Helper;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Helper;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Model.Search;
+namespace TelegramSearchBot.Core.Model.Search;
 
 public class MessageVO {
     public long GroupId { get; set; }

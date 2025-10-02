@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Model.AI {
+namespace TelegramSearchBot.Core.Model.AI {
     /// <summary>
     /// 包含模型信息和能力的数据传输对象
     /// </summary>

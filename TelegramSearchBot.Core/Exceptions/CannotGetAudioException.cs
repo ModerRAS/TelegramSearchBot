@@ -1,6 +1,6 @@
 using System;
 
-namespace TelegramSearchBot.Exceptions {
+namespace TelegramSearchBot.Core.Exceptions {
     public class CannotGetAudioException : Exception {
     }
 }

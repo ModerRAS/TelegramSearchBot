@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Core.Model {
     public class PipelineContext {
         public Update Update { get; set; }
         public Dictionary<string, dynamic> PipelineCache { get; set; }

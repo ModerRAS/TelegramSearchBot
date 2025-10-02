@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace TelegramSearchBot.Model.AI {
+namespace TelegramSearchBot.Core.Model.AI {
     public enum LLMConfState {
         [Description("setting_max_retry")]
         SettingMaxRetry,

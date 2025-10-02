@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.Interface.Controller {
+namespace TelegramSearchBot.Core.Interface.Controller {
     internal interface IPreUpdate {
         public Task ExecuteAsync(Update e);
     }

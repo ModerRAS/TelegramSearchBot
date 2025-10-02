@@ -2,7 +2,7 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 
-namespace TelegramSearchBot.Model.Data {
+namespace TelegramSearchBot.Core.Model.Data {
     /// <summary>
     /// 定时任务执行记录表
     /// 用于跟踪定时任务的执行状态，防止重复执行

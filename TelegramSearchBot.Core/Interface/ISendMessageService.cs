@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 
-namespace TelegramSearchBot.Interface {
+namespace TelegramSearchBot.Core.Interface {
     public interface ISendMessageService : IService {
         #region Fallback Methods
         Task TrySendMessageWithFallback(

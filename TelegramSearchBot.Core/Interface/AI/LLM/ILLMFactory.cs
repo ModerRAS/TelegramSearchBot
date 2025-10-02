@@ -1,6 +1,6 @@
-using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Core.Model.AI;
 
-namespace TelegramSearchBot.Interface.AI.LLM {
+namespace TelegramSearchBot.Core.Interface.AI.LLM {
     public interface ILLMFactory : IService {
         ILLMService GetLLMService(LLMProvider provider);
     }

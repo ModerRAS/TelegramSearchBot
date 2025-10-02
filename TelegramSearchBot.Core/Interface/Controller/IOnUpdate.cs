@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 
-namespace TelegramSearchBot.Interface.Controller {
+namespace TelegramSearchBot.Core.Interface.Controller {
     public interface IOnUpdate {
         List<Type> Dependencies { get; } // 每个Controller的依赖项
 

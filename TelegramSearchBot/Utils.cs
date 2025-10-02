@@ -6,7 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using Markdig;
 using Serilog;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot {
     class Utils {

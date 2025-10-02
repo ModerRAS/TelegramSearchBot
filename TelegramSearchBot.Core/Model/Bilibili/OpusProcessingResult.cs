@@ -4,7 +4,7 @@ using System.IO;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Interface.Bilibili;
 
-namespace TelegramSearchBot.Model.Bilibili {
+namespace TelegramSearchBot.Core.Model.Bilibili {
     public class OpusProcessingResult : IOpusProcessingResult {
         public string MainCaption { get; set; }
         public List<IAlbumInputMedia> MediaGroup { get; set; }

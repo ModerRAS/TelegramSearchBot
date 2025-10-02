@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace TelegramSearchBot.Model.Data;
+namespace TelegramSearchBot.Core.Model.Data;
 
 public class AppConfigurationItem {
     [Key]

@@ -1,4 +1,4 @@
-namespace TelegramSearchBot.Model.Search {
+namespace TelegramSearchBot.Core.Model.Search {
     public enum SearchType {
         /// <summary>
         /// 倒排索引搜索（Lucene）

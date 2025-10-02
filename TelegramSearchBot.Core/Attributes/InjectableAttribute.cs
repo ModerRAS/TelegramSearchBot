@@ -1,7 +1,7 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace TelegramSearchBot.Attributes {
+namespace TelegramSearchBot.Core.Attributes {
     /// <summary>
     /// 标记需要自动注入到DI容器的类
     /// </summary>

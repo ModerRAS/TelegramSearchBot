@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Model.AI {
+namespace TelegramSearchBot.Core.Model.AI {
     public enum LLMProvider {
         None,
         OpenAI,

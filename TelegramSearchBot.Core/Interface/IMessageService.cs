@@ -1,7 +1,7 @@
 using System.Threading.Tasks;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 
-namespace TelegramSearchBot.Interface {
+namespace TelegramSearchBot.Core.Interface {
     public interface IMessageService {
         public abstract Task<long> ExecuteAsync(MessageOption messageOption);
 

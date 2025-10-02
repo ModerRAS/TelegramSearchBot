@@ -4,9 +4,9 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Core.Model.AI;
 
-namespace TelegramSearchBot.Model.Data {
+namespace TelegramSearchBot.Core.Model.Data {
     public class LLMChannel {
         [Key]
         public int Id { get; set; }

@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Interface {
+namespace TelegramSearchBot.Core.Interface {
     /// <summary>
     /// 模型能力管理服务接口
     /// </summary>

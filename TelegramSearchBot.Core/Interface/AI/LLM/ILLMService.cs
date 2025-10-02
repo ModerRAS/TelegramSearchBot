@@ -4,10 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Interface.AI.LLM {
+namespace TelegramSearchBot.Core.Interface.AI.LLM {
     public interface ILLMService {
         public IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, LLMChannel channel,
                                                   [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default);

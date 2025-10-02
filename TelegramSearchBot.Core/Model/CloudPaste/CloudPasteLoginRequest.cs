@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
-namespace TelegramSearchBot.Model.CloudPaste {
+namespace TelegramSearchBot.Core.Model.CloudPaste {
     public class CloudPasteLoginRequest {
         [JsonProperty("username")]
         public string Username { get; set; }

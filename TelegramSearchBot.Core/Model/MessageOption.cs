@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Telegram.Bot.Types;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Core.Model {
     /// <summary>
     /// ChatId, UserId, MessageId, Content
     /// </summary>

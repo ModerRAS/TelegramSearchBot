@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Model.Data {
+namespace TelegramSearchBot.Core.Model.Data {
     public class MessageExtension {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]

@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Interface.AI.LLM {
+namespace TelegramSearchBot.Core.Interface.AI.LLM {
     public interface IGeneralLLMService {
         string ServiceName { get; }
 

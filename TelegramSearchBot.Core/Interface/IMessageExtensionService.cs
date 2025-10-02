@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Interface {
+namespace TelegramSearchBot.Core.Interface {
     public interface IMessageExtensionService : IService {
         Task<MessageExtension> GetByIdAsync(int id);
         Task<List<MessageExtension>> GetByMessageDataIdAsync(long messageDataId);

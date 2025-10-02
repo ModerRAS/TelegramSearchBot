@@ -2,7 +2,7 @@ using MediatR;
 using Telegram.Bot.Types; // Added for Message
 using Telegram.Bot.Types.Enums;
 
-namespace TelegramSearchBot.Model.Notifications {
+namespace TelegramSearchBot.Core.Model.Notifications {
     public class TextMessageReceivedNotification : INotification {
         public string Text { get; } // Kept for convenience if only text is needed
         public long ChatId { get; } // Kept for convenience

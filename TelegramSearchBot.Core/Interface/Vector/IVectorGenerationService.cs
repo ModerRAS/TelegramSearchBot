@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.Data;
-using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
+using TelegramSearchBot.Core.Model.Data;
+using ModelSearchOption = TelegramSearchBot.Core.Model.SearchOption;
 
-namespace TelegramSearchBot.Interface.Vector {
+namespace TelegramSearchBot.Core.Interface.Vector {
     public interface IVectorGenerationService {
         Task<ModelSearchOption> Search(ModelSearchOption searchOption);
         Task<float[]> GenerateVectorAsync(string text);

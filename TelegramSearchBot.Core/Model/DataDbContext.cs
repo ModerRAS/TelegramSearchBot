@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Serilog;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Core.Model {
     public class DataDbContext : DbContext {
         public DataDbContext(DbContextOptions<DataDbContext> options) : base(options) { }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {

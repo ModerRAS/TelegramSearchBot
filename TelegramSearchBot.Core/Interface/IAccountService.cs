@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Interface {
+namespace TelegramSearchBot.Core.Interface {
     public interface IAccountService : IService {
         /// <summary>
         /// 创建账本

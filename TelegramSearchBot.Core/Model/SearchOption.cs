@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Model.Search;
+using TelegramSearchBot.Core.Model.Search;
 
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Core.Model {
 
 
     public class SearchOption {

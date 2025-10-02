@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.Tools;
+using TelegramSearchBot.Core.Model.Tools;
 
-namespace TelegramSearchBot.Interface.Tools {
+namespace TelegramSearchBot.Core.Interface.Tools {
     public interface IShortUrlToolService {
         Task<ShortUrlMappingResult> GetShortUrlMapping(string shortUrl);
         Task<List<ShortUrlMappingResult>> GetAllShortUrlMappings(

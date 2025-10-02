@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace TelegramSearchBot.Model.Data {
+namespace TelegramSearchBot.Core.Model.Data {
     public class CacheData {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string UUID { get; set; }

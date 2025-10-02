@@ -1,7 +1,7 @@
 using MediatR;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
-namespace TelegramSearchBot.Model.Notifications {
+namespace TelegramSearchBot.Core.Model.Notifications {
     public class MessageVectorGenerationNotification : INotification {
         public Message Message { get; }
 

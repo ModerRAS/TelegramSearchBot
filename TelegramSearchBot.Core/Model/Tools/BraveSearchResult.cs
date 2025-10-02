@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace TelegramSearchBot.Model.Tools {
+namespace TelegramSearchBot.Core.Model.Tools {
     public class BraveSearchResult {
         public string Type { get; set; }
         public BraveWebResults Web { get; set; }

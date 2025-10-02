@@ -1,6 +1,6 @@
 using System;
 
-namespace TelegramSearchBot.Attributes // New namespace
+namespace TelegramSearchBot.Core.Attributes // New namespace
 {
     /// <summary>
     /// Marks a method as an MCP tool that can be called by the LLM.
@@ -15,7 +15,7 @@ namespace TelegramSearchBot.Attributes // New namespace
         /// <summary>
         /// Optional. If specified, this name will be used for the tool instead of the method name.
         /// </summary>
-        public string Name { get; set; }
+    public string? Name { get; set; }
 
         public McpToolAttribute(string description) {
             Description = description;

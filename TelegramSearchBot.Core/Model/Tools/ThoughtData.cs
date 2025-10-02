@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace TelegramSearchBot.Model.Tools {
+namespace TelegramSearchBot.Core.Model.Tools {
     public class ThoughtData {
         [JsonPropertyName("thought")]
         public string Thought { get; set; }

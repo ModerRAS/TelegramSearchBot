@@ -9,10 +9,10 @@ using FFMpegCore.Pipes;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Exceptions;
+using TelegramSearchBot.Core.Exceptions;
 using File = System.IO.File;
 
-namespace TelegramSearchBot.Interface.Controller {
+namespace TelegramSearchBot.Core.Interface.Controller {
     public interface IProcessAudio {
         public static bool IsAudio(string Name) {
             if (string.IsNullOrEmpty(Name)) {

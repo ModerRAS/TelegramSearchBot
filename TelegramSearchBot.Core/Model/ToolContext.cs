@@ -1,4 +1,4 @@
-namespace TelegramSearchBot.Model {
+namespace TelegramSearchBot.Core.Model {
     public class ToolContext {
         public long ChatId { get; set; }
         public long UserId { get; set; }

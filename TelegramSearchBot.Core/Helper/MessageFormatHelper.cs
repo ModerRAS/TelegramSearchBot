@@ -7,7 +7,7 @@ using System.Web;
 using HtmlAgilityPack;
 using Markdig;
 
-namespace TelegramSearchBot.Helper {
+namespace TelegramSearchBot.Core.Helper {
     public static class MessageFormatHelper {
         public static string ConvertMarkdownToTelegramHtml(string markdownText) {
             if (string.IsNullOrEmpty(markdownText)) return string.Empty;
@@ -31,7 +31,7 @@ namespace TelegramSearchBot.Helper {
                         case "s": case "strike": case "del": builder.Append("<s>"); ProcessChildren(node, builder); builder.Append("</s>"); break;
                         case "tg-spoiler": builder.Append("<tg-spoiler>"); ProcessChildren(node, builder); builder.Append("</tg-spoiler>"); break;
                         case "a":
-                            string href = node.GetAttributeValue("href", null);
+                            string href = node.GetAttributeValue("href", string.Empty);
                             if (!string.IsNullOrEmpty(href)) { builder.Append($"<a href=\"{HttpUtility.HtmlEncode(href)}\">"); ProcessChildren(node, builder); builder.Append("</a>"); } else { ProcessChildren(node, builder); }
                             break;
                         case "code":
@@ -65,7 +65,7 @@ namespace TelegramSearchBot.Helper {
                         case "font":
                         case "img":
                             if (tagName == "img") {
-                                string alt = node.GetAttributeValue("alt", null); string src = node.GetAttributeValue("src", null);
+                                string alt = node.GetAttributeValue("alt", string.Empty); string src = node.GetAttributeValue("src", string.Empty);
                                 if (!string.IsNullOrEmpty(alt)) builder.Append($"[Image: {HttpUtility.HtmlEncode(alt)}] ");
                                 else if (!string.IsNullOrEmpty(src)) builder.Append($"[Image: {HttpUtility.HtmlEncode(src)}] ");
                             }
