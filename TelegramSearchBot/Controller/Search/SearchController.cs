@@ -6,7 +6,9 @@ using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
-using TelegramSearchBot.Search.Lucene.Model;
+using TelegramSearchBot.Model.Search;
+using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
+using ModelSearchType = TelegramSearchBot.Model.Search.SearchType;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.View;
@@ -47,19 +49,19 @@ namespace TelegramSearchBot.Controller.Search {
         }
 
         private async Task HandleSearch(Message message) {
-            await HandleSearchInternal(message, SearchType.InvertedIndex, 3);
+            await HandleSearchInternal(message, ModelSearchType.InvertedIndex, 3);
         }
 
         private async Task HandleVectorSearch(Message message) {
-            await HandleSearchInternal(message, SearchType.Vector, 5);
+            await HandleSearchInternal(message, ModelSearchType.Vector, 5);
         }
 
         private async Task HandleSyntaxSearch(Message message) {
-            await HandleSearchInternal(message, SearchType.SyntaxSearch, 5);
+            await HandleSearchInternal(message, ModelSearchType.SyntaxSearch, 5);
         }
 
-        private async Task HandleSearchInternal(Message message, SearchType searchType, int prefixLength) {
-            var firstSearch = new SearchOption() {
+        private async Task HandleSearchInternal(Message message, ModelSearchType searchType, int prefixLength) {
+            var firstSearch = new ModelSearchOption() {
                 Search = message.Text.Substring(prefixLength),
                 ChatId = message.Chat.Id,
                 IsGroup = message.Chat.Id < 0,
@@ -91,15 +93,15 @@ namespace TelegramSearchBot.Controller.Search {
 
             // 添加切换搜索方式按钮
             var alternativeSearchType = searchType switch {
-                SearchType.InvertedIndex => SearchType.Vector,
-                SearchType.Vector => SearchType.SyntaxSearch,
-                SearchType.SyntaxSearch => SearchType.InvertedIndex,
-                _ => SearchType.InvertedIndex
+                ModelSearchType.InvertedIndex => ModelSearchType.Vector,
+                ModelSearchType.Vector => ModelSearchType.SyntaxSearch,
+                ModelSearchType.SyntaxSearch => ModelSearchType.InvertedIndex,
+                _ => ModelSearchType.InvertedIndex
             };
 
             var searchTypeText = alternativeSearchType switch {
-                SearchType.Vector => "向量搜索",
-                SearchType.SyntaxSearch => "语法搜索",
+                ModelSearchType.Vector => "向量搜索",
+                ModelSearchType.SyntaxSearch => "语法搜索",
                 _ => "倒排索引"
             };
 

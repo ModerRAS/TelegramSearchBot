@@ -12,11 +12,10 @@ using Moq;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Search.Lucene.Model;
 using TelegramSearchBot.Search.FAISS.Service;
 using Xunit;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
-using SearchType = TelegramSearchBot.Search.Lucene.Model.SearchType;
+using SearchType = TelegramSearchBot.Model.Search.SearchType;
 
 namespace TelegramSearchBot.Test.Service.Vector {
     /// <summary>
@@ -279,6 +278,7 @@ namespace TelegramSearchBot.Test.Service.Vector {
 
             // Assert
             Assert.NotNull(result);
+            Assert.NotNull(result.Messages);
             Assert.Empty(result.Messages);
             Assert.Equal(0, result.Count);
         }

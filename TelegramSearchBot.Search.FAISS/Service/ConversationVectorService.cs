@@ -10,6 +10,7 @@ using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
 
 namespace TelegramSearchBot.Search.FAISS.Service {
     /// <summary>
@@ -42,7 +43,7 @@ namespace TelegramSearchBot.Search.FAISS.Service {
         /// <summary>
         /// 向量搜索 - 委托给FaissVectorService
         /// </summary>
-        public async Task<SearchOption> Search(SearchOption searchOption) {
+        public async Task<ModelSearchOption> Search(ModelSearchOption searchOption) {
             return await _faissVectorService.Search(searchOption);
         }
 

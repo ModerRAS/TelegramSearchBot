@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
-using TelegramSearchBot.Search.Lucene.Model;
+using TelegramSearchBot.Model.Search;
 
 namespace TelegramSearchBot.Service.Search {
     public enum CallbackActionType {
@@ -53,6 +53,10 @@ namespace TelegramSearchBot.Service.Search {
             // 深拷贝搜索选项
             var newOption = Newtonsoft.Json.JsonConvert.DeserializeObject<SearchOption>(
                 Newtonsoft.Json.JsonConvert.SerializeObject(searchOption));
+
+            if (newOption == null) {
+                return await _searchOptionStorageService.SetSearchOptionAsync(searchOption);
+            }
 
             // 修改搜索类型，重置分页
             newOption.SearchType = newSearchType;

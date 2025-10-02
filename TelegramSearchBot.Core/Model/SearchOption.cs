@@ -3,20 +3,20 @@ using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Search.Lucene.Model;
+using TelegramSearchBot.Model.Search;
 
 namespace TelegramSearchBot.Model {
 
 
     public class SearchOption {
-        public string Search { get; set; }
+    public string Search { get; set; } = string.Empty;
         public int MessageId { get; set; }
         public long ChatId { get; set; }
         public bool IsGroup { get; set; }
         /// <summary>
         /// 搜索方式，默认为倒排索引搜索
         /// </summary>
-        public SearchType SearchType { get; set; } = SearchType.InvertedIndex;
+    public SearchType SearchType { get; set; } = SearchType.InvertedIndex;
         /// <summary>
         /// 在GenerateKeyboard的时候会被增加
         /// </summary>
@@ -26,12 +26,12 @@ namespace TelegramSearchBot.Model {
         /// 在Count小于0时表示第一次搜索, 第一次搜索完成之后变成正常的Count
         /// </summary>
         public int Count { get; set; }
-        public List<long> ToDelete { get; set; }
-        public bool ToDeleteNow { get; set; }
+    public List<long> ToDelete { get; set; } = new();
+    public bool ToDeleteNow { get; set; }
         public int ReplyToMessageId { get; set; }
         [JsonIgnore]
-        public Chat Chat { get; set; }
+    public Chat? Chat { get; set; }
         [JsonIgnore]
-        public List<Data.Message> Messages { get; set; }
+    public List<Data.Message>? Messages { get; set; }
     }
 }
