@@ -2,7 +2,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Vector.Configuration;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Vector.Model;
 
 namespace TelegramSearchBot.Vector.Service;
 
@@ -24,9 +24,9 @@ public class ImprovedSegmentationService {
     /// <summary>
     /// 将消息列表分段（主要逻辑）
     /// </summary>
-    public List<SegmentInfo> SegmentMessages(List<Message> messages) {
+    public List<SegmentInfo> SegmentMessages(List<MessageDto> messages) {
         var segments = new List<SegmentInfo>();
-        var currentSegmentMessages = new List<Message>();
+        var currentSegmentMessages = new List<MessageDto>();
         var lastMessageTime = DateTime.MinValue;
         var currentTopicKeywords = new HashSet<string>();
 
@@ -41,7 +41,7 @@ public class ImprovedSegmentationService {
                 var segmentInfo = CreateSegmentInfo(currentSegmentMessages);
                 segments.Add(segmentInfo);
 
-                currentSegmentMessages = new List<Message>();
+                currentSegmentMessages = new List<MessageDto>();
                 currentTopicKeywords = new HashSet<string>();
             }
 
@@ -67,8 +67,8 @@ public class ImprovedSegmentationService {
     /// 多维度检测：消息数量、时间间隔、字符数、话题变化、参与者变化
     /// </summary>
     private bool ShouldStartNewSegment(
-        List<Message> currentMessages,
-        Message newMessage,
+        List<MessageDto> currentMessages,
+        MessageDto newMessage,
         DateTime lastMessageTime,
         HashSet<string> currentTopicKeywords) {
         
@@ -114,7 +114,7 @@ public class ImprovedSegmentationService {
     /// <summary>
     /// 从消息列表创建段落信息
     /// </summary>
-    private SegmentInfo CreateSegmentInfo(List<Message> messages) {
+    private SegmentInfo CreateSegmentInfo(List<MessageDto> messages) {
         var firstMessage = messages.First();
         var lastMessage = messages.Last();
         var participants = messages.Select(m => m.FromUserId).Distinct().Count();
@@ -216,7 +216,7 @@ public class ImprovedSegmentationService {
     /// <summary>
     /// 检测话题转换信号
     /// </summary>
-    private bool HasTopicTransitionSignal(Message message) {
+    private bool HasTopicTransitionSignal(MessageDto message) {
         var content = message.Content?.ToLower() ?? "";
 
         var transitionSignals = new[] {
@@ -249,7 +249,7 @@ public class ImprovedSegmentationService {
 /// 段落信息（用于传递段落数据）
 /// </summary>
 public class SegmentInfo {
-    public List<Message> Messages { get; set; } = new();
+    public List<MessageDto> Messages { get; set; } = new();
     public long GroupId { get; set; }
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }

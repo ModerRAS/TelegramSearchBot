@@ -15,7 +15,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
-    <ProjectReference Include="..\TelegramSearchBot\TelegramSearchBot.csproj" />
   </ItemGroup>
 
 </Project>

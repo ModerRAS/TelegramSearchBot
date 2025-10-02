@@ -32,6 +32,8 @@ namespace TelegramSearchBot.Common {
                 BraveApiKey = config.BraveApiKey;
                 EnableAccounting = config.EnableAccounting;
                 MaxToolCycles = config.MaxToolCycles;
+                EnableEnhancedVectorSearch = config.EnableEnhancedVectorSearch;
+                VectorSimilarityThreshold = config.VectorSimilarityThreshold;
             } catch {
             }
 
@@ -59,6 +61,8 @@ namespace TelegramSearchBot.Common {
         public static string BraveApiKey { get; set; }
         public static bool EnableAccounting { get; set; } = false;
         public static int MaxToolCycles { get; set; }
+        public static bool EnableEnhancedVectorSearch { get; set; } = false;
+        public static float VectorSimilarityThreshold { get; set; } = 1.5f;
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
     }
@@ -82,5 +86,7 @@ namespace TelegramSearchBot.Common {
         public string BraveApiKey { get; set; }
         public bool EnableAccounting { get; set; } = false;
         public int MaxToolCycles { get; set; } = 25;
+        public bool EnableEnhancedVectorSearch { get; set; } = false;
+        public float VectorSimilarityThreshold { get; set; } = 1.5f;
     }
 }
