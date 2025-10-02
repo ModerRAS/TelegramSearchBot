@@ -10,9 +10,9 @@ namespace TelegramSearchBot.Model.Data {
     public class LLMChannel {
         [Key]
         public int Id { get; set; }
-        public string Name { get; set; }
-        public string Gateway { get; set; }
-        public string ApiKey { get; set; }
+        public string Name { get; set; } = null!;
+        public string? Gateway { get; set; }
+        public string? ApiKey { get; set; }
         public LLMProvider Provider { get; set; }
         /// <summary>
         /// 用来设置最大并行数量的
@@ -23,6 +23,6 @@ namespace TelegramSearchBot.Model.Data {
         /// </summary>
         public int Priority { get; set; }
 
-        public virtual ICollection<ChannelWithModel> Models { get; set; }
+        public virtual ICollection<ChannelWithModel> Models { get; set; } = new List<ChannelWithModel>();
     }
 }

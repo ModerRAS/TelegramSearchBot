@@ -22,7 +22,7 @@ namespace TelegramSearchBot.Model.Data {
         /// </summary>
         [Required]
         [MaxLength(50)]
-        public string VectorType { get; set; }
+        public string? VectorType { get; set; }
 
         /// <summary>
         /// 相关实体ID (MessageId 或 ConversationSegmentId)
@@ -38,7 +38,7 @@ namespace TelegramSearchBot.Model.Data {
         /// 向量内容的摘要（用于调试和展示）
         /// </summary>
         [MaxLength(1000)]
-        public string ContentSummary { get; set; }
+        public string? ContentSummary { get; set; }
 
         /// <summary>
         /// 创建时间
@@ -70,14 +70,14 @@ namespace TelegramSearchBot.Model.Data {
         /// </summary>
         [Required]
         [MaxLength(50)]
-        public string IndexType { get; set; }
+        public string? IndexType { get; set; }
 
         /// <summary>
         /// 索引文件路径
         /// </summary>
         [Required]
         [MaxLength(500)]
-        public string FilePath { get; set; }
+        public string? FilePath { get; set; }
 
         /// <summary>
         /// 向量维度
