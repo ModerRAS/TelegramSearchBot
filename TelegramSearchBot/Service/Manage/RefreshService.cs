@@ -19,7 +19,7 @@ using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Search.Lucene.Tool;
 using TelegramSearchBot.Service.AI.ASR;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.AI.OCR;

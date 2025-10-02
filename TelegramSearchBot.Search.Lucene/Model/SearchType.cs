@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Search.Model {
+namespace TelegramSearchBot.Search.Lucene.Model {
     public enum SearchType {
         /// <summary>
         /// 倒排索引搜索（Lucene）

@@ -7,7 +7,7 @@ using Lucene.Net.Analysis.Cn.Smart;
 using Lucene.Net.Analysis.TokenAttributes;
 using Lucene.Net.Util;
 
-namespace TelegramSearchBot.Search.Tokenizer {
+namespace TelegramSearchBot.Search.Lucene.Tokenizer {
     /// <summary>
     /// 统一分词处理器 - 提供安全的分词逻辑和降级策略。
     /// </summary>

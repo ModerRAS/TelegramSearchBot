@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Search.Model;
+using TelegramSearchBot.Search.Lucene.Model;
 
 namespace TelegramSearchBot.Model {
 

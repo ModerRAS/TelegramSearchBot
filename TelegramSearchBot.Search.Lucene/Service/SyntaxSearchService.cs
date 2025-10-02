@@ -6,11 +6,11 @@ using System.Threading.Tasks;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Util;
-using TelegramSearchBot.Search.Model;
-using TelegramSearchBot.Search.Tokenizer;
-using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Search.Lucene.Model;
+using TelegramSearchBot.Search.Lucene.Tokenizer;
+using TelegramSearchBot.Search.Lucene.Tool;
 
-namespace TelegramSearchBot.Search.Service {
+namespace TelegramSearchBot.Search.Lucene.Service {
     public class SyntaxSearchService {
         private static readonly Regex ExcludeRegex = new Regex(@"-([^\s]+)", RegexOptions.Compiled);
 

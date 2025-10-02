@@ -6,9 +6,9 @@ using Lucene.Net.Analysis;
 using Lucene.Net.Analysis.Cn.Smart;
 using Lucene.Net.Analysis.TokenAttributes;
 using Lucene.Net.Util;
-using TelegramSearchBot.Search.Exception;
+using TelegramSearchBot.Search.Lucene.Exception;
 
-namespace TelegramSearchBot.Search.Tool {
+namespace TelegramSearchBot.Search.Lucene.Tool {
     public static class SearchHelper {
         /// <summary>
         /// 在给定的 <paramref name="text"/> 中，根据用户输入的单条查询 <paramref name="query"/>（主要为中文）

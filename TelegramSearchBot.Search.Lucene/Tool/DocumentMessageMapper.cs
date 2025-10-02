@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Lucene.Net.Documents;
-using TelegramSearchBot.Search.Model;
+using TelegramSearchBot.Search.Lucene.Model;
 
-namespace TelegramSearchBot.Search.Tool {
+namespace TelegramSearchBot.Search.Lucene.Tool {
     internal static class DocumentMessageMapper {
         public static MessageDTO? Map(Document document) {
             if (document == null) {

@@ -15,7 +15,7 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Notifications;
-using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Search.Lucene.Tool;
 
 namespace TelegramSearchBot.Service.Storage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

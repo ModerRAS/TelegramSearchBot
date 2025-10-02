@@ -1,8 +1,8 @@
 using System;
-using TelegramSearchBot.Search.Exception;
-using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Search.Lucene.Exception;
+using TelegramSearchBot.Search.Lucene.Tool;
 
-namespace TelegramSearchBot.Search.Test {
+namespace TelegramSearchBot.Search.Lucene.Test {
     public class SearchHelperTests {
         [Fact]
         public void FindBestSnippet_ReturnsSnippet_ForChineseMatch() {

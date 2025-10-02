@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
-using TelegramSearchBot.Search.Interface;
-using TelegramSearchBot.Search.Tokenizer;
+using TelegramSearchBot.Search.Lucene.Interface;
+using TelegramSearchBot.Search.Lucene.Tokenizer;
 
-namespace TelegramSearchBot.Search.Tool {
+namespace TelegramSearchBot.Search.Lucene.Tool {
     internal class ExtQueryBuilder : IQueryBuilder {
         private readonly UnifiedTokenizer _tokenizer;
         private readonly ExtFieldQueryOptimizer _extOptimizer;

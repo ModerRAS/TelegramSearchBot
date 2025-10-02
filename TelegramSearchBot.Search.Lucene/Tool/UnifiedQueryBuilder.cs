@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 
-namespace TelegramSearchBot.Search.Tool {
+namespace TelegramSearchBot.Search.Lucene.Tool {
     internal class UnifiedQueryBuilder {
         private readonly ContentQueryBuilder _contentBuilder;
         private readonly ExtQueryBuilder _extBuilder;

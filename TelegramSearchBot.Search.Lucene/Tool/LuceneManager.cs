@@ -10,11 +10,11 @@ using Lucene.Net.Search;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Search.Model;
-using TelegramSearchBot.Search.Service;
-using TelegramSearchBot.Search.Tokenizer;
+using TelegramSearchBot.Search.Lucene.Model;
+using TelegramSearchBot.Search.Lucene.Service;
+using TelegramSearchBot.Search.Lucene.Tokenizer;
 
-namespace TelegramSearchBot.Search.Tool {
+namespace TelegramSearchBot.Search.Lucene.Tool {
     public class LuceneManager {
         private readonly Func<string, Task> _log;
         private readonly UnifiedTokenizer _tokenizer;

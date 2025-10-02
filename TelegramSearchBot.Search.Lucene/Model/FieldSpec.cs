@@ -1,6 +1,6 @@
 using System;
 
-namespace TelegramSearchBot.Search.Model {
+namespace TelegramSearchBot.Search.Lucene.Model {
     /// <summary>
     /// 字段规范数据模型，来源于 LuceneManager 中的嵌套类
     /// </summary>
