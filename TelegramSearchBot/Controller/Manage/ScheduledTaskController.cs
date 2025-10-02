@@ -8,6 +8,7 @@ using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Scheduler;
 using TgMessage = Telegram.Bot.Types.Message;
 
@@ -17,6 +18,7 @@ namespace TelegramSearchBot.Controller.Manage {
         private readonly SendMessage _sendMessage;
         private readonly DataDbContext _dbContext;
         private readonly ISchedulerService _schedulerService;
+        private readonly AdminService _adminService;
 
         public List<Type> Dependencies => new List<Type>();
 
@@ -24,11 +26,13 @@ namespace TelegramSearchBot.Controller.Manage {
             ITelegramBotClient botClient,
             SendMessage sendMessage,
             DataDbContext dbContext,
-            ISchedulerService schedulerService) {
+            ISchedulerService schedulerService,
+            AdminService adminService) {
             _botClient = botClient;
             _sendMessage = sendMessage;
             _dbContext = dbContext;
             _schedulerService = schedulerService;
+            _adminService = adminService;
         }
 
         public async Task ExecuteAsync(PipelineContext p) {
@@ -39,6 +43,17 @@ namespace TelegramSearchBot.Controller.Manage {
 
             // 检查是否为定时任务相关命令
             if (text.StartsWith("/scheduler", StringComparison.OrdinalIgnoreCase)) {
+                if (!await _adminService.IsNormalAdmin(message.From.Id)) {
+                    await _sendMessage.AddTask(async () => {
+                        await _botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: "❌ 权限不足：只有管理员才能使用定时任务管理功能",
+                            replyParameters: new Telegram.Bot.Types.ReplyParameters() { MessageId = message.MessageId }
+                        );
+                    }, message.Chat.Id < 0);
+                    return;
+                }
+
                 await HandleSchedulerCommand(message, text);
             }
         }
