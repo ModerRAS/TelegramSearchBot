@@ -83,7 +83,8 @@ namespace TelegramSearchBot.Controller.Manage {
 • `/scheduler history` - 查看任务执行历史
 
 可用任务：
-• WordCloudReport - 词云报告任务";
+• WordCloudReport - 词云报告任务
+• SearchPageCacheCleanup - 搜索页面缓存清理任务";
 
             await _sendMessage.AddTask(async () => {
                 await _botClient.SendMessage(
