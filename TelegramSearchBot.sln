@@ -23,7 +23,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TelegramSearchBot.Test", "T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Search.Lucene", "TelegramSearchBot.Search.Lucene\TelegramSearchBot.Search.Lucene.csproj", "{DBFD8C03-8128-428C-A2B1-47A24198FEF1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Search.Test", "TelegramSearchBot.Search.Test\TelegramSearchBot.Search.Test.csproj", "{A17FCB3D-FF05-46CD-A60E-6E43470A5AB3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Search.Lucene.Test", "TelegramSearchBot.Search.Lucene.Test\TelegramSearchBot.Search.Lucene.Test.csproj", "{A17FCB3D-FF05-46CD-A60E-6E43470A5AB3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
