@@ -21,7 +21,6 @@ using TelegramSearchBot.Model.Notifications;
 using TelegramSearchBot.Search.Lucene.Tool;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Storage;
-using TelegramSearchBot.Service.Vector;
 using Xunit;
 using Chat = Telegram.Bot.Types.Chat; // Alias for Telegram.Bot.Types.Chat
 using Message = TelegramSearchBot.Model.Data.Message;

@@ -11,7 +11,7 @@ using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Manage;
-using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Search.FAISS.Service;
 using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Controller.Manage {

@@ -11,7 +11,7 @@ using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service.Vector {
+namespace TelegramSearchBot.Search.FAISS.Service {
     /// <summary>
     /// 对话向量服务 - 现在只处理对话段而不再直接操作向量存储
     /// 实际的向量存储交给FaissVectorService处理

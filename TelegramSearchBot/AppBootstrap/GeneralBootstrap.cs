@@ -28,7 +28,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Scheduler;
 using TelegramSearchBot.Service.Storage;
-using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Search.FAISS.Service;
 using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.AppBootstrap {
