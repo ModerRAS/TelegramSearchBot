@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using TelegramSearchBot.Search.Model;
+using TelegramSearchBot.Search.Lucene.Model;
 
-namespace TelegramSearchBot.Search.Tool {
+namespace TelegramSearchBot.Search.Lucene.Tool {
     public class FieldSpecificationParser {
         private static readonly Regex FieldRegex = new Regex(@"(\w+):([^\s]+)", RegexOptions.Compiled);
         private readonly Action<string>? _logAction;

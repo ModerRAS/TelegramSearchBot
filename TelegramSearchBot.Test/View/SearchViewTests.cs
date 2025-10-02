@@ -7,7 +7,7 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Search;
-using TelegramSearchBot.Search.Model;
+using TelegramSearchBot.Search.Lucene.Model;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.View;
 using Xunit;

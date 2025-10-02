@@ -5,7 +5,7 @@ using System.Linq;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 
-namespace TelegramSearchBot.Search.Tool {
+namespace TelegramSearchBot.Search.Lucene.Tool {
     public class ExtFieldQueryOptimizer {
         private readonly ConcurrentDictionary<long, (string[] Fields, DateTime CachedAt)> _fieldCache = new();
         private readonly Action<string>? _logAction;

@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
-using TelegramSearchBot.Search.Tokenizer;
+using TelegramSearchBot.Search.Lucene.Tokenizer;
 
-namespace TelegramSearchBot.Search.Tool {
+namespace TelegramSearchBot.Search.Lucene.Tool {
     public class PhraseQueryProcessor {
         private static readonly Regex PhraseRegex = new Regex("\"([^\"]+)\"", RegexOptions.Compiled);
         private readonly UnifiedTokenizer _tokenizer;

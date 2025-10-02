@@ -11,8 +11,8 @@ using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model; // For DataDbContext
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Tools;
-using TelegramSearchBot.Search.Model;
-using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Search.Lucene.Model;
+using TelegramSearchBot.Search.Lucene.Tool;
 using TelegramSearchBot.Service.AI.LLM; // For McpTool attributes
 using TelegramSearchBot.Service.Storage; // For MessageExtensionService
 
@@ -46,7 +46,7 @@ namespace TelegramSearchBot.Service.Tools {
             int skip = ( page - 1 ) * pageSize;
             int take = pageSize;
 
-            (int totalHits, List<TelegramSearchBot.Search.Model.MessageDTO> messageDtos) searchResult;
+            (int totalHits, List<TelegramSearchBot.Search.Lucene.Model.MessageDTO> messageDtos) searchResult;
             try {
                 searchResult = _luceneManager.Search(query, chatId, skip, take);
             } catch (System.IO.DirectoryNotFoundException) {

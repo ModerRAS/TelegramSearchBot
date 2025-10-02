@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using TelegramSearchBot.Search.Model;
+using TelegramSearchBot.Search.Lucene.Model;
 
 namespace TelegramSearchBot.Model.Search;
 

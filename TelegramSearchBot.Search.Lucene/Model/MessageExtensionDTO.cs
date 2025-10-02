@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TelegramSearchBot.Search.Model {
+namespace TelegramSearchBot.Search.Lucene.Model {
     public class MessageExtensionDTO {
         public string Name { get; set; } = string.Empty;
         public string Value { get; set; } = string.Empty;

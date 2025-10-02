@@ -25,7 +25,7 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
-using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Search.Lucene.Tool;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.View;

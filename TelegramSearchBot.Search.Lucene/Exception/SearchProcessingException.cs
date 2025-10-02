@@ -1,6 +1,6 @@
 using System;
 
-namespace TelegramSearchBot.Search.Exception {
+namespace TelegramSearchBot.Search.Lucene.Exception {
     public class SearchProcessingException : System.Exception {
         public SearchProcessingException() { }
         public SearchProcessingException(string message) : base(message) { }
