@@ -11,7 +11,7 @@ using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
-namespace TelegramSearchBot.Service.Vector {
+namespace TelegramSearchBot.Search.FAISS.Service {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class ConversationSegmentationService : IService {
         public string ServiceName => "ConversationSegmentationService";

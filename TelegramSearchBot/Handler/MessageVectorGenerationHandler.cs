@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using MediatR;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Notifications;
-using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Search.FAISS.Service;
 
 namespace TelegramSearchBot.Handler {
     public class MessageVectorGenerationHandler : INotificationHandler<MessageVectorGenerationNotification> {

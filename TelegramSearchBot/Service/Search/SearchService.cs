@@ -8,9 +8,10 @@ using TelegramSearchBot.Interface.Vector;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Search.Lucene.Model;
 using TelegramSearchBot.Search.Lucene.Tool;
-using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Search.FAISS.Service;
+using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
+using SearchType = TelegramSearchBot.Model.Search.SearchType;
 
 namespace TelegramSearchBot.Service.Search {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -33,7 +34,7 @@ namespace TelegramSearchBot.Service.Search {
 
         public string ServiceName => "SearchService";
 
-        public async Task<SearchOption> Search(SearchOption searchOption) {
+        public async Task<ModelSearchOption> Search(ModelSearchOption searchOption) {
             return searchOption.SearchType switch {
                 SearchType.Vector => await VectorSearch(searchOption),
                 SearchType.InvertedIndex => await LuceneSearch(searchOption), // 默认使用简单搜索
@@ -42,7 +43,7 @@ namespace TelegramSearchBot.Service.Search {
             };
         }
 
-        private async Task<SearchOption> LuceneSearch(SearchOption searchOption) {
+        private Task<ModelSearchOption> LuceneSearch(ModelSearchOption searchOption) {
             if (searchOption.IsGroup) {
                 var (count, messageDtos) = lucene.Search(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
                 searchOption.Count = count;
@@ -59,11 +60,11 @@ namespace TelegramSearchBot.Service.Search {
                     searchOption.Count += count;
                 }
             }
-            return searchOption;
+            return Task.FromResult(searchOption);
         }
 
         // 语法搜索方法 - 使用支持语法的新搜索实现
-        private async Task<SearchOption> LuceneSyntaxSearch(SearchOption searchOption) {
+        private Task<ModelSearchOption> LuceneSyntaxSearch(ModelSearchOption searchOption) {
             if (searchOption.IsGroup) {
                 var (count, messageDtos) = lucene.SyntaxSearch(searchOption.Search, searchOption.ChatId, searchOption.Skip, searchOption.Take);
                 searchOption.Count = count;
@@ -80,10 +81,10 @@ namespace TelegramSearchBot.Service.Search {
                     searchOption.Count += count;
                 }
             }
-            return searchOption;
+            return Task.FromResult(searchOption);
         }
 
-        private async Task<SearchOption> VectorSearch(SearchOption searchOption) {
+        private async Task<ModelSearchOption> VectorSearch(ModelSearchOption searchOption) {
             if (searchOption.IsGroup) {
                 // 使用FAISS对话段向量搜索当前群组
                 return await faissVectorService.Search(searchOption);
@@ -98,7 +99,7 @@ namespace TelegramSearchBot.Service.Search {
 
                 foreach (var Group in UserInGroups) {
                     // 为每个群组创建搜索选项
-                    var groupSearchOption = new SearchOption {
+                    var groupSearchOption = new ModelSearchOption {
                         Search = searchOption.Search,
                         ChatId = Group.GroupId,
                         IsGroup = true,

@@ -19,8 +19,9 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using FaissIndex = FaissNet.Index;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
+using SearchType = TelegramSearchBot.Model.Search.SearchType;
 
-namespace TelegramSearchBot.Service.Vector {
+namespace TelegramSearchBot.Search.FAISS.Service {
     /// <summary>
     /// 基于FAISS.NET的向量服务
     /// 使用SQLite存储元数据，FAISS存储向量索引
@@ -74,6 +75,7 @@ namespace TelegramSearchBot.Service.Vector {
                     _logger.LogWarning($"群组 {searchOption.ChatId} 的对话段向量索引为空");
                     searchOption.Messages = new List<Message>();
                     searchOption.Count = 0;
+                    searchOption.SearchType = SearchType.Vector;
                     return searchOption;
                 }
 
@@ -89,6 +91,7 @@ namespace TelegramSearchBot.Service.Vector {
                     _logger.LogInformation($"对话段向量搜索完成，未找到结果");
                     searchOption.Messages = new List<Message>();
                     searchOption.Count = 0;
+                    searchOption.SearchType = SearchType.Vector;
                     return searchOption;
                 }
 

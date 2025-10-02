@@ -11,7 +11,7 @@ using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Service.Vector;
+using TelegramSearchBot.Search.FAISS.Service;
 
 namespace TelegramSearchBot.Service.Scheduler {
     [Injectable(ServiceLifetime.Transient)]

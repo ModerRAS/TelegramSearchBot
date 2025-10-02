@@ -1,8 +1,8 @@
 using System.Threading.Tasks;
-using TelegramSearchBot.Model;
+using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
 
 namespace TelegramSearchBot.Interface {
     public interface ISearchService {
-        public abstract Task<SearchOption> Search(SearchOption searchOption);
+        public abstract Task<ModelSearchOption> Search(ModelSearchOption searchOption);
     }
 }
