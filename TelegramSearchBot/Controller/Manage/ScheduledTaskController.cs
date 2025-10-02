@@ -17,8 +17,8 @@ namespace TelegramSearchBot.Controller.Manage {
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
         private readonly DataDbContext _dbContext;
-    private readonly ISchedulerService _schedulerService;
-    private readonly AdminService _adminService;
+        private readonly ISchedulerService _schedulerService;
+        private readonly AdminService _adminService;
 
         public List<Type> Dependencies => new List<Type>();
 
