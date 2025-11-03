@@ -5,11 +5,11 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Search.FAISS.Service {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -139,7 +139,7 @@ namespace TelegramSearchBot.Search.FAISS.Service {
 
             // 4. 话题发生明显变化
             if (currentMessages.Count >= MinMessagesPerSegment) {
-                var newMessageKeywords = ExtractKeywords(newMessage.Content);
+                var newMessageKeywords = ExtractKeywords(newMessage.Content ?? string.Empty);
                 if (HasTopicChanged(currentTopicKeywords, newMessageKeywords))
                     return true;
             }
@@ -349,21 +349,21 @@ namespace TelegramSearchBot.Search.FAISS.Service {
         /// <summary>
         /// 生成内容摘要
         /// </summary>
-        private async Task<string> GenerateContentSummary(string fullContent) {
+        private Task<string> GenerateContentSummary(string fullContent) {
             try {
                 // 如果内容较短，直接截取
                 if (fullContent.Length <= 100)
-                    return fullContent;
+                    return Task.FromResult(fullContent);
 
                 // 简单截取前100个字符作为摘要
                 var summary = fullContent.Substring(0, Math.Min(100, fullContent.Length));
                 if (fullContent.Length > 100)
                     summary += "...";
 
-                return summary;
+                return Task.FromResult(summary);
             } catch (Exception ex) {
                 _logger.LogError(ex, "生成内容摘要失败");
-                return fullContent.Substring(0, Math.Min(50, fullContent.Length)) + "...";
+                return Task.FromResult(fullContent.Substring(0, Math.Min(50, fullContent.Length)) + "...");
             }
         }
 

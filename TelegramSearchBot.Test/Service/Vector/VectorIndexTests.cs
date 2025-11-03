@@ -3,8 +3,8 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Service.Vector {

@@ -1,8 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Notifications;
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Notifications;
 using TelegramSearchBot.Search.FAISS.Service;
 
 namespace TelegramSearchBot.Handler {

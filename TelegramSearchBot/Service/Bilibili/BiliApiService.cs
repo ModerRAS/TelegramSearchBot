@@ -9,11 +9,11 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Manager; // For Env (though BiliCookie will now come from service)
-using TelegramSearchBot.Model.Bilibili;
-using TelegramSearchBot.Model.Notifications;
+using TelegramSearchBot.Core.Model.Bilibili;
+using TelegramSearchBot.Core.Model.Notifications;
 using TelegramSearchBot.Service.Common; // For IAppConfigurationService
 
 namespace TelegramSearchBot.Service.Bilibili;

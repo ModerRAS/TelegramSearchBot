@@ -12,10 +12,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using SkiaSharp;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
 using TelegramSearchBot.Core.Model;
 using TelegramSearchBot.Core.Model.AI;
 using TelegramSearchBot.Core.Model.Data;
@@ -116,7 +116,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             try {
-                var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+                var googleAI = new GoogleAi(channel.ApiKey!, client: _httpClientFactory.CreateClient());
                 var modelsResponse = await googleAI.ListModelsAsync();
                 return modelsResponse.Models.Select(m => m.Name.Replace("models/", ""));
             } catch (Exception ex) {
@@ -134,7 +134,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             try {
-                var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+                var googleAI = new GoogleAi(channel.ApiKey!, client: _httpClientFactory.CreateClient());
                 var modelsResponse = await googleAI.ListModelsAsync();
                 var results = new List<ModelWithCapabilities>();
 
@@ -259,7 +259,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
 
-            var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+            var googleAI = new GoogleAi(channel.ApiKey!, client: _httpClientFactory.CreateClient());
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
             var fullResponse = new StringBuilder();
 
@@ -327,7 +327,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             try {
-                var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+                var googleAI = new GoogleAi(channel.ApiKey!, client: _httpClientFactory.CreateClient());
                 var embeddings = googleAI.CreateEmbeddingModel("models/embedding-001");
                 var response = await embeddings.EmbedContentAsync(text);
 #pragma warning disable CS8602 // 解引用可能出现空引用。
@@ -349,7 +349,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return $"Error: {ServiceName} channel/gateway/apikey is not configured.";
             }
 
-            var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+            var googleAI = new GoogleAi(channel.ApiKey!, client: _httpClientFactory.CreateClient());
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
             try {
                 var prompt = $"请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用'图中显示'或'这是一张图片'这类通用表达。";

@@ -9,15 +9,13 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums; // For ChatType
 using TelegramSearchBot.Controller.Download;
-using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Storage; // Added for SendMessageService
-using TelegramSearchBot.Exceptions;
-using TelegramSearchBot.Exceptions;
-using TelegramSearchBot.Interface; // Added for IOnUpdate, IProcessPhoto
-using TelegramSearchBot.Interface.Controller; // Added for ISendMessageService
+using TelegramSearchBot.Core.Exceptions;
+using TelegramSearchBot.Core.Interface; // Added for IOnUpdate, IProcessPhoto
+using TelegramSearchBot.Core.Interface.Controller; // Added for ISendMessageService
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model; // Added for MessageOption
-using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
+using TelegramSearchBot.Core.Model; // Added for MessageOption
+using TelegramSearchBot.Core.Model.Notifications; // Added for TextMessageReceivedNotification
 using TelegramSearchBot.Service.AI.QR; // Added for AutoQRService
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage; // Added for MessageService

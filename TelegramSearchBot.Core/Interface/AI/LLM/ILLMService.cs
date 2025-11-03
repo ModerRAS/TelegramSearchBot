@@ -9,8 +9,8 @@ using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Core.Interface.AI.LLM {
     public interface ILLMService {
-        public IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, LLMChannel channel,
-                                                  [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default);
+    public IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, LLMChannel channel,
+                          CancellationToken cancellationToken = default);
         public Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel);
         public Task<IEnumerable<string>> GetAllModels(LLMChannel channel);
 

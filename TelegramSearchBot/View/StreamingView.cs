@@ -6,9 +6,12 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Helper;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.BotAPI;
+using BotMessage = Telegram.Bot.Types.Message;
+using CoreMessage = TelegramSearchBot.Core.Model.Data.Message;
 
 namespace TelegramSearchBot.View {
     public class StreamingView : IView {
@@ -52,7 +55,7 @@ namespace TelegramSearchBot.View {
             return this;
         }
 
-        private async Task<Message> RenderFinalMessage(CancellationToken cancellationToken) {
+    private async Task<BotMessage> RenderFinalMessage(CancellationToken cancellationToken) {
             var inlineButtons = _buttons?.Select(b =>
                 InlineKeyboardButton.WithCallbackData(b.Text, b.CallbackData)).ToList();
 
@@ -91,9 +94,9 @@ namespace TelegramSearchBot.View {
             return this;
         }
 
-        public async Task<List<Model.Data.Message>> Render(CancellationToken cancellationToken = default) {
+        public async Task<List<CoreMessage>> Render(CancellationToken cancellationToken = default) {
             if (_streamData == null) {
-                return new List<Model.Data.Message>() { Model.Data.Message.FromTelegramMessage(await RenderFinalMessage(cancellationToken)) };
+                return new List<CoreMessage>() { CoreMessage.FromTelegramMessage(await RenderFinalMessage(cancellationToken)) };
             }
 
             var inlineButtons = _buttons?.Select(b =>

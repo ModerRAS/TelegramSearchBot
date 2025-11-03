@@ -20,7 +20,7 @@ namespace TelegramSearchBot.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.AppConfigurationItem", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.AppConfigurationItem", b =>
                 {
                     b.Property<string>("Key")
                         .HasColumnType("TEXT");
@@ -33,7 +33,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("AppConfigurationItems");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ChannelWithModel", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ChannelWithModel", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -52,7 +52,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("ChannelsWithModel");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ConversationSegment", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ConversationSegment", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -104,7 +104,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("ConversationSegments");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ConversationSegmentMessage", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ConversationSegmentMessage", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -128,7 +128,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("ConversationSegmentMessages");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.GroupData", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.GroupData", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -151,7 +151,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("GroupData");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.GroupSettings", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.GroupSettings", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -174,7 +174,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("GroupSettings");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.LLMChannel", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.LLMChannel", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -203,7 +203,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("LLMChannels");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.MemoryGraph", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.MemoryGraph", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -244,7 +244,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("MemoryGraphs");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.Message", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.Message", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -276,7 +276,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("Messages");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.MessageExtension", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.MessageExtension", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -298,7 +298,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("MessageExtensions");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ModelCapability", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ModelCapability", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -327,7 +327,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("ModelCapabilities");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.SearchPageCache", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.SearchPageCache", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -349,7 +349,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("SearchPageCaches");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ShortUrlMapping", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ShortUrlMapping", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -373,7 +373,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("ShortUrlMappings");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.TelegramFileCacheEntry", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.TelegramFileCacheEntry", b =>
                 {
                     b.Property<string>("CacheKey")
                         .HasColumnType("TEXT");
@@ -393,7 +393,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("TelegramFileCacheEntries");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.UserData", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.UserData", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -419,7 +419,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("UserData");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.UserWithGroup", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.UserWithGroup", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -436,9 +436,9 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("UsersWithGroup");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ChannelWithModel", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ChannelWithModel", b =>
                 {
-                    b.HasOne("TelegramSearchBot.Model.Data.LLMChannel", "LLMChannel")
+                    b.HasOne("TelegramSearchBot.Core.Model.Data.LLMChannel", "LLMChannel")
                         .WithMany("Models")
                         .HasForeignKey("LLMChannelId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -447,15 +447,15 @@ namespace TelegramSearchBot.Migrations
                     b.Navigation("LLMChannel");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ConversationSegmentMessage", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ConversationSegmentMessage", b =>
                 {
-                    b.HasOne("TelegramSearchBot.Model.Data.ConversationSegment", "ConversationSegment")
+                    b.HasOne("TelegramSearchBot.Core.Model.Data.ConversationSegment", "ConversationSegment")
                         .WithMany("Messages")
                         .HasForeignKey("ConversationSegmentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("TelegramSearchBot.Model.Data.Message", "Message")
+                    b.HasOne("TelegramSearchBot.Core.Model.Data.Message", "Message")
                         .WithMany()
                         .HasForeignKey("MessageDataId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -466,9 +466,9 @@ namespace TelegramSearchBot.Migrations
                     b.Navigation("Message");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.MessageExtension", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.MessageExtension", b =>
                 {
-                    b.HasOne("TelegramSearchBot.Model.Data.Message", "Message")
+                    b.HasOne("TelegramSearchBot.Core.Model.Data.Message", "Message")
                         .WithMany("MessageExtensions")
                         .HasForeignKey("MessageDataId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -477,9 +477,9 @@ namespace TelegramSearchBot.Migrations
                     b.Navigation("Message");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ModelCapability", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ModelCapability", b =>
                 {
-                    b.HasOne("TelegramSearchBot.Model.Data.ChannelWithModel", "ChannelWithModel")
+                    b.HasOne("TelegramSearchBot.Core.Model.Data.ChannelWithModel", "ChannelWithModel")
                         .WithMany("Capabilities")
                         .HasForeignKey("ChannelWithModelId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -488,22 +488,22 @@ namespace TelegramSearchBot.Migrations
                     b.Navigation("ChannelWithModel");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ChannelWithModel", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ChannelWithModel", b =>
                 {
                     b.Navigation("Capabilities");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.ConversationSegment", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.ConversationSegment", b =>
                 {
                     b.Navigation("Messages");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.LLMChannel", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.LLMChannel", b =>
                 {
                     b.Navigation("Models");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Data.Message", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Data.Message", b =>
                 {
                     b.Navigation("MessageExtensions");
                 });

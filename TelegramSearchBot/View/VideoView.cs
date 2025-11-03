@@ -6,13 +6,13 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Scriban;
 using Telegram.Bot;
-using Telegram.Bot.Extensions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Helper;
+using TelegramSearchBot.Core.Interface;
 using TelegramSearchBot.Manager;
+using BotMessage = Telegram.Bot.Types.Message;
 
 namespace TelegramSearchBot.View {
     public class VideoView : IView {
@@ -177,7 +177,7 @@ UP: {{ owner_name }}
             return this;
         }
 
-        public async Task<Message> Render() {
+        public async Task<BotMessage> Render() {
             var replyParameters = new Telegram.Bot.Types.ReplyParameters {
                 MessageId = _replyToMessageId
             };
@@ -201,14 +201,14 @@ UP: {{ owner_name }}
                     }
                 }
 
-                await _sendMessage.AddTextMessageToSend(
+                var sentMessage = await _sendMessage.AddTaskWithResult(async () => await _botClient.SendMessage(
                     chatId: _chatId,
                     text: caption,
                     parseMode: ParseMode.Html,
                     replyParameters: replyParameters,
-                    disableNotification: _disableNotification,
-                    highPriorityForGroup: _chatId < 0 // Groups have negative chat IDs
-                );
+                    disableNotification: _disableNotification
+                ), _chatId);
+
                 if (replyMarkup != null) {
                     await _sendMessage.AddTask(async () =>
                         await _botClient.SendMessage(
@@ -219,7 +219,8 @@ UP: {{ owner_name }}
                         _chatId < 0
                     );
                 }
-                return new Message(); // Return dummy message since we don't have the actual message
+
+                return sentMessage;
             }
 
             // Handle video message case

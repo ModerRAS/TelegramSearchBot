@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using Scriban;
 using Telegram.Bot;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Interface;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 
 namespace TelegramSearchBot.View {
     public class WordCloudView : ImageView {

@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Search;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Search;
 using TelegramSearchBot.Search.Lucene.Model;
 
 namespace TelegramSearchBot.Helper {

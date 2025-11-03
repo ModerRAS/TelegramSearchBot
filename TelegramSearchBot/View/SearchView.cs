@@ -5,11 +5,12 @@ using System.Threading.Tasks;
 using Scriban;
 using Telegram.Bot;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Interface;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Search;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
+using CoreMessage = TelegramSearchBot.Core.Model.Data.Message;
+using TelegramSearchBot.Core.Model.Search;
 using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.View {
@@ -28,7 +29,7 @@ namespace TelegramSearchBot.View {
         private long ChatId { get; set; }
         private int ReplyToMessageId { get; set; }
         private bool IsGroup { get => ChatId < 0; }
-        private List<Message> Messages { get; set; }
+    private List<CoreMessage> Messages { get; set; }
         private int Count { get; set; }
         private int Skip { get; set; }
         private int Take { get; set; }
@@ -56,7 +57,7 @@ namespace TelegramSearchBot.View {
         }
 
         [Obsolete("Use WithSearchResult(SearchMessageVO) instead")]
-        public SearchView WithMessages(List<Message> messages) {
+        public SearchView WithMessages(List<CoreMessage> messages) {
             Messages = messages;
             return this;
         }
@@ -177,7 +178,7 @@ namespace TelegramSearchBot.View {
         }
 
         [Obsolete("Use RenderSearchResults instead")]
-        public List<string> ConvertToMarkdownLinks(IEnumerable<Model.Data.Message> messages) {
+    public List<string> ConvertToMarkdownLinks(IEnumerable<CoreMessage> messages) {
             var template = Template.Parse("[{{content | string.truncate 30 | string.replace '\n' '' | string.replace '\r' ''}}](https://t.me/c/{{group_id | string.slice 4}}/{{message_id}})");
 
             var result = new List<string>();

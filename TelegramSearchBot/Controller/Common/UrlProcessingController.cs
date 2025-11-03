@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Controller.AI.QR;
 using TelegramSearchBot.Controller.Storage;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Controller;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.Service.Common;
 
 namespace TelegramSearchBot.Controller.Common {

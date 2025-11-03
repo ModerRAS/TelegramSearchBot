@@ -11,9 +11,9 @@ using System.Xml.Linq;
 using Microsoft.Extensions.DependencyInjection; // For potential DI later
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json; // Added for Json.NET
-using TelegramSearchBot.Attributes; // Added to reference McpToolAttribute and McpParameterAttribute
-using TelegramSearchBot.Model; // Added for ToolContext
-using TelegramSearchBot.Model.Tools; // For BraveSearchResult
+using TelegramSearchBot.Core.Attributes; // Added to reference McpToolAttribute and McpParameterAttribute
+using TelegramSearchBot.Core.Model; // Added for ToolContext
+using TelegramSearchBot.Core.Model.Tools; // For BraveSearchResult
 
 namespace TelegramSearchBot.Service.AI.LLM {
     /// <summary>
@@ -83,6 +83,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                 var toolName = string.IsNullOrWhiteSpace(toolAttr.Name) ? method.Name : toolAttr.Name;
                 toolName = toolName.Split('`')[0]; // Sanitize
+                var declaringTypeName = method.DeclaringType?.FullName ?? method.Name;
 
                 // Use TryAdd for ConcurrentDictionary to handle race conditions more gracefully if multiple threads were to register the exact same tool name simultaneously,
                 // though the Clear() at the beginning makes this less of an issue for distinct calls to RegisterToolsAndGetPromptString.
@@ -92,7 +93,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     // but given the Clear() at the start of this method, if this method is called sequentially,
                     // ContainsKey would be false. If called concurrently, TryAdd is safer.
                     // The original log message for duplicate is still relevant if different methods map to the same sanitized toolName.
-                    loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found or failed to add. Method {method.DeclaringType.FullName}.{method.Name} might be ignored or overwritten by a concurrent call.");
+                    loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found or failed to add. Method {declaringTypeName}.{method.Name} might be ignored or overwritten by a concurrent call.");
                     // If we want to strictly prevent overwriting and log the original "ignored" message,
                     // we might need a slightly different approach, but ConcurrentDictionary handles the concurrent access safely.
                     // For simplicity and to address the core concurrency bug, TryAdd is sufficient.
@@ -101,7 +102,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     // Let's stick to a pattern closer to the original to ensure the warning logic remains:
                     if (ToolRegistry.ContainsKey(toolName)) // Check first
                     {
-                        loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found. Method {method.DeclaringType.FullName}.{method.Name} will be ignored.");
+                        loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found. Method {declaringTypeName}.{method.Name} will be ignored.");
                         continue;
                     }
                     // If, after the check, another thread adds it, ToolRegistry[toolName] could throw or overwrite.
@@ -111,7 +112,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     var toolTuple = (method, method.DeclaringType);
                     if (!ToolRegistry.TryAdd(toolName, toolTuple)) {
                         // This means toolName was already present (added by this thread in a previous iteration for a *different* method mapping to the same name, or by another thread).
-                        loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' encountered for method {method.DeclaringType.FullName}.{method.Name}. This tool registration will be skipped.");
+                        loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' encountered for method {declaringTypeName}.{method.Name}. This tool registration will be skipped.");
                         continue;
                     }
                     // If TryAdd succeeded, it's in the dictionary.
@@ -256,12 +257,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 // First try to parse the input as a whole document
                 try {
                     XDocument doc = XDocument.Parse(processedInput);
-                    // Check if there's a wrapper element containing tool elements
-                    if (doc.Root.Elements().Any(e =>
+                    var root = doc.Root;
+                    if (root != null && root.Elements().Any(e =>
                         e.Name.LocalName.Equals("tool", StringComparison.OrdinalIgnoreCase) ||
                         ToolRegistry.ContainsKey(e.Name.LocalName))) {
-                        // Process each tool element inside the wrapper
-                        foreach (var toolElement in doc.Root.Elements()) {
+                        foreach (var toolElement in root.Elements()) {
                             var toolCall = ParseToolElement(toolElement);
                             if (toolCall.toolName != null) {
                                 parsedToolCalls.Add(toolCall);
@@ -454,10 +454,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private static void ValidateRequiredParameters(string toolName, Dictionary<string, string> arguments) {
             var methodParams = ToolRegistry[toolName].Method.GetParameters();
             foreach (var param in methodParams) {
-                if (!arguments.ContainsKey(param.Name) &&
+                var paramName = param.Name;
+                if (string.IsNullOrEmpty(paramName)) {
+                    continue;
+                }
+
+                if (!arguments.ContainsKey(paramName) &&
                     !param.IsOptional &&
                     !param.HasDefaultValue) {
-                    _sLogger?.LogWarning($"ValidateRequiredParameters: Missing required parameter '{param.Name}' for tool '{toolName}'");
+                    _sLogger?.LogWarning($"ValidateRequiredParameters: Missing required parameter '{paramName}' for tool '{toolName}'");
                 }
             }
         }
@@ -488,7 +493,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     continue;
                 }
 
-                if (stringArguments.TryGetValue(paramInfo.Name, out var stringValue)) {
+                if (!string.IsNullOrEmpty(paramInfo.Name) && stringArguments.TryGetValue(paramInfo.Name, out var stringValue)) {
                     convertedArgs[i] = ConvertArgumentValue(stringValue, paramInfo.ParameterType, paramInfo.Name);
                 } else if (paramInfo.HasDefaultValue) {
                     convertedArgs[i] = paramInfo.DefaultValue;

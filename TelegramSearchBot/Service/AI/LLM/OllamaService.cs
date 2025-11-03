@@ -16,16 +16,17 @@ using OllamaSharp;
 using OllamaSharp.Models;
 using OllamaSharp.Models.Chat;
 using SkiaSharp;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM; // For ILLMService
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Tools; // For BraveSearchResult
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM; // For ILLMService
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Tools; // For BraveSearchResult
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Tools;
+using DataMessage = TelegramSearchBot.Core.Model.Data.Message;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService
@@ -89,7 +90,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         // --- Main Execution Logic (Using OllamaSharp.Chat helper) ---
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+    public async IAsyncEnumerable<string> ExecAsync(DataMessage message, long ChatId, string modelName, LLMChannel channel,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             modelName = modelName ?? Env.OllamaModelName;
             if (string.IsNullOrWhiteSpace(modelName)) {
@@ -105,7 +106,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // --- Client and Model Setup ---
             HttpClient httpClient = _httpClientFactory?.CreateClient("OllamaClient") ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(channel.Gateway);
+            httpClient.BaseAddress = new Uri(channel.Gateway!);
             var ollama = new OllamaApiClient(httpClient, modelName);
 
             if (!await CheckAndPullModelAsync(ollama, modelName)) {
@@ -200,7 +201,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             try {
                 var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-                httpClient.BaseAddress = new Uri(channel.Gateway);
+                httpClient.BaseAddress = new Uri(channel.Gateway!);
                 var ollama = new OllamaApiClient(httpClient);
 
                 var models = await ollama.ListLocalModelsAsync();
@@ -221,7 +222,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             try {
                 var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-                httpClient.BaseAddress = new Uri(channel.Gateway);
+                httpClient.BaseAddress = new Uri(channel.Gateway!);
                 var ollama = new OllamaApiClient(httpClient);
 
                 var models = await ollama.ListLocalModelsAsync();
@@ -339,7 +340,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(channel.Gateway);
+            httpClient.BaseAddress = new Uri(channel.Gateway!);
             var ollama = new OllamaApiClient(httpClient, modelName);
 
             if (!await CheckAndPullModelAsync(ollama, modelName)) {
@@ -366,7 +367,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(channel.Gateway);
+            httpClient.BaseAddress = new Uri(channel.Gateway!);
             var ollama = new OllamaApiClient(httpClient, modelName);
             ollama.SelectedModel = modelName;
             var prompt = "请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用'图中显示'或'这是一张图片'这类通用表达。";

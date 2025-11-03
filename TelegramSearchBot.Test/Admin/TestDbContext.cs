@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 
 namespace TelegramSearchBot.Test.Admin {
     // DbContext 定义

@@ -7,8 +7,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Model;
 using TelegramSearchBot.Service.AI.LLM;
 using Xunit;
 

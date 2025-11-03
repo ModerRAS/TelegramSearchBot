@@ -22,7 +22,7 @@ using TelegramSearchBot.Common;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Core.Model;
 using TelegramSearchBot.Service.BotAPI;

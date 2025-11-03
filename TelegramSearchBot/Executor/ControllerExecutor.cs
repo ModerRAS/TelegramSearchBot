@@ -5,8 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Serilog;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Interface.Controller;
+using TelegramSearchBot.Core.Model;
 
 namespace TelegramSearchBot.Executor {
     public class ControllerExecutor {

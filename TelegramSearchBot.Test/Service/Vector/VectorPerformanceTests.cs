@@ -9,14 +9,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.Search.FAISS.Service;
 using Xunit;
 using Xunit.Abstractions;
-using SearchOption = TelegramSearchBot.Model.SearchOption;
-using SearchType = TelegramSearchBot.Model.Search.SearchType;
+using SearchOption = TelegramSearchBot.Core.Model.SearchOption;
+using SearchType = TelegramSearchBot.Core.Model.Search.SearchType;
 
 namespace TelegramSearchBot.Test.Service.Vector {
     /// <summary>

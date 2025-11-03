@@ -6,11 +6,12 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Tools;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Tools;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
+using ModelMemoryGraph = TelegramSearchBot.Core.Model.Data.MemoryGraph;
 
 namespace TelegramSearchBot.Service.Tools {
     public class Entity {
@@ -230,37 +231,59 @@ For delete_relations: {relations: [{from: string, to: string, relationType: stri
 
                 switch (command.ToLower()) {
                     case "create_entities":
-                        var entitiesWrapper = JsonSerializer.Deserialize<EntityWrapper>(arguments, JsonOptions);
-                        return await _graphManager.CreateEntitiesAsync(entitiesWrapper.Entities, toolContext.ChatId);
+                        var entitiesWrapper = JsonSerializer.Deserialize<EntityWrapper>(arguments, JsonOptions)
+                            ?? throw new ArgumentException("Entities payload is required");
+                        var entities = entitiesWrapper.Entities
+                            ?? throw new ArgumentException("Entities collection cannot be null");
+                        return await _graphManager.CreateEntitiesAsync(entities, toolContext.ChatId);
                     case "create_relations":
-                        var relationsWrapper = JsonSerializer.Deserialize<RelationWrapper>(arguments, JsonOptions);
-                        return await _graphManager.CreateRelationsAsync(relationsWrapper.Relations, toolContext.ChatId);
+                        var relationsWrapper = JsonSerializer.Deserialize<RelationWrapper>(arguments, JsonOptions)
+                            ?? throw new ArgumentException("Relations payload is required");
+                        var relations = relationsWrapper.Relations
+                            ?? throw new ArgumentException("Relations collection cannot be null");
+                        return await _graphManager.CreateRelationsAsync(relations, toolContext.ChatId);
                     case "add_observations":
-                        var obsWrapper = JsonSerializer.Deserialize<ObservationWrapper>(arguments, JsonOptions);
-                        return await _graphManager.AddObservationsAsync(obsWrapper.Observations, toolContext.ChatId);
+                        var obsWrapper = JsonSerializer.Deserialize<ObservationWrapper>(arguments, JsonOptions)
+                            ?? throw new ArgumentException("Observations payload is required");
+                        var observations = obsWrapper.Observations
+                            ?? throw new ArgumentException("Observations collection cannot be null");
+                        return await _graphManager.AddObservationsAsync(observations, toolContext.ChatId);
                     case "delete_entities":
-                        var entityNamesWrapper = JsonSerializer.Deserialize<EntityNamesWrapper>(arguments, JsonOptions);
-                        await _graphManager.DeleteEntitiesAsync(entityNamesWrapper.EntityNames, toolContext.ChatId);
+                        var entityNamesWrapper = JsonSerializer.Deserialize<EntityNamesWrapper>(arguments, JsonOptions)
+                            ?? throw new ArgumentException("Entity names payload is required");
+                        var entityNames = entityNamesWrapper.EntityNames
+                            ?? throw new ArgumentException("Entity names cannot be null");
+                        await _graphManager.DeleteEntitiesAsync(entityNames, toolContext.ChatId);
                         return "Entities deleted successfully";
                     case "delete_observations":
-                        var obsDeletionsWrapper = JsonSerializer.Deserialize<ObservationDeletionWrapper>(arguments, JsonOptions);
-                        await _graphManager.DeleteObservationsAsync(obsDeletionsWrapper.Deletions, toolContext.ChatId);
+                        var obsDeletionsWrapper = JsonSerializer.Deserialize<ObservationDeletionWrapper>(arguments, JsonOptions)
+                            ?? throw new ArgumentException("Observation deletions payload is required");
+                        var deletions = obsDeletionsWrapper.Deletions
+                            ?? throw new ArgumentException("Observation deletions cannot be null");
+                        await _graphManager.DeleteObservationsAsync(deletions, toolContext.ChatId);
                         return "Observations deleted successfully";
                     case "delete_relations":
-                        var delRelationsWrapper = JsonSerializer.Deserialize<RelationWrapper>(arguments, JsonOptions);
-                        await _graphManager.DeleteRelationsAsync(delRelationsWrapper.Relations, toolContext.ChatId);
+                        var delRelationsWrapper = JsonSerializer.Deserialize<RelationWrapper>(arguments, JsonOptions)
+                            ?? throw new ArgumentException("Relation deletions payload is required");
+                        var relationDeletions = delRelationsWrapper.Relations
+                            ?? throw new ArgumentException("Relations collection cannot be null");
+                        await _graphManager.DeleteRelationsAsync(relationDeletions, toolContext.ChatId);
                         return "Relations deleted successfully";
                     case "read_graph":
                         return await _graphManager.ReadGraphAsync(toolContext.ChatId);
                     case "search_nodes":
-                        var searchQuery = JsonSerializer.Deserialize<SearchQuery>(arguments, JsonOptions);
-                        if (searchQuery?.Query == null) {
+                        var searchQuery = JsonSerializer.Deserialize<SearchQuery>(arguments, JsonOptions)
+                            ?? throw new ArgumentException("Search query payload is required");
+                        if (string.IsNullOrWhiteSpace(searchQuery.Query)) {
                             throw new ArgumentException("Search query is required");
                         }
                         return await _graphManager.SearchNodesAsync(searchQuery.Query, toolContext.ChatId);
                     case "open_nodes":
-                        var nodeNamesWrapper = JsonSerializer.Deserialize<NodeNamesWrapper>(arguments, JsonOptions);
-                        return await _graphManager.OpenNodesAsync(nodeNamesWrapper.Names, toolContext.ChatId);
+                        var nodeNamesWrapper = JsonSerializer.Deserialize<NodeNamesWrapper>(arguments, JsonOptions)
+                            ?? throw new ArgumentException("Node names payload is required");
+                        var nodeNames = nodeNamesWrapper.Names
+                            ?? throw new ArgumentException("Node names cannot be null");
+                        return await _graphManager.OpenNodesAsync(nodeNames, toolContext.ChatId);
                     default:
                         throw new ArgumentException($"Unknown command: {command}");
                 }
@@ -386,7 +409,7 @@ For delete_relations: {relations: [{from: string, to: string, relationType: stri
                 if (existing == null) {
                     _logger.LogDebug("Creating new entity: {EntityName} in chatId: {ChatId}", entity.Name, chatId);
 
-                    _dbContext.MemoryGraphs.Add(new Model.Data.MemoryGraph {
+                    _dbContext.MemoryGraphs.Add(new ModelMemoryGraph {
                         ChatId = chatId,
                         Name = entity.Name,
                         EntityType = entity.EntityType ?? "",
@@ -424,7 +447,7 @@ For delete_relations: {relations: [{from: string, to: string, relationType: stri
                     _logger.LogDebug("Creating new relation: {From} -> {To} ({RelationType}) in chatId: {ChatId}",
                         relation.From, relation.To, relation.RelationType, chatId);
 
-                    _dbContext.MemoryGraphs.Add(new Model.Data.MemoryGraph {
+                    _dbContext.MemoryGraphs.Add(new ModelMemoryGraph {
                         ChatId = chatId,
                         Name = $"{relation.From}-{relation.RelationType}-{relation.To}",
                         EntityType = "",

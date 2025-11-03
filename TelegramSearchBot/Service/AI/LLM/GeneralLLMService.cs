@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore; // For AnyAsync()
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped)]
@@ -74,8 +74,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
             return llmChannels;
         }
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+    public async IAsyncEnumerable<string> ExecAsync(Message message, long ChatId,
+                            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             // 1. 获取模型名称
             var modelName = await ( from s in _dbContext.GroupSettings
                                     where s.GroupId == ChatId
@@ -87,18 +87,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             await foreach (var e in ExecOperationAsync((service, channel, cancel) => {
-                return ExecAsync(message, ChatId, modelName, service, channel, cancellationToken);
+                return ExecAsync(message, ChatId, modelName, service, channel, cancel);
             }, modelName, cancellationToken)) {
                 yield return e;
             }
         }
         public async IAsyncEnumerable<string> ExecAsync(
-            Model.Data.Message message,
+            Message message,
             long ChatId,
             string modelName,
             ILLMService service,
             LLMChannel channel,
-            CancellationToken cancellation) {
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellation) {
             await foreach (var e in service.ExecAsync(message, ChatId, modelName, channel, cancellation).WithCancellation(cancellation)) {
                 yield return e;
             }
@@ -161,7 +161,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             }
 
                             // 6. 根据Provider选择服务
-                            await foreach (var e in operation(service, channel, new CancellationToken())) {
+                            await foreach (var e in operation(service, channel, cancellationToken).WithCancellation(cancellationToken)) {
                                 yield return e;
                             }
                             yield break;
@@ -201,12 +201,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogWarning($"未能获取 {modelName} 模型的图片分析结果");
             return $"Error:未能获取 {modelName} 模型的图片分析结果";
         }
-        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel);
             yield break;
         }
 
-        public async Task<float[]> GenerateEmbeddingsAsync(Model.Data.Message message, long ChatId) {
+        public async Task<float[]> GenerateEmbeddingsAsync(Message message, long ChatId) {
             var modelName = "bge-m3:latest";
             var config = await _dbContext.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == EmbeddingModelName);
@@ -236,7 +236,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogWarning($"未能获取 {modelName} 模型的嵌入向量");
             return Array.Empty<float>();
         }
-        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             yield return await service.GenerateEmbeddingsAsync(message, modelName, channel);
             yield break;
         }
@@ -268,7 +268,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private async Task SetDefaultMaxRetryCountAsync() {
-            await _dbContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
+            await _dbContext.AppConfigurationItems.AddAsync(new AppConfigurationItem {
                 Key = MaxRetryCountKey,
                 Value = DefaultMaxRetryCount.ToString()
             });
@@ -276,7 +276,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private async Task SetDefaultMaxImageRetryCountAsync() {
-            await _dbContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
+            await _dbContext.AppConfigurationItems.AddAsync(new AppConfigurationItem {
                 Key = MaxImageRetryCountKey,
                 Value = DefaultMaxImageRetryCount.ToString()
             });

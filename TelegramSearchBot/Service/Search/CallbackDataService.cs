@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Search;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Search;
 
 namespace TelegramSearchBot.Service.Search {
     public enum CallbackActionType {

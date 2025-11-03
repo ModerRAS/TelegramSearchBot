@@ -8,9 +8,9 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Executor;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface.Controller;
 
 namespace TelegramSearchBot.Service.BotAPI {
     [Injectable(ServiceLifetime.Singleton)]

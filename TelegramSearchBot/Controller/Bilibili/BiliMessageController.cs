@@ -8,14 +8,15 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using BotMessage = Telegram.Bot.Types.Message;
 using TelegramSearchBot.Controller.AI.OCR;
 using TelegramSearchBot.Controller.AI.QR;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface.Bilibili;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface.Bilibili;
+using TelegramSearchBot.Core.Interface.Controller;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Bilibili;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Bilibili;
 using TelegramSearchBot.Service.Bilibili;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.View;
@@ -112,7 +113,7 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
             }
         }
 
-        private async Task ProcessVideoUrlAsync(Message message, string url) {
+    private async Task ProcessVideoUrlAsync(BotMessage message, string url) {
             _logger.LogInformation("Processing Bilibili video URL: {Url}", url);
             var videoInfo = await _biliApiService.GetVideoInfoAsync(url);
             if (videoInfo == null) {
@@ -122,7 +123,7 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
             await HandleVideoInfoAsync(message, videoInfo);
         }
 
-        private async Task ProcessOpusUrlAsync(Message message, string url) {
+    private async Task ProcessOpusUrlAsync(BotMessage message, string url) {
             _logger.LogInformation("Processing Bilibili opus URL: {Url}", url);
             var opusInfo = await _biliApiService.GetOpusInfoAsync(url);
             if (opusInfo == null) {
@@ -132,7 +133,7 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
             await HandleOpusInfoAsync(message, opusInfo);
         }
 
-        private async Task HandleVideoInfoAsync(Message message, BiliVideoInfo videoInfo) {
+    private async Task HandleVideoInfoAsync(BotMessage message, BiliVideoInfo videoInfo) {
             _logger.LogInformation("Handling video info: {VideoTitle} for chat {ChatId}", videoInfo.Title, message.Chat.Id);
             bool isGroup = message.Chat.Type != ChatType.Private;
 
@@ -153,7 +154,7 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
                         .WithDimensions(videoInfo.DimensionWidth, videoInfo.DimensionHeight)
                         .WithThumbnail(result.ThumbnailInputFile);
 
-                    Message sentMessage = await videoView.Render();
+                        BotMessage sentMessage = await videoView.Render();
                     videoSent = true;
                     _logger.LogInformation("Video send task completed for {VideoTitle}", videoInfo.Title);
 
@@ -189,7 +190,7 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
             }
         }
 
-        private async Task HandleOpusInfoAsync(Message message, BiliOpusInfo opusInfo) {
+    private async Task HandleOpusInfoAsync(BotMessage message, BiliOpusInfo opusInfo) {
             _logger.LogInformation("Handling opus info by: {UserName} for chat {ChatId}", opusInfo.UserName, message.Chat.Id);
             bool isGroup = message.Chat.Type != ChatType.Private;
 
@@ -206,7 +207,7 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
             }
 
             if (result.HasImages) {
-                var tcs = new TaskCompletionSource<Message[]>();
+                    var tcs = new TaskCompletionSource<BotMessage[]>();
                 // Send media group directly, no need for AddTask
                 try {
                     var sentMediaMessages = await _botClient.SendMediaGroup(

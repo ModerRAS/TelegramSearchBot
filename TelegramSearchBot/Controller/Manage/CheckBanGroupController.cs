@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface.Controller;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 using TelegramSearchBot.Service.Manage;
 
 namespace TelegramSearchBot.Controller.Manage {

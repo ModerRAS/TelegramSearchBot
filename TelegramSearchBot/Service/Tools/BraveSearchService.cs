@@ -6,11 +6,10 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface.Tools;
-using TelegramSearchBot.Model.Tools;
-using TelegramSearchBot.Service.AI.LLM; // 添加MCP工具支持
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface.Tools;
+using TelegramSearchBot.Core.Model.Tools;
 
 namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -119,8 +118,8 @@ namespace TelegramSearchBot.Service.Tools {
                         case HttpStatusCode.OK:
                             // 解析响应
                             var json = await response.Content.ReadAsStringAsync();
-                            var result = JsonConvert.DeserializeObject<BraveSearchResult>(json);
-                            return result;
+                            return JsonConvert.DeserializeObject<BraveSearchResult>(json)
+                                ?? throw new InvalidOperationException("Brave Search API returned an empty result.");
                         case HttpStatusCode.Unauthorized:
                             throw new InvalidOperationException("Brave Search API key is invalid or missing");
                         case HttpStatusCode.TooManyRequests:
@@ -160,7 +159,7 @@ namespace TelegramSearchBot.Service.Tools {
                 }
             }
 
-            return null; // 这行不会执行，仅为编译器满意
+            throw new InvalidOperationException("Failed to retrieve Brave search results after retries.");
         }
     }
 }

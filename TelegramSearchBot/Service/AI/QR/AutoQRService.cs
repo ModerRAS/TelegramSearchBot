@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
 using StackExchange.Redis;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Extension;
-using TelegramSearchBot.Interface.AI.QR;
+using TelegramSearchBot.Core.Interface.AI.QR;
 using TelegramSearchBot.Service.Abstract;
 
 namespace TelegramSearchBot.Service.AI.QR {

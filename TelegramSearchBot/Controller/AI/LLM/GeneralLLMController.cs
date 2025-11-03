@@ -8,11 +8,12 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums; // Added for MessageEntityType
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Interface.Controller;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
+using CoreMessage = TelegramSearchBot.Core.Model.Data.Message;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Manage;
@@ -102,7 +103,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 var initialContentPlaceholder = $"{modelName}初始化中。。。";
 
                 // Prepare the input message for GeneralLLMService
-                var inputLlMessage = new Model.Data.Message() {
+                var inputLlMessage = new CoreMessage() {
                     Content = Message,
                     DateTime = e.Message.Date, // This is DateTimeOffset, Model.Data.Message.DateTime is DateTime. Ensure conversion if needed.
                     FromUserId = e.Message.From.Id,
@@ -117,7 +118,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 IAsyncEnumerable<string> fullMessageStream = GeneralLLMService.ExecAsync(inputLlMessage, e.Message.Chat.Id, CancellationToken.None);
 
                 // Call the new SendFullMessageStream method
-                List<Model.Data.Message> sentMessagesForDb = await SendMessageService.SendFullMessageStream(
+                List<CoreMessage> sentMessagesForDb = await SendMessageService.SendFullMessageStream(
                     fullMessageStream,
                     e.Message.Chat.Id,
                     e.Message.MessageId, // Reply to the original user's message

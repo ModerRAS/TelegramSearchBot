@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.Search.FAISS.Service;
 
 namespace TelegramSearchBot.Service.Scheduler {

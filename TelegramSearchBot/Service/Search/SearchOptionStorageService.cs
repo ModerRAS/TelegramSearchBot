@@ -5,10 +5,10 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Service.Search {
     /// <summary>

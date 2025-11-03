@@ -2,13 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
+using BotMessage = Telegram.Bot.Types.Message;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Search;
-using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
-using ModelSearchType = TelegramSearchBot.Model.Search.SearchType;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Controller;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Search;
+using ModelSearchOption = TelegramSearchBot.Core.Model.SearchOption;
+using ModelSearchType = TelegramSearchBot.Core.Model.Search.SearchType;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Search;
 using TelegramSearchBot.View;
@@ -48,19 +49,19 @@ namespace TelegramSearchBot.Controller.Search {
             }
         }
 
-        private async Task HandleSearch(Message message) {
+    private async Task HandleSearch(BotMessage message) {
             await HandleSearchInternal(message, ModelSearchType.InvertedIndex, 3);
         }
 
-        private async Task HandleVectorSearch(Message message) {
+    private async Task HandleVectorSearch(BotMessage message) {
             await HandleSearchInternal(message, ModelSearchType.Vector, 5);
         }
 
-        private async Task HandleSyntaxSearch(Message message) {
+    private async Task HandleSyntaxSearch(BotMessage message) {
             await HandleSearchInternal(message, ModelSearchType.SyntaxSearch, 5);
         }
 
-        private async Task HandleSearchInternal(Message message, ModelSearchType searchType, int prefixLength) {
+    private async Task HandleSearchInternal(BotMessage message, ModelSearchType searchType, int prefixLength) {
             var firstSearch = new ModelSearchOption() {
                 Search = message.Text.Substring(prefixLength),
                 ChatId = message.Chat.Id,

@@ -3,8 +3,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Model;
 
 namespace TelegramSearchBot.Service.Scheduler {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

@@ -4,16 +4,15 @@ using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks; // For async operations
 using Microsoft.EntityFrameworkCore; // For EF Core operations
-using TelegramSearchBot.Attributes; // For DateTime parsing
+using TelegramSearchBot.Core.Attributes; // For DateTime parsing
+using TelegramSearchBot.Core.Interface; // Added for IService
+using TelegramSearchBot.Core.Interface.Tools;
+using TelegramSearchBot.Core.Model; // For DataDbContext
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Tools;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface; // Added for IService
-using TelegramSearchBot.Interface.Tools;
-using TelegramSearchBot.Model; // For DataDbContext
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Tools;
 using TelegramSearchBot.Search.Lucene.Model;
 using TelegramSearchBot.Search.Lucene.Tool;
-using TelegramSearchBot.Service.AI.LLM; // For McpTool attributes
 using TelegramSearchBot.Service.Storage; // For MessageExtensionService
 
 namespace TelegramSearchBot.Service.Tools {

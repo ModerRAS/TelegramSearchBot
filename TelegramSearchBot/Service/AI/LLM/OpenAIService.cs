@@ -18,14 +18,14 @@ using OpenAI;
 using OpenAI.Chat;
 using OpenAI.Embeddings;
 using SkiaSharp; // Added for image processing
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Tools; // For BraveSearchResult
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Tools; // For BraveSearchResult
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Storage;
 // Using alias for the common internal ChatMessage format
@@ -82,11 +82,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // --- Client Setup ---
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(channel.Gateway!),
                 Transport = new HttpClientPipelineTransport(httpClient),
             };
 
-            var apikey = new ApiKeyCredential(channel.ApiKey);
+            var apikey = new ApiKeyCredential(channel.ApiKey!);
 
             OpenAIClient client = new(apikey, clientOptions);
             var model = client.GetOpenAIModelClient();
@@ -156,7 +156,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             try {
                 // 尝试使用OpenAI内部API获取模型能力信息
-                var internalApiUrl = channel.Gateway.TrimEnd('/') + "/dashboard/onboarding/models";
+                var internalApiUrl = channel.Gateway!.TrimEnd('/') + "/dashboard/onboarding/models";
                 httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {channel.ApiKey}");
 
                 var response = await httpClient.GetAsync(internalApiUrl);
@@ -177,7 +177,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     Transport = new HttpClientPipelineTransport(httpClient),
                 };
 
-                var apikey = new ApiKeyCredential(channel.ApiKey);
+                var apikey = new ApiKeyCredential(channel.ApiKey!);
                 OpenAIClient client = new(apikey, clientOptions);
                 var model = client.GetOpenAIModelClient();
                 var models = await model.GetModelsAsync();
@@ -471,7 +471,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         // --- Helper Methods (Defined locally again) ---
 
-        public bool IsSameSender(Model.Data.Message message1, Model.Data.Message message2) {
+    public bool IsSameSender(Message message1, Message message2) {
             if (message1 == null || message2 == null) return false;
             bool msg1IsUser = message1.FromUserId != Env.BotId;
             bool msg2IsUser = message2.FromUserId != Env.BotId;
@@ -489,7 +489,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, Model.Data.Message InputToken) {
+    public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, Message InputToken) {
             var Messages = await _dbContext.Messages.AsNoTracking()
                             .Where(m => m.GroupId == ChatId && m.DateTime > DateTime.UtcNow.AddHours(-1))
                             .OrderBy(m => m.DateTime)
@@ -508,7 +508,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogInformation($"OpenAI GetChatHistory: Found {Messages.Count} messages for ChatId {ChatId}.");
 
             var str = new StringBuilder();
-            Model.Data.Message previous = null;
+            Message previous = null;
             var userCache = new Dictionary<long, UserData>();
 
             foreach (var message in Messages) {
@@ -560,7 +560,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         // ConvertToolResultToString is now in McpToolHelper
 
         // --- Main Execution Logic ---
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+    public async IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, LLMChannel channel,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName;
 
@@ -584,10 +584,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // --- Client Setup ---
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(channel.Gateway!),
                 Transport = new HttpClientPipelineTransport(client),
             };
-            var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
+            var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey!), clientOptions);
 
             try {
                 int maxToolCycles = Env.MaxToolCycles;
@@ -680,11 +680,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             using var httpClient = _httpClientFactory.CreateClient();
 
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(channel.Gateway!),
                 Transport = new HttpClientPipelineTransport(httpClient),
             };
 
-            var apikey = new ApiKeyCredential(channel.ApiKey);
+            var apikey = new ApiKeyCredential(channel.ApiKey!);
             OpenAIClient client = new(apikey, clientOptions);
 
             try {
@@ -776,11 +776,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             using var httpClient = _httpClientFactory.CreateClient();
 
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(channel.Gateway!),
                 Transport = new HttpClientPipelineTransport(httpClient),
             };
 
-            var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
+            var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey!), clientOptions);
 
             try {
                 // 读取图像并转换为Base64

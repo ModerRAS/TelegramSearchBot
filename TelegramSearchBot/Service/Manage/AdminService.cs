@@ -9,8 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.Service.Common; // Added for IAppConfigurationService
 using TelegramSearchBot.Service.Scheduler; // Added for ISchedulerService
 
@@ -61,7 +62,7 @@ namespace TelegramSearchBot.Service.Manage {
                 .FirstOrDefaultAsync(g => g.GroupId == groupId);
 
             if (groupSetting == null) {
-                groupSetting = new Model.Data.GroupSettings() {
+                groupSetting = new GroupSettings() {
                     GroupId = groupId,
                     IsManagerGroup = false
                 };
@@ -108,7 +109,7 @@ namespace TelegramSearchBot.Service.Manage {
                     if (GroupSetting != null) {
                         GroupSetting.IsManagerGroup = true;
                     } else {
-                        await DataContext.GroupSettings.AddAsync(new Model.Data.GroupSettings() {
+                        await DataContext.GroupSettings.AddAsync(new GroupSettings() {
                             GroupId = ChatId,
                             IsManagerGroup = true
                         });
@@ -129,7 +130,7 @@ namespace TelegramSearchBot.Service.Manage {
                     if (GroupSetting != null) {
                         GroupSetting.IsManagerGroup = false;
                     } else {
-                        await DataContext.GroupSettings.AddAsync(new Model.Data.GroupSettings() {
+                        await DataContext.GroupSettings.AddAsync(new GroupSettings() {
                             GroupId = ChatId,
                             IsManagerGroup = false
                         });

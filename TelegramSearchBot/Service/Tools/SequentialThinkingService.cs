@@ -1,69 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+
 using System.Threading.Tasks;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Tools;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Tools;
+using TelegramSearchBot.Core.Model;
+
+using TelegramSearchBot.Core.Model.Tools;
+
+#nullable enable
 
 namespace TelegramSearchBot.Service.Tools {
-    public class ThoughtData {
-        [JsonPropertyName("thought")]
-        public string Thought { get; set; }
-
-        [JsonPropertyName("thoughtNumber")]
-        public int ThoughtNumber { get; set; }
-
-        [JsonPropertyName("totalThoughts")]
-        public int TotalThoughts { get; set; }
-
-        [JsonPropertyName("isRevision")]
-        public bool? IsRevision { get; set; }
-
-        [JsonPropertyName("revisesThought")]
-        public int? RevisesThought { get; set; }
-
-        [JsonPropertyName("branchFromThought")]
-        public int? BranchFromThought { get; set; }
-
-        [JsonPropertyName("branchId")]
-        public string BranchId { get; set; }
-
-        [JsonPropertyName("needsMoreThoughts")]
-        public bool? NeedsMoreThoughts { get; set; }
-
-        [JsonPropertyName("nextThoughtNeeded")]
-        public bool NextThoughtNeeded { get; set; }
-    }
-
-    public class SequentialThinkingResult {
-        [JsonPropertyName("thoughtNumber")]
-        public int ThoughtNumber { get; set; }
-
-        [JsonPropertyName("totalThoughts")]
-        public int TotalThoughts { get; set; }
-
-        [JsonPropertyName("nextThoughtNeeded")]
-        public bool NextThoughtNeeded { get; set; }
-
-        [JsonPropertyName("branches")]
-        public List<string> Branches { get; set; }
-
-        [JsonPropertyName("thoughtHistoryLength")]
-        public int ThoughtHistoryLength { get; set; }
-    }
-
-    public class SequentialThinkingError {
-        [JsonPropertyName("error")]
-        public string Error { get; set; }
-
-        [JsonPropertyName("status")]
-        public string Status { get; set; }
-    }
-
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class SequentialThinkingService : IService, ISequentialThinkingService {
         public string ServiceName => "SequentialThinkingService";
@@ -73,7 +22,8 @@ namespace TelegramSearchBot.Service.Tools {
 
         private ThoughtData ValidateThoughtData(string input) {
             try {
-                var data = JsonSerializer.Deserialize<ThoughtData>(input);
+                var data = JsonSerializer.Deserialize<ThoughtData>(input) 
+                    ?? throw new Exception("Thought data deserialization failed");
 
                 if (string.IsNullOrEmpty(data.Thought)) {
                     throw new Exception("Invalid thought: must be a string");
@@ -145,7 +95,7 @@ You should:
 9. Repeat the process until satisfied with the solution
 10. Provide a single, ideally correct answer as the final output
 11. Only set next_thought_needed to false when truly done and a satisfactory answer is reached")]
-        public async Task<object> ProcessThoughtAsync(
+        public Task<object> ProcessThoughtAsync(
             ToolContext toolContext,
             [McpParameter(@"Your current thinking step")] string input,
             [McpParameter("Whether another thought step is needed", IsRequired = false)] bool? nextThoughtNeeded = null,
@@ -154,7 +104,7 @@ You should:
             [McpParameter("Whether this revises previous thinking", IsRequired = false)] bool? isRevision = null,
             [McpParameter("Which thought is being reconsidered", IsRequired = false)] int? revisesThought = null,
             [McpParameter("Branching point thought number", IsRequired = false)] int? branchFromThought = null,
-            [McpParameter("Branch identifier", IsRequired = false)] string branchId = null,
+            [McpParameter("Branch identifier", IsRequired = false)] string? branchId = null,
             [McpParameter("If more thoughts are needed", IsRequired = false)] bool? needsMoreThoughts = null) {
             try {
                 var validatedInput = ValidateThoughtData(input);
@@ -180,13 +130,13 @@ You should:
                     ThoughtHistoryLength = _thoughtHistory.Count
                 };
 
-                return JsonSerializer.Serialize(result);
+                return Task.FromResult((object)JsonSerializer.Serialize(result));
             } catch (Exception ex) {
                 var error = new SequentialThinkingError {
                     Error = ex.Message,
                     Status = "failed"
                 };
-                return JsonSerializer.Serialize(error);
+                return Task.FromResult((object)JsonSerializer.Serialize(error));
             }
         }
     }

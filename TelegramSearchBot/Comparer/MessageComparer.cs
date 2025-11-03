@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Comparer {
     class MessageComparer : IEqualityComparer<Message> {

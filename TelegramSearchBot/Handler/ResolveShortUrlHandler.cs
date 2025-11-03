@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Model.Notifications;
+using TelegramSearchBot.Core.Model.Notifications;
 using TelegramSearchBot.Service.Common;
 
 namespace TelegramSearchBot.Handler {

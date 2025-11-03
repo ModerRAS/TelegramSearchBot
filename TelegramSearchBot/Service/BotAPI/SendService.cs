@@ -4,10 +4,10 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Interface;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Service.BotAPI {
 

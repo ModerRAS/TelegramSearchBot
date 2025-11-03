@@ -5,11 +5,10 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using J2N.IO;
-using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Tools;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Tools;
 
 namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

@@ -3,15 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.AI;
-using static GenerativeAI.VertexAIModels;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.AI;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]

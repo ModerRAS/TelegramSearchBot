@@ -5,16 +5,16 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Controller;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.ChatExport;
-using TelegramSearchBot.Model.Data;
-using DataMessage = TelegramSearchBot.Model.Data.Message;
-using ExportMessage = TelegramSearchBot.Model.ChatExport.Message;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.ChatExport;
+using TelegramSearchBot.Core.Model.Data;
+using DataMessage = TelegramSearchBot.Core.Model.Data.Message;
+using ExportMessage = TelegramSearchBot.Core.Model.ChatExport.Message;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

@@ -6,13 +6,13 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Interface.Manage;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Interface.Manage;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.Service.Manage {

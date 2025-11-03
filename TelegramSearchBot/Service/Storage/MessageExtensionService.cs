@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Service.Storage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

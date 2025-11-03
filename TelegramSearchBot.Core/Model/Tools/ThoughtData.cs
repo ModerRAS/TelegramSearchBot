@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace TelegramSearchBot.Core.Model.Tools {
     public class ThoughtData {
         [JsonPropertyName("thought")]
-        public string Thought { get; set; }
+        public string Thought { get; set; } = string.Empty;
 
         [JsonPropertyName("thoughtNumber")]
         public int ThoughtNumber { get; set; }
@@ -22,7 +22,7 @@ namespace TelegramSearchBot.Core.Model.Tools {
         public int? BranchFromThought { get; set; }
 
         [JsonPropertyName("branchId")]
-        public string BranchId { get; set; }
+        public string? BranchId { get; set; }
 
         [JsonPropertyName("needsMoreThoughts")]
         public bool? NeedsMoreThoughts { get; set; }
@@ -42,7 +42,7 @@ namespace TelegramSearchBot.Core.Model.Tools {
         public bool NextThoughtNeeded { get; set; }
 
         [JsonPropertyName("branches")]
-        public List<string> Branches { get; set; }
+        public List<string> Branches { get; set; } = new();
 
         [JsonPropertyName("thoughtHistoryLength")]
         public int ThoughtHistoryLength { get; set; }
@@ -50,9 +50,9 @@ namespace TelegramSearchBot.Core.Model.Tools {
 
     public class SequentialThinkingError {
         [JsonPropertyName("error")]
-        public string Error { get; set; }
+        public string Error { get; set; } = string.Empty;
 
         [JsonPropertyName("status")]
-        public string Status { get; set; }
+        public string Status { get; set; } = string.Empty;
     }
 }

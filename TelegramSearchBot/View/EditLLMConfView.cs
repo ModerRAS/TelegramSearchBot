@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 using Telegram.Bot;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Interface;
 using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.View {

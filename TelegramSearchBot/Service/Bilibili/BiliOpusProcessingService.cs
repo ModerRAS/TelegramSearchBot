@@ -7,8 +7,8 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Model.Bilibili;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Model.Bilibili;
 using TelegramSearchBot.Service.Common;
 
 namespace TelegramSearchBot.Service.Bilibili {

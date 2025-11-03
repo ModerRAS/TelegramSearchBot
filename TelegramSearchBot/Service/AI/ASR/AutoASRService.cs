@@ -1,7 +1,7 @@
 using System.Threading.Tasks;
 using StackExchange.Redis;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface.AI.ASR;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface.AI.ASR;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.Abstract;
 

@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Model.Bilibili;
+using TelegramSearchBot.Core.Model.Bilibili;
 
 namespace TelegramSearchBot.Helper;
 

@@ -7,7 +7,7 @@ using Moq;
 using Moq.Protected;
 using Newtonsoft.Json;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Model.Tools;
+using TelegramSearchBot.Core.Model.Tools;
 using TelegramSearchBot.Service.Tools;
 using Xunit;
 

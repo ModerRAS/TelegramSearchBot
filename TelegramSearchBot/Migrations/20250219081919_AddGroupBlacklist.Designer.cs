@@ -20,7 +20,7 @@ namespace TelegramSearchBot.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0");
 
-            modelBuilder.Entity("TelegramSearchBot.Model.GroupData", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.GroupData", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -43,7 +43,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("GroupData");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.Message", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.Message", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -66,7 +66,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("Messages");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.UserData", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.UserData", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -92,7 +92,7 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("UserData");
                 });
 
-            modelBuilder.Entity("TelegramSearchBot.Model.UserWithGroup", b =>
+            modelBuilder.Entity("TelegramSearchBot.Core.Model.UserWithGroup", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()

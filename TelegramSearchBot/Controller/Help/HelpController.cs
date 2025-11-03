@@ -4,9 +4,9 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Controller;
+using TelegramSearchBot.Core.Model;
 using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.Controller.Help {

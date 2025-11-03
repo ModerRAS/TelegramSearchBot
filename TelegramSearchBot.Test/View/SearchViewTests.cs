@@ -4,13 +4,13 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Telegram.Bot;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Search;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Search;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.View;
 using Xunit;
-using SearchType = TelegramSearchBot.Model.Search.SearchType;
+using SearchType = TelegramSearchBot.Core.Model.Search.SearchType;
 
 namespace TelegramSearchBot.Test.View {
     public class SearchViewTests {

@@ -9,7 +9,7 @@ using FFMpegCore.Extend;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using StackExchange.Redis;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface.Controller;
 using TelegramSearchBot.Manager;
 using Whisper.net;
 using Whisper.net.Ggml;

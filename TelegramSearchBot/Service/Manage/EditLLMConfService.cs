@@ -7,13 +7,13 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Manage;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.AI;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Manage;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.AI;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.Service.Manage {
@@ -170,7 +170,7 @@ namespace TelegramSearchBot.Service.Manage {
                     .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.AltPhotoModelName);
 
                 if (config == null) {
-                    await DataContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
+                    await DataContext.AppConfigurationItems.AddAsync(new AppConfigurationItem {
                         Key = GeneralLLMService.AltPhotoModelName,
                         Value = command
                     });
@@ -395,7 +395,7 @@ namespace TelegramSearchBot.Service.Manage {
                 .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxRetryCountKey);
 
             if (retryConfig == null) {
-                await DataContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
+                await DataContext.AppConfigurationItems.AddAsync(new AppConfigurationItem {
                     Key = GeneralLLMService.MaxRetryCountKey,
                     Value = maxRetry.ToString()
                 });
@@ -417,7 +417,7 @@ namespace TelegramSearchBot.Service.Manage {
                 .FirstOrDefaultAsync(x => x.Key == GeneralLLMService.MaxImageRetryCountKey);
 
             if (imageRetryConfig == null) {
-                await DataContext.AppConfigurationItems.AddAsync(new Model.Data.AppConfigurationItem {
+                await DataContext.AppConfigurationItems.AddAsync(new AppConfigurationItem {
                     Key = GeneralLLMService.MaxImageRetryCountKey,
                     Value = maxImageRetry.ToString()
                 });

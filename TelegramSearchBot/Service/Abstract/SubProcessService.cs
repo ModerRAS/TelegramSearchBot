@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using StackExchange.Redis;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Extension;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Interface;
 
 namespace TelegramSearchBot.Service.Abstract {
     public class SubProcessService : IService {

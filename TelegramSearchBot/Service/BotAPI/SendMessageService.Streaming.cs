@@ -10,8 +10,10 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using TelegramSearchBot.Helper;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Helper;
+using TelegramSearchBot.Core.Model;
+using BotMessage = Telegram.Bot.Types.Message;
+using CoreMessage = TelegramSearchBot.Core.Model.Data.Message;
 
 namespace TelegramSearchBot.Service.BotAPI {
     /// <summary>
@@ -28,7 +30,7 @@ namespace TelegramSearchBot.Service.BotAPI {
         /// <param name="InitialContent">初始占位内容</param>
         /// <param name="parseMode">消息解析模式</param>
         /// <returns>异步枚举的消息集合</returns>
-        public async IAsyncEnumerable<Model.Data.Message> SendMessage(IAsyncEnumerable<string> messages, long ChatId, int replyTo, string InitialContent = "Initializing...", ParseMode parseMode = ParseMode.Html) {
+    public async IAsyncEnumerable<CoreMessage> SendMessage(IAsyncEnumerable<string> messages, long ChatId, int replyTo, string InitialContent = "Initializing...", ParseMode parseMode = ParseMode.Html) {
             var sentMessage = await botClient.SendMessage(
                 chatId: ChatId,
                 text: InitialContent,
@@ -37,14 +39,14 @@ namespace TelegramSearchBot.Service.BotAPI {
             StringBuilder builder = new StringBuilder();
             var tmpMessageId = sentMessage.MessageId;
             var datetime = DateTime.UtcNow;
-            var messagesToYield = new List<Model.Data.Message>();
+            var messagesToYield = new List<CoreMessage>();
 
             try {
                 await foreach (var PerMessage in messages) {
                     if (builder.Length > 1900) {
                         tmpMessageId = sentMessage.MessageId;
                         var currentContent = builder.ToString();
-                        messagesToYield.Add(new Model.Data.Message() {
+                        messagesToYield.Add(new CoreMessage() {
                             GroupId = ChatId,
                             MessageId = sentMessage.MessageId,
                             DateTime = sentMessage.Date,
@@ -81,7 +83,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                 }
             }
 
-            messagesToYield.Add(new Model.Data.Message() {
+            messagesToYield.Add(new CoreMessage() {
                 GroupId = ChatId,
                 MessageId = sentMessage.MessageId,
                 DateTime = sentMessage.Date,
@@ -105,13 +107,13 @@ namespace TelegramSearchBot.Service.BotAPI {
         /// <param name="initialPlaceholderContent">初始占位内容</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>发送成功的消息列表</returns>
-        public async Task<List<Model.Data.Message>> SendFullMessageStream(
+        public async Task<List<CoreMessage>> SendFullMessageStream(
             IAsyncEnumerable<string> fullMessagesStream,
             long chatId,
             int replyTo,
             string initialPlaceholderContent = "⏳",
             CancellationToken cancellationToken = default) {
-            List<Message> sentTelegramMessages = new List<Message>();
+            List<BotMessage> sentTelegramMessages = new List<BotMessage>();
             Dictionary<int, string> lastSentHtmlPerMessageId = new Dictionary<int, string>();
             DateTime lastApiSyncTime = DateTime.MinValue;
             TimeSpan syncInterval = TimeSpan.FromSeconds(1.0);
@@ -162,13 +164,13 @@ namespace TelegramSearchBot.Service.BotAPI {
                 chunksForDb = MessageFormatHelper.SplitMarkdownIntoChunks(latestMarkdownSnapshot, 1900);
                 if (!chunksForDb.Any() && !string.IsNullOrEmpty(latestMarkdownSnapshot)) chunksForDb.Add(string.Empty);
 
-                var syncResult = await SynchronizeTelegramMessagesInternalAsync(
+          var syncResult = await SynchronizeTelegramMessagesInternalAsync(
                        chatId, replyTo, chunksForDb, sentTelegramMessages, lastSentHtmlPerMessageId, CancellationToken.None);
                 sentTelegramMessages = syncResult.UpdatedMessages;
             } else if (latestMarkdownSnapshot == null && sentTelegramMessages.Any()) {
                 logger.LogInformation("SendFullMessageStream: Stream ended with no content, clearing existing messages.");
                 chunksForDb = new List<string> { string.Empty };
-                var syncResult = await SynchronizeTelegramMessagesInternalAsync(
+            var syncResult = await SynchronizeTelegramMessagesInternalAsync(
                       chatId, replyTo, chunksForDb, sentTelegramMessages, lastSentHtmlPerMessageId, CancellationToken.None);
                 sentTelegramMessages = syncResult.UpdatedMessages;
             }
@@ -186,14 +188,14 @@ namespace TelegramSearchBot.Service.BotAPI {
         /// <param name="currentHtmlMap">当前HTML内容映射</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>更新后的消息列表和HTML映射</returns>
-        private async Task<(List<Message> UpdatedMessages, Dictionary<int, string> UpdatedHtmlMap)> SynchronizeTelegramMessagesInternalAsync(
+        private async Task<(List<BotMessage> UpdatedMessages, Dictionary<int, string> UpdatedHtmlMap)> SynchronizeTelegramMessagesInternalAsync(
             long chatId,
             int originalReplyTo,
             List<string> newMarkdownChunks,
-            List<Message> currentTgMessages,
+            List<BotMessage> currentTgMessages,
             Dictionary<int, string> currentHtmlMap,
             CancellationToken cancellationToken) {
-            List<Message> nextTgMessagesState = new List<Message>();
+            List<BotMessage> nextTgMessagesState = new List<BotMessage>();
             Dictionary<int, string> nextHtmlMap = new Dictionary<int, string>(currentHtmlMap);
             int effectiveReplyTo = originalReplyTo;
 
@@ -209,7 +211,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                 }
 
                 if (i < currentTgMessages.Count) {
-                    Message existingMsg = currentTgMessages[i];
+                    BotMessage existingMsg = currentTgMessages[i];
                     if (existingMsg == null || existingMsg.MessageId == 0) {
                         this.logger.LogWarning($"SynchronizeMessages: Found null or invalid message in currentTgMessages at index {i}, skipping.");
                         continue;
@@ -226,7 +228,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                             nextTgMessagesState.Add(existingMsg);
                         } else {
                             try {
-                                Message editedMsg = await this.botClient.EditMessageText(
+                                BotMessage editedMsg = await this.botClient.EditMessageText(
                                     chatId: chatId, messageId: existingMsg.MessageId, text: htmlChunk,
                                     parseMode: ParseMode.Html, cancellationToken: cancellationToken);
                                 if (editedMsg != null && editedMsg.MessageId != 0) {
@@ -255,7 +257,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                 } else {
                     if (!string.IsNullOrWhiteSpace(htmlChunk)) {
                         try {
-                            Message newMsg = await this.botClient.SendMessage(
+                            BotMessage newMsg = await this.botClient.SendMessage(
                                 chatId: chatId, text: htmlChunk, parseMode: ParseMode.Html,
                                 replyParameters: new ReplyParameters { MessageId = effectiveReplyTo },
                                 cancellationToken: cancellationToken);
@@ -290,13 +292,13 @@ namespace TelegramSearchBot.Service.BotAPI {
         /// <param name="finalMarkdownChunks">最终的Markdown消息块</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>格式化后的消息列表</returns>
-        private async Task<List<Model.Data.Message>> BuildResultForDbAsync(
+        private async Task<List<CoreMessage>> BuildResultForDbAsync(
             long chatId,
             int originalReplyTo,
-            List<Message> finalSentTgMessages,
+            List<BotMessage> finalSentTgMessages,
             List<string> finalMarkdownChunks,
             CancellationToken cancellationToken) {
-            var resultMessagesForDb = new List<Model.Data.Message>();
+            var resultMessagesForDb = new List<CoreMessage>();
             User botUser = null;
 
             for (int i = 0; i < finalSentTgMessages.Count; i++) {
@@ -315,7 +317,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                     msgReplyToId = finalSentTgMessages[i - 1].MessageId;
                 else msgReplyToId = originalReplyTo;
 
-                resultMessagesForDb.Add(new Model.Data.Message() {
+                resultMessagesForDb.Add(new CoreMessage() {
                     GroupId = chatId,
                     MessageId = tgMsg.MessageId,
                     DateTime = tgMsg.Date.ToUniversalTime(),
@@ -338,13 +340,13 @@ namespace TelegramSearchBot.Service.BotAPI {
         /// <param name="initialContent">初始占位内容</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>发送成功的消息列表</returns>
-        public async Task<List<Model.Data.Message>> SendStreamingMessage(
+        public async Task<List<CoreMessage>> SendStreamingMessage(
             IAsyncEnumerable<string> messages,
             long chatId,
             int replyTo,
             string initialContent = "⏳",
             CancellationToken cancellationToken = default) {
-            var sentMessages = new List<Model.Data.Message>();
+            var sentMessages = new List<CoreMessage>();
             var builder = new StringBuilder();
             var currentMessage = await botClient.SendMessage(
                 chatId: chatId,
@@ -430,7 +432,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                             cancellationToken: cancellationToken);
 
                         lastMessageId = newMessage.MessageId;
-                        sentMessages.Add(new Model.Data.Message {
+                        sentMessages.Add(new CoreMessage {
                             GroupId = chatId,
                             MessageId = newMessage.MessageId,
                             DateTime = newMessage.Date,
@@ -442,7 +444,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                 }
 
                 // 添加第一条消息到结果
-                sentMessages.Add(new Model.Data.Message {
+                sentMessages.Add(new CoreMessage {
                     GroupId = chatId,
                     MessageId = currentMessage.MessageId,
                     DateTime = currentMessage.Date,

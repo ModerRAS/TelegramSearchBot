@@ -6,11 +6,11 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Nito.AsyncEx;
 using Telegram.Bot.Types.Enums;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Controller;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Interface;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

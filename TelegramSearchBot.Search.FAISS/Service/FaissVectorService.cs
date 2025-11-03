@@ -10,16 +10,16 @@ using FaissNet;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Interface.Vector;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Interface.Vector;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 using FaissIndex = FaissNet.Index;
-using SearchOption = TelegramSearchBot.Model.SearchOption;
-using SearchType = TelegramSearchBot.Model.Search.SearchType;
+using SearchOption = TelegramSearchBot.Core.Model.SearchOption;
+using SearchType = TelegramSearchBot.Core.Model.Search.SearchType;
 
 namespace TelegramSearchBot.Search.FAISS.Service {
     /// <summary>

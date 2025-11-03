@@ -11,8 +11,8 @@ using TelegramSearchBot.Controller.Download;
 using TelegramSearchBot.Controller.Help;
 using TelegramSearchBot.Controller.Manage;
 using TelegramSearchBot.Controller.Search;
-using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Interface.Controller;
+using TelegramSearchBot.Core.Model;
 using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Controller.Storage {

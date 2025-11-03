@@ -17,14 +17,14 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.AppBootstrap;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Executor;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Controller;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Model;
 using TelegramSearchBot.Search.Lucene.Tool;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
@@ -78,7 +78,7 @@ namespace TelegramSearchBot.Extension {
         public static IServiceCollection AddCommonServices(this IServiceCollection services) {
 
             services.AddTransient<TelegramSearchBot.Service.Common.IAppConfigurationService, TelegramSearchBot.Service.Common.AppConfigurationService>();
-            services.AddTransient<TelegramSearchBot.Interface.IShortUrlMappingService, TelegramSearchBot.Service.Common.ShortUrlMappingService>();
+            services.AddTransient<TelegramSearchBot.Core.Interface.IShortUrlMappingService, TelegramSearchBot.Service.Common.ShortUrlMappingService>();
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<GeneralBootstrap>());
             return services;
         }

@@ -4,11 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot;
-using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Core.Interface.Controller;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Service.Manage;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Service.Manage;
 using TelegramSearchBot.Service.Scheduler;
 using TgMessage = Telegram.Bot.Types.Message;
 

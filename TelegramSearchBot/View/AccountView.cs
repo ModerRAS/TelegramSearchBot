@@ -9,9 +9,9 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Interface;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.View {
     public class AccountView : IView {

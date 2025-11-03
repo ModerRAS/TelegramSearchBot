@@ -15,15 +15,15 @@ using StackExchange.Redis;
 using Telegram.Bot; // Added for ITelegramBotClient
 using Telegram.Bot.Types;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Notifications;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Notifications;
 using TelegramSearchBot.Search.Lucene.Tool;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Storage;
 using Xunit;
 using Chat = Telegram.Bot.Types.Chat; // Alias for Telegram.Bot.Types.Chat
-using Message = TelegramSearchBot.Model.Data.Message;
+using Message = TelegramSearchBot.Core.Model.Data.Message;
 using User = Telegram.Bot.Types.User; // Alias for Telegram.Bot.Types.User
 
 namespace TelegramSearchBot.Test.Service.Storage {

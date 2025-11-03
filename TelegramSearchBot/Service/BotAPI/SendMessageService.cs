@@ -15,10 +15,10 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Helper;
-using TelegramSearchBot.Interface;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
 using TelegramSearchBot.Manager;
+using BotMessage = Telegram.Bot.Types.Message;
 
 namespace TelegramSearchBot.Service.BotAPI {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -50,7 +50,7 @@ namespace TelegramSearchBot.Service.BotAPI {
 
             try {
                 if (isEdit) {
-                    Message editedMessage = null;
+                    BotMessage editedMessage = null;
                     await Send.AddTask(async () => {
                         editedMessage = await botClient.EditMessageText(
                             chatId: chatId, messageId: messageId, parseMode: currentParseMode, text: textToSend);
@@ -58,7 +58,7 @@ namespace TelegramSearchBot.Service.BotAPI {
 
                     if (editedMessage != null && editedMessage.MessageId > 0) { logger.LogInformation($"Edited message {editedMessage.MessageId} successfully with {currentParseMode}."); } else { logger.LogWarning($"Editing message {messageId} with {currentParseMode} failed silently. Edit will be skipped."); }
                 } else {
-                    Message sentMsg = null;
+                    BotMessage sentMsg = null;
                     await Send.AddTask(async () => {
                         sentMsg = await botClient.SendMessage(
                             chatId: chatId, text: textToSend, parseMode: currentParseMode,

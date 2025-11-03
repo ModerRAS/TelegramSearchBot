@@ -3,13 +3,14 @@ using System.Collections.Generic; // For List
 using System.Linq;
 using System.Threading.Tasks; // For async operations
 using Microsoft.EntityFrameworkCore; // For EF Core operations
-using TelegramSearchBot.Attributes; // For McpTool attributes
-using TelegramSearchBot.Interface; // Added for IService
-using TelegramSearchBot.Interface.Tools;
-using TelegramSearchBot.Model; // For DataDbContext
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Tools;
-using TelegramSearchBot.Service.AI.LLM; // For McpTool attributes
+using TelegramSearchBot.Core.Attributes; // For McpTool attributes
+using TelegramSearchBot.Core.Interface; // Added for IService
+using TelegramSearchBot.Core.Interface.Tools;
+using TelegramSearchBot.Core.Model; // For DataDbContext
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Tools;
+
+#nullable enable
 
 namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -23,8 +24,8 @@ namespace TelegramSearchBot.Service.Tools {
         }
 
         [McpTool("Retrieves the expanded URL and creation date for a given short URL.")]
-        public async Task<ShortUrlMappingResult> GetShortUrlMapping(
-            [McpParameter("The short URL (OriginalUrl) to look up.")] string shortUrl) {
+        public async Task<ShortUrlMappingResult?> GetShortUrlMapping(
+            [McpParameter("The short URL (OriginalUrl) to look up.")] string? shortUrl) {
             if (string.IsNullOrWhiteSpace(shortUrl)) {
                 return null; // Or throw an ArgumentNullException
             }
@@ -46,8 +47,8 @@ namespace TelegramSearchBot.Service.Tools {
 
         [McpTool("Retrieves all short URL mappings, optionally filtered by a partial original or expanded URL. Supports pagination.")]
         public async Task<List<ShortUrlMappingResult>> GetAllShortUrlMappings(
-            [McpParameter("Optional: Text to search within the original URL.", IsRequired = false)] string originalUrlQuery = null,
-            [McpParameter("Optional: Text to search within the expanded URL.", IsRequired = false)] string expandedUrlQuery = null,
+            [McpParameter("Optional: Text to search within the original URL.", IsRequired = false)] string? originalUrlQuery = null,
+            [McpParameter("Optional: Text to search within the expanded URL.", IsRequired = false)] string? expandedUrlQuery = null,
             [McpParameter("The page number for pagination (e.g., 1, 2, 3...). Defaults to 1.", IsRequired = false)] int page = 1,
             [McpParameter("The number of results per page (e.g., 10, 25). Defaults to 10, max 50.", IsRequired = false)] int pageSize = 10) {
             if (pageSize > 50) pageSize = 50;
@@ -81,7 +82,7 @@ namespace TelegramSearchBot.Service.Tools {
 
         [McpTool("Retrieves the expanded URLs and creation dates for a list of short URLs.")]
         public async Task<List<ShortUrlMappingResult>> GetShortUrlMappingsBatch(
-            [McpParameter("A list of short URLs (OriginalUrls) to look up.")] List<string> shortUrls) {
+            [McpParameter("A list of short URLs (OriginalUrls) to look up.")] List<string>? shortUrls) {
             if (shortUrls == null || !shortUrls.Any()) {
                 return new List<ShortUrlMappingResult>();
             }

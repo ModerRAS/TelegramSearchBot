@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using TelegramSearchBot.Model.Bilibili;
+using TelegramSearchBot.Core.Model.Bilibili;
 
 namespace TelegramSearchBot.Service.Bilibili;
 

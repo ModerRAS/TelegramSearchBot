@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 using MediatR; // Added for IMediator
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
+using TelegramSearchBot.Core.Interface.Controller;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Notifications; // Added for TextMessageReceivedNotification
 using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Controller.Storage {

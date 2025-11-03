@@ -8,11 +8,11 @@ using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
-using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Core.Attributes;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.View;
 
 namespace TelegramSearchBot.Service.Scheduler {

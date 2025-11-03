@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Exceptions;
-using TelegramSearchBot.Interface.Controller;
-using TelegramSearchBot.Model;
+using TelegramSearchBot.Core.Exceptions;
+using TelegramSearchBot.Core.Interface.Controller;
+using TelegramSearchBot.Core.Model;
 using File = System.IO.File;
 
 namespace TelegramSearchBot.Controller.Download {

@@ -8,9 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using StackExchange.Redis;
-using TelegramSearchBot.Interface; // Keep this if other interfaces from here are used
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.Service.Common; // Add this for IAppConfigurationService
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Scheduler; // Add this for ISchedulerService

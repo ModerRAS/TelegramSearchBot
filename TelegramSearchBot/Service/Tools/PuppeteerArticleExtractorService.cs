@@ -2,10 +2,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using PuppeteerSharp;
-using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.Tools;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.Tools;
 
 namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]

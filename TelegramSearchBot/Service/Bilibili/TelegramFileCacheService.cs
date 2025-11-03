@@ -3,9 +3,9 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 
 namespace TelegramSearchBot.Service.Bilibili;
 

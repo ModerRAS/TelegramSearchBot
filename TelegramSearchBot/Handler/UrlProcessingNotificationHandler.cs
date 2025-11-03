@@ -7,12 +7,12 @@ using MediatR;
 using Microsoft.EntityFrameworkCore; // Required for ToListAsync, ToDictionaryAsync etc.
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface; // Added for DataDbContext
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface; // Added for DataDbContext
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using TelegramSearchBot.Model.Notifications;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
+using TelegramSearchBot.Core.Model.Notifications;
 using TelegramSearchBot.Service.Common;
 
 namespace TelegramSearchBot.Handler {

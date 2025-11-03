@@ -11,12 +11,12 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Manager;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
 using TelegramSearchBot.Service.BotAPI;
 using Xunit;
-using Message = TelegramSearchBot.Model.Data.Message;
-using SearchOption = TelegramSearchBot.Model.SearchOption;
+using Message = TelegramSearchBot.Core.Model.Data.Message;
+using SearchOption = TelegramSearchBot.Core.Model.SearchOption;
 
 namespace TelegramSearchBot.Test.Service.BotAPI {
     public static class TestExtensions {

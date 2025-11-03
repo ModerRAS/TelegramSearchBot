@@ -4,13 +4,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Interface.Vector;
-using TelegramSearchBot.Model;
-using TelegramSearchBot.Model.Data;
-using ModelSearchOption = TelegramSearchBot.Model.SearchOption;
+using TelegramSearchBot.Core.Attributes;
+using TelegramSearchBot.Core.Interface;
+using TelegramSearchBot.Core.Interface.AI.LLM;
+using TelegramSearchBot.Core.Interface.Vector;
+using TelegramSearchBot.Core.Model;
+using TelegramSearchBot.Core.Model.Data;
+using ModelSearchOption = TelegramSearchBot.Core.Model.SearchOption;
 
 namespace TelegramSearchBot.Search.FAISS.Service {
     /// <summary>
