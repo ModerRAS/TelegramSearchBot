@@ -15,9 +15,11 @@ using TelegramSearchBot.Interface.Controller;
 namespace TelegramSearchBot.Service.BotAPI {
     [Injectable(ServiceLifetime.Singleton)]
     public class TelegramBotReceiverService : BackgroundService {
+        private const int MaxConcurrentUpdates = 8;
         private readonly ITelegramBotClient _botClient;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<TelegramBotReceiverService> _logger;
+        private readonly SemaphoreSlim _updateProcessingSemaphore;
 
         public TelegramBotReceiverService(
             ITelegramBotClient botClient,
@@ -26,6 +28,7 @@ namespace TelegramSearchBot.Service.BotAPI {
             _botClient = botClient;
             _serviceProvider = serviceProvider;
             _logger = logger;
+            _updateProcessingSemaphore = new SemaphoreSlim(MaxConcurrentUpdates, MaxConcurrentUpdates);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
@@ -45,14 +48,15 @@ namespace TelegramSearchBot.Service.BotAPI {
             }
         }
 
-        private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) {
-            try {
-                using var scope = _serviceProvider.CreateScope();
-                var executor = new ControllerExecutor(scope.ServiceProvider.GetServices<IOnUpdate>());
-                await executor.ExecuteControllers(update);
-            } catch (Exception ex) {
-                _logger.LogError(ex, "Error handling update {UpdateId}", update.Id);
+        private Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken) {
+            var processingTask = ProcessUpdateAsync(update, cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested) {
+                return processingTask;
             }
+
+            _ = processingTask;
+            return Task.CompletedTask;
         }
 
         private Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken) {
@@ -63,6 +67,24 @@ namespace TelegramSearchBot.Service.BotAPI {
 
             _logger.LogError(errorMessage);
             return Task.CompletedTask;
+        }
+
+        private async Task ProcessUpdateAsync(Update update, CancellationToken cancellationToken) {
+            await _updateProcessingSemaphore.WaitAsync().ConfigureAwait(false);
+
+            try {
+                if (cancellationToken.IsCancellationRequested) {
+                    _logger.LogDebug("Cancellation requested while handling update {UpdateId}; finishing in-flight processing before shutdown.", update.Id);
+                }
+
+                using var scope = _serviceProvider.CreateScope();
+                var executor = new ControllerExecutor(scope.ServiceProvider.GetServices<IOnUpdate>());
+                await executor.ExecuteControllers(update).ConfigureAwait(false);
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Error handling update {UpdateId}", update.Id);
+            } finally {
+                _updateProcessingSemaphore.Release();
+            }
         }
     }
 }
