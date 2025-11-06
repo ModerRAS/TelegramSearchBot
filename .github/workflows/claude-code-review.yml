@@ -35,7 +35,7 @@ jobs:
         id: claude-review
         uses: anthropics/claude-code-action@beta
         env:
-          ANTHROPIC_BASE_URL: https://open.bigmodel.cn/api/anthropic/
+          ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
