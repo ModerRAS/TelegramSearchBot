@@ -16,13 +16,6 @@
   ```
 - **影响**: 无法发布适用于 Linux 或 macOS 的版本
 
-#### 1.2 TelegramSearchBot.Agent.PaddleOCR 项目
-- **文件**: `TelegramSearchBot.Agent.PaddleOCR/TelegramSearchBot.Agent.PaddleOCR.csproj`
-- **问题**: 强制指定 Windows 运行时
-  ```xml
-  <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-  ```
-
 ### 2. Windows 特定 NuGet 包
 
 #### 2.1 OpenCV 相关依赖
@@ -35,12 +28,6 @@
 - **包名**: `Sdcb.PaddleInference.runtime.win64.mkl` (v2.6.1)
 - **文件**: `TelegramSearchBot/TelegramSearchBot.csproj`
 - **问题**: Windows 专用的 PaddleOCR 推理引擎运行时
-
-#### 2.3 Agent 项目中的依赖
-- **包名**: `OpenCvSharp4.runtime.win` (v4.8.0.20230708)
-- **包名**: `OpenCvSharp4.Windows` (v4.8.0.20230708)
-- **包名**: `Sdcb.PaddleInference.runtime.win64.mkl` (v2.5.1)
-- **文件**: `TelegramSearchBot.Agent.PaddleOCR/TelegramSearchBot.Agent.PaddleOCR.csproj`
 
 ### 3. Windows API 调用
 
