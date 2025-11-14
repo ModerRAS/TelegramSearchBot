@@ -64,7 +64,6 @@ namespace TelegramSearchBot.Extension {
                 .AddHostedService<SendMessage>()
                 .AddSingleton<Func<string, Task>>(sp => sp.GetRequiredService<SendMessage>().Log)
                 .AddSingleton<LuceneManager>()
-                .AddSingleton<PaddleOCR>()
                 .AddSingleton<WhisperManager>();
         }
 
