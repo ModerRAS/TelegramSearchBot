@@ -38,7 +38,7 @@ namespace TelegramSearchBot.Service.AI.OCR {
             
             try {
                 // 解析OCR结果
-                var ocrResult = JsonConvert.DeserializeObject<Common.Model.DO.PaddleOCRResult>(resultJson);
+                var ocrResult = JsonConvert.DeserializeObject<TelegramSearchBot.Common.Model.DO.PaddleOCRResult>(resultJson);
                 if (ocrResult?.Results != null && ocrResult.Results.Count > 0) {
                     var textResults = new System.Collections.Generic.List<string>();
                     foreach (var resultList in ocrResult.Results) {
