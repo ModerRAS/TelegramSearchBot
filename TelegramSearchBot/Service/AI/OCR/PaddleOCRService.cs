@@ -7,7 +7,6 @@ using SkiaSharp;
 using StackExchange.Redis;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface.AI.OCR;
-using TelegramSearchBot.OCR;  // 引用新的OCR库
 using TelegramSearchBot.Service.Abstract;
 
 namespace TelegramSearchBot.Service.AI.OCR {
