@@ -97,6 +97,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.OCR\TelegramSearchBot.OCR.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Resources\" />
