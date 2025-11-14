@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
+    <PackageReference Include="Sdcb.PaddleInference" Version="3.0.1" />
+    <PackageReference Include="Sdcb.PaddleOCR" Version="3.0.1" />
+    <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="3.0.1" />
+    <PackageReference Include="StackExchange.Redis" Version="2.9.32" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
