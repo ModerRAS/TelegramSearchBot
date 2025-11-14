@@ -9,7 +9,7 @@
     <PackageReference Include="Sdcb.PaddleInference" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="3.0.1" />
-    <PackageReference Include="StackExchange.Redis" Version="2.9.32" />
+    <PackageReference Include="StackExchange.Redis" Version="2.9.17" />
   </ItemGroup>
 
   <PropertyGroup>
