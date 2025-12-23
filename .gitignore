@@ -355,3 +355,22 @@ tessdata/
 
 example/
 .VsCodeCounter/
+
+# -----------------------------
+# Rust - common ignores
+# -----------------------------
+# Ignore build artifacts created by Cargo
+/target/
+**/target/
+
+# Ignore generated documentation
+/target/doc/
+
+# Ignore typical compiled file types
+*.rlib
+*.rmeta
+
+# Ignore Cargo backup and temporary files
+**/Cargo.toml.orig
+
+# Note: decide whether to check in Cargo.lock (recommended for binaries, optional for libraries)
