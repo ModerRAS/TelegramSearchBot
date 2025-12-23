@@ -1,36 +1,57 @@
-# TelegramSearchBot
-自用群聊消息搜索机器人
+# TelegramSearchBot (Rust 版本)
 
-![Build Status](https://github.com/ModerRAS/TelegramSearchBot/actions/workflows/push.yml/badge.svg)
+这是 [TelegramSearchBot](https://github.com/ModerRAS/TelegramSearchBot) 的 Rust 重写版本。
 
-## 功能列表
-1. 群聊消息存储并支持中文分词搜索 (Lucene)
-2. **向量搜索功能 (FAISS)**: 基于对话段的语义搜索，无需额外服务依赖
-3. 群聊消息中多媒体内容自动处理:
-   - 图片自动下载并OCR存储 (PaddleOCR)
-   - 图片自动二维码识别(WeChatQR)
-   - 语音/视频自动语音识别 (Whisper)
-   - 发送图片附带`打印`指令时自动OCR回复
-4. 大语言模型集成:
-   - Ollama本地模型
-   - OpenAI API
-   - Gemini API
-   - 可配置多模型通道管理
-5. 高级功能:
-   - 短链接映射服务
-   - 消息扩展存储
-   - 记忆图谱功能
-   - 私有Bot API支持
-   - 群组黑名单/设置管理
+## 功能
 
-详细功能说明请参考: [Docs/Bot_Commands_User_Guide.md](Docs/Bot_Commands_User_Guide.md)
+- ✅ 群聊消息存储与搜索
+- ✅ 中文分词搜索 (使用 Tantivy + jieba-rs)
+- ✅ SQLite 数据库存储
+- 🚧 向量搜索（语义搜索）
+- 🚧 AI 对话集成
+- 🚧 OCR/ASR 支持
 
-## 安装与配置
+## 项目结构
 
-### 快速开始
-1. 下载[最新版本](https://clickonce.miaostay.com/TelegramSearchBot/Publish.html)
-2. 首次运行会自动生成配置目录
-3. 编辑`AppData/Local/TelegramSearchBot/Config.json`:
+```
+rust-version/
+├── Cargo.toml                          # 工作空间配置
+├── telegram_search_bot/                # 主应用
+│   ├── src/
+│   │   ├── main.rs                    # 入口
+│   │   ├── lib.rs                     # 库入口
+│   │   ├── bot/                       # Bot 核心
+│   │   ├── controller/                # 控制器（命令处理）
+│   │   ├── database.rs                # 数据库层
+│   │   └── service/                   # 服务层
+│   └── Cargo.toml
+├── telegram_search_bot_common/         # 通用模块
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── config.rs                  # 配置管理
+│   │   ├── error.rs                   # 错误类型
+│   │   └── model/                     # 数据模型
+│   └── Cargo.toml
+└── telegram_search_bot_search/         # 搜索模块
+    ├── src/
+    │   ├── lib.rs
+    │   ├── manager.rs                 # 搜索管理器
+    │   ├── tokenizer.rs               # 中文分词器
+    │   └── error.rs
+    └── Cargo.toml
+```
+
+## 快速开始
+
+### 1. 安装 Rust
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+### 2. 配置
+
+创建配置文件（Windows: `%LOCALAPPDATA%\TelegramSearchBot\Config.json`，Linux/macOS: `~/.local/share/TelegramSearchBot/Config.json`）：
 
 ```json
 {
@@ -46,76 +67,61 @@
   "EnableVideoASR": false,
   "EnableOpenAI": false,
   "OpenAIModelName": "gpt-4o",
-  "OLTPAuth": "",
-  "OLTPAuthUrl": "",
-  "OLTPName": ""
+  "MaxToolCycles": 25
 }
 ```
 
-### 配置说明
-- **必填项**:
-  - `BotToken`: 从@BotFather获取的Telegram机器人token
-  - `AdminId`: 管理员Telegram用户ID(必须为数字)
+### 3. 构建和运行
 
-- **AI相关**:
-  - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")
-  - `EnableOpenAI`: 是否启用OpenAI(默认false)
-  - `OpenAIModelName`: OpenAI模型名称(默认"gpt-4o")
-
-- **日志推送**:
-  - `OLTPAuth`: OLTP日志推送认证密钥
-  - `OLTPAuthUrl`: OLTP日志推送URL
-  - `OLTPName`: OLTP日志推送名称
-
-完整配置参考: [Env.cs](TelegramSearchBot/Env.cs)
-
-## 向量搜索功能
-基于FAISS的向量搜索系统，提供强大的语义搜索能力：
-- ✅ **零额外服务依赖** - 不需要外部向量数据库
-- ✅ **对话段语义理解** - 基于完整对话上下文而非单条消息
-- ✅ **自动向量化** - 消息自动分组为对话段并生成向量
-- ✅ **高效检索** - 使用FAISS进行快速相似度搜索
-
-详细文档: [TelegramSearchBot/README_FaissVectorSearch.md](TelegramSearchBot/README_FaissVectorSearch.md)
+```bash
+cd rust-version
+cargo build --release
+cargo run --release
+```
 
 ## 使用方法
 
-### 基本操作流程
-1. 去找BotFather创建一个Bot
-2. 设置Bot的Group Privacy为disabled
-3. 将该Bot加入群聊
-4. 输入`搜索 + 空格 + 搜索关键字`，如`搜索 食用方法`
+### 搜索命令
 
-### 搜索类型
-- **倒排索引搜索**: `搜索 关键词` - 传统关键词搜索
-- **向量搜索**: `/vector 问题描述` - 语义搜索，理解问题含义
+- `搜索 关键词` - 使用倒排索引搜索
+- `向量搜索 问题描述` - 使用语义搜索
+- `语法搜索 查询语句` - 使用高级语法搜索
+- `/search 关键词` - 英文命令搜索
+- `/vector 问题描述` - 英文命令向量搜索
 
-### AI交互
-- @机器人 + 问题: 使用配置的LLM回复
+## 与 C# 版本的对比
 
-完整命令列表: [Docs/Bot_Commands_User_Guide.md](Docs/Bot_Commands_User_Guide.md)
+| 功能 | C# 版本 | Rust 版本 |
+|------|---------|-----------|
+| 搜索引擎 | Lucene.NET | Tantivy |
+| 中文分词 | SmartChineseAnalyzer | jieba-rs |
+| 数据库 | EF Core + SQLite | SQLx + SQLite |
+| Telegram SDK | Telegram.Bot | teloxide |
+| 向量搜索 | Faiss.NET | (计划中) |
+| AI 集成 | OpenAI/Ollama | (计划中) |
+| OCR | PaddleOCR | (计划中) |
+| ASR | Whisper | (计划中) |
 
-## 系统架构
-```mermaid
-graph TD
-    A[Telegram Bot] --> B[消息处理管道]
-    B --> C[消息存储]
-    B --> D[多媒体处理]
-    B --> E[LLM交互]
-    B --> F[向量搜索]
-    C --> G[(SQLite)]
-    C --> H[Lucene索引]
-    F --> I[对话段生成]
-    F --> J[FAISS向量索引]
-    I --> K[向量生成]
-    D --> L[OCR服务]
-    D --> M[ASR服务]
-    E --> N[Ollama]
-    E --> O[OpenAI]
-    E --> P[Gemini]
+## 开发
+
+### 运行测试
+
+```bash
+cargo test
 ```
 
-详细架构设计: [Docs/Existing_Codebase_Overview.md](Docs/Existing_Codebase_Overview.md)
+### 代码格式化
 
-## License
-这里曾经是一个FOSSA Status的，但是因为经常报错烦了，遂删之。
+```bash
+cargo fmt
+```
+
+### 代码检查
+
+```bash
+cargo clippy
+```
+
+## 许可证
+
+MIT License

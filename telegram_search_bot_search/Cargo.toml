@@ -1,0 +1,20 @@
+[package]
+name = "telegram_search_bot_search"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+telegram_search_bot_common = { path = "../telegram_search_bot_common" }
+
+tantivy = { workspace = true }
+jieba-rs = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+once_cell = { workspace = true }
