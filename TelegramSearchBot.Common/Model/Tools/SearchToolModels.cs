@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Model.Tools {
     public class SearchToolResult {
@@ -17,7 +16,7 @@ namespace TelegramSearchBot.Model.Tools {
         public string ContentPreview { get; set; }
         public List<HistoryMessageItem> ContextBefore { get; set; }
         public List<HistoryMessageItem> ContextAfter { get; set; }
-        public List<MessageExtension> Extensions { get; set; }
+        public List<MessageExtensionDto> Extensions { get; set; }
     }
 
     public class HistoryQueryResult {
@@ -35,6 +34,6 @@ namespace TelegramSearchBot.Model.Tools {
         public string SenderName { get; set; }
         public DateTime DateTime { get; set; }
         public long? ReplyToMessageId { get; set; }
-        public List<MessageExtension> Extensions { get; set; }
+        public List<MessageExtensionDto> Extensions { get; set; }
     }
 }
