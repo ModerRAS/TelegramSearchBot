@@ -93,7 +93,7 @@ namespace TelegramSearchBot.View {
 
         public async Task<List<Model.Data.Message>> Render(CancellationToken cancellationToken = default) {
             if (_streamData == null) {
-                return new List<Model.Data.Message>() { Model.Data.Message.FromTelegramMessage(await RenderFinalMessage(cancellationToken)) };
+                return new List<Model.Data.Message>() { Extension.MessageExtensions.FromTelegramMessage(await RenderFinalMessage(cancellationToken)) };
             }
 
             var inlineButtons = _buttons?.Select(b =>

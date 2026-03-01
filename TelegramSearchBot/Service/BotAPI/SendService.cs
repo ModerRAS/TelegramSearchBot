@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
@@ -64,8 +65,8 @@ namespace TelegramSearchBot.Service.BotAPI {
                 var uuid_nxt = Guid.NewGuid().ToString();
                 var nextPageCache = new SearchPageCache() {
                     UUID = uuid_nxt,
-                    SearchOption = searchOption
                 };
+                nextPageCache.SetSearchOption(searchOption);
 
                 if (_dbContext.SearchPageCaches != null) {
                     _dbContext.SearchPageCaches.Add(nextPageCache);
@@ -82,8 +83,8 @@ namespace TelegramSearchBot.Service.BotAPI {
             searchOption.ToDeleteNow = true;
             var deleteCache = new SearchPageCache() {
                 UUID = uuid,
-                SearchOption = searchOption
             };
+            deleteCache.SetSearchOption(searchOption);
 
             if (_dbContext.SearchPageCaches != null) {
                 _dbContext.SearchPageCaches.Add(deleteCache);

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
@@ -51,11 +52,11 @@ namespace TelegramSearchBot.Service.Search {
                     throw new KeyNotFoundException($"SearchPageCache with UUID {UUID} not found");
                 }
 
-                if (cache.SearchOption == null) {
+                if (cache.GetSearchOption() == null) {
                     throw new InvalidOperationException($"SearchOption for UUID {UUID} is null");
                 }
 
-                var result = cache.SearchOption;
+                var result = cache.GetSearchOption();
 
                 // 查询成功后删除记录
                 _dataDbContext.SearchPageCaches.Remove(cache);
@@ -83,8 +84,8 @@ namespace TelegramSearchBot.Service.Search {
                 var uuid = Guid.NewGuid().ToString();
                 var cache = new SearchPageCache {
                     UUID = uuid,
-                    SearchOption = searchOption
                 };
+                cache.SetSearchOption(searchOption);
 
                 _dataDbContext.SearchPageCaches.Add(cache);
                 await _dataDbContext.SaveChangesAsync().ConfigureAwait(false);
