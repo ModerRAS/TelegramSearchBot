@@ -32,10 +32,11 @@ namespace TelegramSearchBot.Test.Helper {
 
                 // 打印文件路径
                 System.Console.WriteLine($"词云图片已保存到: {Path.GetFullPath(outputPath)}");
-            } catch (System.TypeInitializationException ex) when (ex.InnerException is System.PlatformNotSupportedException) {
-                // 在Linux上System.Drawing.Common不支持时跳过测试
-                System.Console.WriteLine("跳过测试：System.Drawing.Common在当前平台上不支持");
-                // Assert.Skip在xUnit中不可用，使用Skip属性
+            } catch (Exception ex) when (ex is System.DllNotFoundException ||
+                                          (ex is System.TypeInitializationException tex &&
+                                           tex.InnerException is System.PlatformNotSupportedException or System.DllNotFoundException)) {
+                // 在Linux上GDI+不可用时跳过测试（包括libgdiplus未安装或平台不支持）
+                System.Console.WriteLine($"跳过测试：{ex.Message}");
                 return;
             }
         }
