@@ -13,14 +13,14 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - uses: actions/setup-python@v4
       with:
         python-version: '3.9'
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.x
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v1.1
     - name: Clear NuGet cache
@@ -47,7 +47,8 @@ jobs:
           $xmldata.Save($content)
           echo $env:BUILD_VERSION
           msbuild TelegramSearchBot /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
-          Copy-Item "TelegramSearchBot/bin/Release/net9.0/win-x64/app.publish/Publish.html" "TelegramSearchBot/bin/TelegramSearchBot/"
+          $tfm = ([xml](Get-Content "TelegramSearchBot/TelegramSearchBot.csproj")).Project.PropertyGroup.TargetFramework | Where-Object { $_ } | Select-Object -First 1
+          Copy-Item "TelegramSearchBot/bin/Release/$tfm/win-x64/app.publish/Publish.html" "TelegramSearchBot/bin/TelegramSearchBot/"
     - name: Upload to ClickOnce Server
       shell: pwsh
       env:
