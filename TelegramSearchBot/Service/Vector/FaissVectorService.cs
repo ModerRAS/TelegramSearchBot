@@ -217,9 +217,8 @@ namespace TelegramSearchBot.Service.Vector {
 
                 await AddVectorToIndexAsync(index, vector, faissIndex);
 
-                // 更新对话段状态
-                segment.IsVectorized = true;
-                dbContext.ConversationSegments.Update(segment);
+                // 更新对话段状态（兼容EF Core 10的变更跟踪严格模式）
+                SetSegmentVectorizedStatus(dbContext, segment, true);
 
                 await dbContext.SaveChangesAsync();
 
@@ -235,8 +234,7 @@ namespace TelegramSearchBot.Service.Vector {
                 // 确保不会阻塞其他处理
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
-                segment.IsVectorized = false;
-                dbContext.ConversationSegments.Update(segment);
+                SetSegmentVectorizedStatus(dbContext, segment, false);
                 await dbContext.SaveChangesAsync();
             }
         }
@@ -585,6 +583,21 @@ namespace TelegramSearchBot.Service.Vector {
         /// </summary>
         private string GetIndexKey(long groupId, string indexType) {
             return $"{groupId}_{indexType}";
+        }
+
+        /// <summary>
+        /// 更新对话段的向量化状态，兼容EF Core 10的严格变更跟踪模式。
+        /// </summary>
+        private static void SetSegmentVectorizedStatus(DataDbContext dbContext, ConversationSegment segment, bool isVectorized) {
+            var trackedEntry = dbContext.ChangeTracker
+                .Entries<ConversationSegment>()
+                .FirstOrDefault(e => e.Entity.Id == segment.Id);
+            if (trackedEntry != null) {
+                trackedEntry.Entity.IsVectorized = isVectorized;
+            } else {
+                segment.IsVectorized = isVectorized;
+                dbContext.ConversationSegments.Update(segment);
+            }
         }
 
         #region IVectorGenerationService 实现
