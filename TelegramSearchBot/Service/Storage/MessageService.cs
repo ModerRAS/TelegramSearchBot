@@ -50,42 +50,69 @@ namespace TelegramSearchBot.Service.Storage {
         }
 
         public async Task<long> AddToSqlite(MessageOption messageOption) {
-            var UserIsInGroup = from s in DataContext.UsersWithGroup
-                                where s.UserId == messageOption.UserId &&
-                                      s.GroupId == messageOption.ChatId
-                                select s;
-            if (!UserIsInGroup.Any()) {
-                await DataContext.UsersWithGroup.AddAsync(new UserWithGroup() {
-                    GroupId = messageOption.ChatId,
-                    UserId = messageOption.UserId
-                });
+            // 使用 FirstOrDefaultAsync 代替 Any 以避免竞争条件
+            var existingUserInGroup = await DataContext.UsersWithGroup
+                .FirstOrDefaultAsync(s => s.UserId == messageOption.UserId &&
+                                         s.GroupId == messageOption.ChatId);
+            
+            if (existingUserInGroup == null) {
+                // 使用 try-catch 处理并发插入导致的唯一约束冲突
+                try {
+                    await DataContext.UsersWithGroup.AddAsync(new UserWithGroup() {
+                        GroupId = messageOption.ChatId,
+                        UserId = messageOption.UserId
+                    });
+                    // 立即保存以检测冲突
+                    await DataContext.SaveChangesAsync();
+                } catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("UNIQUE constraint failed") == true ||
+                                                     ex.InnerException?.Message?.Contains("duplicate") == true) {
+                    // 忽略重复插入错误，其他线程已经插入了该记录
+                    Logger.LogDebug($"UserId {messageOption.UserId} 在群组 {messageOption.ChatId} 的关联已存在，跳过插入");
+                    // 清理追踪状态
+                    DataContext.ChangeTracker.Clear();
+                }
             }
 
-            var UserDataExists = from s in DataContext.UserData
-                                 where s.Id == messageOption.User.Id
-                                 select s;
-            if (!UserDataExists.Any() && messageOption.User != null) {
-                await DataContext.UserData.AddAsync(new UserData() {
-                    Id = messageOption.User.Id,
-                    IsBot = messageOption.User.IsBot,
-                    FirstName = messageOption.User.FirstName,
-                    LastName = messageOption.User.LastName,
-                    IsPremium = messageOption.User.IsPremium,
-                    UserName = messageOption.User.Username,
-                });
+            var existingUserData = await DataContext.UserData
+                .FirstOrDefaultAsync(s => s.Id == messageOption.User.Id);
+            
+            if (existingUserData == null && messageOption.User != null) {
+                try {
+                    await DataContext.UserData.AddAsync(new UserData() {
+                        Id = messageOption.User.Id,
+                        IsBot = messageOption.User.IsBot,
+                        FirstName = messageOption.User.FirstName,
+                        LastName = messageOption.User.LastName,
+                        IsPremium = messageOption.User.IsPremium,
+                        UserName = messageOption.User.Username,
+                    });
+                    await DataContext.SaveChangesAsync();
+                } catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("UNIQUE constraint failed") == true ||
+                                                     ex.InnerException?.Message?.Contains("duplicate") == true) {
+                    Logger.LogDebug($"用户数据 {messageOption.User.Id} 已存在，跳过插入");
+                    DataContext.ChangeTracker.Clear();
+                }
             }
 
-            var GroupDataExists = from s in DataContext.GroupData
-                                  where s.Id == messageOption.Chat.Id
-                                  select s;
-            if (!GroupDataExists.Any() && messageOption.Chat != null) {
-                await DataContext.GroupData.AddAsync(new GroupData() {
-                    Id = messageOption.Chat.Id,
-                    IsForum = messageOption.Chat.IsForum,
-                    Title = messageOption.Chat.Title,
-                    Type = Enum.GetName(messageOption.Chat.Type),
-                });
+            var existingGroupData = await DataContext.GroupData
+                .FirstOrDefaultAsync(s => s.Id == messageOption.Chat.Id);
+            
+            if (existingGroupData == null && messageOption.Chat != null) {
+                try {
+                    await DataContext.GroupData.AddAsync(new GroupData() {
+                        Id = messageOption.Chat.Id,
+                        IsForum = messageOption.Chat.IsForum,
+                        Title = messageOption.Chat.Title,
+                        Type = Enum.GetName(messageOption.Chat.Type),
+                    });
+                    await DataContext.SaveChangesAsync();
+                } catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("UNIQUE constraint failed") == true ||
+                                                     ex.InnerException?.Message?.Contains("duplicate") == true) {
+                    Logger.LogDebug($"群组数据 {messageOption.Chat.Id} 已存在，跳过插入");
+                    DataContext.ChangeTracker.Clear();
+                }
             }
+            
             var message = new Message() {
                 GroupId = messageOption.ChatId,
                 MessageId = messageOption.MessageId,
@@ -95,10 +122,9 @@ namespace TelegramSearchBot.Service.Storage {
             };
             if (messageOption.ReplyTo != 0) {
                 message.ReplyToMessageId = messageOption.ReplyTo;
-                await DataContext.Messages.AddAsync(message);
-            } else {
-                await DataContext.Messages.AddAsync(message);
             }
+            
+            await DataContext.Messages.AddAsync(message);
             await DataContext.SaveChangesAsync();
             return message.Id;
         }
