@@ -119,8 +119,8 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 IAsyncEnumerable<string> fullMessageStream = GeneralLLMService.ExecAsync(
                     inputLlMessage, e.Message.Chat.Id, executionContext, CancellationToken.None);
 
-                // Send directly - no marker wrapping needed
-                List<Model.Data.Message> sentMessagesForDb = await SendMessageService.SendFullMessageStream(
+                // Use sendMessageDraft API for LLM streaming (better performance, no send+edit)
+                List<Model.Data.Message> sentMessagesForDb = await SendMessageService.SendDraftStream(
                     fullMessageStream,
                     e.Message.Chat.Id,
                     e.Message.MessageId,

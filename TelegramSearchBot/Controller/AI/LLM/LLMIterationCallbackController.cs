@@ -144,13 +144,14 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                     snapshotId, snapshot.ChatId, snapshot.Provider,
                     snapshot.ProviderHistory?.Count ?? 0, snapshot.CyclesSoFar);
 
-                // Resume with full context
+                // Resume with full context — yields only NEW content (not re-sending old history)
                 var executionContext = new LlmExecutionContext();
                 IAsyncEnumerable<string> resumeStream = _generalLLMService.ResumeFromSnapshotAsync(
                     snapshot, executionContext, CancellationToken.None);
 
                 var initialContent = $"{snapshot.ModelName} 继续迭代中...";
-                List<Model.Data.Message> sentMessagesForDb = await _sendMessageService.SendFullMessageStream(
+                // Use SendDraftStream for continuation — only new content is streamed
+                List<Model.Data.Message> sentMessagesForDb = await _sendMessageService.SendDraftStream(
                     resumeStream,
                     snapshot.ChatId,
                     snapshot.OriginalMessageId,

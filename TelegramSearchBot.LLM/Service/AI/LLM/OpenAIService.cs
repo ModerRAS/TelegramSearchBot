@@ -724,8 +724,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             };
             var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
 
-            // Resume with the accumulated content from the snapshot
-            var currentMessageContentBuilder = new StringBuilder(snapshot.LastAccumulatedContent ?? "");
+            // Resume: only yield NEW content (the old content was already displayed to the user)
+            // We keep a separate builder for full accumulated content (for snapshot) and one for new-only content (for yield)
+            var fullContentBuilder = new StringBuilder(snapshot.LastAccumulatedContent ?? "");
+            var newContentBuilder = new StringBuilder();
 
             try {
                 int maxToolCycles = Env.MaxToolCycles;
@@ -739,11 +741,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                         foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>()) {
                             if (updatePart?.Text != null) {
-                                currentMessageContentBuilder.Append(updatePart.Text);
+                                fullContentBuilder.Append(updatePart.Text);
+                                newContentBuilder.Append(updatePart.Text);
                                 llmResponseAccumulatorForToolParsing.Append(updatePart.Text);
-                                var currentContent = currentMessageContentBuilder.ToString();
-                                if (currentContent.Length > 10) {
-                                    yield return currentContent;
+                                var newContent = newContentBuilder.ToString();
+                                if (newContent.Length > 10) {
+                                    yield return newContent;
                                 }
                             }
                         }
@@ -792,7 +795,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         ModelName = modelName,
                         Provider = "OpenAI",
                         ChannelId = channel.Id,
-                        LastAccumulatedContent = currentMessageContentBuilder.ToString(),
+                        LastAccumulatedContent = fullContentBuilder.ToString(),
                         CyclesSoFar = snapshot.CyclesSoFar + maxToolCycles,
                         ProviderHistory = SerializeProviderHistory(providerHistory),
                     };

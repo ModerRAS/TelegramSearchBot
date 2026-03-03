@@ -328,6 +328,99 @@ namespace TelegramSearchBot.Service.BotAPI {
         }
         #endregion
 
+        #region Draft-Based Streaming (sendMessageDraft API)
+        /// <summary>
+        /// 使用 Telegram sendMessageDraft API 进行流式发送。
+        /// 该 API 专为 LLM 流式输出设计，无需 send+edit，直接流式更新消息。
+        /// 每次 yield 的内容被视为完整快照（full accumulated text）。
+        /// </summary>
+        /// <param name="fullMessagesStream">完整消息流（每次yield为累积全文快照）</param>
+        /// <param name="chatId">目标聊天ID</param>
+        /// <param name="replyTo">回复的消息ID（同时作为 draftId）</param>
+        /// <param name="initialPlaceholderContent">初始占位内容</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>发送成功的消息列表（用于DB记录）</returns>
+        public async Task<List<Model.Data.Message>> SendDraftStream(
+            IAsyncEnumerable<string> fullMessagesStream,
+            long chatId,
+            int replyTo,
+            string initialPlaceholderContent = "⏳",
+            CancellationToken cancellationToken = default) {
+            int draftId = replyTo; // Use the reply-to message ID as the draft identifier
+            string latestContent = null;
+            bool draftStarted = false;
+
+            try {
+                // Send initial placeholder as draft
+                try {
+                    await botClient.SendMessageDraft(chatId, draftId, initialPlaceholderContent, parseMode: ParseMode.None, cancellationToken: cancellationToken);
+                    draftStarted = true;
+                } catch (Exception ex) {
+                    logger.LogWarning(ex, "SendDraftStream: Failed to send initial draft placeholder, falling back to SendFullMessageStream.");
+                    // Fall back to the old method if sendMessageDraft is not supported
+                    return await SendFullMessageStream(fullMessagesStream, chatId, replyTo, initialPlaceholderContent, cancellationToken);
+                }
+
+                await foreach (var markdownContent in fullMessagesStream.WithCancellation(cancellationToken)) {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    if (string.IsNullOrEmpty(markdownContent)) continue;
+
+                    latestContent = markdownContent;
+
+                    // Convert markdown to HTML and send as draft update
+                    try {
+                        var html = MessageFormatHelper.ConvertMarkdownToTelegramHtml(latestContent);
+                        if (!string.IsNullOrWhiteSpace(html)) {
+                            await botClient.SendMessageDraft(chatId, draftId, html, parseMode: ParseMode.Html, cancellationToken: cancellationToken);
+                        }
+                    } catch (Exception ex) {
+                        logger.LogTrace(ex, "SendDraftStream: Error sending draft update, will retry on next chunk.");
+                    }
+                }
+            } catch (OperationCanceledException) {
+                logger.LogInformation("SendDraftStream: Stream consumption cancelled.");
+            } catch (Exception ex) {
+                logger.LogError(ex, "SendDraftStream: Error during stream consumption.");
+            }
+
+            // Final sync: ensure the latest content is sent
+            if (latestContent != null) {
+                try {
+                    var finalHtml = MessageFormatHelper.ConvertMarkdownToTelegramHtml(latestContent);
+                    if (!string.IsNullOrWhiteSpace(finalHtml)) {
+                        await botClient.SendMessageDraft(chatId, draftId, finalHtml, parseMode: ParseMode.Html, cancellationToken: CancellationToken.None);
+                    }
+                } catch (Exception ex) {
+                    logger.LogWarning(ex, "SendDraftStream: Error sending final draft content.");
+                }
+            }
+
+            // Build DB result
+            // Note: sendMessageDraft doesn't return a Message object, so we construct one for DB storage
+            var resultMessages = new List<Model.Data.Message>();
+            User botUser = null;
+            try {
+                botUser = await botClient.GetMe(cancellationToken: CancellationToken.None);
+            } catch { }
+
+            if (latestContent != null) {
+                var chunks = MessageFormatHelper.SplitMarkdownIntoChunks(latestContent, 4096);
+                for (int i = 0; i < chunks.Count; i++) {
+                    resultMessages.Add(new Model.Data.Message {
+                        GroupId = chatId,
+                        MessageId = 0, // Draft messages don't have standard message IDs during streaming
+                        DateTime = DateTime.UtcNow,
+                        Content = chunks[i],
+                        FromUserId = botUser?.Id ?? 0,
+                        ReplyToMessageId = replyTo,
+                    });
+                }
+            }
+
+            return resultMessages;
+        }
+        #endregion
+
         #region Simplified Streaming with Auto-HTML
         /// <summary>
         /// 简化版流式消息发送(自动HTML构建和分块)
