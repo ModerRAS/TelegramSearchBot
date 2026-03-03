@@ -41,7 +41,7 @@ namespace TelegramSearchBot.Extension {
         }
 
         public static IServiceCollection AddRedis(this IServiceCollection services) {
-            var redisConnectionString = $"localhost:{Env.SchedulerPort}";
+            var redisConnectionString = $"localhost:{Env.SchedulerPort},abortConnect=false,connectTimeout=5000,connectRetry=5";
             return services.AddSingleton<IConnectionMultiplexer>(
                 ConnectionMultiplexer.Connect(redisConnectionString));
         }
