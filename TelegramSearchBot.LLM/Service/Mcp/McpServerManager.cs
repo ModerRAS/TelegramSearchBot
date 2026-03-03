@@ -1,75 +1,120 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Mcp;
+using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Mcp;
 
 namespace TelegramSearchBot.Service.Mcp {
     /// <summary>
     /// Manages MCP server configurations and lifecycle.
-    /// Stores server configs in a JSON file and manages client connections.
+    /// Stores server configs in the SQLite database via AppConfigurationItems table.
     /// </summary>
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public class McpServerManager : IMcpServerManager, IService, IDisposable {
         private readonly ILogger<McpServerManager> _logger;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ConcurrentDictionary<string, IMcpClient> _clients = new();
         private readonly ConcurrentDictionary<string, List<McpToolDescription>> _serverTools = new();
         private readonly ConcurrentDictionary<string, string> _toolToServer = new();
-        private readonly string _configPath;
-        private McpServersConfig _config;
+
+        internal const string McpConfigKeyPrefix = "MCP:ServerConfig:";
 
         public string ServiceName => "McpServerManager";
 
-        public McpServerManager(ILogger<McpServerManager> logger) {
+        public McpServerManager(ILogger<McpServerManager> logger, IServiceScopeFactory scopeFactory) {
             _logger = logger;
-            _configPath = Path.Combine(Env.WorkDir, "mcp_servers.json");
-            LoadConfig();
+            _scopeFactory = scopeFactory;
         }
 
-        private void LoadConfig() {
+        private async Task<List<McpServerConfig>> LoadConfigsFromDbAsync() {
             try {
-                if (File.Exists(_configPath)) {
-                    var json = File.ReadAllText(_configPath);
-                    _config = JsonConvert.DeserializeObject<McpServersConfig>(json) ?? new McpServersConfig();
-                } else {
-                    _config = new McpServersConfig();
+                using var scope = _scopeFactory.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+
+                var items = await dbContext.AppConfigurationItems
+                    .Where(x => x.Key.StartsWith(McpConfigKeyPrefix))
+                    .ToListAsync();
+
+                var configs = new List<McpServerConfig>();
+                foreach (var item in items) {
+                    try {
+                        var config = JsonConvert.DeserializeObject<McpServerConfig>(item.Value);
+                        if (config != null) {
+                            configs.Add(config);
+                        }
+                    } catch (Exception ex) {
+                        _logger.LogWarning(ex, "Failed to deserialize MCP server config for key {Key}", item.Key);
+                    }
                 }
+                return configs;
             } catch (Exception ex) {
-                _logger.LogError(ex, "Failed to load MCP server config from {Path}", _configPath);
-                _config = new McpServersConfig();
+                _logger.LogError(ex, "Failed to load MCP server configs from database");
+                return new List<McpServerConfig>();
             }
         }
 
-        private async Task SaveConfigAsync() {
+        private async Task SaveConfigToDbAsync(McpServerConfig config) {
             try {
-                var json = JsonConvert.SerializeObject(_config, Formatting.Indented);
-                await File.WriteAllTextAsync(_configPath, json);
+                using var scope = _scopeFactory.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+
+                var key = McpConfigKeyPrefix + config.Name;
+                var json = JsonConvert.SerializeObject(config);
+
+                var existing = await dbContext.AppConfigurationItems.FindAsync(key);
+                if (existing != null) {
+                    existing.Value = json;
+                } else {
+                    dbContext.AppConfigurationItems.Add(new TelegramSearchBot.Model.Data.AppConfigurationItem {
+                        Key = key,
+                        Value = json
+                    });
+                }
+                await dbContext.SaveChangesAsync();
             } catch (Exception ex) {
-                _logger.LogError(ex, "Failed to save MCP server config to {Path}", _configPath);
+                _logger.LogError(ex, "Failed to save MCP server config for {Name}", config.Name);
+            }
+        }
+
+        private async Task RemoveConfigFromDbAsync(string serverName) {
+            try {
+                using var scope = _scopeFactory.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+
+                var key = McpConfigKeyPrefix + serverName;
+                var existing = await dbContext.AppConfigurationItems.FindAsync(key);
+                if (existing != null) {
+                    dbContext.AppConfigurationItems.Remove(existing);
+                    await dbContext.SaveChangesAsync();
+                }
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Failed to remove MCP server config for {Name}", serverName);
             }
         }
 
         public List<McpServerConfig> GetServerConfigs() {
-            return _config.Servers.ToList();
+            return LoadConfigsFromDbAsync().GetAwaiter().GetResult();
+        }
+
+        public async Task<List<McpServerConfig>> GetServerConfigsAsync() {
+            return await LoadConfigsFromDbAsync();
         }
 
         public async Task AddServerAsync(McpServerConfig config) {
             if (config == null) throw new ArgumentNullException(nameof(config));
             if (string.IsNullOrWhiteSpace(config.Name)) throw new ArgumentException("Server name is required.");
 
-            // Remove existing server with same name
-            _config.Servers.RemoveAll(s => s.Name.Equals(config.Name, StringComparison.OrdinalIgnoreCase));
-            _config.Servers.Add(config);
-            await SaveConfigAsync();
+            await SaveConfigToDbAsync(config);
 
             _logger.LogInformation("Added MCP server config: {Name} ({Command})", config.Name, config.Command);
 
@@ -99,14 +144,14 @@ namespace TelegramSearchBot.Service.Mcp {
                 }
             }
 
-            _config.Servers.RemoveAll(s => s.Name.Equals(serverName, StringComparison.OrdinalIgnoreCase));
-            await SaveConfigAsync();
+            await RemoveConfigFromDbAsync(serverName);
 
             _logger.LogInformation("Removed MCP server: {Name}", serverName);
         }
 
         public async Task InitializeAllServersAsync(CancellationToken cancellationToken = default) {
-            foreach (var serverConfig in _config.Servers.Where(s => s.Enabled)) {
+            var configs = await LoadConfigsFromDbAsync();
+            foreach (var serverConfig in configs.Where(s => s.Enabled)) {
                 try {
                     await ConnectToServerAsync(serverConfig, cancellationToken);
                 } catch (Exception ex) {
@@ -173,7 +218,6 @@ namespace TelegramSearchBot.Service.Mcp {
         }
 
         public void Dispose() {
-            // Best-effort synchronous cleanup to avoid deadlocks
             foreach (var kvp in _clients) {
                 try {
                     (kvp.Value as IDisposable)?.Dispose();

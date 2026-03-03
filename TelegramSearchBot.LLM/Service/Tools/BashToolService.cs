@@ -15,6 +15,8 @@ using TelegramSearchBot.Model;
 namespace TelegramSearchBot.Service.Tools {
     /// <summary>
     /// Built-in tool for executing shell commands.
+    /// On Windows, uses PowerShell (preferring pwsh over powershell).
+    /// On Linux/macOS, uses /bin/bash.
     /// Restricted to admin users for security.
     /// </summary>
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -28,7 +30,55 @@ namespace TelegramSearchBot.Service.Tools {
             _logger = logger;
         }
 
-        [BuiltInTool("Execute a shell command and return the output. Use this to run system commands, install software, or manage MCP tool servers. Only available to admin users.")]
+        /// <summary>
+        /// Gets the shell executable and argument format for the current platform.
+        /// On Windows, prefers pwsh (PowerShell 7+) over powershell (Windows PowerShell 5.1).
+        /// On Linux/macOS, uses /bin/bash.
+        /// </summary>
+        internal static (string shellPath, string shellArgFormat, string shellName) GetShellInfo() {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                // Prefer pwsh (PowerShell 7+) over powershell (Windows PowerShell 5.1)
+                var pwshPath = FindExecutableOnPath("pwsh.exe") ?? FindExecutableOnPath("pwsh");
+                if (pwshPath != null) {
+                    return (pwshPath, "-NoProfile -NonInteractive -Command {0}", "PowerShell 7+ (pwsh)");
+                }
+
+                // Fallback to Windows PowerShell
+                var powershellPath = FindExecutableOnPath("powershell.exe") ?? "powershell.exe";
+                return (powershellPath, "-NoProfile -NonInteractive -Command {0}", "Windows PowerShell");
+            }
+
+            return ("/bin/bash", "-c {0}", "bash");
+        }
+
+        /// <summary>
+        /// Returns a description of the current shell environment for inclusion in LLM prompts.
+        /// </summary>
+        public static string GetShellEnvironmentDescription() {
+            var (_, _, shellName) = GetShellInfo();
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                return $"当前系统为 Windows，命令执行使用 {shellName}。请使用 PowerShell 语法编写命令，" +
+                       "例如使用 Get-ChildItem 而不是 ls，使用 Get-Content 而不是 cat，使用 Select-String 而不是 grep。" +
+                       "也可以使用 PowerShell 的别名（如 ls, cat, dir 等），但请注意其行为可能与 Unix 版本不同。";
+            }
+            return $"当前系统为 {RuntimeInformation.OSDescription}，命令执行使用 {shellName}。请使用标准 bash 语法编写命令。";
+        }
+
+        internal static string FindExecutableOnPath(string fileName) {
+            var pathEnv = Environment.GetEnvironmentVariable("PATH");
+            if (string.IsNullOrEmpty(pathEnv)) return null;
+
+            foreach (var dir in pathEnv.Split(Path.PathSeparator)) {
+                var fullPath = Path.Combine(dir, fileName);
+                if (File.Exists(fullPath)) return fullPath;
+            }
+            return null;
+        }
+
+        [BuiltInTool("Execute a shell command and return the output. " +
+                      "On Windows, commands are executed using PowerShell (pwsh if available, otherwise powershell). " +
+                      "On Linux/macOS, commands are executed using bash. " +
+                      "Only available to admin users.")]
         public async Task<string> ExecuteCommand(
             [BuiltInParameter("The shell command to execute")] string command,
             ToolContext toolContext,
@@ -56,13 +106,14 @@ namespace TelegramSearchBot.Service.Tools {
                 command, workDir, toolContext.UserId);
 
             try {
-                var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-                var shellName = isWindows ? "cmd.exe" : "/bin/bash";
-                var shellArgs = isWindows ? $"/c {command}" : $"-c {command}";
+                var (shellPath, shellArgFormat, shellName) = GetShellInfo();
+                var shellArgs = string.Format(shellArgFormat, command);
+
+                _logger.LogDebug("Using shell: {ShellName} ({ShellPath}), args: {Args}", shellName, shellPath, shellArgs);
 
                 var process = new Process {
                     StartInfo = new ProcessStartInfo {
-                        FileName = shellName,
+                        FileName = shellPath,
                         Arguments = shellArgs,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,

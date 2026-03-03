@@ -27,8 +27,8 @@ using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Mcp;
+using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
-using TelegramSearchBot.Service.Mcp;
 using TelegramSearchBot.Service.Scheduler;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Vector;
@@ -96,7 +96,8 @@ namespace TelegramSearchBot.AppBootstrap {
             var loggerFactory = service.GetRequiredService<ILoggerFactory>();
             var mcpLogger = loggerFactory.CreateLogger("McpToolHelperInitialization");
             var mainAssembly = typeof(GeneralBootstrap).Assembly;
-            TelegramSearchBot.Service.AI.LLM.McpToolHelper.EnsureInitialized(mainAssembly, service, mcpLogger);
+            var llmAssembly = typeof(McpToolHelper).Assembly;
+            McpToolHelper.EnsureInitialized(mainAssembly, llmAssembly, service, mcpLogger);
             Log.Information("McpToolHelper has been initialized with built-in tools.");
 
             // Initialize external MCP tool servers
@@ -137,20 +138,20 @@ namespace TelegramSearchBot.AppBootstrap {
             var externalTools = mcpServerManager.GetAllExternalTools();
             if (!externalTools.Any()) return;
 
-            var toolInfos = externalTools.Select(t => (t.serverName, new TelegramSearchBot.Service.AI.LLM.McpToolHelper.ExternalToolInfo {
+            var toolInfos = externalTools.Select(t => (t.serverName, new McpToolHelper.ExternalToolInfo {
                 ServerName = t.serverName,
                 ToolName = t.tool.Name,
                 Description = t.tool.Description ?? "",
                 Parameters = t.tool.InputSchema?.Properties?.Select(p =>
-                    new TelegramSearchBot.Service.AI.LLM.McpToolHelper.ExternalToolParameter {
+                    new McpToolHelper.ExternalToolParameter {
                         Name = p.Key,
                         Type = p.Value.Type ?? "string",
                         Description = p.Value.Description ?? "",
                         Required = t.tool.InputSchema.Required?.Contains(p.Key) ?? false
-                    }).ToList() ?? new List<TelegramSearchBot.Service.AI.LLM.McpToolHelper.ExternalToolParameter>()
+                    }).ToList() ?? new List<McpToolHelper.ExternalToolParameter>()
             })).ToList();
 
-            TelegramSearchBot.Service.AI.LLM.McpToolHelper.RegisterExternalTools(
+            McpToolHelper.RegisterExternalTools(
                 toolInfos,
                 async (serverName, toolName, arguments) => {
                     var objectArgs = arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);

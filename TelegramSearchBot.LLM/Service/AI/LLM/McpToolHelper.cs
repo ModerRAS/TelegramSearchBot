@@ -55,9 +55,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         /// <summary>
         /// Ensures that McpToolHelper is initialized, tools are registered, and the prompt string is cached.
+        /// Scans both the main assembly and the LLM assembly for tool attributes.
         /// This method should be called once at application startup.
         /// </summary>
-        public static void EnsureInitialized(Assembly assembly, IServiceProvider serviceProvider, ILogger logger) {
+        public static void EnsureInitialized(Assembly mainAssembly, Assembly llmAssembly, IServiceProvider serviceProvider, ILogger logger) {
             if (_sIsInitialized) {
                 return;
             }
@@ -67,10 +68,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return;
                 }
 
-                Initialize(serviceProvider, logger); // Sets _sServiceProvider and _sLogger
+                Initialize(serviceProvider, logger);
 
                 _sLogger?.LogInformation("McpToolHelper.EnsureInitialized: Starting tool registration...");
-                _sCachedToolsXml = RegisterToolsAndGetPromptString(assembly);
+                var assemblies = new List<Assembly> { mainAssembly };
+                if (llmAssembly != null && llmAssembly != mainAssembly) {
+                    assemblies.Add(llmAssembly);
+                }
+                _sCachedToolsXml = RegisterToolsAndGetPromptString(assemblies);
                 if (string.IsNullOrWhiteSpace(_sCachedToolsXml)) {
                     _sCachedToolsXml = "<!-- No tools are currently available. -->";
                     _sLogger?.LogWarning("McpToolHelper.EnsureInitialized: No tools found or registered. Prompt will indicate no tools available.");
@@ -83,17 +88,25 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
+        /// Backward-compatible overload that scans a single assembly.
+        /// </summary>
+        public static void EnsureInitialized(Assembly assembly, IServiceProvider serviceProvider, ILogger logger) {
+            EnsureInitialized(assembly, null, serviceProvider, logger);
+        }
+
+        /// <summary>
         /// Scans an assembly for methods marked with BuiltInToolAttribute or McpToolAttribute and registers them.
         /// Also generates the descriptive string for the LLM prompt.
         /// This method is called by EnsureInitialized.
         /// </summary>
-        private static string RegisterToolsAndGetPromptString(Assembly assembly) {
+        private static string RegisterToolsAndGetPromptString(List<Assembly> assemblies) {
             ToolRegistry.Clear();
 
             var loggerForRegistration = _sLogger;
 
-            // Scan for both BuiltInToolAttribute and (deprecated) McpToolAttribute
-            var methods = assembly.GetTypes()
+            // Scan all assemblies for both BuiltInToolAttribute and (deprecated) McpToolAttribute
+            var methods = assemblies
+                                  .SelectMany(a => a.GetTypes())
                                   .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))
                                   .Where(m => m.GetCustomAttribute<BuiltInToolAttribute>() != null ||
                                               m.GetCustomAttribute<McpToolAttribute>() != null)
@@ -136,7 +149,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         /// <summary>
         /// Formats the standard system prompt incorporating tool descriptions and usage instructions.
-        /// Includes both built-in tools and external MCP tools.
+        /// Includes both built-in tools and external MCP tools, and shell environment information.
         /// </summary>
         public static string FormatSystemPrompt(string botName, long chatId) {
             if (!_sIsInitialized) {
@@ -159,7 +172,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             string toolsXmlToUse = toolsSectionBuilder.ToString();
 
+            // Shell environment description
+            string shellEnvInfo = TelegramSearchBot.Service.Tools.BashToolService.GetShellEnvironmentDescription();
+
             return $"你的名字是 {botName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{chatId}。\n\n" +
+                   $"== 运行环境信息 ==\n{shellEnvInfo}\n\n" +
                    $"你的核心任务是协助用户。为此，你可以调用工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
                    $"{toolsXmlToUse}\n\n" +
                    $"当你需要调用工具时，必须严格遵循以下规则：\n\n" +
