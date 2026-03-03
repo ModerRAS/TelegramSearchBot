@@ -51,7 +51,7 @@ namespace TelegramSearchBot.Service.Tools {
             _graphManager = new KnowledgeGraphManager(_dbContext, _logger);
         }
 
-        [McpTool(@"
+        [BuiltInTool(@"
 🧠 MEMORY SYSTEM - Your persistent long-term memory that remembers everything across conversations
 
 ✨ AUTOMATIC USAGE TRIGGERS - Use this tool IMMEDIATELY when you encounter:
@@ -139,7 +139,7 @@ Available Commands:
 ⚡ MEMORY RULE: Be proactive! Your memory makes you smarter and more helpful. Use it constantly!
 ")]
         public async Task<object> ProcessMemoryCommandAsync(
-            [McpParameter(@"
+            [BuiltInParameter(@"
 The memory command to execute. Choose based on situation:
 
 🔍 INFORMATION GATHERING:
@@ -159,7 +159,7 @@ The memory command to execute. Choose based on situation:
 
 ⚡ DEFAULT BEHAVIOR: Always search_nodes FIRST when user asks questions!
 ")] string command,
-            [McpParameter(@"
+            [BuiltInParameter(@"
 Command arguments in JSON format. Use these patterns:
 
 💾 STORING NEW INFORMATION:
