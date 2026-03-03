@@ -663,10 +663,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     }
                 }
 
-                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}.", ServiceName, ChatId);
-                // Yield a final message indicating the loop termination.
-                // This will be the last item in the stream for SendFullMessageStream.
-                yield return "I seem to be stuck in a loop trying to use tools. Please try rephrasing your request or check tool definitions.";
+                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
+                // Instead of directly outputting an error, we yield a special marker that tells
+                // the SendMessageService to prompt the user for confirmation to continue iterations.
+                var limitPayload = new TelegramSearchBot.Model.Tools.IterationLimitReachedPayload {
+                    ChatId = ChatId,
+                    UserId = message.FromUserId,
+                    CurrentCycles = maxToolCycles,
+                    MaxCycles = maxToolCycles,
+                    AccumulatedContent = currentMessageContentBuilder.ToString()
+                };
+                yield return $"{TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.Marker}\n{limitPayload.ToJsonString()}";
             } finally {
                 // No cleanup needed for ToolContext
             }

@@ -181,8 +181,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     }
                 }
 
-                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}.", ServiceName, ChatId);
-                yield return "I seem to be stuck in a loop trying to use tools. Please try rephrasing your request or check tool definitions.";
+                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
+                var limitPayload = new TelegramSearchBot.Model.Tools.IterationLimitReachedPayload {
+                    ChatId = ChatId,
+                    UserId = message.FromUserId,
+                    CurrentCycles = maxToolCycles,
+                    MaxCycles = maxToolCycles,
+                    AccumulatedContent = currentLlmResponseBuilder.ToString()
+                };
+                yield return $"{TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.Marker}\n{limitPayload.ToJsonString()}";
             } finally {
                 // No cleanup needed for ToolContext
             }
