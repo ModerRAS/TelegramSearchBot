@@ -346,7 +346,8 @@ namespace TelegramSearchBot.Service.BotAPI {
             int replyTo,
             string initialPlaceholderContent = "⏳",
             CancellationToken cancellationToken = default) {
-            int draftId = replyTo; // Use the reply-to message ID as the draft identifier
+            // Generate a unique draftId to avoid collisions for concurrent requests to the same message
+            int draftId = unchecked((int)(chatId ^ replyTo ^ DateTime.UtcNow.Ticks));
             string latestContent = null;
             bool draftStarted = false;
 
@@ -396,19 +397,22 @@ namespace TelegramSearchBot.Service.BotAPI {
             }
 
             // Build DB result
-            // Note: sendMessageDraft doesn't return a Message object, so we construct one for DB storage
+            // Note: sendMessageDraft returns Task (void), so we don't get a Message ID.
+            // The draft will be finalized into a message by Telegram when streaming ends.
             var resultMessages = new List<Model.Data.Message>();
             User botUser = null;
             try {
                 botUser = await botClient.GetMe(cancellationToken: CancellationToken.None);
-            } catch { }
+            } catch (Exception ex) {
+                logger.LogWarning(ex, "SendDraftStream: Failed to get bot user info for DB result.");
+            }
 
             if (latestContent != null) {
                 var chunks = MessageFormatHelper.SplitMarkdownIntoChunks(latestContent, 4096);
                 for (int i = 0; i < chunks.Count; i++) {
                     resultMessages.Add(new Model.Data.Message {
                         GroupId = chatId,
-                        MessageId = 0, // Draft messages don't have standard message IDs during streaming
+                        MessageId = 0, // sendMessageDraft doesn't return a message ID; Telegram finalizes the draft internally
                         DateTime = DateTime.UtcNow,
                         Content = chunks[i],
                         FromUserId = botUser?.Id ?? 0,
