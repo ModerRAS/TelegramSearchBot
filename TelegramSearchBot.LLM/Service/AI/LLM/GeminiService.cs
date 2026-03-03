@@ -257,6 +257,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
             string modelName,
             LLMChannel channel,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            var executionContext = new LlmExecutionContext();
+            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(
+            Message message,
+            long ChatId,
+            string modelName,
+            LLMChannel channel,
+            LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
 
             var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
@@ -271,10 +284,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             int maxToolCycles = Env.MaxToolCycles;
             var currentMessageBuilder = new StringBuilder();
+            // Track history for snapshot
+            var trackedHistory = new List<SerializedChatMessage>();
+            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = McpToolHelper.FormatSystemPrompt(null, ChatId) });
+
             for (int cycle = 0; cycle < maxToolCycles; cycle++) {
                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
                 var fullResponseBuilder = new StringBuilder();
+                trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = message.Content });
 
                 await foreach (var chunk in chatSession.StreamContentAsync(message.Content)) {
                     currentMessageBuilder.Append(chunk.Text);
@@ -284,6 +302,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                 string llmResponse = fullResponseBuilder.ToString().Trim();
                 _logger.LogDebug("Gemini raw response (Cycle {Cycle}): {Response}", cycle + 1, llmResponse);
+                trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = llmResponse });
 
                 if (McpToolHelper.TryParseToolCalls(llmResponse, out var toolCalls) && toolCalls.Any()) {
                     var firstToolCall = toolCalls[0];
@@ -318,8 +337,20 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-            // Append the iteration limit marker to the accumulated content.
-            yield return TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.AppendMarker(currentMessageBuilder.ToString());
+            if (executionContext != null) {
+                executionContext.IterationLimitReached = true;
+                executionContext.SnapshotData = new LlmContinuationSnapshot {
+                    ChatId = ChatId,
+                    OriginalMessageId = (int)message.MessageId,
+                    UserId = message.FromUserId,
+                    ModelName = modelName,
+                    Provider = "Gemini",
+                    ChannelId = channel.Id,
+                    LastAccumulatedContent = currentMessageBuilder.ToString(),
+                    CyclesSoFar = maxToolCycles,
+                    ProviderHistory = trackedHistory,
+                };
+            }
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {

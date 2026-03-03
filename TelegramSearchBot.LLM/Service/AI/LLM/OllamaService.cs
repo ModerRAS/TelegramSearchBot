@@ -88,6 +88,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
         // --- Main Execution Logic (Using OllamaSharp.Chat helper) ---
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            var executionContext = new LlmExecutionContext();
+            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+                                                        LlmExecutionContext executionContext,
+                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             modelName = modelName ?? Env.OllamaModelName;
             if (string.IsNullOrWhiteSpace(modelName)) {
                 _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
@@ -117,6 +126,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             var chat = new OllamaSharp.Chat(ollama, systemPrompt);
 
+            // Track history explicitly for snapshot serialization
+            var trackedHistory = new List<SerializedChatMessage>();
+            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = systemPrompt });
+
             try {
                 string nextMessageToSend = message.Content;
                 int maxToolCycles = Env.MaxToolCycles;
@@ -126,6 +139,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
                     bool receivedAnyToken = false;
+
+                    trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = nextMessageToSend });
 
                     _logger.LogDebug("Sending to Ollama (Cycle {Cycle}): {Message}", cycle + 1, nextMessageToSend);
                     await foreach (var token in chat.SendAsync(nextMessageToSend, cancellationToken).WithCancellation(cancellationToken)) {
@@ -137,12 +152,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     string llmFullResponseText = currentLlmResponseBuilder.ToString().Trim();
                     _logger.LogDebug("LLM raw full response (Cycle {Cycle}): {Response}", cycle + 1, llmFullResponseText);
 
+                    if (receivedAnyToken) {
+                        trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = llmFullResponseText });
+                    }
+
                     if (!receivedAnyToken && cycle < maxToolCycles - 1 && !string.IsNullOrEmpty(nextMessageToSend)) {
                         _logger.LogWarning("{ServiceName}: Ollama returned empty stream during tool cycle {Cycle} for input '{Input}'.", ServiceName, cycle + 1, nextMessageToSend);
                     }
 
                     // --- Tool Handling (using the full accumulated response text) ---
-                    // No need for McpToolHelper.CleanLlmResponse before TryParseToolCall if tool calls are expected in raw response.
                     if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any()) {
                         var firstToolCall = parsedToolCalls[0];
                         string parsedToolName = firstToolCall.toolName;
@@ -169,9 +187,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
                         nextMessageToSend = $"{feedbackPrefix}{toolResultString}]";
                         _logger.LogInformation("Prepared feedback for next LLM call: {Feedback}", nextMessageToSend);
-                        // Continue loop - the next chat.SendAsync will send this feedback
                     } else {
-                        // Not a tool call. The stream has already yielded the full content.
                         if (string.IsNullOrWhiteSpace(llmFullResponseText) && receivedAnyToken) {
                             _logger.LogWarning("{ServiceName}: LLM returned empty final non-tool response after trimming for ChatId {ChatId}.", ServiceName, ChatId);
                         } else if (!receivedAnyToken && string.IsNullOrEmpty(llmFullResponseText)) {
@@ -182,8 +198,20 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-                // Append the iteration limit marker to the accumulated content.
-                yield return TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.AppendMarker(currentLlmResponseBuilder.ToString());
+                if (executionContext != null) {
+                    executionContext.IterationLimitReached = true;
+                    executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        ChatId = ChatId,
+                        OriginalMessageId = (int)message.MessageId,
+                        UserId = message.FromUserId,
+                        ModelName = modelName,
+                        Provider = "Ollama",
+                        ChannelId = channel.Id,
+                        LastAccumulatedContent = currentLlmResponseBuilder.ToString(),
+                        CyclesSoFar = maxToolCycles,
+                        ProviderHistory = trackedHistory,
+                    };
+                }
             } finally {
                 // No cleanup needed for ToolContext
             }

@@ -560,6 +560,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
         // --- Main Execution Logic ---
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            var executionContext = new LlmExecutionContext();
+            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+                                                        LlmExecutionContext executionContext,
+                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName;
 
             if (string.IsNullOrWhiteSpace(modelName)) {
@@ -664,12 +673,184 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-                // Append the iteration limit marker to the accumulated content.
-                // The controller-side wrapper will detect and strip it, then show an InlineButton prompt.
-                yield return TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.AppendMarker(currentMessageContentBuilder.ToString());
+                // Signal iteration limit via execution context (NOT via stream marker)
+                if (executionContext != null) {
+                    executionContext.IterationLimitReached = true;
+                    executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        ChatId = ChatId,
+                        OriginalMessageId = (int)message.MessageId,
+                        UserId = message.FromUserId,
+                        ModelName = modelName,
+                        Provider = "OpenAI",
+                        ChannelId = channel.Id,
+                        LastAccumulatedContent = currentMessageContentBuilder.ToString(),
+                        CyclesSoFar = maxToolCycles,
+                        ProviderHistory = SerializeProviderHistory(providerHistory),
+                    };
+                }
             } finally {
                 // No cleanup needed for ToolContext
             }
+        }
+
+        /// <summary>
+        /// Resume LLM execution from a saved snapshot, restoring the full provider history.
+        /// </summary>
+        public async IAsyncEnumerable<string> ResumeFromSnapshotAsync(LlmContinuationSnapshot snapshot, LLMChannel channel,
+                                                                       LlmExecutionContext executionContext,
+                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            if (snapshot == null) {
+                _logger.LogError("{ServiceName}: Cannot resume from null snapshot.", ServiceName);
+                yield break;
+            }
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway) || string.IsNullOrWhiteSpace(channel.ApiKey)) {
+                _logger.LogError("{ServiceName}: Channel, Gateway, or ApiKey is not configured for resume.", ServiceName);
+                yield break;
+            }
+
+            var modelName = snapshot.ModelName;
+            if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName;
+
+            _logger.LogInformation("{ServiceName}: Resuming from snapshot {SnapshotId} for ChatId {ChatId}, restoring {HistoryCount} history entries.",
+                ServiceName, snapshot.SnapshotId, snapshot.ChatId, snapshot.ProviderHistory?.Count ?? 0);
+
+            // Restore provider history from snapshot
+            List<ChatMessage> providerHistory = DeserializeProviderHistory(snapshot.ProviderHistory);
+
+            using var client = _httpClientFactory.CreateClient();
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(channel.Gateway),
+                Transport = new HttpClientPipelineTransport(client),
+            };
+            var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
+
+            // Resume with the accumulated content from the snapshot
+            var currentMessageContentBuilder = new StringBuilder(snapshot.LastAccumulatedContent ?? "");
+
+            try {
+                int maxToolCycles = Env.MaxToolCycles;
+
+                for (int cycle = 0; cycle < maxToolCycles; cycle++) {
+                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                    var llmResponseAccumulatorForToolParsing = new StringBuilder();
+
+                    await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, cancellationToken: cancellationToken).WithCancellation(cancellationToken)) {
+                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+                        foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>()) {
+                            if (updatePart?.Text != null) {
+                                currentMessageContentBuilder.Append(updatePart.Text);
+                                llmResponseAccumulatorForToolParsing.Append(updatePart.Text);
+                                if (currentMessageContentBuilder.ToString().Length > 10) {
+                                    yield return currentMessageContentBuilder.ToString();
+                                }
+                            }
+                        }
+                    }
+                    string llmFullResponseText = llmResponseAccumulatorForToolParsing.ToString().Trim();
+                    _logger.LogDebug("{ServiceName} raw full response (Resume Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
+
+                    if (!string.IsNullOrWhiteSpace(llmFullResponseText)) {
+                        providerHistory.Add(new AssistantChatMessage(llmFullResponseText));
+                    }
+
+                    if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any()) {
+                        var firstToolCall = parsedToolCalls[0];
+                        string parsedToolName = firstToolCall.toolName;
+                        Dictionary<string, string> toolArguments = firstToolCall.arguments;
+
+                        _logger.LogInformation("{ServiceName}: LLM requested tool (resume): {ToolName}", ServiceName, parsedToolName);
+
+                        string toolResultString;
+                        bool isError = false;
+                        try {
+                            var toolContext = new ToolContext { ChatId = snapshot.ChatId, UserId = snapshot.UserId };
+                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
+                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
+                        } catch (Exception ex) {
+                            isError = true;
+                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName} (resume).", ServiceName, parsedToolName);
+                            toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                        }
+
+                        string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
+                        string feedback = $"{feedbackPrefix}{toolResultString}]";
+                        providerHistory.Add(new UserChatMessage(feedback));
+                    } else {
+                        yield break;
+                    }
+                }
+
+                _logger.LogWarning("{ServiceName}: Max tool call cycles reached again during resume for ChatId {ChatId}.", ServiceName, snapshot.ChatId);
+                if (executionContext != null) {
+                    executionContext.IterationLimitReached = true;
+                    executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        ChatId = snapshot.ChatId,
+                        OriginalMessageId = snapshot.OriginalMessageId,
+                        UserId = snapshot.UserId,
+                        ModelName = modelName,
+                        Provider = "OpenAI",
+                        ChannelId = channel.Id,
+                        LastAccumulatedContent = currentMessageContentBuilder.ToString(),
+                        CyclesSoFar = snapshot.CyclesSoFar + maxToolCycles,
+                        ProviderHistory = SerializeProviderHistory(providerHistory),
+                    };
+                }
+            } finally {
+                // No cleanup needed
+            }
+        }
+
+        /// <summary>
+        /// Serialize OpenAI ChatMessage list to portable format for snapshot persistence.
+        /// </summary>
+        public static List<SerializedChatMessage> SerializeProviderHistory(List<ChatMessage> history) {
+            var result = new List<SerializedChatMessage>();
+            foreach (var msg in history) {
+                string role;
+                string content = "";
+
+                if (msg is SystemChatMessage systemMsg) {
+                    role = "system";
+                    content = string.Join("", systemMsg.Content?.Select(p => p.Text) ?? Enumerable.Empty<string>());
+                } else if (msg is AssistantChatMessage assistantMsg) {
+                    role = "assistant";
+                    content = string.Join("", assistantMsg.Content?.Select(p => p.Text) ?? Enumerable.Empty<string>());
+                } else if (msg is UserChatMessage userMsg) {
+                    role = "user";
+                    content = string.Join("", userMsg.Content?.Select(p => p.Text) ?? Enumerable.Empty<string>());
+                } else {
+                    role = "user";
+                    content = msg.ToString();
+                }
+
+                result.Add(new SerializedChatMessage { Role = role, Content = content });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Deserialize portable format back to OpenAI ChatMessage list.
+        /// </summary>
+        public static List<ChatMessage> DeserializeProviderHistory(List<SerializedChatMessage> serialized) {
+            var result = new List<ChatMessage>();
+            if (serialized == null) return result;
+
+            foreach (var msg in serialized) {
+                switch (msg.Role?.ToLowerInvariant()) {
+                    case "system":
+                        result.Add(new SystemChatMessage(msg.Content ?? ""));
+                        break;
+                    case "assistant":
+                        result.Add(new AssistantChatMessage(msg.Content ?? ""));
+                        break;
+                    case "user":
+                    default:
+                        result.Add(new UserChatMessage(msg.Content ?? ""));
+                        break;
+                }
+            }
+            return result;
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {

@@ -9,12 +9,12 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums; // Added for MessageEntityType
 using Telegram.Bot.Types.ReplyMarkups; // For InlineKeyboardMarkup
 using TelegramSearchBot.Common;
-using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Manage;
@@ -31,6 +31,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         public AdminService adminService { get; set; }
         public ISendMessageService SendMessageService { get; set; }
         public IGeneralLLMService GeneralLLMService { get; set; }
+        public ILlmContinuationService ContinuationService { get; set; }
         public GeneralLLMController(
             MessageService messageService,
             ITelegramBotClient botClient,
@@ -39,7 +40,8 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             ILogger<GeneralLLMController> logger,
             AdminService adminService,
             ISendMessageService SendMessageService,
-            IGeneralLLMService generalLLMService
+            IGeneralLLMService generalLLMService,
+            ILlmContinuationService continuationService
             ) {
             this.logger = logger;
             this.botClient = botClient;
@@ -49,6 +51,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             this.adminService = adminService;
             this.SendMessageService = SendMessageService;
             GeneralLLMService = generalLLMService;
+            ContinuationService = continuationService;
 
         }
         public async Task ExecuteAsync(PipelineContext p) {
@@ -97,59 +100,42 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             bool isReplyToBot = e.Message.ReplyToMessage != null && e.Message.ReplyToMessage.From != null && e.Message.ReplyToMessage.From.Id == Env.BotId;
 
             if (isMentionToBot || isReplyToBot) {
-                // TODO: Consider getting BotName in a more generic way if GeneralLLMService is to be truly general
-                // For now, this relies on OpenAIService instance's BotName being set for mentions.
-
-                var modelName = await service.GetModel(e.Message.Chat.Id); // Still uses OpenAIService for GetModel
+                var modelName = await service.GetModel(e.Message.Chat.Id);
                 var initialContentPlaceholder = $"{modelName}初始化中。。。";
 
                 // Prepare the input message for GeneralLLMService
                 var inputLlMessage = new Model.Data.Message() {
                     Content = Message,
-                    DateTime = e.Message.Date, // This is DateTimeOffset, Model.Data.Message.DateTime is DateTime. Ensure conversion if needed.
+                    DateTime = e.Message.Date,
                     FromUserId = e.Message.From.Id,
                     GroupId = e.Message.Chat.Id,
-                    MessageId = e.Message.MessageId, // Original user message ID
-                    ReplyToMessageId = e.Message.ReplyToMessage?.MessageId ?? 0, // ReplyToMessage is a Message object
-                    Id = -1, // Placeholder, DB will assign
+                    MessageId = e.Message.MessageId,
+                    ReplyToMessageId = e.Message.ReplyToMessage?.MessageId ?? 0,
+                    Id = -1,
                 };
 
-                // Call GeneralLLMService.ExecAsync to get the stream of full markdown messages
-                // Pass CancellationToken.None as IOnUpdate doesn't provide a natural CancellationToken source here.
-                IAsyncEnumerable<string> fullMessageStream = GeneralLLMService.ExecAsync(inputLlMessage, e.Message.Chat.Id, CancellationToken.None);
+                // Use execution context to detect iteration limit (no stream pollution)
+                var executionContext = new LlmExecutionContext();
+                IAsyncEnumerable<string> fullMessageStream = GeneralLLMService.ExecAsync(
+                    inputLlMessage, e.Message.Chat.Id, executionContext, CancellationToken.None);
 
-                // Wrap the stream to detect iteration limit marker
-                var iterationLimitDetector = new IterationLimitAwareStream();
-                IAsyncEnumerable<string> wrappedStream = iterationLimitDetector.WrapAsync(fullMessageStream, CancellationToken.None);
-
-                // Call the new SendFullMessageStream method
+                // Send directly - no marker wrapping needed
                 List<Model.Data.Message> sentMessagesForDb = await SendMessageService.SendFullMessageStream(
-                    wrappedStream,
+                    fullMessageStream,
                     e.Message.Chat.Id,
-                    e.Message.MessageId, // Reply to the original user's message
-                    initialContentPlaceholder, // Corrected variable name
-                    CancellationToken.None // Pass a CancellationToken here as well
+                    e.Message.MessageId,
+                    initialContentPlaceholder,
+                    CancellationToken.None
                 );
 
                 // Process the list of messages returned for DB logging
-                User botUser = null; // Cache bot user info
+                User botUser = null;
                 foreach (var dbMessage in sentMessagesForDb) {
                     if (botUser == null) {
                         botUser = await botClient.GetMe();
                     }
-                    // dbMessage already contains FromUserId (bot's ID) and Content (markdown chunk)
-                    // and MessageId (the ID of the Telegram message segment)
-                    // and ReplyToMessageId (the ID it replied to)
-                    // DateTime is also from the Telegram Message object.
-
-                    // We need to ensure messageService.ExecuteAsync can handle Model.Data.Message directly
-                    // or adapt it to MessageOption.
-                    // Assuming messageService.ExecuteAsync is for saving to DB.
-                    // The `dbMessage` objects are already what we want to save.
-                    // However, messageService.ExecuteAsync takes MessageOption.
-
                     await messageService.ExecuteAsync(new MessageOption() {
-                        Chat = e.Message.Chat, // Original chat context
+                        Chat = e.Message.Chat,
                         ChatId = dbMessage.GroupId,
                         Content = dbMessage.Content,
                         DateTime = dbMessage.DateTime,
@@ -160,14 +146,18 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                     });
                 }
 
-                // Check if the iteration limit was reached → send InlineButton confirmation
-                if (iterationLimitDetector.IterationLimitReached) {
-                    logger.LogInformation("Iteration limit reached for ChatId {ChatId}, MessageId {MessageId}. Prompting user to continue or stop.", e.Message.Chat.Id, e.Message.MessageId);
+                // Check if the iteration limit was reached via execution context
+                if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
+                    logger.LogInformation("Iteration limit reached for ChatId {ChatId}, MessageId {MessageId}. Saving snapshot and prompting user.",
+                        e.Message.Chat.Id, e.Message.MessageId);
+
+                    // Save the snapshot to Redis
+                    var snapshotId = await ContinuationService.SaveSnapshotAsync(executionContext.SnapshotData);
 
                     var keyboard = new InlineKeyboardMarkup(new[] {
                         new[] {
-                            InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{e.Message.Chat.Id}:{e.Message.MessageId}"),
-                            InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{e.Message.Chat.Id}:{e.Message.MessageId}"),
+                            InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{snapshotId}"),
+                            InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{snapshotId}"),
                         }
                     });
 
