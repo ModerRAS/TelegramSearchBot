@@ -1,14 +1,12 @@
 using System;
 
-namespace TelegramSearchBot.Attributes
-{
+namespace TelegramSearchBot.Attributes {
     /// <summary>
-    /// Marks a method as a tool that can be called by the LLM.
-    /// Deprecated: Use <see cref="BuiltInToolAttribute"/> instead for built-in tools.
+    /// Marks a method as a built-in tool that can be called by the LLM.
+    /// This replaces the previous McpToolAttribute for internal tools.
     /// </summary>
-    [Obsolete("Use BuiltInToolAttribute instead. This attribute will be removed in a future version.")]
     [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
-    public sealed class McpToolAttribute : Attribute {
+    public sealed class BuiltInToolAttribute : Attribute {
         /// <summary>
         /// A description of what the tool does.
         /// </summary>
@@ -19,18 +17,17 @@ namespace TelegramSearchBot.Attributes
         /// </summary>
         public string Name { get; set; }
 
-        public McpToolAttribute(string description) {
+        public BuiltInToolAttribute(string description) {
             Description = description;
         }
     }
 
     /// <summary>
-    /// Describes a parameter of an McpTool.
-    /// Deprecated: Use <see cref="BuiltInParameterAttribute"/> instead.
+    /// Describes a parameter of a BuiltInTool.
+    /// This replaces the previous McpParameterAttribute for internal tools.
     /// </summary>
-    [Obsolete("Use BuiltInParameterAttribute instead. This attribute will be removed in a future version.")]
     [AttributeUsage(AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
-    public sealed class McpParameterAttribute : Attribute {
+    public sealed class BuiltInParameterAttribute : Attribute {
         /// <summary>
         /// A description of the parameter.
         /// </summary>
@@ -41,7 +38,7 @@ namespace TelegramSearchBot.Attributes
         /// </summary>
         public bool IsRequired { get; set; } = true;
 
-        public McpParameterAttribute(string description) {
+        public BuiltInParameterAttribute(string description) {
             Description = description;
         }
     }

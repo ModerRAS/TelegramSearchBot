@@ -11,7 +11,7 @@ using LiteDB;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging; // Added for ILoggerFactory
+using Microsoft.Extensions.Logging;
 using Serilog;
 using StackExchange.Redis;
 using Telegram.Bot;
@@ -23,9 +23,12 @@ using TelegramSearchBot.Executor;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Mcp;
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Service.Mcp;
 using TelegramSearchBot.Service.Scheduler;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.Service.Vector;
@@ -94,7 +97,19 @@ namespace TelegramSearchBot.AppBootstrap {
             var mcpLogger = loggerFactory.CreateLogger("McpToolHelperInitialization");
             var mainAssembly = typeof(GeneralBootstrap).Assembly;
             TelegramSearchBot.Service.AI.LLM.McpToolHelper.EnsureInitialized(mainAssembly, service, mcpLogger);
-            Log.Information("McpToolHelper has been initialized.");
+            Log.Information("McpToolHelper has been initialized with built-in tools.");
+
+            // Initialize external MCP tool servers
+            try {
+                var mcpServerManager = service.GetRequiredService<IMcpServerManager>();
+                await mcpServerManager.InitializeAllServersAsync();
+
+                // Register external tools with McpToolHelper
+                RegisterExternalMcpTools(mcpServerManager);
+                Log.Information("External MCP servers initialized.");
+            } catch (Exception ex) {
+                Log.Warning(ex, "Failed to initialize external MCP servers. Continuing without them.");
+            }
 
             // SQLite 数据库初始化
             using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
@@ -112,6 +127,39 @@ namespace TelegramSearchBot.AppBootstrap {
 
             // 保持程序运行
             await host.WaitForShutdownAsync();
+        }
+
+        /// <summary>
+        /// Register external MCP tools with McpToolHelper so they appear in the LLM prompt
+        /// and can be executed through the tool call system.
+        /// </summary>
+        private static void RegisterExternalMcpTools(IMcpServerManager mcpServerManager) {
+            var externalTools = mcpServerManager.GetAllExternalTools();
+            if (!externalTools.Any()) return;
+
+            var toolInfos = externalTools.Select(t => (t.serverName, new TelegramSearchBot.Service.AI.LLM.McpToolHelper.ExternalToolInfo {
+                ServerName = t.serverName,
+                ToolName = t.tool.Name,
+                Description = t.tool.Description ?? "",
+                Parameters = t.tool.InputSchema?.Properties?.Select(p =>
+                    new TelegramSearchBot.Service.AI.LLM.McpToolHelper.ExternalToolParameter {
+                        Name = p.Key,
+                        Type = p.Value.Type ?? "string",
+                        Description = p.Value.Description ?? "",
+                        Required = t.tool.InputSchema.Required?.Contains(p.Key) ?? false
+                    }).ToList() ?? new List<TelegramSearchBot.Service.AI.LLM.McpToolHelper.ExternalToolParameter>()
+            })).ToList();
+
+            TelegramSearchBot.Service.AI.LLM.McpToolHelper.RegisterExternalTools(
+                toolInfos,
+                async (serverName, toolName, arguments) => {
+                    var objectArgs = arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
+                    var result = await mcpServerManager.CallToolAsync(serverName, toolName, objectArgs);
+                    if (result.IsError) {
+                        return $"Error: {string.Join("\n", result.Content.Select(c => c.Text))}";
+                    }
+                    return string.Join("\n", result.Content.Select(c => c.Text));
+                });
         }
     }
 }
