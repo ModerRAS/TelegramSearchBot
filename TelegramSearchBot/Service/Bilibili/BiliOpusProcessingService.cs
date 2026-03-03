@@ -3,15 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model.Bilibili;
 using TelegramSearchBot.Service.Common;
 
 namespace TelegramSearchBot.Service.Bilibili {
+    [Injectable(ServiceLifetime.Transient)]
     public class BiliOpusProcessingService : IService {
         private readonly IBiliApiService _biliApiService;
         private readonly IDownloadService _downloadService;

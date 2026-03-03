@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
@@ -15,6 +16,7 @@ using TelegramSearchBot.Service.Common; // Added for IAppConfigurationService
 using TelegramSearchBot.Service.Scheduler; // Added for ISchedulerService
 
 namespace TelegramSearchBot.Service.Manage {
+    [Injectable(ServiceLifetime.Scoped)]
     public class AdminService : IService {
         protected readonly DataDbContext DataContext;
         protected readonly ILogger<AdminService> Logger;

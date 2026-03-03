@@ -29,6 +29,11 @@ namespace TelegramSearchBot.Model {
                 .HasIndex(e => e.CacheKey)
                 .IsUnique();
 
+            // 配置用户群组关系唯一约束，防止重复插入
+            modelBuilder.Entity<UserWithGroup>()
+                .HasIndex(uwg => new { uwg.UserId, uwg.GroupId })
+                .IsUnique();
+
             // 配置对话段模型
             modelBuilder.Entity<ConversationSegment>()
                 .HasIndex(cs => new { cs.GroupId, cs.StartTime, cs.EndTime });

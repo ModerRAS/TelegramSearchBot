@@ -3,12 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Abstract {
+    [Injectable(ServiceLifetime.Transient)]
     public class SubProcessService : IService {
         public string ServiceName => "SubProcessService";
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }

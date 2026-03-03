@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
@@ -12,6 +14,7 @@ using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.BotAPI {
 
+    [Injectable(ServiceLifetime.Scoped)]
     public class SendService : IService {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;

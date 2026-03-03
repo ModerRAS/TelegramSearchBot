@@ -115,7 +115,7 @@ namespace TelegramSearchBot.Service.Tools {
                     ContentPreview = msg.Content?.Length > 200 ? msg.Content.Substring(0, 200) + "..." : msg.Content,
                     ContextBefore = contextBefore,
                     ContextAfter = contextAfter,
-                    Extensions = msg.MessageExtensions?.ToList() ?? new List<MessageExtension>()
+                    Extensions = msg.MessageExtensions?.Select(e => new MessageExtensionDto { Name = e.Name, Value = e.Value }).ToList() ?? new List<MessageExtensionDto>()
                 });
             }
 
@@ -252,7 +252,7 @@ namespace TelegramSearchBot.Service.Tools {
                             : $"User({m.FromUserId})",
                         DateTime = m.DateTime,
                         ReplyToMessageId = m.ReplyToMessageId == 0 ? ( long? ) null : m.ReplyToMessageId,
-                        Extensions = m.MessageExtensions?.ToList() ?? new List<MessageExtension>()
+                        Extensions = m.MessageExtensions?.Select(e => new MessageExtensionDto { Name = e.Name, Value = e.Value }).ToList() ?? new List<MessageExtensionDto>()
                     }).ToList();
 
                     var contextAfter = messagesAfter.Select(m => new HistoryMessageItem {
@@ -264,7 +264,7 @@ namespace TelegramSearchBot.Service.Tools {
                             : $"User({m.FromUserId})",
                         DateTime = m.DateTime,
                         ReplyToMessageId = m.ReplyToMessageId == 0 ? ( long? ) null : m.ReplyToMessageId,
-                        Extensions = m.MessageExtensions?.ToList() ?? new List<MessageExtension>()
+                        Extensions = m.MessageExtensions?.Select(e => new MessageExtensionDto { Name = e.Name, Value = e.Value }).ToList() ?? new List<MessageExtensionDto>()
                     }).ToList();
 
                     resultItems.Add(new HistoryMessageItem {
@@ -276,7 +276,7 @@ namespace TelegramSearchBot.Service.Tools {
                             : $"User({msg.FromUserId})",
                         DateTime = msg.DateTime,
                         ReplyToMessageId = msg.ReplyToMessageId == 0 ? ( long? ) null : msg.ReplyToMessageId,
-                        Extensions = msg.MessageExtensions?.ToList() ?? new List<MessageExtension>()
+                        Extensions = msg.MessageExtensions?.Select(e => new MessageExtensionDto { Name = e.Name, Value = e.Value }).ToList() ?? new List<MessageExtensionDto>()
                     });
                 }
 

@@ -34,6 +34,24 @@ using TelegramSearchBot.View;
 namespace TelegramSearchBot.AppBootstrap {
     public class GeneralBootstrap : AppBootstrap {
         private static IServiceProvider service;
+
+        /// <summary>
+        /// 等待 Garnet 服务端口就绪，最多等待 10 秒
+        /// </summary>
+        private static async Task WaitForGarnetReady(int port, int maxRetries = 20, int delayMs = 500) {
+            for (int i = 0; i < maxRetries; i++) {
+                try {
+                    using var tcp = new System.Net.Sockets.TcpClient();
+                    await tcp.ConnectAsync("127.0.0.1", port);
+                    Log.Information("Garnet 服务已就绪 (端口 {Port})，耗时约 {ElapsedMs}ms", port, i * delayMs);
+                    return;
+                } catch {
+                    await Task.Delay(delayMs);
+                }
+            }
+            Log.Warning("等待 Garnet 服务就绪超时 (端口 {Port})，将继续启动（Redis 连接会自动重试）", port);
+        }
+
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .UseSerilog()
@@ -51,6 +69,9 @@ namespace TelegramSearchBot.AppBootstrap {
             Env.SchedulerPort = 6379;
 #endif
             Fork(["Scheduler", $"{Env.SchedulerPort}"]);
+
+            // 等待 Garnet 服务就绪，避免竞态条件导致 Redis 连接失败
+            await WaitForGarnetReady(Env.SchedulerPort);
 
             IHost host = CreateHostBuilder(args)
                 //.ConfigureLogging(logging => {

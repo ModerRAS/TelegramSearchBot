@@ -24,9 +24,6 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Tools; // For BraveSearchResult
-using TelegramSearchBot.Service.Common;
-using TelegramSearchBot.Service.Tools;
-
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService
     [Injectable(ServiceLifetime.Transient)]

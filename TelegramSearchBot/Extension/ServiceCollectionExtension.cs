@@ -26,6 +26,7 @@ using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.View;
@@ -40,7 +41,7 @@ namespace TelegramSearchBot.Extension {
         }
 
         public static IServiceCollection AddRedis(this IServiceCollection services) {
-            var redisConnectionString = $"localhost:{Env.SchedulerPort}";
+            var redisConnectionString = $"localhost:{Env.SchedulerPort},abortConnect=false,connectTimeout=5000,connectRetry=5";
             return services.AddSingleton<IConnectionMultiplexer>(
                 ConnectionMultiplexer.Connect(redisConnectionString));
         }
@@ -105,6 +106,7 @@ namespace TelegramSearchBot.Extension {
 
         public static IServiceCollection ConfigureAllServices(this IServiceCollection services) {
             var assembly = typeof(GeneralBootstrap).Assembly;
+            var llmAssembly = typeof(ILLMFactory).Assembly;
             return services
                 .AddTelegramBotClient()
                 .AddRedis()
@@ -114,7 +116,8 @@ namespace TelegramSearchBot.Extension {
                 .AddBilibiliServices()
                 .AddCommonServices()
                 .AddAutoRegisteredServices()
-                .AddInjectables(assembly);
+                .AddInjectables(assembly)
+                .AddInjectables(llmAssembly);
         }
 
         /// <summary>

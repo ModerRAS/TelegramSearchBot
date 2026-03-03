@@ -26,8 +26,6 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Tools; // For BraveSearchResult
-using TelegramSearchBot.Service.Common;
-using TelegramSearchBot.Service.Storage;
 // Using alias for the common internal ChatMessage format
 using CommonChat = OpenAI.Chat;
 

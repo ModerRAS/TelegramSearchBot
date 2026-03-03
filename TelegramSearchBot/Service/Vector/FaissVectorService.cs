@@ -28,6 +28,10 @@ namespace TelegramSearchBot.Service.Vector {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public class FaissVectorService : IService, IVectorGenerationService {
         public string ServiceName => "FaissVectorService";
+        /// <summary>
+        /// 获取FAISS向量服务是否启用
+        /// </summary>
+        public bool IsEnabled => _isEnabled;
 
         private readonly ILogger<FaissVectorService> _logger;
         private readonly IServiceProvider _serviceProvider;
@@ -44,6 +48,8 @@ namespace TelegramSearchBot.Service.Vector {
         private const int MaxParallelVectorization = 4;
         // 用于并发环境下为同一群组分配唯一 FaissIndex
         private static readonly object _faissIdAssignLock = new();
+        // FAISS服务是否启用标志
+        private bool _isEnabled = true;
 
         public FaissVectorService(
             ILogger<FaissVectorService> logger,
@@ -56,7 +62,31 @@ namespace TelegramSearchBot.Service.Vector {
             _indexDirectory = Path.Combine(Env.WorkDir, "faiss_indexes");
             Directory.CreateDirectory(_indexDirectory);
 
+            // 初始化时检查嵌入模型是否可用
+            _ = CheckEmbeddingModelAvailabilityAsync();
+
             _logger.LogInformation($"FAISS向量服务初始化，索引目录: {_indexDirectory}");
+        }
+
+        /// <summary>
+        /// 异步检查嵌入模型是否可用
+        /// </summary>
+        private async Task CheckEmbeddingModelAvailabilityAsync() {
+            try {
+                // 尝试生成一个简单的测试向量
+                var testVector = await _generalLLMService.GenerateEmbeddingsAsync("test", CancellationToken.None);
+                
+                if (testVector == null || testVector.Length == 0) {
+                    _logger.LogWarning("嵌入模型不可用或返回空向量，已禁用FAISS向量服务");
+                    _isEnabled = false;
+                } else {
+                    _logger.LogInformation("嵌入模型可用，FAISS向量服务已启用");
+                    _isEnabled = true;
+                }
+            } catch (Exception ex) {
+                _logger.LogWarning(ex, "检查嵌入模型时出错，已禁用FAISS向量服务");
+                _isEnabled = false;
+            }
         }
 
         /// <summary>
@@ -64,6 +94,14 @@ namespace TelegramSearchBot.Service.Vector {
         /// </summary>
         public async Task<SearchOption> Search(SearchOption searchOption) {
             try {
+                // 如果服务未启用，返回空结果
+                if (!_isEnabled) {
+                    _logger.LogWarning($"FAISS向量服务已禁用，搜索操作无法进行");
+                    searchOption.Messages = new List<Message>();
+                    searchOption.Count = 0;
+                    return searchOption;
+                }
+
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
@@ -79,6 +117,14 @@ namespace TelegramSearchBot.Service.Vector {
 
                 // 生成查询向量
                 var queryVector = await GenerateVectorAsync(searchOption.Search);
+
+                // 如果查询向量为空，返回空结果
+                if (queryVector == null || queryVector.Length == 0) {
+                    _logger.LogWarning($"查询向量生成失败");
+                    searchOption.Messages = new List<Message>();
+                    searchOption.Count = 0;
+                    return searchOption;
+                }
 
                 // 执行相似性搜索
                 var searchResults = await SearchSimilarVectorsAsync(
@@ -167,6 +213,11 @@ namespace TelegramSearchBot.Service.Vector {
         /// 为对话段生成并存储向量
         /// </summary>
         public async Task VectorizeConversationSegment(ConversationSegment segment) {
+            if (!_isEnabled) {
+                _logger.LogDebug($"FAISS向量服务已禁用，跳过对话段 {segment.Id} 的向量化");
+                return;
+            }
+
             try {
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
@@ -185,6 +236,13 @@ namespace TelegramSearchBot.Service.Vector {
                 // 生成向量内容
                 var vectorContent = BuildVectorContent(segment);
                 var vector = await GenerateVectorAsync(vectorContent);
+
+                // 如果向量生成失败（返回空或null），禁用FAISS服务
+                if (vector == null || vector.Length == 0) {
+                    _logger.LogWarning("生成向量失败，嵌入模型可能不可用，已禁用FAISS向量服务");
+                    _isEnabled = false;
+                    return;
+                }
 
                 // 获取或创建索引
                 var indexKey = GetIndexKey(segment.GroupId, "ConversationSegment");
@@ -243,6 +301,11 @@ namespace TelegramSearchBot.Service.Vector {
         /// 根据ID向量化对话段，避免实体跟踪冲突
         /// </summary>
         public async Task VectorizeConversationSegmentById(long segmentId) {
+            if (!_isEnabled) {
+                _logger.LogDebug($"FAISS向量服务已禁用，跳过对话段 {segmentId} 的向量化");
+                return;
+            }
+
             try {
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
@@ -270,6 +333,13 @@ namespace TelegramSearchBot.Service.Vector {
                 // 生成向量内容
                 var vectorContent = BuildVectorContent(segment);
                 var vector = await GenerateVectorAsync(vectorContent);
+
+                // 如果向量生成失败（返回空或null），禁用FAISS服务
+                if (vector == null || vector.Length == 0) {
+                    _logger.LogWarning("生成向量失败，嵌入模型可能不可用，已禁用FAISS向量服务");
+                    _isEnabled = false;
+                    return;
+                }
 
                 // 获取或创建索引
                 var indexKey = GetIndexKey(segment.GroupId, "ConversationSegment");
@@ -331,6 +401,11 @@ namespace TelegramSearchBot.Service.Vector {
         /// 批量向量化群组的所有对话段
         /// </summary>
         public async Task VectorizeGroupSegments(long groupId) {
+            if (!_isEnabled) {
+                _logger.LogDebug($"FAISS向量服务已禁用，跳过群组 {groupId} 的向量化");
+                return;
+            }
+
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
 
@@ -603,7 +678,22 @@ namespace TelegramSearchBot.Service.Vector {
         #region IVectorGenerationService 实现
 
         public async Task<float[]> GenerateVectorAsync(string text) {
-            return await _generalLLMService.GenerateEmbeddingsAsync(text);
+            try {
+                var vector = await _generalLLMService.GenerateEmbeddingsAsync(text);
+                
+                // 如果返回空向量，记录警告并禁用服务
+                if (vector == null || vector.Length == 0) {
+                    _logger.LogWarning("嵌入模型返回空向量，FAISS向量服务已禁用");
+                    _isEnabled = false;
+                    return Array.Empty<float>();
+                }
+                
+                return vector;
+            } catch (Exception ex) {
+                _logger.LogWarning(ex, "生成向量时出错，FAISS向量服务已禁用");
+                _isEnabled = false;
+                return Array.Empty<float>();
+            }
         }
 
         public async Task StoreVectorAsync(string collectionName, ulong id, float[] vector, Dictionary<string, string> payload) {
