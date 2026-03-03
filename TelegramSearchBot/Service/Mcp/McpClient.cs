@@ -232,7 +232,16 @@ namespace TelegramSearchBot.Service.Mcp {
         public void Dispose() {
             if (_disposed) return;
             _disposed = true;
-            DisconnectAsync().GetAwaiter().GetResult();
+            try {
+                // Best-effort synchronous cleanup to avoid deadlocks
+                if (_process != null && !_process.HasExited) {
+                    _process.Kill(true);
+                    _process.Dispose();
+                    _process = null;
+                }
+            } catch { }
+            _stdin = null;
+            IsConnected = false;
             _sendLock.Dispose();
         }
     }

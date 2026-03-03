@@ -87,7 +87,13 @@ Only available to admin users.")]
             [BuiltInParameter("A unique name for the MCP server (e.g., 'filesystem', 'github')")] string name,
             [BuiltInParameter("The command to start the MCP server (e.g., 'npx', 'uvx', 'node', 'python')")] string command,
             [BuiltInParameter("Space-separated command arguments (e.g., '-y @modelcontextprotocol/server-filesystem /tmp')")] string args,
+            ToolContext toolContext,
             [BuiltInParameter("Optional environment variables in KEY=VALUE format, separated by semicolons (e.g., 'GITHUB_TOKEN=abc;API_KEY=xyz')", IsRequired = false)] string env = null) {
+
+            // Security check: only allow admin users
+            if (toolContext == null || toolContext.UserId != Env.AdminId) {
+                return "Error: MCP server management is only available to admin users.";
+            }
 
             try {
                 if (string.IsNullOrWhiteSpace(name)) {
@@ -144,9 +150,14 @@ Only available to admin users.")]
             }
         }
 
-        [BuiltInTool("Remove a configured MCP tool server by name. This will disconnect the server and remove its configuration.")]
+        [BuiltInTool("Remove a configured MCP tool server by name. This will disconnect the server and remove its configuration. Only available to admin users.")]
         public async Task<string> RemoveMcpServer(
-            [BuiltInParameter("The name of the MCP server to remove")] string name) {
+            [BuiltInParameter("The name of the MCP server to remove")] string name,
+            ToolContext toolContext) {
+
+            if (toolContext == null || toolContext.UserId != Env.AdminId) {
+                return "Error: MCP server management is only available to admin users.";
+            }
 
             try {
                 if (string.IsNullOrWhiteSpace(name)) {
@@ -166,8 +177,12 @@ Only available to admin users.")]
             }
         }
 
-        [BuiltInTool("Restart all enabled MCP tool servers. Use this after making configuration changes or if tools are not responding.")]
-        public async Task<string> RestartMcpServers() {
+        [BuiltInTool("Restart all enabled MCP tool servers. Use this after making configuration changes or if tools are not responding. Only available to admin users.")]
+        public async Task<string> RestartMcpServers(ToolContext toolContext) {
+            if (toolContext == null || toolContext.UserId != Env.AdminId) {
+                return "Error: MCP server management is only available to admin users.";
+            }
+
             try {
                 await _mcpServerManager.ShutdownAllAsync();
                 await _mcpServerManager.InitializeAllServersAsync();

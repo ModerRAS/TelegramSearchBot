@@ -156,9 +156,9 @@ namespace TelegramSearchBot.AppBootstrap {
                     var objectArgs = arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
                     var result = await mcpServerManager.CallToolAsync(serverName, toolName, objectArgs);
                     if (result.IsError) {
-                        return $"Error: {string.Join("\n", result.Content.Select(c => c.Text))}";
+                        return $"Error: {string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>())}";
                     }
-                    return string.Join("\n", result.Content.Select(c => c.Text));
+                    return string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>());
                 });
         }
     }

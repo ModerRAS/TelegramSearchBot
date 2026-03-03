@@ -173,7 +173,15 @@ namespace TelegramSearchBot.Service.Mcp {
         }
 
         public void Dispose() {
-            ShutdownAllAsync().GetAwaiter().GetResult();
+            // Best-effort synchronous cleanup to avoid deadlocks
+            foreach (var kvp in _clients) {
+                try {
+                    (kvp.Value as IDisposable)?.Dispose();
+                } catch { }
+            }
+            _clients.Clear();
+            _serverTools.Clear();
+            _toolToServer.Clear();
         }
     }
 }
