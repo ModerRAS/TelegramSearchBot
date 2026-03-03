@@ -97,6 +97,11 @@
     <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="telegram-bot-api.exe" Condition="Exists('telegram-bot-api.exe')">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <Folder Include="Resources\" />
     <Folder Include="View\" />
   </ItemGroup>
