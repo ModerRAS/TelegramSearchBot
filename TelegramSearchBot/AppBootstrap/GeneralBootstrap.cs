@@ -135,32 +135,7 @@ namespace TelegramSearchBot.AppBootstrap {
         /// and can be executed through the tool call system.
         /// </summary>
         private static void RegisterExternalMcpTools(IMcpServerManager mcpServerManager) {
-            var externalTools = mcpServerManager.GetAllExternalTools();
-            if (!externalTools.Any()) return;
-
-            var toolInfos = externalTools.Select(t => (t.serverName, new McpToolHelper.ExternalToolInfo {
-                ServerName = t.serverName,
-                ToolName = t.tool.Name,
-                Description = t.tool.Description ?? "",
-                Parameters = t.tool.InputSchema?.Properties?.Select(p =>
-                    new McpToolHelper.ExternalToolParameter {
-                        Name = p.Key,
-                        Type = p.Value.Type ?? "string",
-                        Description = p.Value.Description ?? "",
-                        Required = t.tool.InputSchema.Required?.Contains(p.Key) ?? false
-                    }).ToList() ?? new List<McpToolHelper.ExternalToolParameter>()
-            })).ToList();
-
-            McpToolHelper.RegisterExternalTools(
-                toolInfos,
-                async (serverName, toolName, arguments) => {
-                    var objectArgs = arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
-                    var result = await mcpServerManager.CallToolAsync(serverName, toolName, objectArgs);
-                    if (result.IsError) {
-                        return $"Error: {string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>())}";
-                    }
-                    return string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>());
-                });
+            McpToolHelper.RegisterExternalMcpTools(mcpServerManager);
         }
     }
 }

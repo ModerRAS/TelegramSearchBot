@@ -29,13 +29,43 @@ namespace TelegramSearchBot.Service.Mcp {
         public string ServerName => _config.Name;
         public bool IsConnected { get; private set; }
 
+        /// <summary>
+        /// Returns true if the underlying process is still running.
+        /// If the process has exited, sets IsConnected to false.
+        /// </summary>
+        public bool IsProcessAlive {
+            get {
+                if (_process == null) {
+                    IsConnected = false;
+                    return false;
+                }
+                try {
+                    if (_process.HasExited) {
+                        _logger.LogWarning("MCP server '{ServerName}' process (PID: {Pid}) has exited with code {ExitCode}.",
+                            ServerName, _process.Id, _process.ExitCode);
+                        IsConnected = false;
+                        return false;
+                    }
+                    return true;
+                } catch (InvalidOperationException) {
+                    // Process object is in an invalid state
+                    IsConnected = false;
+                    return false;
+                }
+            }
+        }
+
         public McpClient(McpServerConfig config, ILogger logger) {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task ConnectAsync(CancellationToken cancellationToken = default) {
-            if (IsConnected) return;
+            // If already connected and process is alive, skip
+            if (IsConnected && IsProcessAlive) return;
+
+            // Clean up any existing dead process before reconnecting
+            await CleanupProcessAsync();
 
             try {
                 var startInfo = new ProcessStartInfo {
@@ -64,10 +94,11 @@ namespace TelegramSearchBot.Service.Mcp {
                 _stdout = _process.StandardOutput;
 
                 // Start reading stderr in background for logging
+                var stderrProcess = _process;
                 _ = Task.Run(async () => {
                     try {
-                        while (!_process.HasExited) {
-                            var line = await _process.StandardError.ReadLineAsync();
+                        while (!stderrProcess.HasExited) {
+                            var line = await stderrProcess.StandardError.ReadLineAsync();
                             if (line != null) {
                                 _logger.LogDebug("[MCP:{ServerName}:stderr] {Line}", ServerName, line);
                             }
@@ -94,13 +125,13 @@ namespace TelegramSearchBot.Service.Mcp {
                 IsConnected = true;
             } catch (Exception ex) {
                 _logger.LogError(ex, "Failed to connect to MCP server '{ServerName}'", ServerName);
-                await DisconnectAsync();
+                await CleanupProcessAsync();
                 throw;
             }
         }
 
         public async Task<List<McpToolDescription>> ListToolsAsync(CancellationToken cancellationToken = default) {
-            if (!IsConnected) {
+            if (!IsConnected || !IsProcessAlive) {
                 throw new InvalidOperationException($"MCP client for '{ServerName}' is not connected.");
             }
 
@@ -109,7 +140,7 @@ namespace TelegramSearchBot.Service.Mcp {
         }
 
         public async Task<McpToolCallResult> CallToolAsync(string toolName, Dictionary<string, object> arguments, CancellationToken cancellationToken = default) {
-            if (!IsConnected) {
+            if (!IsConnected || !IsProcessAlive) {
                 throw new InvalidOperationException($"MCP client for '{ServerName}' is not connected.");
             }
 
@@ -125,6 +156,14 @@ namespace TelegramSearchBot.Service.Mcp {
         }
 
         public async Task DisconnectAsync() {
+            await CleanupProcessAsync();
+        }
+
+        /// <summary>
+        /// Thoroughly cleans up the child process and associated streams.
+        /// Safe to call multiple times.
+        /// </summary>
+        private async Task CleanupProcessAsync() {
             IsConnected = false;
 
             try {
@@ -137,9 +176,16 @@ namespace TelegramSearchBot.Service.Mcp {
             try {
                 if (_process != null && !_process.HasExited) {
                     _process.Kill(true);
-                    _process.Dispose();
-                    _process = null;
+                    // Wait briefly for the process to actually exit
+                    try {
+                        _process.WaitForExit(3000);
+                    } catch { }
                 }
+            } catch { }
+
+            try {
+                _process?.Dispose();
+                _process = null;
             } catch { }
         }
 
@@ -232,16 +278,19 @@ namespace TelegramSearchBot.Service.Mcp {
         public void Dispose() {
             if (_disposed) return;
             _disposed = true;
+            IsConnected = false;
             try {
-                // Best-effort synchronous cleanup to avoid deadlocks
+                _stdin?.Dispose();
+                _stdin = null;
+            } catch { }
+            try {
                 if (_process != null && !_process.HasExited) {
                     _process.Kill(true);
-                    _process.Dispose();
-                    _process = null;
+                    try { _process.WaitForExit(3000); } catch { }
                 }
+                _process?.Dispose();
+                _process = null;
             } catch { }
-            _stdin = null;
-            IsConnected = false;
             _sendLock.Dispose();
         }
     }

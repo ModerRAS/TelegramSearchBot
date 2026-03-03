@@ -12,6 +12,7 @@ using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Mcp;
+using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.Service.Tools {
     /// <summary>
@@ -124,6 +125,9 @@ Only available to admin users.")]
 
                 await _mcpServerManager.AddServerAsync(config);
 
+                // Re-register tools with McpToolHelper so new tools appear in LLM prompts
+                McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+
                 // Check if tools were discovered
                 var tools = _mcpServerManager.GetAllExternalTools()
                     .Where(t => t.serverName == name)
@@ -170,6 +174,10 @@ Only available to admin users.")]
                 }
 
                 await _mcpServerManager.RemoveServerAsync(name);
+
+                // Re-register tools with McpToolHelper to remove stale tool entries
+                McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+
                 return $"Successfully removed MCP server '{name}'.";
             } catch (Exception ex) {
                 _logger.LogError(ex, "Error removing MCP server: {Name}", name);
@@ -186,6 +194,9 @@ Only available to admin users.")]
             try {
                 await _mcpServerManager.ShutdownAllAsync();
                 await _mcpServerManager.InitializeAllServersAsync();
+
+                // Re-register tools with McpToolHelper so they appear in LLM prompts
+                McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
 
                 var tools = _mcpServerManager.GetAllExternalTools();
                 return $"Successfully restarted MCP servers. {tools.Count} external tools available.";

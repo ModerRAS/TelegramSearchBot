@@ -731,5 +731,45 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public static bool IsToolRegistered(string toolName) {
             return ToolRegistry.ContainsKey(toolName) || ExternalToolRegistry.ContainsKey(toolName);
         }
+
+        /// <summary>
+        /// Register external MCP tools from a connected IMcpServerManager.
+        /// This converts tool descriptions from the MCP server format to the McpToolHelper format
+        /// and registers them for use in LLM prompts and tool calls.
+        /// Can be called after server restart to refresh tool registrations.
+        /// </summary>
+        public static void RegisterExternalMcpTools(Interface.Mcp.IMcpServerManager mcpServerManager) {
+            var externalTools = mcpServerManager.GetAllExternalTools();
+            if (!externalTools.Any()) {
+                // Clear stale registrations if no tools available
+                ExternalToolRegistry.Clear();
+                _sCachedExternalToolsXml = string.Empty;
+                return;
+            }
+
+            var toolInfos = externalTools.Select(t => (t.serverName, new ExternalToolInfo {
+                ServerName = t.serverName,
+                ToolName = t.tool.Name,
+                Description = t.tool.Description ?? "",
+                Parameters = t.tool.InputSchema?.Properties?.Select(p =>
+                    new ExternalToolParameter {
+                        Name = p.Key,
+                        Type = p.Value.Type ?? "string",
+                        Description = p.Value.Description ?? "",
+                        Required = t.tool.InputSchema.Required?.Contains(p.Key) ?? false
+                    }).ToList() ?? new List<ExternalToolParameter>()
+            })).ToList();
+
+            RegisterExternalTools(
+                toolInfos,
+                async (serverName, toolName, arguments) => {
+                    var objectArgs = arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
+                    var result = await mcpServerManager.CallToolAsync(serverName, toolName, objectArgs);
+                    if (result.IsError) {
+                        return $"Error: {string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>())}";
+                    }
+                    return string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>());
+                });
+        }
     }
 }

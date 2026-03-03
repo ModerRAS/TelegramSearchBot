@@ -20,7 +20,14 @@ namespace TelegramSearchBot.Interface.Mcp {
         bool IsConnected { get; }
 
         /// <summary>
+        /// Whether the underlying server process is still alive.
+        /// Checking this will also update IsConnected if the process has exited.
+        /// </summary>
+        bool IsProcessAlive { get; }
+
+        /// <summary>
         /// Connect to the MCP server and perform the initialize handshake.
+        /// If the process previously died, this will clean up and start a fresh process.
         /// </summary>
         Task ConnectAsync(CancellationToken cancellationToken = default);
 
