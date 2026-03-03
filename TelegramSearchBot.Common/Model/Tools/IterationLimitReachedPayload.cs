@@ -1,49 +1,38 @@
 namespace TelegramSearchBot.Model.Tools {
     /// <summary>
-    /// 表示AI迭代次数限制已达，需要用户确认是否继续的特殊消息载体
+    /// 当 LLM 服务的 tool-call 循环达到 MaxToolCycles 上限时，
+    /// 会在最后一次 yield 的累积内容末尾追加 Marker。
+    /// 调用方（Controller）通过包装器检测此标记，将其剥离后保留原始内容，
+    /// 并弹出 InlineButton 让用户选择是否继续迭代。
     /// </summary>
-    public class IterationLimitReachedPayload {
+    public static class IterationLimitReachedPayload {
         /// <summary>
-        /// 特殊标记，用于识别这是一个迭代确认消息
+        /// 追加在累积内容末尾的特殊标记
         /// </summary>
-        public const string Marker = "___ITERATION_LIMIT_REACHED___";
+        public const string Marker = "\n___ITERATION_LIMIT_REACHED___";
 
         /// <summary>
-        /// 聊天ID
+        /// 检查流 yield 的字符串是否以迭代限制标记结尾
         /// </summary>
-        public long ChatId { get; set; }
-
-        /// <summary>
-        /// 原始消息ID（用于回复）
-        /// </summary>
-        public int OriginalMessageId { get; set; }
-
-        /// <summary>
-        /// 用户ID
-        /// </summary>
-        public long UserId { get; set; }
-
-        /// <summary>
-        /// 当前迭代次数
-        /// </summary>
-        public int CurrentCycles { get; set; }
-
-        /// <summary>
-        /// 最大迭代次数限制
-        /// </summary>
-        public int MaxCycles { get; set; }
-
-        /// <summary>
-        /// 已经累积的内容（用户需要看到的之前的结果）
-        /// </summary>
-        public string AccumulatedContent { get; set; }
-
-        public string ToJsonString() {
-            return System.Text.Json.JsonSerializer.Serialize(this);
+        public static bool IsIterationLimitMessage(string content) {
+            return content != null && content.EndsWith(Marker);
         }
 
-        public static IterationLimitReachedPayload FromJsonString(string json) {
-            return System.Text.Json.JsonSerializer.Deserialize<IterationLimitReachedPayload>(json);
+        /// <summary>
+        /// 在累积内容末尾追加标记
+        /// </summary>
+        public static string AppendMarker(string accumulatedContent) {
+            return (accumulatedContent ?? string.Empty) + Marker;
+        }
+
+        /// <summary>
+        /// 从带标记的字符串中提取原始内容
+        /// </summary>
+        public static string StripMarker(string content) {
+            if (content != null && content.EndsWith(Marker)) {
+                return content.Substring(0, content.Length - Marker.Length);
+            }
+            return content ?? string.Empty;
         }
     }
 }

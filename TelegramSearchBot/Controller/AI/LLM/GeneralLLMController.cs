@@ -7,7 +7,9 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums; // Added for MessageEntityType
+using Telegram.Bot.Types.ReplyMarkups; // For InlineKeyboardMarkup
 using TelegramSearchBot.Common;
+using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.Controller;
@@ -116,9 +118,13 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 // Pass CancellationToken.None as IOnUpdate doesn't provide a natural CancellationToken source here.
                 IAsyncEnumerable<string> fullMessageStream = GeneralLLMService.ExecAsync(inputLlMessage, e.Message.Chat.Id, CancellationToken.None);
 
+                // Wrap the stream to detect iteration limit marker
+                var iterationLimitDetector = new IterationLimitAwareStream();
+                IAsyncEnumerable<string> wrappedStream = iterationLimitDetector.WrapAsync(fullMessageStream, CancellationToken.None);
+
                 // Call the new SendFullMessageStream method
                 List<Model.Data.Message> sentMessagesForDb = await SendMessageService.SendFullMessageStream(
-                    fullMessageStream,
+                    wrappedStream,
                     e.Message.Chat.Id,
                     e.Message.MessageId, // Reply to the original user's message
                     initialContentPlaceholder, // Corrected variable name
@@ -153,6 +159,26 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                         UserId = dbMessage.FromUserId,
                     });
                 }
+
+                // Check if the iteration limit was reached → send InlineButton confirmation
+                if (iterationLimitDetector.IterationLimitReached) {
+                    logger.LogInformation("Iteration limit reached for ChatId {ChatId}, MessageId {MessageId}. Prompting user to continue or stop.", e.Message.Chat.Id, e.Message.MessageId);
+
+                    var keyboard = new InlineKeyboardMarkup(new[] {
+                        new[] {
+                            InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{e.Message.Chat.Id}:{e.Message.MessageId}"),
+                            InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{e.Message.Chat.Id}:{e.Message.MessageId}"),
+                        }
+                    });
+
+                    await botClient.SendMessage(
+                        e.Message.Chat.Id,
+                        $"⚠️ AI 已达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？",
+                        replyMarkup: keyboard,
+                        replyParameters: new ReplyParameters { MessageId = e.Message.MessageId }
+                    );
+                }
+
                 return;
             }
         }

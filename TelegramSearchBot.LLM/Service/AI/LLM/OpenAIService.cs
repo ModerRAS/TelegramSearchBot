@@ -664,16 +664,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-                // Instead of directly outputting an error, we yield a special marker that tells
-                // the SendMessageService to prompt the user for confirmation to continue iterations.
-                var limitPayload = new TelegramSearchBot.Model.Tools.IterationLimitReachedPayload {
-                    ChatId = ChatId,
-                    UserId = message.FromUserId,
-                    CurrentCycles = maxToolCycles,
-                    MaxCycles = maxToolCycles,
-                    AccumulatedContent = currentMessageContentBuilder.ToString()
-                };
-                yield return $"{TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.Marker}\n{limitPayload.ToJsonString()}";
+                // Append the iteration limit marker to the accumulated content.
+                // The controller-side wrapper will detect and strip it, then show an InlineButton prompt.
+                yield return TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.AppendMarker(currentMessageContentBuilder.ToString());
             } finally {
                 // No cleanup needed for ToolContext
             }

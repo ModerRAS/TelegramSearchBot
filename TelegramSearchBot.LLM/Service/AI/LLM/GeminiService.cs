@@ -318,14 +318,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-            var limitPayload = new TelegramSearchBot.Model.Tools.IterationLimitReachedPayload {
-                ChatId = ChatId,
-                UserId = message.FromUserId,
-                CurrentCycles = maxToolCycles,
-                MaxCycles = maxToolCycles,
-                AccumulatedContent = currentMessageBuilder.ToString()
-            };
-            yield return $"{TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.Marker}\n{limitPayload.ToJsonString()}";
+            // Append the iteration limit marker to the accumulated content.
+            yield return TelegramSearchBot.Model.Tools.IterationLimitReachedPayload.AppendMarker(currentMessageBuilder.ToString());
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {
