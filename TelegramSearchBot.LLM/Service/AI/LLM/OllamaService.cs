@@ -156,7 +156,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         string toolResultString;
                         bool isError = false;
                         try {
-                            var toolContext = new ToolContext { ChatId = ChatId };
+                            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId };
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
                             toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
