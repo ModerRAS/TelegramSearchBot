@@ -36,7 +36,7 @@ namespace TelegramSearchBot.Service.Tools {
         [BuiltInTool("List all configured MCP (Model Context Protocol) tool servers and their status. Shows server name, command, and available tools.")]
         public async Task<string> ListMcpServers() {
             try {
-                var configs = _mcpServerManager.GetServerConfigs();
+                var configs = await _mcpServerManager.GetServerConfigsAsync();
                 var externalTools = _mcpServerManager.GetAllExternalTools();
 
                 if (!configs.Any()) {
@@ -164,7 +164,7 @@ Only available to admin users.")]
                     return "Error: Server name is required.";
                 }
 
-                var configs = _mcpServerManager.GetServerConfigs();
+                var configs = await _mcpServerManager.GetServerConfigsAsync();
                 if (!configs.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) {
                     return $"Error: MCP server '{name}' not found. Use ListMcpServers to see available servers.";
                 }

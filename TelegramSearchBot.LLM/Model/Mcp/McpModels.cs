@@ -157,12 +157,4 @@ namespace TelegramSearchBot.Model.Mcp {
         [JsonProperty("enabled")]
         public bool Enabled { get; set; } = true;
     }
-
-    /// <summary>
-    /// Root configuration for MCP servers stored in mcp_servers.json.
-    /// </summary>
-    public class McpServersConfig {
-        [JsonProperty("servers")]
-        public List<McpServerConfig> Servers { get; set; } = new();
-    }
 }

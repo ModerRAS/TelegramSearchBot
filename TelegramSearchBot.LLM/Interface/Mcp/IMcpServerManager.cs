@@ -9,9 +9,9 @@ namespace TelegramSearchBot.Interface.Mcp {
     /// </summary>
     public interface IMcpServerManager {
         /// <summary>
-        /// Get all configured MCP servers.
+        /// Get all configured MCP servers asynchronously.
         /// </summary>
-        List<McpServerConfig> GetServerConfigs();
+        Task<List<McpServerConfig>> GetServerConfigsAsync();
 
         /// <summary>
         /// Add a new MCP server configuration.

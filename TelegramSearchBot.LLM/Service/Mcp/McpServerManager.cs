@@ -102,10 +102,6 @@ namespace TelegramSearchBot.Service.Mcp {
             }
         }
 
-        public List<McpServerConfig> GetServerConfigs() {
-            return LoadConfigsFromDbAsync().GetAwaiter().GetResult();
-        }
-
         public async Task<List<McpServerConfig>> GetServerConfigsAsync() {
             return await LoadConfigsFromDbAsync();
         }
