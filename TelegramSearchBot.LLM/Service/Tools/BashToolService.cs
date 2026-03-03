@@ -31,24 +31,26 @@ namespace TelegramSearchBot.Service.Tools {
         }
 
         /// <summary>
-        /// Gets the shell executable and argument format for the current platform.
+        /// Gets the shell executable and argument prefix for the current platform.
         /// On Windows, prefers pwsh (PowerShell 7+) over powershell (Windows PowerShell 5.1).
         /// On Linux/macOS, uses /bin/bash.
+        /// Returns: (shellPath, argPrefix list, shellName)
+        /// The command itself should be appended after the argPrefix.
         /// </summary>
-        internal static (string shellPath, string shellArgFormat, string shellName) GetShellInfo() {
+        internal static (string shellPath, string[] argPrefix, string shellName) GetShellInfo() {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
                 // Prefer pwsh (PowerShell 7+) over powershell (Windows PowerShell 5.1)
                 var pwshPath = FindExecutableOnPath("pwsh.exe") ?? FindExecutableOnPath("pwsh");
                 if (pwshPath != null) {
-                    return (pwshPath, "-NoProfile -NonInteractive -Command {0}", "PowerShell 7+ (pwsh)");
+                    return (pwshPath, new[] { "-NoProfile", "-NonInteractive", "-Command" }, "PowerShell 7+ (pwsh)");
                 }
 
                 // Fallback to Windows PowerShell
                 var powershellPath = FindExecutableOnPath("powershell.exe") ?? "powershell.exe";
-                return (powershellPath, "-NoProfile -NonInteractive -Command {0}", "Windows PowerShell");
+                return (powershellPath, new[] { "-NoProfile", "-NonInteractive", "-Command" }, "Windows PowerShell");
             }
 
-            return ("/bin/bash", "-c {0}", "bash");
+            return ("/bin/bash", new[] { "-c" }, "bash");
         }
 
         /// <summary>
@@ -106,15 +108,13 @@ namespace TelegramSearchBot.Service.Tools {
                 command, workDir, toolContext.UserId);
 
             try {
-                var (shellPath, shellArgFormat, shellName) = GetShellInfo();
-                var shellArgs = string.Format(shellArgFormat, command);
+                var (shellPath, shellArgPrefix, shellName) = GetShellInfo();
 
-                _logger.LogDebug("Using shell: {ShellName} ({ShellPath}), args: {Args}", shellName, shellPath, shellArgs);
+                _logger.LogDebug("Using shell: {ShellName} ({ShellPath})", shellName, shellPath);
 
                 var process = new Process {
                     StartInfo = new ProcessStartInfo {
                         FileName = shellPath,
-                        Arguments = shellArgs,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
@@ -124,6 +124,12 @@ namespace TelegramSearchBot.Service.Tools {
                         StandardErrorEncoding = Encoding.UTF8,
                     }
                 };
+
+                // Add shell-specific prefix args, then the command
+                foreach (var arg in shellArgPrefix) {
+                    process.StartInfo.ArgumentList.Add(arg);
+                }
+                process.StartInfo.ArgumentList.Add(command);
 
                 var outputBuilder = new StringBuilder();
                 var errorBuilder = new StringBuilder();
