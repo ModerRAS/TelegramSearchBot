@@ -25,6 +25,36 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
     - name: Clear NuGet cache
       run: dotnet nuget locals all --clear
+    - name: Cache telegram-bot-api build
+      id: cache-tg-bot-api
+      uses: actions/cache@v4
+      with:
+        path: telegram-bot-api-bin
+        key: tg-bot-api-win-x64-${{ hashFiles('.github/workflows/push.yml') }}
+        restore-keys: |
+          tg-bot-api-win-x64-
+    - name: Build telegram-bot-api from source
+      if: steps.cache-tg-bot-api.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        git clone --recursive https://github.com/tdlib/telegram-bot-api.git
+        C:\vcpkg\vcpkg.exe install openssl:x64-windows-static zlib:x64-windows-static --no-print-usage
+        Push-Location telegram-bot-api
+        New-Item -ItemType Directory -Force build | Out-Null
+        Push-Location build
+        cmake -A x64 -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+          -DVCPKG_TARGET_TRIPLET="x64-windows-static" `
+          ..
+        cmake --build . --config Release --target telegram-bot-api
+        Pop-Location
+        Pop-Location
+        New-Item -ItemType Directory -Force telegram-bot-api-bin | Out-Null
+        Copy-Item "telegram-bot-api\build\Release\telegram-bot-api.exe" "telegram-bot-api-bin\telegram-bot-api.exe"
+    - name: Copy telegram-bot-api binary to project
+      shell: pwsh
+      run: |
+        Copy-Item "telegram-bot-api-bin\telegram-bot-api.exe" "TelegramSearchBot\telegram-bot-api.exe"
     - name: Restore dependencies
       run: dotnet restore --force --no-cache /p:BuildWithNetFrameworkHostedCompiler=true
     - name: Build
