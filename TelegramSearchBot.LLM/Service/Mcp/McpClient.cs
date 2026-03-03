@@ -25,6 +25,7 @@ namespace TelegramSearchBot.Service.Mcp {
         private int _nextId = 1;
         private bool _disposed;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
+        private const int ProcessExitTimeoutMs = 3000;
 
         public string ServerName => _config.Name;
         public bool IsConnected { get; private set; }
@@ -94,11 +95,11 @@ namespace TelegramSearchBot.Service.Mcp {
                 _stdout = _process.StandardOutput;
 
                 // Start reading stderr in background for logging
-                var stderrProcess = _process;
+                var capturedProcess = _process;
                 _ = Task.Run(async () => {
                     try {
-                        while (!stderrProcess.HasExited) {
-                            var line = await stderrProcess.StandardError.ReadLineAsync();
+                        while (!capturedProcess.HasExited) {
+                            var line = await capturedProcess.StandardError.ReadLineAsync();
                             if (line != null) {
                                 _logger.LogDebug("[MCP:{ServerName}:stderr] {Line}", ServerName, line);
                             }
@@ -178,7 +179,7 @@ namespace TelegramSearchBot.Service.Mcp {
                     _process.Kill(true);
                     // Wait briefly for the process to actually exit
                     try {
-                        _process.WaitForExit(3000);
+                    _process.WaitForExit(ProcessExitTimeoutMs);
                     } catch { }
                 }
             } catch { }
@@ -286,7 +287,7 @@ namespace TelegramSearchBot.Service.Mcp {
             try {
                 if (_process != null && !_process.HasExited) {
                     _process.Kill(true);
-                    try { _process.WaitForExit(3000); } catch { }
+                    try { _process.WaitForExit(ProcessExitTimeoutMs); } catch { }
                 }
                 _process?.Dispose();
                 _process = null;

@@ -27,8 +27,15 @@ namespace TelegramSearchBot.Service.Mcp {
         private readonly ConcurrentDictionary<string, IMcpClient> _clients = new();
         private readonly ConcurrentDictionary<string, List<McpToolDescription>> _serverTools = new();
         private readonly ConcurrentDictionary<string, string> _toolToServer = new();
+        /// <summary>
+        /// Caches server configurations for reconnection without requiring a DB lookup.
+        /// </summary>
         private readonly ConcurrentDictionary<string, McpServerConfig> _serverConfigs = new();
+        /// <summary>
+        /// Prevents concurrent reconnection attempts to the same or different servers.
+        /// </summary>
         private readonly SemaphoreSlim _reconnectLock = new(1, 1);
+        private const int ReconnectLockTimeoutSeconds = 5;
 
         internal const string McpConfigKeyPrefix = "MCP:ServerConfig:";
 
@@ -199,7 +206,7 @@ namespace TelegramSearchBot.Service.Mcp {
         /// Uses a lock to prevent concurrent reconnection attempts.
         /// </summary>
         private async Task<bool> TryReconnectAsync(string serverName, CancellationToken cancellationToken = default) {
-            if (!await _reconnectLock.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken)) {
+            if (!await _reconnectLock.WaitAsync(TimeSpan.FromSeconds(ReconnectLockTimeoutSeconds), cancellationToken)) {
                 _logger.LogWarning("Reconnection lock timeout for MCP server '{ServerName}'", serverName);
                 return false;
             }
