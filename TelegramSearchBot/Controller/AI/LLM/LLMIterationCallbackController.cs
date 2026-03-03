@@ -118,7 +118,9 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                                 replyMarkup: null
                             );
                         }
-                    } catch { }
+                    } catch (Exception ex) {
+                        _logger.LogWarning(ex, "Failed to remove inline keyboard after snapshot expiry.");
+                    }
                     return;
                 }
 
