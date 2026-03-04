@@ -35,6 +35,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
     public class OpenAIService : IService, ILLMService {
         public string ServiceName => "OpenAIService";
 
+        /// <summary>
+        /// Mutable accumulator for streaming tool call updates.
+        /// </summary>
+        private class ToolCallAccumulator {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public StringBuilder Arguments { get; } = new StringBuilder();
+        }
+
         private readonly ILogger<OpenAIService> _logger;
         public static string _botName;
         public string BotName {
@@ -621,6 +630,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         private static bool IsToolCallingNotSupportedError(Exception ex) {
             var message = ex.Message ?? "";
+            // Check for ClientResultException with specific HTTP status codes
+            if (ex is ClientResultException clientEx) {
+                // 400 Bad Request with tool-related error message
+                if (clientEx.Status == 400 && message.Contains("tool", StringComparison.OrdinalIgnoreCase)) {
+                    return true;
+                }
+            }
             // Common error patterns when a model/API doesn't support tool calling
             return message.Contains("tools", StringComparison.OrdinalIgnoreCase) && 
                    (message.Contains("not supported", StringComparison.OrdinalIgnoreCase) || 
@@ -663,7 +679,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
                     var contentBuilder = new StringBuilder();
-                    var toolCallUpdates = new Dictionary<int, (string id, string name, StringBuilder arguments)>();
+                    var toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
                     ChatFinishReason? finishReason = null;
 
                     // --- Call LLM with tools ---
@@ -684,21 +700,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         // Accumulate tool call updates
                         foreach (var toolCallUpdate in update.ToolCallUpdates ?? Enumerable.Empty<StreamingChatToolCallUpdate>()) {
                             int index = toolCallUpdate.Index;
-                            if (!toolCallUpdates.ContainsKey(index)) {
-                                toolCallUpdates[index] = (toolCallUpdate.ToolCallId, toolCallUpdate.FunctionName, new StringBuilder());
+                            if (!toolCallAccumulators.ContainsKey(index)) {
+                                toolCallAccumulators[index] = new ToolCallAccumulator();
                             }
 
-                            var entry = toolCallUpdates[index];
-                            if (toolCallUpdate.ToolCallId != null && entry.id == null) {
-                                entry.id = toolCallUpdate.ToolCallId;
-                                toolCallUpdates[index] = entry;
-                            }
-                            if (toolCallUpdate.FunctionName != null && entry.name == null) {
-                                entry.name = toolCallUpdate.FunctionName;
-                                toolCallUpdates[index] = entry;
-                            }
+                            var acc = toolCallAccumulators[index];
+                            if (toolCallUpdate.ToolCallId != null) acc.Id ??= toolCallUpdate.ToolCallId;
+                            if (toolCallUpdate.FunctionName != null) acc.Name ??= toolCallUpdate.FunctionName;
                             if (toolCallUpdate.FunctionArgumentsUpdate != null) {
-                                entry.arguments.Append(toolCallUpdate.FunctionArgumentsUpdate);
+                                acc.Arguments.Append(toolCallUpdate.FunctionArgumentsUpdate);
                             }
                         }
 
@@ -710,14 +720,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     string responseText = contentBuilder.ToString().Trim();
 
                     // Check if this is a tool call response
-                    if (finishReason == ChatFinishReason.ToolCalls && toolCallUpdates.Any()) {
+                    if (finishReason == ChatFinishReason.ToolCalls && toolCallAccumulators.Any()) {
                         // Build the assistant message with tool calls
                         var chatToolCalls = new List<ChatToolCall>();
-                        foreach (var (index, (id, name, args)) in toolCallUpdates) {
+                        foreach (var (index, acc) in toolCallAccumulators) {
+                            if (acc.Id == null) {
+                                _logger.LogWarning("{ServiceName}: Tool call at index {Index} has no ID, generating fallback.", ServiceName, index);
+                            }
                             chatToolCalls.Add(ChatToolCall.CreateFunctionToolCall(
-                                id ?? $"call_{Guid.NewGuid():N}",
-                                name ?? "unknown",
-                                BinaryData.FromString(args.ToString())));
+                                acc.Id ?? $"call_{Guid.NewGuid():N}",
+                                acc.Name ?? "unknown",
+                                BinaryData.FromString(acc.Arguments.ToString())));
                         }
 
                         var assistantMessage = new AssistantChatMessage(chatToolCalls);

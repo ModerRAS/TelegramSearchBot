@@ -203,7 +203,9 @@ namespace TelegramSearchBot.Test.Service.Tools {
             // 8. List shows only second server
             result = await _service.ListMcpServers();
             Assert.Contains("lifecycle-test-2", result);
-            Assert.DoesNotContain("lifecycle-test\n", result); // Name without -2 suffix should not appear as standalone
+            // Verify the first server name doesn't appear as a standalone entry (only as part of "lifecycle-test-2")
+            var lines = result.Split('\n');
+            Assert.DoesNotContain(lines, line => line.Trim() == "Server: lifecycle-test");
             Assert.Contains("Configured MCP Servers (1)", result);
 
             // 9. Remove second server

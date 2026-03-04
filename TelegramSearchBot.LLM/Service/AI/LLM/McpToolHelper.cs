@@ -312,7 +312,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                    "- RestartMcpServers: 重启所有已启用的MCP服务器\n" +
                    "常见MCP服务器：\n" +
                    "- Playwright浏览器: AddMcpServer(name='playwright', command='npx', args='-y @playwright/mcp')\n" +
-                   "- 文件系统: AddMcpServer(name='filesystem', command='npx', args='-y @modelcontextprotocol/server-filesystem /tmp')\n" +
+                   "- 文件系统: AddMcpServer(name='filesystem', command='npx', args='-y @modelcontextprotocol/server-filesystem /path/to/directory')\n" +
                    "- GitHub: AddMcpServer(name='github', command='npx', args='-y @modelcontextprotocol/server-github', env='GITHUB_TOKEN=xxx')\n" +
                    "安装前建议用 ExecuteCommand 工具检查npm/npx是否已安装。\n\n" +
                    "引用说明：当你使用工具（特别是搜索工具）获取信息并在回答中使用了这些信息时，如果工具结果提供了来源(Source)或链接(URL)，请务必在你的回答中清晰地注明来源。你可以使用Markdown链接格式，例如 `[来源标题](URL)`，或者在回答末尾列出引用来源列表。确保用户可以追溯信息的原始出处。\n\n" +
