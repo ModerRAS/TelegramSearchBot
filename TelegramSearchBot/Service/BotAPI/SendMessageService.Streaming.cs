@@ -18,6 +18,11 @@ namespace TelegramSearchBot.Service.BotAPI {
     /// 提供Telegram消息流式发送功能的服务类
     /// </summary>
     public partial class SendMessageService {
+        /// <summary>
+        /// Cache of chat IDs that don't support the sendMessageDraft API.
+        /// Once a chat fails with TEXTDRAFT_PEER_INVALID, we skip drafts for that chat in the future.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, bool> _draftUnsupportedChats = new();
         #region Incremental Streaming Send Method (Old)
         /// <summary>
         /// 增量式流式发送消息(旧版实现)
@@ -346,6 +351,13 @@ namespace TelegramSearchBot.Service.BotAPI {
             int replyTo,
             string initialPlaceholderContent = "⏳",
             CancellationToken cancellationToken = default) {
+
+            // If this chat previously failed with TEXTDRAFT_PEER_INVALID, skip draft and fall back immediately
+            if (_draftUnsupportedChats.ContainsKey(chatId)) {
+                logger.LogDebug("SendDraftStream: Chat {ChatId} is known to not support drafts. Falling back to SendFullMessageStream.", chatId);
+                return await SendFullMessageStream(fullMessagesStream, chatId, replyTo, initialPlaceholderContent, cancellationToken);
+            }
+
             // Generate a unique draftId to avoid collisions for concurrent requests to the same message
             int draftId = unchecked((int)(chatId ^ replyTo ^ DateTime.UtcNow.Ticks));
             string latestContent = null;
@@ -357,7 +369,13 @@ namespace TelegramSearchBot.Service.BotAPI {
                     await botClient.SendMessageDraft(chatId, draftId, initialPlaceholderContent, parseMode: ParseMode.None, cancellationToken: cancellationToken);
                     draftStarted = true;
                 } catch (Exception ex) {
-                    logger.LogWarning(ex, "SendDraftStream: Failed to send initial draft placeholder, falling back to SendFullMessageStream.");
+                    // Remember chats that don't support draft messages to avoid repeated failures
+                    if (ex.Message != null && ex.Message.Contains("TEXTDRAFT_PEER_INVALID", StringComparison.OrdinalIgnoreCase)) {
+                        _draftUnsupportedChats.TryAdd(chatId, true);
+                        logger.LogInformation("SendDraftStream: Chat {ChatId} does not support draft messages. Will use SendFullMessageStream for future requests.", chatId);
+                    } else {
+                        logger.LogWarning(ex, "SendDraftStream: Failed to send initial draft placeholder, falling back to SendFullMessageStream.");
+                    }
                     // Fall back to the old method if sendMessageDraft is not supported
                     return await SendFullMessageStream(fullMessagesStream, chatId, replyTo, initialPlaceholderContent, cancellationToken);
                 }

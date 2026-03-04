@@ -148,6 +148,104 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
+        /// Generates OpenAI-compatible ChatTool definitions for all registered tools (built-in and external).
+        /// Used for native function/tool calling API instead of XML prompt-based tool calling.
+        /// </summary>
+        public static List<OpenAI.Chat.ChatTool> GetNativeToolDefinitions() {
+            var tools = new List<OpenAI.Chat.ChatTool>();
+
+            // Built-in tools
+            foreach (var (toolName, toolInfo) in ToolRegistry) {
+                var method = toolInfo.Method;
+                var builtInAttr = method.GetCustomAttribute<BuiltInToolAttribute>();
+                var mcpAttr = method.GetCustomAttribute<McpToolAttribute>();
+                var description = builtInAttr?.Description ?? mcpAttr?.Description ?? "";
+
+                var properties = new Dictionary<string, object>();
+                var required = new List<string>();
+
+                foreach (var param in method.GetParameters()) {
+                    if (param.ParameterType == typeof(ToolContext)) continue;
+
+                    var builtInParamAttr = param.GetCustomAttribute<BuiltInParameterAttribute>();
+                    var mcpParamAttr = param.GetCustomAttribute<McpParameterAttribute>();
+                    var paramDescription = builtInParamAttr?.Description ?? mcpParamAttr?.Description ?? $"Parameter '{param.Name}'";
+                    var paramIsRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? (!param.IsOptional && !param.HasDefaultValue);
+                    var paramType = MapToJsonSchemaType(param.ParameterType);
+
+                    properties[param.Name] = new Dictionary<string, object> {
+                        { "type", paramType },
+                        { "description", paramDescription }
+                    };
+
+                    if (paramIsRequired) {
+                        required.Add(param.Name);
+                    }
+                }
+
+                var parametersSchema = new Dictionary<string, object> {
+                    { "type", "object" },
+                    { "properties", properties },
+                    { "required", required }
+                };
+
+                var parametersJson = JsonConvert.SerializeObject(parametersSchema);
+                tools.Add(OpenAI.Chat.ChatTool.CreateFunctionTool(toolName, description, BinaryData.FromString(parametersJson)));
+            }
+
+            // External MCP tools
+            foreach (var (qualifiedName, toolInfo) in ExternalToolRegistry) {
+                var properties = new Dictionary<string, object>();
+                var required = new List<string>();
+
+                foreach (var param in toolInfo.Parameters) {
+                    properties[param.Name] = new Dictionary<string, object> {
+                        { "type", MapExternalTypeToJsonSchema(param.Type) },
+                        { "description", param.Description }
+                    };
+
+                    if (param.Required) {
+                        required.Add(param.Name);
+                    }
+                }
+
+                var parametersSchema = new Dictionary<string, object> {
+                    { "type", "object" },
+                    { "properties", properties },
+                    { "required", required }
+                };
+
+                var description = $"[MCP Server: {toolInfo.ServerName}] {toolInfo.Description}";
+                var parametersJson = JsonConvert.SerializeObject(parametersSchema);
+                tools.Add(OpenAI.Chat.ChatTool.CreateFunctionTool(qualifiedName, description, BinaryData.FromString(parametersJson)));
+            }
+
+            return tools;
+        }
+
+        private static string MapToJsonSchemaType(Type type) {
+            var underlying = Nullable.GetUnderlyingType(type);
+            if (underlying != null) type = underlying;
+
+            if (type == typeof(string)) return "string";
+            if (type == typeof(int) || type == typeof(long)) return "integer";
+            if (type == typeof(float) || type == typeof(double) || type == typeof(decimal)) return "number";
+            if (type == typeof(bool)) return "boolean";
+            return "string";
+        }
+
+        private static string MapExternalTypeToJsonSchema(string type) {
+            return type?.ToLower() switch {
+                "integer" or "int" or "long" => "integer",
+                "number" or "float" or "double" => "number",
+                "boolean" or "bool" => "boolean",
+                "array" => "array",
+                "object" => "object",
+                _ => "string"
+            };
+        }
+
+        /// <summary>
         /// Formats the standard system prompt incorporating tool descriptions and usage instructions.
         /// Includes both built-in tools and external MCP tools, and shell environment information.
         /// </summary>
@@ -207,11 +305,50 @@ namespace TelegramSearchBot.Service.AI.LLM {
                    "2. 如果多次尝试仍不理想，或者你认为其他工具可能更合适，可以尝试调用其他可用工具。\n" +
                    "3. 在进行多次尝试时，建议在思考过程中记录并调整你的策略。\n" +
                    "如果你认为已经获得了足够的信息，或者不需要再使用工具，请继续下一步。\n\n" +
-                   "关于MCP工具管理：你可以使用 ListMcpServers、AddMcpServer、RemoveMcpServer 和 RestartMcpServers 工具来管理外部MCP工具服务器。" +
-                   "如果你需要安装新的MCP工具服务器，可以先使用 ExecuteCommand 工具检查环境（如是否安装了npm/npx），然后使用 AddMcpServer 工具配置服务器。\n\n" +
+                   "关于MCP工具管理：你可以使用以下内置工具来管理外部MCP工具服务器：\n" +
+                   "- ListMcpServers: 列出所有已配置的MCP服务器，包括连接状态和可用工具\n" +
+                   "- AddMcpServer: 添加新的MCP服务器。参数：name(唯一名称), command(启动命令如npx), args(命令参数如'-y @playwright/mcp'), env(可选环境变量如'KEY=value')\n" +
+                   "- RemoveMcpServer: 通过名称删除MCP服务器\n" +
+                   "- RestartMcpServers: 重启所有已启用的MCP服务器\n" +
+                   "常见MCP服务器：\n" +
+                   "- Playwright浏览器: AddMcpServer(name='playwright', command='npx', args='-y @playwright/mcp')\n" +
+                   "- 文件系统: AddMcpServer(name='filesystem', command='npx', args='-y @modelcontextprotocol/server-filesystem /tmp')\n" +
+                   "- GitHub: AddMcpServer(name='github', command='npx', args='-y @modelcontextprotocol/server-github', env='GITHUB_TOKEN=xxx')\n" +
+                   "安装前建议用 ExecuteCommand 工具检查npm/npx是否已安装。\n\n" +
                    "引用说明：当你使用工具（特别是搜索工具）获取信息并在回答中使用了这些信息时，如果工具结果提供了来源(Source)或链接(URL)，请务必在你的回答中清晰地注明来源。你可以使用Markdown链接格式，例如 `[来源标题](URL)`，或者在回答末尾列出引用来源列表。确保用户可以追溯信息的原始出处。\n\n" +
                    $"在决定是否使用工具时，请仔细分析用户的请求。如果不需要工具，或者工具执行完毕后，请直接以自然语言回复用户。\n" +
                    $"当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
+        }
+
+        /// <summary>
+        /// Formats a simplified system prompt for use with native API tool calling.
+        /// No XML tool instructions are needed since tools are passed via the API.
+        /// </summary>
+        public static string FormatSystemPromptForNativeToolCalling(string botName, long chatId) {
+            if (string.IsNullOrWhiteSpace(botName)) botName = "AI Assistant";
+
+            // Shell environment description
+            string shellEnvInfo = TelegramSearchBot.Service.Tools.BashToolService.GetShellEnvironmentDescription();
+
+            return $"你的名字是 {botName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{chatId}。\n\n" +
+                   $"== 运行环境信息 ==\n{shellEnvInfo}\n\n" +
+                   "你的核心任务是协助用户。你可以使用提供的工具来帮助用户完成任务。\n\n" +
+                   "工具使用指南：\n" +
+                   "- 仔细分析用户请求，判断是否需要调用工具\n" +
+                   "- 如果搜索类工具没有找到满意结果，可以修改关键词重试或使用其他工具\n" +
+                   "- 工具执行完毕后，请基于结果以自然语言回复用户\n\n" +
+                   "关于MCP工具管理：\n" +
+                   "- ListMcpServers: 列出所有已配置的MCP服务器及其状态\n" +
+                   "- AddMcpServer: 添加新的MCP服务器（需要name、command、args参数）。常见的MCP服务器：\n" +
+                   "  * Playwright浏览器: command='npx', args='-y @playwright/mcp'\n" +
+                   "  * 文件系统: command='npx', args='-y @modelcontextprotocol/server-filesystem /path'\n" +
+                   "  * GitHub: command='npx', args='-y @modelcontextprotocol/server-github', env='GITHUB_TOKEN=xxx'\n" +
+                   "  * Brave搜索: command='npx', args='-y @modelcontextprotocol/server-brave-search', env='BRAVE_API_KEY=xxx'\n" +
+                   "- RemoveMcpServer: 删除指定的MCP服务器\n" +
+                   "- RestartMcpServers: 重启所有MCP服务器\n" +
+                   "在安装MCP服务器之前，可以先用 ExecuteCommand 检查环境（如npm/npx是否已安装）。\n\n" +
+                   "引用说明：使用搜索工具获取信息时，如果结果提供了来源或链接，请在回答中注明来源，使用Markdown链接格式如 `[来源标题](URL)`。\n\n" +
+                   "当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
         }
 
         /// <summary>

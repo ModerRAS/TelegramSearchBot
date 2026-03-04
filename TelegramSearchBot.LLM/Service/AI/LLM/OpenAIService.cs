@@ -582,14 +582,219 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 yield break;
             }
 
+            // Try native tool calling first; fall back to XML prompt-based if it fails
+            bool useNativeToolCalling = true;
+            var nativeTools = McpToolHelper.GetNativeToolDefinitions();
+
+            if (nativeTools == null || !nativeTools.Any()) {
+                useNativeToolCalling = false;
+            }
+
+            if (useNativeToolCalling) {
+                bool nativeFailed = false;
+                var nativeEnumerator = ExecWithNativeToolCallingAsync(message, ChatId, modelName, channel, executionContext, nativeTools, cancellationToken);
+                await using var enumerator = nativeEnumerator.GetAsyncEnumerator(cancellationToken);
+                bool hasFirst = false;
+                try {
+                    hasFirst = await enumerator.MoveNextAsync();
+                } catch (Exception ex) when (IsToolCallingNotSupportedError(ex)) {
+                    _logger.LogInformation("{ServiceName}: Native tool calling not supported for model {Model}, falling back to XML prompt-based tool calling. Error: {Error}", ServiceName, modelName, ex.Message);
+                    nativeFailed = true;
+                }
+
+                if (!nativeFailed) {
+                    if (hasFirst) {
+                        yield return enumerator.Current;
+                        while (await enumerator.MoveNextAsync()) {
+                            yield return enumerator.Current;
+                        }
+                    }
+                    yield break;
+                }
+            }
+
+            // Fallback: XML prompt-based tool calling
+            await foreach (var item in ExecWithXmlToolCallingAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        private static bool IsToolCallingNotSupportedError(Exception ex) {
+            var message = ex.Message ?? "";
+            // Common error patterns when a model/API doesn't support tool calling
+            return message.Contains("tools", StringComparison.OrdinalIgnoreCase) && 
+                   (message.Contains("not supported", StringComparison.OrdinalIgnoreCase) || 
+                    message.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase)) ||
+                   message.Contains("unrecognized request argument", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Execute LLM with native OpenAI tool calling API.
+        /// </summary>
+        private async IAsyncEnumerable<string> ExecWithNativeToolCallingAsync(
+            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+            LlmExecutionContext executionContext,
+            List<ChatTool> nativeTools,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+
+            // --- History and Prompt Setup (simplified - no XML tool instructions) ---
+            string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(BotName, ChatId);
+            List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
+            providerHistory = await GetChatHistory(ChatId, providerHistory, message);
+
+            using var client = _httpClientFactory.CreateClient();
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(channel.Gateway),
+                Transport = new HttpClientPipelineTransport(client),
+            };
+            var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
+
+            var completionOptions = new ChatCompletionOptions();
+            foreach (var tool in nativeTools) {
+                completionOptions.Tools.Add(tool);
+            }
+
+            try {
+                int maxToolCycles = Env.MaxToolCycles;
+                var currentMessageContentBuilder = new StringBuilder();
+
+                for (int cycle = 0; cycle < maxToolCycles; cycle++) {
+                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                    var contentBuilder = new StringBuilder();
+                    var toolCallUpdates = new Dictionary<int, (string id, string name, StringBuilder arguments)>();
+                    ChatFinishReason? finishReason = null;
+
+                    // --- Call LLM with tools ---
+                    await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, completionOptions, cancellationToken).WithCancellation(cancellationToken)) {
+                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                        // Accumulate text content
+                        foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>()) {
+                            if (updatePart?.Text != null) {
+                                contentBuilder.Append(updatePart.Text);
+                                currentMessageContentBuilder.Append(updatePart.Text);
+                                if (currentMessageContentBuilder.ToString().Length > 10) {
+                                    yield return currentMessageContentBuilder.ToString();
+                                }
+                            }
+                        }
+
+                        // Accumulate tool call updates
+                        foreach (var toolCallUpdate in update.ToolCallUpdates ?? Enumerable.Empty<StreamingChatToolCallUpdate>()) {
+                            int index = toolCallUpdate.Index;
+                            if (!toolCallUpdates.ContainsKey(index)) {
+                                toolCallUpdates[index] = (toolCallUpdate.ToolCallId, toolCallUpdate.FunctionName, new StringBuilder());
+                            }
+
+                            var entry = toolCallUpdates[index];
+                            if (toolCallUpdate.ToolCallId != null && entry.id == null) {
+                                entry.id = toolCallUpdate.ToolCallId;
+                                toolCallUpdates[index] = entry;
+                            }
+                            if (toolCallUpdate.FunctionName != null && entry.name == null) {
+                                entry.name = toolCallUpdate.FunctionName;
+                                toolCallUpdates[index] = entry;
+                            }
+                            if (toolCallUpdate.FunctionArgumentsUpdate != null) {
+                                entry.arguments.Append(toolCallUpdate.FunctionArgumentsUpdate);
+                            }
+                        }
+
+                        if (update.FinishReason.HasValue) {
+                            finishReason = update.FinishReason.Value;
+                        }
+                    }
+
+                    string responseText = contentBuilder.ToString().Trim();
+
+                    // Check if this is a tool call response
+                    if (finishReason == ChatFinishReason.ToolCalls && toolCallUpdates.Any()) {
+                        // Build the assistant message with tool calls
+                        var chatToolCalls = new List<ChatToolCall>();
+                        foreach (var (index, (id, name, args)) in toolCallUpdates) {
+                            chatToolCalls.Add(ChatToolCall.CreateFunctionToolCall(
+                                id ?? $"call_{Guid.NewGuid():N}",
+                                name ?? "unknown",
+                                BinaryData.FromString(args.ToString())));
+                        }
+
+                        var assistantMessage = new AssistantChatMessage(chatToolCalls);
+                        if (!string.IsNullOrWhiteSpace(responseText)) {
+                            assistantMessage = new AssistantChatMessage(chatToolCalls) { Content = { ChatMessageContentPart.CreateTextPart(responseText) } };
+                        }
+                        providerHistory.Add(assistantMessage);
+
+                        // Execute each tool call
+                        foreach (var toolCall in chatToolCalls) {
+                            string toolName = toolCall.FunctionName;
+                            _logger.LogInformation("{ServiceName}: Native tool call: {ToolName} with arguments: {Arguments}", ServiceName, toolName, toolCall.FunctionArguments?.ToString());
+
+                            string toolResultString;
+                            try {
+                                // Parse arguments from JSON
+                                var argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
+                                var argsDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(argsJson)
+                                    ?? new Dictionary<string, string>();
+
+                                var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId };
+                                object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(toolName, argsDict, toolContext);
+                                toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
+                                _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result length: {Length}", ServiceName, toolName, toolResultString.Length);
+                            } catch (Exception ex) {
+                                _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, toolName);
+                                toolResultString = $"Error executing tool {toolName}: {ex.Message}";
+                            }
+
+                            // Add tool result to history using the proper ToolChatMessage
+                            providerHistory.Add(new ToolChatMessage(toolCall.Id, toolResultString));
+                        }
+
+                        // Continue loop for next LLM call
+                    } else {
+                        // Not a tool call - regular text response
+                        if (!string.IsNullOrWhiteSpace(responseText)) {
+                            providerHistory.Add(new AssistantChatMessage(responseText));
+                        }
+                        yield break;
+                    }
+                }
+
+                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
+                if (executionContext != null) {
+                    executionContext.IterationLimitReached = true;
+                    executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        ChatId = ChatId,
+                        OriginalMessageId = (int)message.MessageId,
+                        UserId = message.FromUserId,
+                        ModelName = modelName,
+                        Provider = "OpenAI",
+                        ChannelId = channel.Id,
+                        LastAccumulatedContent = currentMessageContentBuilder.ToString(),
+                        CyclesSoFar = maxToolCycles,
+                        ProviderHistory = SerializeProviderHistory(providerHistory),
+                    };
+                }
+            } finally {
+                // No cleanup needed
+            }
+        }
+
+        /// <summary>
+        /// Execute LLM with XML prompt-based tool calling (fallback for models that don't support native tool calling).
+        /// </summary>
+        private async IAsyncEnumerable<string> ExecWithXmlToolCallingAsync(
+            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+            LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+
             // --- History and Prompt Setup ---
             string systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId);
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
-            providerHistory = await GetChatHistory(ChatId, providerHistory, message); // Use local GetChatHistory
+            providerHistory = await GetChatHistory(ChatId, providerHistory, message);
 
             using var client = _httpClientFactory.CreateClient();
-
-            // --- Client Setup ---
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(channel.Gateway),
                 Transport = new HttpClientPipelineTransport(client),
@@ -598,12 +803,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             try {
                 int maxToolCycles = Env.MaxToolCycles;
-                var currentMessageContentBuilder = new StringBuilder(); // Used to build the current full message for yielding
+                var currentMessageContentBuilder = new StringBuilder();
 
                 for (int cycle = 0; cycle < maxToolCycles; cycle++) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
-                    var llmResponseAccumulatorForToolParsing = new StringBuilder(); // Accumulates the full response text if needed for tool parsing later
+                    var llmResponseAccumulatorForToolParsing = new StringBuilder();
 
                     // --- Call LLM ---
                     await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, cancellationToken: cancellationToken).WithCancellation(cancellationToken)) {
@@ -613,7 +818,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                 currentMessageContentBuilder.Append(updatePart.Text);
                                 llmResponseAccumulatorForToolParsing.Append(updatePart.Text);
                                 if (currentMessageContentBuilder.ToString().Length > 10) {
-                                    yield return currentMessageContentBuilder.ToString(); // Yield current full message
+                                    yield return currentMessageContentBuilder.ToString();
                                 }
                             }
                         }
@@ -621,18 +826,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     string llmFullResponseText = llmResponseAccumulatorForToolParsing.ToString().Trim();
                     _logger.LogDebug("{ServiceName} raw full response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
 
-                    // Add Assistant response (full text) to history 
                     if (!string.IsNullOrWhiteSpace(llmFullResponseText)) {
                         providerHistory.Add(new AssistantChatMessage(llmFullResponseText));
-                    } else if (cycle < maxToolCycles - 1) { // Only log warning if not the last cycle and response was empty
+                    } else if (cycle < maxToolCycles - 1) {
                         _logger.LogWarning("{ServiceName}: LLM returned empty response during tool cycle {Cycle}.", ServiceName, cycle + 1);
-                        // Consider adding an empty assistant message to history if strict turn structure is needed by the model
-                        // providerHistory.Add(new AssistantChatMessage("")); 
                     }
 
-                    // --- Tool Handling (using the full accumulated response text) ---
-                    // Note: McpToolHelper.CleanLlmResponse is not used before TryParseToolCall here, assuming tool calls are not in <think> tags.
-                    // If tool calls could be in <think> tags, llmFullResponseText would need cleaning first.
+                    // --- Tool Handling (XML parsing) ---
                     if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any()) {
                         var firstToolCall = parsedToolCalls[0];
                         string parsedToolName = firstToolCall.toolName;
@@ -648,7 +848,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         try {
                             var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId };
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
-                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject); // Use McpToolHelper
+                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         } catch (Exception ex) {
                             isError = true;
@@ -656,16 +856,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
                         }
 
-                        // Add tool feedback to history (using User role workaround)
                         string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
                         string feedback = $"{feedbackPrefix}{toolResultString}]";
                         providerHistory.Add(new UserChatMessage(feedback));
                         _logger.LogInformation("Added UserChatMessage to history for LLM: {Feedback}", feedback);
-                        // Continue loop 
                     } else {
-                        // Not a tool call. The stream of cumulative messages has already been yielded.
-                        // We just need to end the ExecAsync's IAsyncEnumerable.
-                        if (string.IsNullOrWhiteSpace(llmFullResponseText)) { // Check if the final response was actually empty
+                        if (string.IsNullOrWhiteSpace(llmFullResponseText)) {
                             _logger.LogWarning("{ServiceName}: LLM returned empty final non-tool response for ChatId {ChatId}.", ServiceName, ChatId);
                         }
                         yield break;
@@ -673,7 +869,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-                // Signal iteration limit via execution context (NOT via stream marker)
                 if (executionContext != null) {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
