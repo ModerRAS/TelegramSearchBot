@@ -107,7 +107,7 @@ namespace TelegramSearchBot.Service.Tools {
             }
         }
 
-        [McpTool(@"
+        [BuiltInTool(@"
 ## Deno JavaScript 执行器 [重要：Deno环境]
 
 ⚠️ 特别注意：这是在Deno运行时环境执行，不是Node.js也不是浏览器环境！
@@ -152,8 +152,8 @@ console.log(content);
 4. 必须使用Deno兼容的API
 ")]
         public async Task<string> ExecuteJs(
-            [McpParameter("要执行的JavaScript代码，支持ES6+语法，通过console.log输出结果")] string jsCode,
-            [McpParameter("执行超时时间（毫秒），默认5000")] int timeoutMs = 5000) {
+            [BuiltInParameter("要执行的JavaScript代码，支持ES6+语法，通过console.log输出结果")] string jsCode,
+            [BuiltInParameter("执行超时时间（毫秒），默认5000")] int timeoutMs = 5000) {
             var tempDir = Path.Combine(Env.WorkDir, "temp");
             if (!Directory.Exists(tempDir)) {
                 Directory.CreateDirectory(tempDir);

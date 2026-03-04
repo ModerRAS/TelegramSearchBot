@@ -76,6 +76,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            var executionContext = new LlmExecutionContext();
+            await foreach (var e in ExecAsync(message, ChatId, executionContext, cancellationToken)) {
+                yield return e;
+            }
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId,
+                                                        LlmExecutionContext executionContext,
+                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             // 1. 获取模型名称
             var modelName = await ( from s in _dbContext.GroupSettings
                                     where s.GroupId == ChatId
@@ -87,7 +96,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             await foreach (var e in ExecOperationAsync((service, channel, cancel) => {
-                return ExecAsync(message, ChatId, modelName, service, channel, cancellationToken);
+                return service.ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken);
             }, modelName, cancellationToken)) {
                 yield return e;
             }
@@ -101,6 +110,38 @@ namespace TelegramSearchBot.Service.AI.LLM {
             CancellationToken cancellation) {
             await foreach (var e in service.ExecAsync(message, ChatId, modelName, channel, cancellation).WithCancellation(cancellation)) {
                 yield return e;
+            }
+        }
+
+        /// <summary>
+        /// Resume LLM execution from a snapshot, routing to the correct provider.
+        /// </summary>
+        public async IAsyncEnumerable<string> ResumeFromSnapshotAsync(
+            LlmContinuationSnapshot snapshot,
+            LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+
+            if (snapshot == null) {
+                _logger.LogError("Cannot resume: snapshot is null");
+                yield break;
+            }
+
+            // Find the channel by ID
+            var channel = await _dbContext.LLMChannels
+                .FirstOrDefaultAsync(c => c.Id == snapshot.ChannelId);
+            if (channel == null) {
+                _logger.LogError("Cannot resume: channel {ChannelId} not found", snapshot.ChannelId);
+                yield break;
+            }
+
+            var service = _LLMFactory.GetLLMService(channel.Provider);
+
+            _logger.LogInformation("Resuming from snapshot {SnapshotId} using provider {Provider}, channel {ChannelId}",
+                snapshot.SnapshotId, channel.Provider, channel.Id);
+
+            await foreach (var item in service.ResumeFromSnapshotAsync(snapshot, channel, executionContext, cancellationToken)
+                                              .WithCancellation(cancellationToken)) {
+                yield return item;
             }
         }
         public async IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(

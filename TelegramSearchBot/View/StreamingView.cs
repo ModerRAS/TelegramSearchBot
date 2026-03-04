@@ -99,7 +99,7 @@ namespace TelegramSearchBot.View {
             var inlineButtons = _buttons?.Select(b =>
                 InlineKeyboardButton.WithCallbackData(b.Text, b.CallbackData)).ToList();
 
-            var result = await _sendMessageService.SendFullMessageStream(
+            var result = await _sendMessageService.SendDraftStream(
                 _streamData,
                 _chatId,
                 _replyToMessageId,

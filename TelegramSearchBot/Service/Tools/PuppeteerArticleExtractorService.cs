@@ -19,9 +19,9 @@ namespace TelegramSearchBot.Service.Tools {
             }
         }
 
-        [McpTool("使用Puppeteer提取网页文章内容")]
+        [BuiltInTool("使用Puppeteer提取网页文章内容")]
         public async Task<string> ExtractArticleContent(
-            [McpParameter("网页URL")] string url) {
+            [BuiltInParameter("网页URL")] string url) {
             const string chromiumRevision = "125.0.6422.76"; // Puppeteer 默认支持的稳定版本
 
             var fetcher = new BrowserFetcher(new BrowserFetcherOptions {

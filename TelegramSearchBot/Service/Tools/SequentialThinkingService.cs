@@ -91,7 +91,7 @@ namespace TelegramSearchBot.Service.Tools {
             }
         }
 
-        [McpTool(@"A detailed tool for dynamic and reflective problem-solving through thoughts.
+        [BuiltInTool(@"A detailed tool for dynamic and reflective problem-solving through thoughts.
 This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
 Each thought can build on, question, or revise previous insights as understanding deepens.
 
@@ -147,15 +147,15 @@ You should:
 11. Only set next_thought_needed to false when truly done and a satisfactory answer is reached")]
         public async Task<object> ProcessThoughtAsync(
             ToolContext toolContext,
-            [McpParameter(@"Your current thinking step")] string input,
-            [McpParameter("Whether another thought step is needed", IsRequired = false)] bool? nextThoughtNeeded = null,
-            [McpParameter("Current thought number", IsRequired = false)] int? thoughtNumber = null,
-            [McpParameter("Estimated total thoughts needed", IsRequired = false)] int? totalThoughts = null,
-            [McpParameter("Whether this revises previous thinking", IsRequired = false)] bool? isRevision = null,
-            [McpParameter("Which thought is being reconsidered", IsRequired = false)] int? revisesThought = null,
-            [McpParameter("Branching point thought number", IsRequired = false)] int? branchFromThought = null,
-            [McpParameter("Branch identifier", IsRequired = false)] string branchId = null,
-            [McpParameter("If more thoughts are needed", IsRequired = false)] bool? needsMoreThoughts = null) {
+            [BuiltInParameter(@"Your current thinking step")] string input,
+            [BuiltInParameter("Whether another thought step is needed", IsRequired = false)] bool? nextThoughtNeeded = null,
+            [BuiltInParameter("Current thought number", IsRequired = false)] int? thoughtNumber = null,
+            [BuiltInParameter("Estimated total thoughts needed", IsRequired = false)] int? totalThoughts = null,
+            [BuiltInParameter("Whether this revises previous thinking", IsRequired = false)] bool? isRevision = null,
+            [BuiltInParameter("Which thought is being reconsidered", IsRequired = false)] int? revisesThought = null,
+            [BuiltInParameter("Branching point thought number", IsRequired = false)] int? branchFromThought = null,
+            [BuiltInParameter("Branch identifier", IsRequired = false)] string branchId = null,
+            [BuiltInParameter("If more thoughts are needed", IsRequired = false)] bool? needsMoreThoughts = null) {
             try {
                 var validatedInput = ValidateThoughtData(input);
 

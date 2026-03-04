@@ -18,6 +18,11 @@ namespace TelegramSearchBot.Service.BotAPI {
     /// 提供Telegram消息流式发送功能的服务类
     /// </summary>
     public partial class SendMessageService {
+        /// <summary>
+        /// Cache of chat IDs that don't support the sendMessageDraft API.
+        /// Once a chat fails with TEXTDRAFT_PEER_INVALID, we skip drafts for that chat in the future.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, bool> _draftUnsupportedChats = new();
         #region Incremental Streaming Send Method (Old)
         /// <summary>
         /// 增量式流式发送消息(旧版实现)
@@ -325,6 +330,116 @@ namespace TelegramSearchBot.Service.BotAPI {
                 });
             }
             return resultMessagesForDb;
+        }
+        #endregion
+
+        #region Draft-Based Streaming (sendMessageDraft API)
+        /// <summary>
+        /// 使用 Telegram sendMessageDraft API 进行流式发送。
+        /// 该 API 专为 LLM 流式输出设计，无需 send+edit，直接流式更新消息。
+        /// 每次 yield 的内容被视为完整快照（full accumulated text）。
+        /// </summary>
+        /// <param name="fullMessagesStream">完整消息流（每次yield为累积全文快照）</param>
+        /// <param name="chatId">目标聊天ID</param>
+        /// <param name="replyTo">回复的消息ID（同时作为 draftId）</param>
+        /// <param name="initialPlaceholderContent">初始占位内容</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>发送成功的消息列表（用于DB记录）</returns>
+        public async Task<List<Model.Data.Message>> SendDraftStream(
+            IAsyncEnumerable<string> fullMessagesStream,
+            long chatId,
+            int replyTo,
+            string initialPlaceholderContent = "⏳",
+            CancellationToken cancellationToken = default) {
+
+            // If this chat previously failed with TEXTDRAFT_PEER_INVALID, skip draft and fall back immediately
+            if (_draftUnsupportedChats.ContainsKey(chatId)) {
+                logger.LogDebug("SendDraftStream: Chat {ChatId} is known to not support drafts. Falling back to SendFullMessageStream.", chatId);
+                return await SendFullMessageStream(fullMessagesStream, chatId, replyTo, initialPlaceholderContent, cancellationToken);
+            }
+
+            // Generate a unique draftId to avoid collisions for concurrent requests to the same message
+            int draftId = unchecked((int)(chatId ^ replyTo ^ DateTime.UtcNow.Ticks));
+            string latestContent = null;
+            bool draftStarted = false;
+
+            try {
+                // Send initial placeholder as draft
+                try {
+                    await botClient.SendMessageDraft(chatId, draftId, initialPlaceholderContent, parseMode: ParseMode.None, cancellationToken: cancellationToken);
+                    draftStarted = true;
+                } catch (Exception ex) {
+                    // Remember chats that don't support draft messages to avoid repeated failures
+                    if (ex.Message != null && ex.Message.Contains("TEXTDRAFT_PEER_INVALID", StringComparison.OrdinalIgnoreCase)) {
+                        _draftUnsupportedChats.TryAdd(chatId, true);
+                        logger.LogInformation("SendDraftStream: Chat {ChatId} does not support draft messages. Will use SendFullMessageStream for future requests.", chatId);
+                    } else {
+                        logger.LogWarning(ex, "SendDraftStream: Failed to send initial draft placeholder, falling back to SendFullMessageStream.");
+                    }
+                    // Fall back to the old method if sendMessageDraft is not supported
+                    return await SendFullMessageStream(fullMessagesStream, chatId, replyTo, initialPlaceholderContent, cancellationToken);
+                }
+
+                await foreach (var markdownContent in fullMessagesStream.WithCancellation(cancellationToken)) {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    if (string.IsNullOrEmpty(markdownContent)) continue;
+
+                    latestContent = markdownContent;
+
+                    // Convert markdown to HTML and send as draft update
+                    try {
+                        var html = MessageFormatHelper.ConvertMarkdownToTelegramHtml(latestContent);
+                        if (!string.IsNullOrWhiteSpace(html)) {
+                            await botClient.SendMessageDraft(chatId, draftId, html, parseMode: ParseMode.Html, cancellationToken: cancellationToken);
+                        }
+                    } catch (Exception ex) {
+                        logger.LogTrace(ex, "SendDraftStream: Error sending draft update, will retry on next chunk.");
+                    }
+                }
+            } catch (OperationCanceledException) {
+                logger.LogInformation("SendDraftStream: Stream consumption cancelled.");
+            } catch (Exception ex) {
+                logger.LogError(ex, "SendDraftStream: Error during stream consumption.");
+            }
+
+            // Final sync: ensure the latest content is sent
+            if (latestContent != null) {
+                try {
+                    var finalHtml = MessageFormatHelper.ConvertMarkdownToTelegramHtml(latestContent);
+                    if (!string.IsNullOrWhiteSpace(finalHtml)) {
+                        await botClient.SendMessageDraft(chatId, draftId, finalHtml, parseMode: ParseMode.Html, cancellationToken: CancellationToken.None);
+                    }
+                } catch (Exception ex) {
+                    logger.LogWarning(ex, "SendDraftStream: Error sending final draft content.");
+                }
+            }
+
+            // Build DB result
+            // Note: sendMessageDraft returns Task (void), so we don't get a Message ID.
+            // The draft will be finalized into a message by Telegram when streaming ends.
+            var resultMessages = new List<Model.Data.Message>();
+            User botUser = null;
+            try {
+                botUser = await botClient.GetMe(cancellationToken: CancellationToken.None);
+            } catch (Exception ex) {
+                logger.LogWarning(ex, "SendDraftStream: Failed to get bot user info for DB result.");
+            }
+
+            if (latestContent != null) {
+                var chunks = MessageFormatHelper.SplitMarkdownIntoChunks(latestContent, 4096);
+                for (int i = 0; i < chunks.Count; i++) {
+                    resultMessages.Add(new Model.Data.Message {
+                        GroupId = chatId,
+                        MessageId = 0, // sendMessageDraft doesn't return a message ID; Telegram finalizes the draft internally
+                        DateTime = DateTime.UtcNow,
+                        Content = chunks[i],
+                        FromUserId = botUser?.Id ?? 0,
+                        ReplyToMessageId = replyTo,
+                    });
+                }
+            }
+
+            return resultMessages;
         }
         #endregion
 
