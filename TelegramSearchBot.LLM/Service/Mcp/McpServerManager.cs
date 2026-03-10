@@ -196,7 +196,7 @@ namespace TelegramSearchBot.Service.Mcp {
             foreach (var tool in tools) {
                 var qualifiedName = $"mcp_{config.Name}_{tool.Name}";
                 _toolToServer[qualifiedName] = config.Name;
-                _logger.LogInformation("Registered external MCP tool: {ToolName} from server '{ServerName}'",
+                _logger.LogInformation("Registered external MCP tool: {ToolName} from server '{serverName}'",
                     qualifiedName, config.Name);
             }
         }
@@ -207,7 +207,7 @@ namespace TelegramSearchBot.Service.Mcp {
         /// </summary>
         private async Task<bool> TryReconnectAsync(string serverName, CancellationToken cancellationToken = default) {
             if (!await _reconnectLock.WaitAsync(TimeSpan.FromSeconds(ReconnectLockTimeoutSeconds), cancellationToken)) {
-                _logger.LogWarning("Reconnection lock timeout for MCP server '{ServerName}'", serverName);
+                _logger.LogWarning("Reconnection lock timeout for MCP server '{serverName}'", serverName);
                 return false;
             }
 
@@ -222,18 +222,18 @@ namespace TelegramSearchBot.Service.Mcp {
                     var configs = await LoadConfigsFromDbAsync();
                     config = configs.FirstOrDefault(c => c.Name == serverName);
                     if (config == null) {
-                        _logger.LogError("Cannot reconnect MCP server '{ServerName}': config not found", serverName);
+                        _logger.LogError("Cannot reconnect MCP server '{serverName}': config not found", serverName);
                         return false;
                     }
                     _serverConfigs[serverName] = config;
                 }
 
-                _logger.LogInformation("Attempting to reconnect MCP server '{ServerName}'...", serverName);
+                _logger.LogInformation("Attempting to reconnect MCP server '{serverName}'...", serverName);
                 await ConnectToServerAsync(config, cancellationToken);
-                _logger.LogInformation("Successfully reconnected MCP server '{ServerName}'", serverName);
+                _logger.LogInformation("Successfully reconnected MCP server '{serverName}'", serverName);
                 return true;
             } catch (Exception ex) {
-                _logger.LogError(ex, "Failed to reconnect MCP server '{ServerName}'", serverName);
+                _logger.LogError(ex, "Failed to reconnect MCP server '{serverName}'", serverName);
                 return false;
             } finally {
                 _reconnectLock.Release();
@@ -253,7 +253,7 @@ namespace TelegramSearchBot.Service.Mcp {
         public async Task<McpToolCallResult> CallToolAsync(string serverName, string toolName, Dictionary<string, object> arguments, CancellationToken cancellationToken = default) {
             if (!_clients.TryGetValue(serverName, out var client) || !client.IsConnected || !client.IsProcessAlive) {
                 // Try to reconnect
-                _logger.LogWarning("MCP server '{ServerName}' is not connected. Attempting reconnect...", serverName);
+                _logger.LogWarning("MCP server '{serverName}' is not connected. Attempting reconnect...", serverName);
                 if (await TryReconnectAsync(serverName, cancellationToken)) {
                     client = _clients[serverName];
                 } else {
@@ -261,11 +261,32 @@ namespace TelegramSearchBot.Service.Mcp {
                 }
             }
 
+            // Heartbeat check: verify the connection is actually responsive before making the call
+            // This catches cases where the process is alive but stuck/hung
+            try {
+                var isHealthy = await client.HeartbeatAsync(cancellationToken);
+                if (!isHealthy) {
+                    _logger.LogWarning("MCP server '{serverName}' heartbeat failed. Attempting reconnect...", serverName);
+                    if (await TryReconnectAsync(serverName, cancellationToken)) {
+                        client = _clients[serverName];
+                    } else {
+                        throw new InvalidOperationException($"MCP server '{serverName}' is not responding and reconnection failed.");
+                    }
+                }
+            } catch (Exception ex) {
+                _logger.LogWarning(ex, "Heartbeat check failed for '{serverName}'. Attempting reconnect...", serverName);
+                if (await TryReconnectAsync(serverName, cancellationToken)) {
+                    client = _clients[serverName];
+                } else {
+                    throw new InvalidOperationException($"MCP server '{serverName}' is not responding and reconnection failed.", ex);
+                }
+            }
+
             try {
                 return await client.CallToolAsync(toolName, arguments, cancellationToken);
             } catch (Exception ex) when (ex is not OperationCanceledException) {
                 // If the call failed, the process might have died mid-call. Try reconnect once.
-                _logger.LogWarning(ex, "Tool call to MCP server '{ServerName}' failed. Attempting reconnect and retry...", serverName);
+                _logger.LogWarning(ex, "Tool call to MCP server '{serverName}' failed. Attempting reconnect and retry...", serverName);
                 if (await TryReconnectAsync(serverName, cancellationToken)) {
                     client = _clients[serverName];
                     return await client.CallToolAsync(toolName, arguments, cancellationToken);

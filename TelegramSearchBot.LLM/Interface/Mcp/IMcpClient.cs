@@ -42,6 +42,12 @@ namespace TelegramSearchBot.Interface.Mcp {
         Task<McpToolCallResult> CallToolAsync(string toolName, Dictionary<string, object> arguments, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Send a lightweight heartbeat request to verify the connection is still responsive.
+        /// Returns true if the server responds, false if it times out or fails.
+        /// </summary>
+        Task<bool> HeartbeatAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Disconnect from the MCP server.
         /// </summary>
         Task DisconnectAsync();

@@ -156,6 +156,51 @@ namespace TelegramSearchBot.Service.Mcp {
             };
         }
 
+        /// <summary>
+        /// Sends a lightweight heartbeat request to verify the connection is still responsive.
+        /// Returns true if the server responds, false if it times out or fails.
+        /// </summary>
+        public async Task<bool> HeartbeatAsync(CancellationToken cancellationToken = default) {
+            if (!IsConnected || !IsProcessAlive) {
+                return false;
+            }
+
+            try {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(5));
+
+                var id = _nextId++;
+                var request = new JsonRpcRequest {
+                    Id = id,
+                    Method = "tools/list",
+                    Params = new { }
+                };
+
+                var json = JsonConvert.SerializeObject(request, new JsonSerializerSettings {
+                    NullValueHandling = NullValueHandling.Ignore
+                });
+
+                await _stdin.WriteLineAsync(json);
+                await _stdin.FlushAsync();
+
+                while (!cts.Token.IsCancellationRequested) {
+                    var responseLine = await ReadLineAsync(cts.Token);
+                    if (string.IsNullOrWhiteSpace(responseLine)) continue;
+
+                    try {
+                        var response = JsonConvert.DeserializeObject<JsonRpcResponse>(responseLine);
+                        if (response?.Id == id) {
+                            return response.Error == null;
+                        }
+                    } catch { }
+                }
+                return false;
+            } catch (Exception ex) {
+                _logger.LogDebug(ex, "Heartbeat failed for MCP server '{ServerName}'", ServerName);
+                return false;
+            }
+        }
+
         public async Task DisconnectAsync() {
             await CleanupProcessAsync();
         }

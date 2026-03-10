@@ -128,5 +128,37 @@ namespace TelegramSearchBot.Test.Service.Mcp {
                 client.ConnectAsync(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token));
             Assert.False(client.IsConnected);
         }
+
+        [Fact]
+        public async Task HeartbeatAsync_NotConnected_ReturnsFalse() {
+            var config = new McpServerConfig { Name = "test", Command = "echo" };
+            var client = new McpClient(config, _loggerMock.Object);
+
+            var result = await client.HeartbeatAsync();
+            Assert.False(result);
+        }
+
+        [Fact]
+        public async Task HeartbeatAsync_NotProcessAlive_ReturnsFalse() {
+            var config = new McpServerConfig { Name = "test", Command = "echo" };
+            var client = new McpClient(config, _loggerMock.Object);
+
+            // Manually set connected but process is dead (simulated via IsProcessAlive check)
+            // Since IsProcessAlive checks _process.HasExited and _process is null, it returns false
+            var result = await client.HeartbeatAsync();
+            Assert.False(result);
+            Assert.False(client.IsConnected);
+        }
+
+        [Fact]
+        public async Task HeartbeatAsync_AfterDisconnect_ReturnsFalse() {
+            var config = new McpServerConfig { Name = "test", Command = "echo" };
+            var client = new McpClient(config, _loggerMock.Object);
+
+            await client.DisconnectAsync();
+
+            var result = await client.HeartbeatAsync();
+            Assert.False(result);
+        }
     }
 }

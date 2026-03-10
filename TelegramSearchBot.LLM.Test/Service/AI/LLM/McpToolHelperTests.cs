@@ -748,7 +748,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Assert.Contains("AddMcpServer", prompt);
             Assert.Contains("RemoveMcpServer", prompt);
             Assert.Contains("RestartMcpServers", prompt);
-            Assert.Contains("Playwright", prompt);
+            Assert.Contains("仅管理员", prompt);
         }
 
         [Fact]
@@ -756,10 +756,11 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             var prompt = McpToolHelper.FormatSystemPrompt("TestBot", 12345);
             Assert.Contains("ListMcpServers", prompt);
             Assert.Contains("AddMcpServer", prompt);
-            Assert.Contains("playwright", prompt, StringComparison.OrdinalIgnoreCase);
             // Should contain detailed parameter descriptions
             Assert.Contains("name", prompt);
             Assert.Contains("command", prompt);
+            Assert.Contains("仅管理员", prompt);
+            Assert.Contains("故障排查", prompt);
         }
     }
 }
