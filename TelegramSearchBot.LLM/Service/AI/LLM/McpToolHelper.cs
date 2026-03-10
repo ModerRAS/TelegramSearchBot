@@ -305,16 +305,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
                    "2. 如果多次尝试仍不理想，或者你认为其他工具可能更合适，可以尝试调用其他可用工具。\n" +
                    "3. 在进行多次尝试时，建议在思考过程中记录并调整你的策略。\n" +
                    "如果你认为已经获得了足够的信息，或者不需要再使用工具，请继续下一步。\n\n" +
-                   "关于MCP工具管理：你可以使用以下内置工具来管理外部MCP工具服务器：\n" +
-                   "- ListMcpServers: 列出所有已配置的MCP服务器，包括连接状态和可用工具\n" +
-                   "- AddMcpServer: 添加新的MCP服务器。参数：name(唯一名称), command(启动命令如npx), args(命令参数如'-y @playwright/mcp'), env(可选环境变量如'KEY=value')\n" +
-                   "- RemoveMcpServer: 通过名称删除MCP服务器\n" +
-                   "- RestartMcpServers: 重启所有已启用的MCP服务器\n" +
-                   "常见MCP服务器：\n" +
-                   "- Playwright浏览器: AddMcpServer(name='playwright', command='npx', args='-y @playwright/mcp')\n" +
-                   "- 文件系统: AddMcpServer(name='filesystem', command='npx', args='-y @modelcontextprotocol/server-filesystem /path/to/directory')\n" +
-                   "- GitHub: AddMcpServer(name='github', command='npx', args='-y @modelcontextprotocol/server-github', env='GITHUB_TOKEN=xxx')\n" +
-                   "安装前建议用 ExecuteCommand 工具检查npm/npx是否已安装。\n\n" +
+                   "关于MCP工具管理（重要-仅管理员可用）：MCP (Model Context Protocol) 是用于扩展AI能力的外部工具服务器。\n" +
+                   "工具列表：\n" +
+                   "- ListMcpServers: 查看已配置的MCP服务器、连接状态和可用工具列表\n" +
+                   "- AddMcpServer: 安装新的MCP服务器。参数说明：\n" +
+                   "  * name: 唯一名称，如 'filesystem'、'github'（不能有空格）\n" +
+                   "  * command: 启动命令，常用 'npx'、'uvx'、'node'、'python'\n" +
+                   "  * args: 命令参数，如 '-y @modelcontextprotocol/server-filesystem /tmp'\n" +
+                   "  * env: 可选，多个环境变量用分号分隔，如 'GITHUB_TOKEN=xxx;API_KEY=yyy'\n" +
+                   "- RemoveMcpServer: 卸载MCP服务器（参数：name）\n" +
+                   "- RestartMcpServers: 重启所有MCP服务器（用于解决连接问题）\n\n" +
+                   "安装流程：\n" +
+                   "1. 先用 ExecuteCommand 执行 'npx --version' 检查 npx 是否已安装\n" +
+                   "2. 调用 AddMcpServer 安装服务器\n" +
+                   "3. 安装后用 ListMcpServers 确认状态，显示 'Enabled: True' 表示成功\n\n" +
+                   "故障排查：\n" +
+                   "- 安装失败：检查 npx 是否安装，执行 'npx --version' 验证\n" +
+                   "- 工具不可用：用 ListMcpServers 查看状态，尝试 RestartMcpServers\n" +
+                   "- 权限问题：确认当前用户是管理员\n\n" +
                    "引用说明：当你使用工具（特别是搜索工具）获取信息并在回答中使用了这些信息时，如果工具结果提供了来源(Source)或链接(URL)，请务必在你的回答中清晰地注明来源。你可以使用Markdown链接格式，例如 `[来源标题](URL)`，或者在回答末尾列出引用来源列表。确保用户可以追溯信息的原始出处。\n\n" +
                    $"在决定是否使用工具时，请仔细分析用户的请求。如果不需要工具，或者工具执行完毕后，请直接以自然语言回复用户。\n" +
                    $"当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
@@ -337,16 +345,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
                    "- 仔细分析用户请求，判断是否需要调用工具\n" +
                    "- 如果搜索类工具没有找到满意结果，可以修改关键词重试或使用其他工具\n" +
                    "- 工具执行完毕后，请基于结果以自然语言回复用户\n\n" +
-                   "关于MCP工具管理：\n" +
-                   "- ListMcpServers: 列出所有已配置的MCP服务器及其状态\n" +
-                   "- AddMcpServer: 添加新的MCP服务器（需要name、command、args参数）。常见的MCP服务器：\n" +
-                   "  * Playwright浏览器: command='npx', args='-y @playwright/mcp'\n" +
-                   "  * 文件系统: command='npx', args='-y @modelcontextprotocol/server-filesystem /path'\n" +
-                   "  * GitHub: command='npx', args='-y @modelcontextprotocol/server-github', env='GITHUB_TOKEN=xxx'\n" +
-                   "  * Brave搜索: command='npx', args='-y @modelcontextprotocol/server-brave-search', env='BRAVE_API_KEY=xxx'\n" +
-                   "- RemoveMcpServer: 删除指定的MCP服务器\n" +
-                   "- RestartMcpServers: 重启所有MCP服务器\n" +
-                   "在安装MCP服务器之前，可以先用 ExecuteCommand 检查环境（如npm/npx是否已安装）。\n\n" +
+                   "关于MCP工具管理（重要-仅管理员可用）：MCP (Model Context Protocol) 是用于扩展AI能力的外部工具服务器。\n" +
+                   "工具列表：\n" +
+                   "- ListMcpServers: 查看已配置的MCP服务器、连接状态和可用工具列表\n" +
+                   "- AddMcpServer: 安装新的MCP服务器。参数说明：\n" +
+                   "  * name: 唯一名称（不能有空格）\n" +
+                   "  * command: 启动命令，常用 'npx'、'uvx'、'node'、'python'\n" +
+                   "  * args: 命令参数\n" +
+                   "  * env: 可选，多个环境变量用分号分隔，如 'GITHUB_TOKEN=xxx;API_KEY=yyy'\n" +
+                   "- RemoveMcpServer: 卸载MCP服务器（参数：name）\n" +
+                   "- RestartMcpServers: 重启所有MCP服务器（用于解决连接问题）\n\n" +
+                   "安装流程：\n" +
+                   "1. 先用 ExecuteCommand 执行 'npx --version' 检查 npx 是否已安装\n" +
+                   "2. 调用 AddMcpServer 安装服务器\n" +
+                   "3. 安装后用 ListMcpServers 确认状态，显示 'Enabled: True' 表示成功\n\n" +
+                   "故障排查：\n" +
+                   "- 安装失败：检查 npx 是否安装，执行 'npx --version' 验证\n" +
+                   "- 工具不可用：用 ListMcpServers 查看状态，尝试 RestartMcpServers\n" +
+                   "- 权限问题：确认当前用户是管理员\n\n" +
                    "引用说明：使用搜索工具获取信息时，如果结果提供了来源或链接，请在回答中注明来源，使用Markdown链接格式如 `[来源标题](URL)`。\n\n" +
                    "当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
         }
