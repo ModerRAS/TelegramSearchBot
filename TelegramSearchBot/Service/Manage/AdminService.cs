@@ -53,6 +53,7 @@ namespace TelegramSearchBot.Service.Manage {
 
         private async Task<List<string>> GetDistinctModelsAsync() {
             return await DataContext.ChannelsWithModel
+                .Where(x => !x.IsDeleted)
                 .Select(x => x.ModelName)
                 .Distinct()
                 .ToListAsync();

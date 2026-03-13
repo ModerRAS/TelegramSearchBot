@@ -263,7 +263,7 @@ namespace TelegramSearchBot.Service.Manage {
 
             // 获取该渠道下的所有模型
             var models = await DataContext.ChannelsWithModel
-                .Where(m => m.LLMChannelId == removeModelChannelId)
+                .Where(m => m.LLMChannelId == removeModelChannelId && !m.IsDeleted)
                 .Select(m => m.ModelName)
                 .ToListAsync();
 
@@ -326,7 +326,7 @@ namespace TelegramSearchBot.Service.Manage {
 
             // 获取该渠道下的所有模型
             var channelModels = await DataContext.ChannelsWithModel
-                .Where(m => m.LLMChannelId == viewModelChannelId)
+                .Where(m => m.LLMChannelId == viewModelChannelId && !m.IsDeleted)
                 .Select(m => m.ModelName)
                 .ToListAsync();
 

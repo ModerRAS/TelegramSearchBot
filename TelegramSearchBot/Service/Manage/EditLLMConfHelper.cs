@@ -69,7 +69,7 @@ namespace TelegramSearchBot.Service.Manage {
                 models = await service.GetAllModels(channel);
                 var list = new List<ChannelWithModel>();
                 foreach (var e in models) {
-                    list.Add(new ChannelWithModel() { LLMChannelId = channel.Id, ModelName = e });
+                    list.Add(new ChannelWithModel() { LLMChannelId = channel.Id, ModelName = e, IsDeleted = false });
                 }
                 await DataContext.ChannelsWithModel.AddRangeAsync(list);
                 await DataContext.SaveChangesAsync();
@@ -97,7 +97,6 @@ namespace TelegramSearchBot.Service.Manage {
             var count = 0;
             var channels = from s in DataContext.LLMChannels
                            select s;
-            IEnumerable<string> models;
 
             _logger.LogInformation("开始刷新所有通道的模型和能力信息...");
 
@@ -111,29 +110,55 @@ namespace TelegramSearchBot.Service.Manage {
                 _logger.LogInformation("正在刷新通道: {ChannelName} ({Provider})", channel.Name, channel.Provider);
 
                 try {
-                    models = await service.GetAllModels(channel);
+                    IEnumerable<string> models = await service.GetAllModels(channel);
+                    var modelSet = models.ToHashSet();
 
-                    var list = new List<ChannelWithModel>();
+                    // 获取该通道下所有已有记录（包含已软删除的）
+                    var existingRecords = await DataContext.ChannelsWithModel
+                        .Where(x => x.LLMChannelId == channel.Id)
+                        .ToListAsync();
 
-                    foreach (var model in models) {
-                        bool exists = await DataContext.ChannelsWithModel
-                            .AnyAsync(x => x.LLMChannelId == channel.Id && x.ModelName == model);
-
-                        if (!exists) {
-                            list.Add(new ChannelWithModel {
-                                LLMChannelId = channel.Id,
-                                ModelName = model
-                            });
-                        }
+                    // 恢复之前被标记删除但现在重新出现的模型
+                    var toRestore = existingRecords
+                        .Where(x => x.IsDeleted && modelSet.Contains(x.ModelName))
+                        .ToList();
+                    foreach (var record in toRestore) {
+                        record.IsDeleted = false;
+                        count++;
+                        _logger.LogInformation("通道 {ChannelName} 恢复模型 {ModelName}", channel.Name, record.ModelName);
                     }
 
-                    if (list.Any()) {
-                        await DataContext.ChannelsWithModel.AddRangeAsync(list);
-                        count += list.Count;
-                        _logger.LogInformation("为通道 {ChannelName} 添加了 {Count} 个新模型", channel.Name, list.Count);
+                    // 标记已有记录中不再存在于 API 的模型为已删除
+                    var existingModelNames = existingRecords
+                        .Where(x => !x.IsDeleted)
+                        .Select(x => x.ModelName)
+                        .ToHashSet();
+                    var toDelete = existingRecords
+                        .Where(x => !x.IsDeleted && !modelSet.Contains(x.ModelName))
+                        .ToList();
+                    foreach (var record in toDelete) {
+                        record.IsDeleted = true;
+                        _logger.LogInformation("通道 {ChannelName} 标记删除消失的模型 {ModelName}", channel.Name, record.ModelName);
                     }
 
-                    // 保存新模型到数据库
+                    // 添加全新的模型（既未存在也未被软删除过）
+                    var allExistingNames = existingRecords.Select(x => x.ModelName).ToHashSet();
+                    var toAdd = modelSet
+                        .Where(m => !allExistingNames.Contains(m))
+                        .Select(m => new ChannelWithModel {
+                            LLMChannelId = channel.Id,
+                            ModelName = m,
+                            IsDeleted = false
+                        })
+                        .ToList();
+
+                    if (toAdd.Any()) {
+                        await DataContext.ChannelsWithModel.AddRangeAsync(toAdd);
+                        count += toAdd.Count;
+                        _logger.LogInformation("为通道 {ChannelName} 添加了 {Count} 个新模型", channel.Name, toAdd.Count);
+                    }
+
+                    // 保存变更
                     await DataContext.SaveChangesAsync();
 
                     // 刷新此通道的模型能力信息
@@ -150,7 +175,7 @@ namespace TelegramSearchBot.Service.Manage {
                 }
             }
 
-            _logger.LogInformation("完成刷新所有通道，共添加了 {Count} 个新模型", count);
+            _logger.LogInformation("完成刷新所有通道，共添加/恢复了 {Count} 个模型", count);
             return count;
         }
 
@@ -275,10 +300,17 @@ namespace TelegramSearchBot.Service.Manage {
             if (DataContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory") {
                 try {
                     foreach (var modelName in modelNames) {
-                        await DataContext.ChannelsWithModel.AddAsync(new ChannelWithModel {
-                            LLMChannelId = channelId,
-                            ModelName = modelName
-                        });
+                        var existing = await DataContext.ChannelsWithModel
+                            .FirstOrDefaultAsync(m => m.LLMChannelId == channelId && m.ModelName == modelName);
+                        if (existing != null) {
+                            existing.IsDeleted = false;
+                        } else {
+                            await DataContext.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                                LLMChannelId = channelId,
+                                ModelName = modelName,
+                                IsDeleted = false
+                            });
+                        }
                     }
                     await DataContext.SaveChangesAsync();
                     return true;
@@ -289,10 +321,17 @@ namespace TelegramSearchBot.Service.Manage {
                 using var transaction = await DataContext.Database.BeginTransactionAsync();
                 try {
                     foreach (var modelName in modelNames) {
-                        await DataContext.ChannelsWithModel.AddAsync(new ChannelWithModel {
-                            LLMChannelId = channelId,
-                            ModelName = modelName
-                        });
+                        var existing = await DataContext.ChannelsWithModel
+                            .FirstOrDefaultAsync(m => m.LLMChannelId == channelId && m.ModelName == modelName);
+                        if (existing != null) {
+                            existing.IsDeleted = false;
+                        } else {
+                            await DataContext.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                                LLMChannelId = channelId,
+                                ModelName = modelName,
+                                IsDeleted = false
+                            });
+                        }
                     }
                     await DataContext.SaveChangesAsync();
                     await transaction.CommitAsync();
@@ -382,7 +421,7 @@ namespace TelegramSearchBot.Service.Manage {
 
         public async Task<List<string>> GetModelsByChannelId(long channelId) {
             var models = await DataContext.ChannelsWithModel
-                .Where(c => c.LLMChannelId == channelId)
+                .Where(c => c.LLMChannelId == channelId && !c.IsDeleted)
                 .Select(c => c.ModelName)
                 .ToListAsync();
             return models;

@@ -16,6 +16,11 @@ namespace TelegramSearchBot.Model.Data {
         public virtual LLMChannel LLMChannel { get; set; }
 
         /// <summary>
+        /// 标记删除：模型在最近一次刷新后不再存在于提供商，但保留记录以供历史查询
+        /// </summary>
+        public bool IsDeleted { get; set; } = false;
+
+        /// <summary>
         /// 关联的模型能力信息
         /// </summary>
         public virtual ICollection<ModelCapability> Capabilities { get; set; } = new List<ModelCapability>();

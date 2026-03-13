@@ -98,6 +98,113 @@ namespace TelegramSearchBot.Test.Manage {
         }
 
         [Fact]
+        public async Task RefreshAllChannel_ShouldMarkDeletedModels_WhenModelDisappears() {
+            // Arrange: channel with 2 pre-existing models
+            var channel = new LLMChannel { Id = 10, Name = "OpenAI", Provider = LLMProvider.OpenAI };
+            await _context.LLMChannels.AddAsync(channel);
+            await _context.ChannelsWithModel.AddRangeAsync(new[] {
+                new ChannelWithModel { LLMChannelId = 10, ModelName = "openai-model1", IsDeleted = false },
+                new ChannelWithModel { LLMChannelId = 10, ModelName = "old-model", IsDeleted = false }
+            });
+            await _context.SaveChangesAsync();
+
+            // Mock now only returns openai-model1 and openai-model2 (old-model disappeared)
+            // OpenAI mock already returns ["openai-model1", "openai-model2"] in constructor
+
+            // Act
+            await _helper.RefreshAllChannel();
+
+            // Assert: old-model should be marked as deleted
+            var oldModel = await _context.ChannelsWithModel
+                .FirstOrDefaultAsync(m => m.LLMChannelId == 10 && m.ModelName == "old-model");
+            Assert.NotNull(oldModel);
+            Assert.True(oldModel.IsDeleted);
+
+            // openai-model1 should still exist and not be deleted
+            var model1 = await _context.ChannelsWithModel
+                .FirstOrDefaultAsync(m => m.LLMChannelId == 10 && m.ModelName == "openai-model1");
+            Assert.NotNull(model1);
+            Assert.False(model1.IsDeleted);
+        }
+
+        [Fact]
+        public async Task RefreshAllChannel_ShouldRestoreModels_WhenModelReappears() {
+            // Arrange: channel with a previously-deleted model
+            var channel = new LLMChannel { Id = 11, Name = "OpenAI", Provider = LLMProvider.OpenAI };
+            await _context.LLMChannels.AddAsync(channel);
+            await _context.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                LLMChannelId = 11,
+                ModelName = "openai-model1",
+                IsDeleted = true   // Previously deleted
+            });
+            await _context.SaveChangesAsync();
+
+            // Mock returns ["openai-model1", "openai-model2"] – openai-model1 is back
+
+            // Act
+            var count = await _helper.RefreshAllChannel();
+
+            // Assert: openai-model1 should be restored (IsDeleted = false)
+            var model1 = await _context.ChannelsWithModel
+                .FirstOrDefaultAsync(m => m.LLMChannelId == 11 && m.ModelName == "openai-model1");
+            Assert.NotNull(model1);
+            Assert.False(model1.IsDeleted);
+
+            // openai-model2 should be newly added
+            var model2 = await _context.ChannelsWithModel
+                .FirstOrDefaultAsync(m => m.LLMChannelId == 11 && m.ModelName == "openai-model2");
+            Assert.NotNull(model2);
+            Assert.False(model2.IsDeleted);
+
+            // count reflects restored + added
+            Assert.Equal(2, count);  // 1 restored + 1 added
+        }
+
+        [Fact]
+        public async Task GetModelsByChannelId_ShouldNotReturnDeletedModels() {
+            // Arrange
+            var channel = new LLMChannel { Id = 12, Name = "Test", Provider = LLMProvider.OpenAI };
+            await _context.LLMChannels.AddAsync(channel);
+            await _context.ChannelsWithModel.AddRangeAsync(new[] {
+                new ChannelWithModel { LLMChannelId = 12, ModelName = "active-model", IsDeleted = false },
+                new ChannelWithModel { LLMChannelId = 12, ModelName = "deleted-model", IsDeleted = true }
+            });
+            await _context.SaveChangesAsync();
+
+            // Act
+            var models = await _helper.GetModelsByChannelId(12);
+
+            // Assert
+            Assert.Single(models);
+            Assert.Contains("active-model", models);
+            Assert.DoesNotContain("deleted-model", models);
+        }
+
+        [Fact]
+        public async Task AddModelWithChannel_ShouldReactivateSoftDeletedModel() {
+            // Arrange: model is soft-deleted
+            var channel = new LLMChannel { Id = 13, Name = "Test", Provider = LLMProvider.OpenAI };
+            await _context.LLMChannels.AddAsync(channel);
+            await _context.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                LLMChannelId = 13,
+                ModelName = "reactivated-model",
+                IsDeleted = true
+            });
+            await _context.SaveChangesAsync();
+
+            // Act: manually add the model back
+            var result = await _helper.AddModelWithChannel(13, new List<string> { "reactivated-model" });
+
+            // Assert: the model should be restored, not duplicated
+            Assert.True(result);
+            var models = await _context.ChannelsWithModel
+                .Where(m => m.LLMChannelId == 13 && m.ModelName == "reactivated-model")
+                .ToListAsync();
+            Assert.Single(models);
+            Assert.False(models[0].IsDeleted);
+        }
+
+        [Fact]
         public async Task RefreshAllChannel_ShouldUpdateAllModels() {
             // Arrange
             // Use mocks initialized in Initialize()
