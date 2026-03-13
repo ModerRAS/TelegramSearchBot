@@ -46,8 +46,7 @@ jobs:
           $node.MinimumRequiredVersion = $Version
           $xmldata.Save($content)
           echo $env:BUILD_VERSION
-          dotnet restore -r win-x64
-          msbuild TelegramSearchBot /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile
+          msbuild TelegramSearchBot /restore /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile /p:RuntimeIdentifier=win-x64 /p:SelfContained=true
           $tfm = ([xml](Get-Content "TelegramSearchBot/TelegramSearchBot.csproj")).Project.PropertyGroup.TargetFramework | Where-Object { $_ } | Select-Object -First 1
           Copy-Item "TelegramSearchBot/bin/Release/$tfm/win-x64/app.publish/Publish.html" "TelegramSearchBot/bin/TelegramSearchBot/"
     - name: Upload to ClickOnce Server
