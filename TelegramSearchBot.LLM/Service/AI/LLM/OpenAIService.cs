@@ -75,6 +75,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return new List<string>();
             }
 
+            // MiniMax 使用预定义模型列表
+            if (channel.Provider == LLMProvider.MiniMax) {
+                return _miniMaxModels;
+            }
+
             // 检查是否为OpenRouter
             if (IsOpenRouter(channel.Gateway)) {
                 return await GetOpenRouterModels(channel);
@@ -174,6 +179,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return !string.IsNullOrEmpty(gateway) &&
                    ( gateway.Contains("openrouter.ai") || gateway.Contains("openrouter") );
         }
+
+        /// <summary>
+        /// MiniMax预定义模型列表
+        /// </summary>
+        private static readonly string[] _miniMaxModels = {
+            "MiniMax-M2.5",
+            "MiniMax-M2.5-highspeed",
+            "MiniMax-M2.1",
+            "MiniMax-M2.1-highspeed",
+            "MiniMax-M2"
+        };
 
         /// <summary>
         /// 获取OpenRouter模型列表

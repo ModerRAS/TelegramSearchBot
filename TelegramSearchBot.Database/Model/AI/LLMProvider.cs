@@ -9,6 +9,7 @@ namespace TelegramSearchBot.Model.AI {
         None,
         OpenAI,
         Ollama,
-        Gemini
+        Gemini,
+        MiniMax = 4
     }
 }
