@@ -44,7 +44,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _services = new() {
                 [LLMProvider.OpenAI] = _openAIService,
                 [LLMProvider.Ollama] = _ollamaService,
-                [LLMProvider.Gemini] = _geminiService
+                [LLMProvider.Gemini] = _geminiService,
+                [LLMProvider.MiniMax] = _openAIService
             };
         }
 
