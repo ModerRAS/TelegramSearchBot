@@ -71,9 +71,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.13.0.20260228" />
-    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260228" />
-    <PackageReference Include="OpenCvSharp4.Windows" Version="4.13.0.20260228" />
+    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.13.0.20260308" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260302" />
+    <PackageReference Include="OpenCvSharp4.Windows" Version="4.13.0.20260302" />
     <PackageReference Include="Sdcb.PaddleInference" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="3.0.1" />
