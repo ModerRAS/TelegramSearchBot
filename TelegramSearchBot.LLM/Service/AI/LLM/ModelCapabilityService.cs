@@ -100,7 +100,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public async Task<ModelWithCapabilities> GetModelCapabilities(string modelName, int channelId) {
             var channelWithModel = await _dbContext.ChannelsWithModel
                 .Include(c => c.Capabilities)
-                .FirstOrDefaultAsync(c => c.ModelName == modelName && c.LLMChannelId == channelId);
+                .FirstOrDefaultAsync(c => c.ModelName == modelName && c.LLMChannelId == channelId && !c.IsDeleted);
 
             if (channelWithModel == null) {
                 return null;
@@ -124,7 +124,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return await _dbContext.ChannelsWithModel
                 .Include(c => c.LLMChannel)
                 .Include(c => c.Capabilities)
-                .Where(c => c.Capabilities.Any(cap =>
+                .Where(c => !c.IsDeleted && c.Capabilities.Any(cap =>
                     cap.CapabilityName == capabilityName &&
                     cap.CapabilityValue == capabilityValue))
                 .ToListAsync();
@@ -184,10 +184,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 existingModel = new ChannelWithModel {
                     ModelName = modelWithCaps.ModelName,
                     LLMChannelId = channel.Id,
+                    IsDeleted = false,
                     Capabilities = new List<ModelCapability>()
                 };
                 _dbContext.ChannelsWithModel.Add(existingModel);
                 await _dbContext.SaveChangesAsync(); // 保存以获取ID
+            } else {
+                // 确保软删除标记被清除（能力更新说明模型依然存在）
+                existingModel.IsDeleted = false;
             }
 
             // 删除现有能力信息

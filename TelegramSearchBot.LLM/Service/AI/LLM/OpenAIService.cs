@@ -80,26 +80,91 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return await GetOpenRouterModels(channel);
             }
 
-            var handler = new HttpClientHandler {
-                Proxy = WebRequest.DefaultWebProxy,
-                UseProxy = true
-            };
+            // 首先尝试使用通用 HTTP 方式获取模型列表（兼容 MiniMax 等非标准 OpenAI 兼容 API）
+            var genericModels = await GetGenericOpenAICompatibleModels(channel);
+            if (genericModels.Any()) {
+                return genericModels;
+            }
 
-            using var httpClient = new HttpClient(handler);
+            // 回退到 OpenAI SDK
+            try {
+                var handler = new HttpClientHandler {
+                    Proxy = WebRequest.DefaultWebProxy,
+                    UseProxy = true
+                };
 
-            // --- Client Setup ---
-            var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
-                Transport = new HttpClientPipelineTransport(httpClient),
-            };
+                using var httpClient = new HttpClient(handler);
 
-            var apikey = new ApiKeyCredential(channel.ApiKey);
+                // --- Client Setup ---
+                var clientOptions = new OpenAIClientOptions {
+                    Endpoint = new Uri(channel.Gateway),
+                    Transport = new HttpClientPipelineTransport(httpClient),
+                };
 
-            OpenAIClient client = new(apikey, clientOptions);
-            var model = client.GetOpenAIModelClient();
-            var models = await model.GetModelsAsync();
-            return from s in models.Value
-                   select s.Id;
+                var apikey = new ApiKeyCredential(channel.ApiKey);
+
+                OpenAIClient client = new(apikey, clientOptions);
+                var model = client.GetOpenAIModelClient();
+                var models = await model.GetModelsAsync();
+                return from s in models.Value
+                       select s.Id;
+            } catch (Exception ex) {
+                _logger.LogError(ex, "使用 OpenAI SDK 获取模型列表失败 (Gateway: {Gateway})", channel.Gateway);
+                return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// 使用通用 HTTP GET 方式获取 OpenAI 兼容 API 的模型列表，兼容 MiniMax、DeepSeek 等提供商
+        /// </summary>
+        private async Task<IEnumerable<string>> GetGenericOpenAICompatibleModels(LLMChannel channel) {
+            try {
+                var httpClient = _httpClientFactory.CreateClient();
+                if (!string.IsNullOrEmpty(channel.ApiKey)) {
+                    httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {channel.ApiKey}");
+                }
+
+                // 构建模型列表 URL，确保路径正确
+                var gatewayBase = channel.Gateway.TrimEnd('/');
+                var modelsUrl = gatewayBase.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
+                    ? $"{gatewayBase}/models"
+                    : $"{gatewayBase}/v1/models";
+
+                var response = await httpClient.GetAsync(modelsUrl);
+                if (!response.IsSuccessStatusCode) {
+                    // 尝试不带 /v1 的路径
+                    var altUrl = $"{gatewayBase}/models";
+                    if (altUrl != modelsUrl) {
+                        response = await httpClient.GetAsync(altUrl);
+                    }
+                }
+
+                if (response.IsSuccessStatusCode) {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var modelsData = JsonConvert.DeserializeObject<dynamic>(content);
+
+                    var models = new List<string>();
+                    if (modelsData?.data != null) {
+                        foreach (var model in modelsData.data) {
+                            string modelId = model.id?.ToString();
+                            if (!string.IsNullOrEmpty(modelId)) {
+                                models.Add(modelId);
+                            }
+                        }
+                    }
+
+                    if (models.Any()) {
+                        _logger.LogInformation("通用 HTTP 方式获取到 {Count} 个模型 (Gateway: {Gateway})", models.Count, channel.Gateway);
+                    }
+                    return models;
+                } else {
+                    _logger.LogDebug("通用 HTTP 方式获取模型列表失败: {StatusCode} (Gateway: {Gateway})", response.StatusCode, channel.Gateway);
+                    return new List<string>();
+                }
+            } catch (Exception ex) {
+                _logger.LogDebug(ex, "通用 HTTP 方式获取模型列表出错 (Gateway: {Gateway})", channel.Gateway);
+                return new List<string>();
+            }
         }
 
         /// <summary>

@@ -53,9 +53,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
             this._LLMFactory = _LLMFactory;
         }
         public async Task<List<LLMChannel>> GetChannelsAsync(string modelName) {
-            // 2. 查询ChannelWithModel获取关联的LLMChannel
+            // 2. 查询ChannelWithModel获取关联的LLMChannel（排除已软删除的模型）
             var channelsWithModel = await ( from s in _dbContext.ChannelsWithModel
-                                            where s.ModelName == modelName
+                                            where s.ModelName == modelName && !s.IsDeleted
                                             select s.LLMChannelId ).ToListAsync();
 
 
@@ -150,9 +150,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
             ) {
 
-            // 2. 查询ChannelWithModel获取关联的LLMChannel
+            // 2. 查询ChannelWithModel获取关联的LLMChannel（排除已软删除的模型）
             var channelsWithModel = await ( from s in _dbContext.ChannelsWithModel
-                                            where s.ModelName == modelName
+                                            where s.ModelName == modelName && !s.IsDeleted
                                             select s.LLMChannelId ).ToListAsync();
 
 
@@ -340,7 +340,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var totalParallel = await redisDb.StringGetAsync(totalKey);
             if (!totalParallel.HasValue) {
                 var channelsWithModel = await ( from s in _dbContext.ChannelsWithModel
-                                                where s.ModelName == modelName
+                                                where s.ModelName == modelName && !s.IsDeleted
                                                 select s.LLMChannelId ).ToListAsync();
 
                 if (!channelsWithModel.Any()) {
@@ -357,9 +357,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 totalParallel = total;
             }
 
-            // 重新查询当前使用量
+            // 重新查询当前使用量（排除已软删除的模型）
             var currentChannelsWithModel = await ( from s in _dbContext.ChannelsWithModel
-                                                   where s.ModelName == modelName
+                                                   where s.ModelName == modelName && !s.IsDeleted
                                                    select s.LLMChannelId ).ToListAsync();
 
             if (!currentChannelsWithModel.Any()) {
