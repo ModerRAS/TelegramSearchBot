@@ -13,7 +13,7 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Tools;
 using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Search.Tool;
-using TelegramSearchBot.Service.AI.LLM; // For McpTool attributes
+using TelegramSearchBot.Service.AI.LLM; // For McpToolHelper
 using TelegramSearchBot.Service.Storage; // For MessageExtensionService
 
 namespace TelegramSearchBot.Service.Tools {
@@ -31,12 +31,12 @@ namespace TelegramSearchBot.Service.Tools {
             _messageExtensionService = messageExtensionService;
         }
 
-        [McpTool("Searches indexed messages within the current chat using keywords. Supports pagination.")]
+        [BuiltInTool("Searches indexed messages within the current chat using keywords. Supports pagination.")]
         public async Task<SearchToolResult> SearchMessagesInCurrentChatAsync(
-            [McpParameter("The text query (keywords) to search for messages.")] string query,
+            [BuiltInParameter("The text query (keywords) to search for messages.")] string query,
             ToolContext toolContext,
-            [McpParameter("The page number for pagination (e.g., 1, 2, 3...). Defaults to 1 if not specified.", IsRequired = false)] int page = 1,
-            [McpParameter("The number of search results per page (e.g., 5, 10). Defaults to 5, with a maximum of 20.", IsRequired = false)] int pageSize = 5) {
+            [BuiltInParameter("The page number for pagination (e.g., 1, 2, 3...). Defaults to 1 if not specified.", IsRequired = false)] int page = 1,
+            [BuiltInParameter("The number of search results per page (e.g., 5, 10). Defaults to 5, with a maximum of 20.", IsRequired = false)] int pageSize = 5) {
             long chatId = toolContext.ChatId;
 
             if (pageSize > 20) pageSize = 20;
@@ -122,16 +122,16 @@ namespace TelegramSearchBot.Service.Tools {
             return new SearchToolResult { Query = query, TotalFound = searchResult.totalHits, CurrentPage = page, PageSize = pageSize, Results = resultItems, Note = searchResult.totalHits == 0 ? "No messages found matching your query." : null };
         }
 
-        [McpTool("Queries the message history database for the current chat with various filters (text, sender, date). Supports pagination.")]
+        [BuiltInTool("Queries the message history database for the current chat with various filters (text, sender, date). Supports pagination.")]
         public async Task<HistoryQueryResult> QueryMessageHistory(
             ToolContext toolContext,
-            [McpParameter("Optional text to search within message content.", IsRequired = false)] string queryText = null,
-            [McpParameter("Optional Telegram User ID of the sender.", IsRequired = false)] long? senderUserId = null,
-            [McpParameter("Optional hint for sender's first or last name (case-insensitive search).", IsRequired = false)] string senderNameHint = null,
-            [McpParameter("Optional start date/time (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS). Messages on or after this time.", IsRequired = false)] string startDate = null,
-            [McpParameter("Optional end date/time (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS). Messages before this time.", IsRequired = false)] string endDate = null,
-            [McpParameter("The page number for pagination (e.g., 1, 2, 3...). Defaults to 1.", IsRequired = false)] int page = 1,
-            [McpParameter("The number of results per page (e.g., 10, 25). Defaults to 10, max 50.", IsRequired = false)] int pageSize = 10) {
+            [BuiltInParameter("Optional text to search within message content.", IsRequired = false)] string queryText = null,
+            [BuiltInParameter("Optional Telegram User ID of the sender.", IsRequired = false)] long? senderUserId = null,
+            [BuiltInParameter("Optional hint for sender's first or last name (case-insensitive search).", IsRequired = false)] string senderNameHint = null,
+            [BuiltInParameter("Optional start date/time (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS). Messages on or after this time.", IsRequired = false)] string startDate = null,
+            [BuiltInParameter("Optional end date/time (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS). Messages before this time.", IsRequired = false)] string endDate = null,
+            [BuiltInParameter("The page number for pagination (e.g., 1, 2, 3...). Defaults to 1.", IsRequired = false)] int page = 1,
+            [BuiltInParameter("The number of results per page (e.g., 10, 25). Defaults to 10, max 50.", IsRequired = false)] int pageSize = 10) {
             long chatId = toolContext.ChatId;
 
             if (pageSize > 50) pageSize = 50;

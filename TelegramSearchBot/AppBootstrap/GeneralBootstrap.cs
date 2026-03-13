@@ -11,7 +11,7 @@ using LiteDB;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging; // Added for ILoggerFactory
+using Microsoft.Extensions.Logging;
 using Serilog;
 using StackExchange.Redis;
 using Telegram.Bot;
@@ -23,8 +23,11 @@ using TelegramSearchBot.Executor;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Mcp;
+using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Scheduler;
 using TelegramSearchBot.Service.Storage;
@@ -93,8 +96,21 @@ namespace TelegramSearchBot.AppBootstrap {
             var loggerFactory = service.GetRequiredService<ILoggerFactory>();
             var mcpLogger = loggerFactory.CreateLogger("McpToolHelperInitialization");
             var mainAssembly = typeof(GeneralBootstrap).Assembly;
-            TelegramSearchBot.Service.AI.LLM.McpToolHelper.EnsureInitialized(mainAssembly, service, mcpLogger);
-            Log.Information("McpToolHelper has been initialized.");
+            var llmAssembly = typeof(McpToolHelper).Assembly;
+            McpToolHelper.EnsureInitialized(mainAssembly, llmAssembly, service, mcpLogger);
+            Log.Information("McpToolHelper has been initialized with built-in tools.");
+
+            // Initialize external MCP tool servers
+            try {
+                var mcpServerManager = service.GetRequiredService<IMcpServerManager>();
+                await mcpServerManager.InitializeAllServersAsync();
+
+                // Register external tools with McpToolHelper
+                RegisterExternalMcpTools(mcpServerManager);
+                Log.Information("External MCP servers initialized.");
+            } catch (Exception ex) {
+                Log.Warning(ex, "Failed to initialize external MCP servers. Continuing without them.");
+            }
 
             // SQLite 数据库初始化
             using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
@@ -112,6 +128,14 @@ namespace TelegramSearchBot.AppBootstrap {
 
             // 保持程序运行
             await host.WaitForShutdownAsync();
+        }
+
+        /// <summary>
+        /// Register external MCP tools with McpToolHelper so they appear in the LLM prompt
+        /// and can be executed through the tool call system.
+        /// </summary>
+        private static void RegisterExternalMcpTools(IMcpServerManager mcpServerManager) {
+            McpToolHelper.RegisterExternalMcpTools(mcpServerManager);
         }
     }
 }

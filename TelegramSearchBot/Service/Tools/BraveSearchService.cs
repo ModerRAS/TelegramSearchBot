@@ -10,7 +10,7 @@ using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model.Tools;
-using TelegramSearchBot.Service.AI.LLM; // 添加MCP工具支持
+using TelegramSearchBot.Service.AI.LLM; // For McpToolHelper
 
 namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -58,13 +58,13 @@ namespace TelegramSearchBot.Service.Tools {
             _apiKey = Env.BraveApiKey ?? string.Empty;
         }
 
-        [McpTool("Searches the web using Brave Search API. Returns web search results with titles, descriptions, and URLs.")]
+        [BuiltInTool("Searches the web using Brave Search API. Returns web search results with titles, descriptions, and URLs.")]
         public async Task<BraveSearchResult> SearchWeb(
-            [McpParameter("The search query string (e.g., 'weather in Tokyo', 'best restaurants near me').")] string query,
-            [McpParameter("Page number for pagination (e.g., 1, 2, 3...). Defaults to 1.", IsRequired = false)] int page = 1,
-            [McpParameter("Number of search results per page (e.g., 5, 10). Defaults to 5, maximum is 20.", IsRequired = false)] int count = 5,
-            [McpParameter("Country code for localized search results. Must be one of: us, cn, jp, gb, de, fr, etc. Defaults to 'us'.", IsRequired = false)] string country = "us",
-            [McpParameter("Search language code. Must be exact: en, zh-hans, zh-hant, ja, ko, fr, de, es, ru, etc. Use 'zh-hans' for Simplified Chinese, 'zh-hant' for Traditional Chinese. Defaults to 'en'.", IsRequired = false)] string searchLang = "en") {
+            [BuiltInParameter("The search query string (e.g., 'weather in Tokyo', 'best restaurants near me').")] string query,
+            [BuiltInParameter("Page number for pagination (e.g., 1, 2, 3...). Defaults to 1.", IsRequired = false)] int page = 1,
+            [BuiltInParameter("Number of search results per page (e.g., 5, 10). Defaults to 5, maximum is 20.", IsRequired = false)] int count = 5,
+            [BuiltInParameter("Country code for localized search results. Must be one of: us, cn, jp, gb, de, fr, etc. Defaults to 'us'.", IsRequired = false)] string country = "us",
+            [BuiltInParameter("Search language code. Must be exact: en, zh-hans, zh-hant, ja, ko, fr, de, es, ru, etc. Use 'zh-hans' for Simplified Chinese, 'zh-hant' for Traditional Chinese. Defaults to 'en'.", IsRequired = false)] string searchLang = "en") {
             const int maxRetries = 3;
             const int delayMs = 1000;
 

@@ -676,5 +676,90 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Assert.Equal("检测到推理延迟波动，启动自适应调节机制：动态调整神经符号权重比例...", parsedToolCalls[3].arguments["input"]);
             Assert.Equal("true", parsedToolCalls[3].arguments["isRevision"]);
         }
+
+        [Fact]
+        public void GetNativeToolDefinitions_ReturnsNonEmpty() {
+            // Since EnsureInitialized was called in the constructor with TestToolProvider assembly,
+            // we should have built-in tools registered
+            var tools = McpToolHelper.GetNativeToolDefinitions();
+            Assert.NotNull(tools);
+            Assert.NotEmpty(tools);
+        }
+
+        [Fact]
+        public void GetNativeToolDefinitions_ContainsRegisteredTools() {
+            var tools = McpToolHelper.GetNativeToolDefinitions();
+
+            // StaticTool should be in the list (registered via [McpTool] attribute on TestToolProvider)
+            var staticTool = tools.FirstOrDefault(t => t.FunctionName == "StaticTool");
+            Assert.NotNull(staticTool);
+            Assert.Equal("A simple static tool.", staticTool.FunctionDescription);
+        }
+
+        [Fact]
+        public void GetNativeToolDefinitions_ToolHasCorrectParameters() {
+            var tools = McpToolHelper.GetNativeToolDefinitions();
+            var staticTool = tools.First(t => t.FunctionName == "StaticTool");
+
+            // Verify parameters are included in JSON schema
+            var paramsJson = staticTool.FunctionParameters.ToString();
+            Assert.Contains("arg1", paramsJson);
+            Assert.Contains("arg2", paramsJson);
+            Assert.Contains("string", paramsJson);
+        }
+
+        [Fact]
+        public void GetNativeToolDefinitions_IncludesExternalMcpTools() {
+            // Register some external tools
+            var externalTools = new List<(string serverName, McpToolHelper.ExternalToolInfo tool)> {
+                ("test-server", new McpToolHelper.ExternalToolInfo {
+                    ServerName = "test-server",
+                    ToolName = "testTool",
+                    Description = "A test external tool",
+                    Parameters = new List<McpToolHelper.ExternalToolParameter> {
+                        new() { Name = "input", Type = "string", Description = "Input text", Required = true }
+                    }
+                })
+            };
+
+            McpToolHelper.RegisterExternalTools(
+                externalTools,
+                async (server, tool, args) => { await Task.CompletedTask; return "mock result"; });
+
+            var tools = McpToolHelper.GetNativeToolDefinitions();
+
+            var externalTool = tools.FirstOrDefault(t => t.FunctionName == "mcp_test-server_testTool");
+            Assert.NotNull(externalTool);
+            Assert.Contains("test-server", externalTool.FunctionDescription);
+            Assert.Contains("A test external tool", externalTool.FunctionDescription);
+
+            // Clean up
+            McpToolHelper.RegisterExternalTools(
+                new List<(string, McpToolHelper.ExternalToolInfo)>(),
+                null);
+        }
+
+        [Fact]
+        public void FormatSystemPromptForNativeToolCalling_ContainsMcpInstructions() {
+            var prompt = McpToolHelper.FormatSystemPromptForNativeToolCalling("TestBot", 12345);
+            Assert.Contains("TestBot", prompt);
+            Assert.Contains("12345", prompt);
+            Assert.Contains("ListMcpServers", prompt);
+            Assert.Contains("AddMcpServer", prompt);
+            Assert.Contains("RemoveMcpServer", prompt);
+            Assert.Contains("RestartMcpServers", prompt);
+            Assert.Contains("Playwright", prompt);
+        }
+
+        [Fact]
+        public void FormatSystemPrompt_ContainsEnhancedMcpInstructions() {
+            var prompt = McpToolHelper.FormatSystemPrompt("TestBot", 12345);
+            Assert.Contains("ListMcpServers", prompt);
+            Assert.Contains("AddMcpServer", prompt);
+            Assert.Contains("playwright", prompt, StringComparison.OrdinalIgnoreCase);
+            // Should contain detailed parameter descriptions
+            Assert.Contains("name", prompt);
+            Assert.Contains("command", prompt);
+        }
     }
 }

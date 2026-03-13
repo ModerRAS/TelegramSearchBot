@@ -60,6 +60,17 @@ namespace TelegramSearchBot.Interface {
             string initialPlaceholderContent = "⏳",
             CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// 使用 Telegram sendMessageDraft API 进行流式发送。
+        /// 专为 LLM 流式输出设计，性能优于 send+edit 方式。
+        /// </summary>
+        Task<List<Model.Data.Message>> SendDraftStream(
+            IAsyncEnumerable<string> fullMessagesStream,
+            long chatId,
+            int replyTo,
+            string initialPlaceholderContent = "⏳",
+            CancellationToken cancellationToken = default);
+
         Task<List<Model.Data.Message>> SendStreamingMessage(
             IAsyncEnumerable<string> messages,
             long chatId,

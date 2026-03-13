@@ -1,31 +1,52 @@
 using System;
-using System.Collections.Concurrent; // Added for ConcurrentDictionary
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Text.RegularExpressions; // Added for Regex cleaning
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml.Linq;
-using Microsoft.Extensions.DependencyInjection; // For potential DI later
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json; // Added for Json.NET
-using TelegramSearchBot.Attributes; // Added to reference McpToolAttribute and McpParameterAttribute
-using TelegramSearchBot.Model; // Added for ToolContext
-using TelegramSearchBot.Model.Tools; // For BraveSearchResult
+using Newtonsoft.Json;
+using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Tools;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     /// <summary>
-    /// Formats a list of methods (decorated with McpToolAttribute) into a string for the LLM prompt.
+    /// Manages built-in tools (decorated with BuiltInToolAttribute or McpToolAttribute) and
+    /// external MCP tools from connected MCP servers.
     /// </summary>
     public static class McpToolHelper {
         private static readonly ConcurrentDictionary<string, (MethodInfo Method, Type OwningType)> ToolRegistry = new ConcurrentDictionary<string, (MethodInfo, Type)>();
-        private static IServiceProvider _sServiceProvider; // For DI-based instance resolution
+        private static readonly ConcurrentDictionary<string, ExternalToolInfo> ExternalToolRegistry = new ConcurrentDictionary<string, ExternalToolInfo>();
+        private static Func<string, string, Dictionary<string, string>, Task<string>> _externalToolExecutor;
+        private static IServiceProvider _sServiceProvider;
         private static ILogger _sLogger;
         private static string _sCachedToolsXml;
+        private static string _sCachedExternalToolsXml;
         private static bool _sIsInitialized = false;
         private static readonly object _initializationLock = new object();
+
+        /// <summary>
+        /// Information about an external tool from an MCP server.
+        /// </summary>
+        public class ExternalToolInfo {
+            public string ServerName { get; set; }
+            public string ToolName { get; set; }
+            public string Description { get; set; }
+            public List<ExternalToolParameter> Parameters { get; set; } = new();
+        }
+
+        public class ExternalToolParameter {
+            public string Name { get; set; }
+            public string Type { get; set; }
+            public string Description { get; set; }
+            public bool Required { get; set; }
+        }
 
         private static void Initialize(IServiceProvider serviceProvider, ILogger logger) {
             _sServiceProvider = serviceProvider;
@@ -34,9 +55,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         /// <summary>
         /// Ensures that McpToolHelper is initialized, tools are registered, and the prompt string is cached.
+        /// Scans both the main assembly and the LLM assembly for tool attributes.
         /// This method should be called once at application startup.
         /// </summary>
-        public static void EnsureInitialized(Assembly assembly, IServiceProvider serviceProvider, ILogger logger) {
+        public static void EnsureInitialized(Assembly mainAssembly, Assembly llmAssembly, IServiceProvider serviceProvider, ILogger logger) {
             if (_sIsInitialized) {
                 return;
             }
@@ -46,10 +68,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return;
                 }
 
-                Initialize(serviceProvider, logger); // Sets _sServiceProvider and _sLogger
+                Initialize(serviceProvider, logger);
 
                 _sLogger?.LogInformation("McpToolHelper.EnsureInitialized: Starting tool registration...");
-                _sCachedToolsXml = RegisterToolsAndGetPromptString(assembly);
+                var assemblies = new List<Assembly> { mainAssembly };
+                if (llmAssembly != null && llmAssembly != mainAssembly) {
+                    assemblies.Add(llmAssembly);
+                }
+                _sCachedToolsXml = RegisterToolsAndGetPromptString(assemblies);
                 if (string.IsNullOrWhiteSpace(_sCachedToolsXml)) {
                     _sCachedToolsXml = "<!-- No tools are currently available. -->";
                     _sLogger?.LogWarning("McpToolHelper.EnsureInitialized: No tools found or registered. Prompt will indicate no tools available.");
@@ -62,69 +88,56 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
-        /// Scans an assembly for methods marked with McpToolAttribute and registers them.
+        /// Backward-compatible overload that scans a single assembly.
+        /// </summary>
+        public static void EnsureInitialized(Assembly assembly, IServiceProvider serviceProvider, ILogger logger) {
+            EnsureInitialized(assembly, null, serviceProvider, logger);
+        }
+
+        /// <summary>
+        /// Scans an assembly for methods marked with BuiltInToolAttribute or McpToolAttribute and registers them.
         /// Also generates the descriptive string for the LLM prompt.
         /// This method is called by EnsureInitialized.
         /// </summary>
-        private static string RegisterToolsAndGetPromptString(Assembly assembly) {
-            ToolRegistry.Clear(); // Clear previous registrations if any
+        private static string RegisterToolsAndGetPromptString(List<Assembly> assemblies) {
+            ToolRegistry.Clear();
 
             var loggerForRegistration = _sLogger;
 
-            var methods = assembly.GetTypes()
+            // Scan all assemblies for both BuiltInToolAttribute and (deprecated) McpToolAttribute
+            var methods = assemblies
+                                  .SelectMany(a => a.GetTypes())
                                   .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))
-                                  .Where(m => m.GetCustomAttribute<McpToolAttribute>() != null)
+                                  .Where(m => m.GetCustomAttribute<BuiltInToolAttribute>() != null ||
+                                              m.GetCustomAttribute<McpToolAttribute>() != null)
                                   .ToList();
 
             var sb = new StringBuilder();
             foreach (var method in methods) {
-                var toolAttr = method.GetCustomAttribute<McpToolAttribute>();
-                if (toolAttr == null) continue; // Should not happen due to Where clause
+                // Prefer BuiltInToolAttribute, fall back to McpToolAttribute
+                var builtInAttr = method.GetCustomAttribute<BuiltInToolAttribute>();
+                var mcpAttr = method.GetCustomAttribute<McpToolAttribute>();
+                var description = builtInAttr?.Description ?? mcpAttr?.Description;
+                var nameOverride = builtInAttr?.Name ?? mcpAttr?.Name;
+                if (description == null) continue;
 
-                var toolName = string.IsNullOrWhiteSpace(toolAttr.Name) ? method.Name : toolAttr.Name;
+                var toolName = string.IsNullOrWhiteSpace(nameOverride) ? method.Name : nameOverride;
                 toolName = toolName.Split('`')[0]; // Sanitize
 
-                // Use TryAdd for ConcurrentDictionary to handle race conditions more gracefully if multiple threads were to register the exact same tool name simultaneously,
-                // though the Clear() at the beginning makes this less of an issue for distinct calls to RegisterToolsAndGetPromptString.
-                // However, the primary issue is concurrent calls to RegisterToolsAndGetPromptString itself, each operating on the shared static ToolRegistry.
                 if (!ToolRegistry.TryAdd(toolName, (method, method.DeclaringType))) {
-                    // If TryAdd fails, it means the key already exists. This check is slightly different from ContainsKey + Add,
-                    // but given the Clear() at the start of this method, if this method is called sequentially,
-                    // ContainsKey would be false. If called concurrently, TryAdd is safer.
-                    // The original log message for duplicate is still relevant if different methods map to the same sanitized toolName.
-                    loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found or failed to add. Method {method.DeclaringType.FullName}.{method.Name} might be ignored or overwritten by a concurrent call.");
-                    // If we want to strictly prevent overwriting and log the original "ignored" message,
-                    // we might need a slightly different approach, but ConcurrentDictionary handles the concurrent access safely.
-                    // For simplicity and to address the core concurrency bug, TryAdd is sufficient.
-                    // If it was already added by another concurrent call, this instance of the tool might not be the one stored.
-                    // The duplicate tool name warnings from the user log suggest this is a valid concern.
-                    // Let's stick to a pattern closer to the original to ensure the warning logic remains:
-                    if (ToolRegistry.ContainsKey(toolName)) // Check first
-                    {
-                        loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found. Method {method.DeclaringType.FullName}.{method.Name} will be ignored.");
-                        continue;
-                    }
-                    // If, after the check, another thread adds it, ToolRegistry[toolName] could throw or overwrite.
-                    // So, TryAdd is indeed better. Let's re-evaluate.
-                    // The goal is: if toolName is new, add it. If it exists, log warning and skip.
-                    // This needs to be atomic.
-                    var toolTuple = (method, method.DeclaringType);
-                    if (!ToolRegistry.TryAdd(toolName, toolTuple)) {
-                        // This means toolName was already present (added by this thread in a previous iteration for a *different* method mapping to the same name, or by another thread).
-                        loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' encountered for method {method.DeclaringType.FullName}.{method.Name}. This tool registration will be skipped.");
-                        continue;
-                    }
-                    // If TryAdd succeeded, it's in the dictionary.
+                    loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found. Method {method.DeclaringType.FullName}.{method.Name} will be ignored.");
+                    continue;
                 }
-                // ToolRegistry[toolName] = (method, method.DeclaringType); // This line is now handled by TryAdd
 
                 sb.AppendLine($"- <tool name=\"{toolName}\">");
-                sb.AppendLine($"    <description>{toolAttr.Description}</description>");
+                sb.AppendLine($"    <description>{description}</description>");
                 sb.AppendLine($"    <parameters>");
                 foreach (var param in method.GetParameters()) {
-                    var paramAttr = param.GetCustomAttribute<McpParameterAttribute>();
-                    var paramDescription = paramAttr?.Description ?? $"Parameter '{param.Name}'";
-                    var paramIsRequired = paramAttr?.IsRequired ?? ( !param.IsOptional && !param.HasDefaultValue && !( param.ParameterType.IsValueType && Nullable.GetUnderlyingType(param.ParameterType) == null ) );
+                    // Check both attribute types
+                    var builtInParamAttr = param.GetCustomAttribute<BuiltInParameterAttribute>();
+                    var mcpParamAttr = param.GetCustomAttribute<McpParameterAttribute>();
+                    var paramDescription = builtInParamAttr?.Description ?? mcpParamAttr?.Description ?? $"Parameter '{param.Name}'";
+                    var paramIsRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !param.IsOptional && !param.HasDefaultValue && !( param.ParameterType.IsValueType && Nullable.GetUnderlyingType(param.ParameterType) == null ) );
                     var paramType = GetSimplifiedTypeName(param.ParameterType);
                     sb.AppendLine($"        <parameter name=\"{param.Name}\" type=\"{paramType}\" required=\"{paramIsRequired.ToString().ToLower()}\">{paramDescription}</parameter>");
                 }
@@ -135,20 +148,134 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
+        /// Generates OpenAI-compatible ChatTool definitions for all registered tools (built-in and external).
+        /// Used for native function/tool calling API instead of XML prompt-based tool calling.
+        /// </summary>
+        public static List<OpenAI.Chat.ChatTool> GetNativeToolDefinitions() {
+            var tools = new List<OpenAI.Chat.ChatTool>();
+
+            // Built-in tools
+            foreach (var (toolName, toolInfo) in ToolRegistry) {
+                var method = toolInfo.Method;
+                var builtInAttr = method.GetCustomAttribute<BuiltInToolAttribute>();
+                var mcpAttr = method.GetCustomAttribute<McpToolAttribute>();
+                var description = builtInAttr?.Description ?? mcpAttr?.Description ?? "";
+
+                var properties = new Dictionary<string, object>();
+                var required = new List<string>();
+
+                foreach (var param in method.GetParameters()) {
+                    if (param.ParameterType == typeof(ToolContext)) continue;
+
+                    var builtInParamAttr = param.GetCustomAttribute<BuiltInParameterAttribute>();
+                    var mcpParamAttr = param.GetCustomAttribute<McpParameterAttribute>();
+                    var paramDescription = builtInParamAttr?.Description ?? mcpParamAttr?.Description ?? $"Parameter '{param.Name}'";
+                    var paramIsRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? (!param.IsOptional && !param.HasDefaultValue);
+                    var paramType = MapToJsonSchemaType(param.ParameterType);
+
+                    properties[param.Name] = new Dictionary<string, object> {
+                        { "type", paramType },
+                        { "description", paramDescription }
+                    };
+
+                    if (paramIsRequired) {
+                        required.Add(param.Name);
+                    }
+                }
+
+                var parametersSchema = new Dictionary<string, object> {
+                    { "type", "object" },
+                    { "properties", properties },
+                    { "required", required }
+                };
+
+                var parametersJson = JsonConvert.SerializeObject(parametersSchema);
+                tools.Add(OpenAI.Chat.ChatTool.CreateFunctionTool(toolName, description, BinaryData.FromString(parametersJson)));
+            }
+
+            // External MCP tools
+            foreach (var (qualifiedName, toolInfo) in ExternalToolRegistry) {
+                var properties = new Dictionary<string, object>();
+                var required = new List<string>();
+
+                foreach (var param in toolInfo.Parameters) {
+                    properties[param.Name] = new Dictionary<string, object> {
+                        { "type", MapExternalTypeToJsonSchema(param.Type) },
+                        { "description", param.Description }
+                    };
+
+                    if (param.Required) {
+                        required.Add(param.Name);
+                    }
+                }
+
+                var parametersSchema = new Dictionary<string, object> {
+                    { "type", "object" },
+                    { "properties", properties },
+                    { "required", required }
+                };
+
+                var description = $"[MCP Server: {toolInfo.ServerName}] {toolInfo.Description}";
+                var parametersJson = JsonConvert.SerializeObject(parametersSchema);
+                tools.Add(OpenAI.Chat.ChatTool.CreateFunctionTool(qualifiedName, description, BinaryData.FromString(parametersJson)));
+            }
+
+            return tools;
+        }
+
+        private static string MapToJsonSchemaType(Type type) {
+            var underlying = Nullable.GetUnderlyingType(type);
+            if (underlying != null) type = underlying;
+
+            if (type == typeof(string)) return "string";
+            if (type == typeof(int) || type == typeof(long)) return "integer";
+            if (type == typeof(float) || type == typeof(double) || type == typeof(decimal)) return "number";
+            if (type == typeof(bool)) return "boolean";
+            return "string";
+        }
+
+        private static string MapExternalTypeToJsonSchema(string type) {
+            return type?.ToLower() switch {
+                "integer" or "int" or "long" => "integer",
+                "number" or "float" or "double" => "number",
+                "boolean" or "bool" => "boolean",
+                "array" => "array",
+                "object" => "object",
+                _ => "string"
+            };
+        }
+
+        /// <summary>
         /// Formats the standard system prompt incorporating tool descriptions and usage instructions.
+        /// Includes both built-in tools and external MCP tools, and shell environment information.
         /// </summary>
         public static string FormatSystemPrompt(string botName, long chatId) {
             if (!_sIsInitialized) {
                 _sLogger?.LogCritical("McpToolHelper.FormatSystemPrompt called before EnsureInitialized. Tool descriptions will be missing or incorrect.");
-                // Consider throwing an InvalidOperationException here if this state is truly unrecoverable.
             }
 
             if (string.IsNullOrWhiteSpace(botName)) botName = "AI Assistant";
-            string toolsXmlToUse = _sCachedToolsXml ?? "<!-- Tools not initialized or no tools available. -->";
+            string builtInToolsXml = _sCachedToolsXml ?? "<!-- No built-in tools available. -->";
+            string externalToolsXml = _sCachedExternalToolsXml ?? "";
 
-            // Exact prompt structure from OpenAIService/OllamaService
+            var toolsSectionBuilder = new StringBuilder();
+            toolsSectionBuilder.AppendLine("== 内置工具 (Built-in Tools) ==");
+            toolsSectionBuilder.AppendLine(builtInToolsXml);
+
+            if (!string.IsNullOrWhiteSpace(externalToolsXml)) {
+                toolsSectionBuilder.AppendLine();
+                toolsSectionBuilder.AppendLine("== 外部MCP工具 (External MCP Tools) ==");
+                toolsSectionBuilder.AppendLine(externalToolsXml);
+            }
+
+            string toolsXmlToUse = toolsSectionBuilder.ToString();
+
+            // Shell environment description
+            string shellEnvInfo = TelegramSearchBot.Service.Tools.BashToolService.GetShellEnvironmentDescription();
+
             return $"你的名字是 {botName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{chatId}。\n\n" +
-                   $"你的核心任务是协助用户。为此，你可以调用外部工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
+                   $"== 运行环境信息 ==\n{shellEnvInfo}\n\n" +
+                   $"你的核心任务是协助用户。为此，你可以调用工具。以下是你当前可以使用的工具列表和它们的描述：\n\n" +
                    $"{toolsXmlToUse}\n\n" +
                    $"当你需要调用工具时，必须严格遵循以下规则：\n\n" +
                    "1. 工具调用必须使用XML格式，且必须是回复的唯一内容\n" +
@@ -178,9 +305,50 @@ namespace TelegramSearchBot.Service.AI.LLM {
                    "2. 如果多次尝试仍不理想，或者你认为其他工具可能更合适，可以尝试调用其他可用工具。\n" +
                    "3. 在进行多次尝试时，建议在思考过程中记录并调整你的策略。\n" +
                    "如果你认为已经获得了足够的信息，或者不需要再使用工具，请继续下一步。\n\n" +
+                   "关于MCP工具管理：你可以使用以下内置工具来管理外部MCP工具服务器：\n" +
+                   "- ListMcpServers: 列出所有已配置的MCP服务器，包括连接状态和可用工具\n" +
+                   "- AddMcpServer: 添加新的MCP服务器。参数：name(唯一名称), command(启动命令如npx), args(命令参数如'-y @playwright/mcp'), env(可选环境变量如'KEY=value')\n" +
+                   "- RemoveMcpServer: 通过名称删除MCP服务器\n" +
+                   "- RestartMcpServers: 重启所有已启用的MCP服务器\n" +
+                   "常见MCP服务器：\n" +
+                   "- Playwright浏览器: AddMcpServer(name='playwright', command='npx', args='-y @playwright/mcp')\n" +
+                   "- 文件系统: AddMcpServer(name='filesystem', command='npx', args='-y @modelcontextprotocol/server-filesystem /path/to/directory')\n" +
+                   "- GitHub: AddMcpServer(name='github', command='npx', args='-y @modelcontextprotocol/server-github', env='GITHUB_TOKEN=xxx')\n" +
+                   "安装前建议用 ExecuteCommand 工具检查npm/npx是否已安装。\n\n" +
                    "引用说明：当你使用工具（特别是搜索工具）获取信息并在回答中使用了这些信息时，如果工具结果提供了来源(Source)或链接(URL)，请务必在你的回答中清晰地注明来源。你可以使用Markdown链接格式，例如 `[来源标题](URL)`，或者在回答末尾列出引用来源列表。确保用户可以追溯信息的原始出处。\n\n" +
                    $"在决定是否使用工具时，请仔细分析用户的请求。如果不需要工具，或者工具执行完毕后，请直接以自然语言回复用户。\n" +
                    $"当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
+        }
+
+        /// <summary>
+        /// Formats a simplified system prompt for use with native API tool calling.
+        /// No XML tool instructions are needed since tools are passed via the API.
+        /// </summary>
+        public static string FormatSystemPromptForNativeToolCalling(string botName, long chatId) {
+            if (string.IsNullOrWhiteSpace(botName)) botName = "AI Assistant";
+
+            // Shell environment description
+            string shellEnvInfo = TelegramSearchBot.Service.Tools.BashToolService.GetShellEnvironmentDescription();
+
+            return $"你的名字是 {botName}，你是一个AI助手。现在时间是：{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")}。当前对话的群聊ID是:{chatId}。\n\n" +
+                   $"== 运行环境信息 ==\n{shellEnvInfo}\n\n" +
+                   "你的核心任务是协助用户。你可以使用提供的工具来帮助用户完成任务。\n\n" +
+                   "工具使用指南：\n" +
+                   "- 仔细分析用户请求，判断是否需要调用工具\n" +
+                   "- 如果搜索类工具没有找到满意结果，可以修改关键词重试或使用其他工具\n" +
+                   "- 工具执行完毕后，请基于结果以自然语言回复用户\n\n" +
+                   "关于MCP工具管理：\n" +
+                   "- ListMcpServers: 列出所有已配置的MCP服务器及其状态\n" +
+                   "- AddMcpServer: 添加新的MCP服务器（需要name、command、args参数）。常见的MCP服务器：\n" +
+                   "  * Playwright浏览器: command='npx', args='-y @playwright/mcp'\n" +
+                   "  * 文件系统: command='npx', args='-y @modelcontextprotocol/server-filesystem /path'\n" +
+                   "  * GitHub: command='npx', args='-y @modelcontextprotocol/server-github', env='GITHUB_TOKEN=xxx'\n" +
+                   "  * Brave搜索: command='npx', args='-y @modelcontextprotocol/server-brave-search', env='BRAVE_API_KEY=xxx'\n" +
+                   "- RemoveMcpServer: 删除指定的MCP服务器\n" +
+                   "- RestartMcpServers: 重启所有MCP服务器\n" +
+                   "在安装MCP服务器之前，可以先用 ExecuteCommand 检查环境（如npm/npx是否已安装）。\n\n" +
+                   "引用说明：使用搜索工具获取信息时，如果结果提供了来源或链接，请在回答中注明来源，使用Markdown链接格式如 `[来源标题](URL)`。\n\n" +
+                   "当你直接回复时，请直接输出内容，不要模仿历史消息的格式。";
         }
 
         /// <summary>
@@ -334,12 +502,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return (null, null);
                 }
             } else {
-                // 尝试匹配注册的工具名称
+                // 尝试匹配注册的工具名称 (built-in and external)
                 toolName = ToolRegistry.Keys.FirstOrDefault(k =>
                     k.Equals(element.Name.LocalName, StringComparison.OrdinalIgnoreCase));
+                if (toolName == null) {
+                    toolName = ExternalToolRegistry.Keys.FirstOrDefault(k =>
+                        k.Equals(element.Name.LocalName, StringComparison.OrdinalIgnoreCase));
+                }
             }
 
-            if (toolName == null || !ToolRegistry.ContainsKey(toolName)) {
+            if (toolName == null || (!ToolRegistry.ContainsKey(toolName) && !ExternalToolRegistry.ContainsKey(toolName))) {
                 _sLogger?.LogWarning($"ParseToolElement: Unregistered tool '{element.Name.LocalName}'");
                 return (null, null);
             }
@@ -467,11 +639,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var cleanedArguments = new Dictionary<string, string>();
             foreach (var kvp in stringArguments) {
                 var value = kvp.Value;
-                // Remove CDATA markers if present
                 value = Regex.Replace(value, @"<!\[CDATA\[(.*?)\]\]>", "$1").Trim();
                 cleanedArguments[kvp.Key] = value;
             }
             stringArguments = cleanedArguments;
+
+            // Check if this is an external MCP tool
+            if (ExternalToolRegistry.TryGetValue(toolName, out var externalTool)) {
+                return await ExecuteExternalToolAsync(toolName, externalTool, stringArguments);
+            }
+
             if (!ToolRegistry.TryGetValue(toolName, out var toolInfo)) {
                 throw new ArgumentException($"Tool '{toolName}' not registered.");
             }
@@ -493,13 +670,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 } else if (paramInfo.HasDefaultValue) {
                     convertedArgs[i] = paramInfo.DefaultValue;
                 } else if (paramInfo.IsOptional) {
-                    convertedArgs[i] = Type.Missing; // Or null if appropriate for the type
+                    convertedArgs[i] = Type.Missing;
                 } else {
-                    var paramAttr = paramInfo.GetCustomAttribute<McpParameterAttribute>();
-                    bool isActuallyRequired = paramAttr?.IsRequired ?? ( !paramInfo.IsOptional && !paramInfo.HasDefaultValue && !( paramInfo.ParameterType.IsValueType && Nullable.GetUnderlyingType(paramInfo.ParameterType) == null ) );
+                    // Check both attribute types
+                    var builtInParamAttr = paramInfo.GetCustomAttribute<BuiltInParameterAttribute>();
+                    var mcpParamAttr = paramInfo.GetCustomAttribute<McpParameterAttribute>();
+                    bool isActuallyRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !paramInfo.IsOptional && !paramInfo.HasDefaultValue && !( paramInfo.ParameterType.IsValueType && Nullable.GetUnderlyingType(paramInfo.ParameterType) == null ) );
                     if (isActuallyRequired)
                         throw new ArgumentException($"Missing required parameter '{paramInfo.Name}' for tool '{toolName}'.");
-                    else // Parameter is implicitly optional (e.g. nullable reference type with no default)
+                    else
                         convertedArgs[i] = null;
                 }
             }
@@ -523,12 +702,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var result = method.Invoke(instance, convertedArgs);
 
             if (result is Task taskResult) {
-                await taskResult; // Await the task if the method is async
-                if (taskResult.GetType().IsGenericType) // Check if it's Task<T>
+                await taskResult;
+                if (taskResult.GetType().IsGenericType)
                 {
-                    return ( ( dynamic ) taskResult ).Result; // Get the T result
+                    return ( ( dynamic ) taskResult ).Result;
                 }
-                return null; // For non-generic Task (void async method)
+                return null;
             }
             return result;
         }
@@ -622,6 +801,112 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return toolResultObject.ToString();
                 }
             }
+        }
+        /// <summary>
+        /// Register external MCP tools from connected MCP servers.
+        /// These tools are added to the system prompt and routed to the MCP server for execution.
+        /// </summary>
+        /// <param name="tools">List of (serverName, tool) tuples from MCP servers</param>
+        /// <param name="executor">Function to execute an external tool: (serverName, toolName, arguments) -> result string</param>
+        public static void RegisterExternalTools(
+            List<(string serverName, ExternalToolInfo tool)> tools,
+            Func<string, string, Dictionary<string, string>, Task<string>> executor) {
+
+            ExternalToolRegistry.Clear();
+            _externalToolExecutor = executor;
+
+            var sb = new StringBuilder();
+
+            foreach (var (serverName, tool) in tools) {
+                var qualifiedName = $"mcp_{serverName}_{tool.ToolName}";
+                ExternalToolRegistry[qualifiedName] = tool;
+
+                sb.AppendLine($"- <tool name=\"{qualifiedName}\">");
+                sb.AppendLine($"    <description>[MCP Server: {serverName}] {tool.Description}</description>");
+                sb.AppendLine($"    <parameters>");
+                foreach (var param in tool.Parameters) {
+                    sb.AppendLine($"        <parameter name=\"{param.Name}\" type=\"{param.Type}\" required=\"{param.Required.ToString().ToLower()}\">{param.Description}</parameter>");
+                }
+                sb.AppendLine($"    </parameters>");
+                sb.AppendLine($"  </tool>");
+            }
+
+            _sCachedExternalToolsXml = sb.ToString();
+            _sLogger?.LogInformation("Registered {Count} external MCP tools from {ServerCount} servers.",
+                tools.Count, tools.Select(t => t.serverName).Distinct().Count());
+        }
+
+        /// <summary>
+        /// Execute an external MCP tool by forwarding the call to the MCP server.
+        /// </summary>
+        private static async Task<object> ExecuteExternalToolAsync(string qualifiedToolName, ExternalToolInfo toolInfo, Dictionary<string, string> arguments) {
+            if (_externalToolExecutor == null) {
+                throw new InvalidOperationException("External tool executor is not configured.");
+            }
+
+            _sLogger?.LogInformation("Executing external MCP tool: {ToolName} on server {ServerName}", qualifiedToolName, toolInfo.ServerName);
+
+            try {
+                var result = await _externalToolExecutor(toolInfo.ServerName, toolInfo.ToolName, arguments);
+                return result;
+            } catch (Exception ex) {
+                _sLogger?.LogError(ex, "Error executing external MCP tool: {ToolName}", qualifiedToolName);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Check if a tool name corresponds to an external MCP tool.
+        /// </summary>
+        public static bool IsExternalTool(string toolName) {
+            return ExternalToolRegistry.ContainsKey(toolName);
+        }
+
+        /// <summary>
+        /// Check if a tool name is registered (either built-in or external).
+        /// </summary>
+        public static bool IsToolRegistered(string toolName) {
+            return ToolRegistry.ContainsKey(toolName) || ExternalToolRegistry.ContainsKey(toolName);
+        }
+
+        /// <summary>
+        /// Register external MCP tools from a connected IMcpServerManager.
+        /// This converts tool descriptions from the MCP server format to the McpToolHelper format
+        /// and registers them for use in LLM prompts and tool calls.
+        /// Can be called after server restart to refresh tool registrations.
+        /// </summary>
+        public static void RegisterExternalMcpTools(Interface.Mcp.IMcpServerManager mcpServerManager) {
+            var externalTools = mcpServerManager.GetAllExternalTools();
+            if (!externalTools.Any()) {
+                // Clear stale registrations if no tools available
+                ExternalToolRegistry.Clear();
+                _sCachedExternalToolsXml = string.Empty;
+                return;
+            }
+
+            var toolInfos = externalTools.Select(t => (t.serverName, new ExternalToolInfo {
+                ServerName = t.serverName,
+                ToolName = t.tool.Name,
+                Description = t.tool.Description ?? "",
+                Parameters = t.tool.InputSchema?.Properties?.Select(p =>
+                    new ExternalToolParameter {
+                        Name = p.Key,
+                        Type = p.Value.Type ?? "string",
+                        Description = p.Value.Description ?? "",
+                        Required = t.tool.InputSchema.Required?.Contains(p.Key) ?? false
+                    }).ToList() ?? new List<ExternalToolParameter>()
+            })).ToList();
+
+            RegisterExternalTools(
+                toolInfos,
+                async (serverName, toolName, arguments) => {
+                    var objectArgs = arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
+                    var result = await mcpServerManager.CallToolAsync(serverName, toolName, objectArgs);
+                    if (result.IsError) {
+                        return $"Error: {string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>())}";
+                    }
+                    return string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>());
+                });
         }
     }
 }
