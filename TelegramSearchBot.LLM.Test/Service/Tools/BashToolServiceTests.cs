@@ -92,16 +92,14 @@ namespace TelegramSearchBot.Test.Service.Tools {
             // Very short timeout should be clamped to 1000ms minimum
             string command;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
-                command = "Write-Output 'quick'";
+                command = "Write-Output 'quick'; Start-Sleep -Seconds 2";
             } else {
-                command = "echo 'quick'";
+                command = "echo 'quick'; sleep 2";
             }
 
             var result = await _service.ExecuteCommand(command, toolContext,
                 workingDirectory: Path.GetTempPath(), timeoutMs: 100);
-            // Should still execute because clamped to 1s, and echo is fast
-            Assert.Contains("Exit code: 0", result);
+            Assert.Contains("Command timed out after 1000ms.", result);
         }
     }
 }
-
