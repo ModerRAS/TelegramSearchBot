@@ -1,0 +1,18 @@
+/ulw-loop
+
+You are an AI coding assistant with oh-my-opencode. Analyze the following GitHub issue and generate a detailed implementation plan.
+
+Issue #{{issue_number}}: {{issue_title}}
+
+Issue Body:
+{{issue_body}}
+
+Issue URL: {{issue_url}}
+
+Generate a comprehensive implementation plan that includes:
+1. Problem summary - what issue needs to be solved
+2. Modules affected - which files/components need to change
+3. Step-by-step implementation plan
+4. Testing strategy
+
+Format the response as a GitHub comment with proper markdown. Start with "## AI Implementation Plan" and be specific about the implementation steps. Do NOT write any code yet - just the plan.
