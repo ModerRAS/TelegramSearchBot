@@ -1,0 +1,141 @@
+name: AI Issue Planning
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+jobs:
+  ai-plan:
+    if: github.event.label.name == 'ai-task'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install OpenCode and oh-my-opencode
+        run: |
+          npm install -g @opencode-ai/cli
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
+
+      - name: Copy oh-my-opencode config
+        run: |
+          mkdir -p ~/.config/opencode
+          cp .github/workflows/oh-my-opencode.json ~/.config/opencode/oh-my-opencode.json
+
+      - name: Get issue details
+        id: issue
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const issue = context.payload.issue;
+            const { data: issueData } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number
+            });
+            return JSON.stringify({
+              number: issue.number,
+              title: issue.title,
+              body: issueData.body,
+              url: issueData.html_url
+            });
+
+      - name: Check existing plan
+        id: find-comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: data.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const aiComment = comments.find(c => c.body.includes('## AI Implementation Plan'));
+            return aiComment ? aiComment.id : 'none';
+
+      - name: Remove label if plan exists
+        if: steps.find-comment.outputs.result != 'none'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            await github.rest.issues.removeLabel({
+              issue_number: data.number,
+              name: 'ai-task',
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+
+      - name: Generate plan
+        if: steps.find-comment.outputs.result == 'none'
+        id: opencode
+        env:
+          ISSUE_DATA: ${{ steps.issue.outputs.result }}
+        run: |
+          npm install -g @opencode-ai/cli
+
+          node -e "
+            const fs=require('fs');
+            const d=JSON.parse(process.env.ISSUE_DATA);
+            let p=fs.readFileSync('.github/workflows/prompts/ai-plan-prompt.txt','utf8');
+            p=p.replace(/{{issue_number}}/g,d.number)
+               .replace(/{{issue_title}}/g,d.title)
+               .replace(/{{issue_body}}/g,d.body)
+               .replace(/{{issue_url}}/g,d.url);
+            fs.writeFileSync('prompt.txt',p);
+          "
+
+          opencode --project-path . --file prompt.txt --output plan.md
+
+      - name: Post plan comment
+        if: steps.opencode.outputs.result != '' && steps.find-comment.outputs.result == 'none'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('plan.md', 'utf8');
+            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            await github.rest.issues.createComment({
+              issue_number: data.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: plan
+            });
+
+      - name: Create branch
+        if: steps.opencode.outputs.result != '' && steps.find-comment.outputs.result == 'none'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node -e "console.log('ai/issue-'+JSON.parse(process.env.ISSUE_DATA).number)" > branch_name.txt
+          git config user.name "AI Agent"
+          git config user.email "ai@github.local"
+          git checkout -b $(cat branch_name.txt) main || git checkout -b $(cat branch_name.txt) master
+          git push -u origin $(cat branch_name.txt) || echo Branch created locally
+
+      - name: Cleanup label on failure
+        if: failure() && steps.find-comment.outputs.result == 'none'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            await github.rest.issues.removeLabel({
+              issue_number: data.number,
+              name: 'ai-task',
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });

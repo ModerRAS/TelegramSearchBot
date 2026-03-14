@@ -1,0 +1,61 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/dev/assets/oh-my-opencode.schema.json",
+  "agents": {
+    "hephaestus": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "oracle": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "librarian": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "explore": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "multimodal-looker": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "prometheus": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "metis": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "momus": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "atlas": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "sisyphus": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    }
+  },
+  "categories": {
+    "visual-engineering": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "ultrabrain": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "deep": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "artistry": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "quick": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "unspecified-low": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "unspecified-high": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    },
+    "writing": {
+      "model": "minimax-cn/MiniMax-M2.5"
+    }
+  }
+}

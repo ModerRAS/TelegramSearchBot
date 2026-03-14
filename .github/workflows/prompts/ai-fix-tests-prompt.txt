@@ -1,0 +1,9 @@
+The tests failed for your implementation. Fix the failing tests.
+
+Issue: #{{issue_number}}
+
+Instructions:
+1. Analyze the test failures
+2. Fix the implementation to make tests pass
+3. Do NOT modify test files to make them pass - fix the actual code
+4. Run tests again to verify

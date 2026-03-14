@@ -1,0 +1,14 @@
+You are an AI coding assistant. Implement the approved plan for issue #{{issue_number}}: {{issue_title}}
+
+Implementation Plan:
+{{plan}}
+
+Instructions:
+1. Implement the approved plan for this issue
+2. Modify only the necessary files
+3. Add tests if needed
+4. Keep changes minimal and focused
+5. Do NOT modify any GitHub Actions workflows
+6. After implementation, run tests to verify the changes work correctly
+
+If there are any errors or issues, fix them.
