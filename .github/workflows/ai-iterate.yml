@@ -66,6 +66,8 @@ jobs:
       - name: Run OpenCode for changes
         if: steps.comments.outputs.result != '[]'
         id: opencode
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
           npm install -g @opencode-ai/cli
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no

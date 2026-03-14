@@ -85,6 +85,7 @@ jobs:
         id: opencode
         env:
           ISSUE_DATA: ${{ steps.issue.outputs.result }}
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
           npm install -g @opencode-ai/cli
 

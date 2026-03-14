@@ -1,4 +1,6 @@
-You are an AI coding assistant. Implement the approved plan for issue #{{issue_number}}: {{issue_title}}
+/ulw-loop
+
+You are an AI coding assistant with oh-my-opencode. Implement the approved plan for issue #{{issue_number}}: {{issue_title}}
 
 Implementation Plan:
 {{plan}}
