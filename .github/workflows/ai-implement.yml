@@ -142,3 +142,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr create --base main --head "ai/issue-%ISSUE_NUM%" --title "AI: Issue #%ISSUE_NUM%" --body "AI implementation" 2>nul || echo PR exists
+
+      - name: Mark issue as done
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              issue_number: parseInt('%ISSUE_NUM%'),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['ai-done']
+            });

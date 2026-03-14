@@ -127,6 +127,19 @@ jobs:
           git checkout -b $(cat branch_name.txt) main || git checkout -b $(cat branch_name.txt) master
           git push -u origin $(cat branch_name.txt) || echo Branch created locally
 
+      - name: Remove ai-task label after planning
+        if: steps.opencode.outputs.result != '' && steps.find-comment.outputs.result == 'none'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            await github.rest.issues.removeLabel({
+              issue_number: data.number,
+              name: 'ai-task',
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+
       - name: Cleanup label on failure
         if: failure() && steps.find-comment.outputs.result == 'none'
         uses: actions/github-script@v7
