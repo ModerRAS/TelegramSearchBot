@@ -1,0 +1,49 @@
+name: AI Task Scheduler
+
+on:
+  schedule:
+    - cron: '0 16 * * *'
+
+permissions:
+  issues: write
+
+concurrency:
+  group: ai-scheduler
+  cancel-in-progress: false
+
+jobs:
+  schedule-ai-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find and label ready issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: allIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 50
+            });
+            
+            const readyIssues = allIssues.filter(issue => {
+              const hasAiTaskLabel = issue.labels.some(l => l.name === 'ai-task');
+              const hasAiDoneLabel = issue.labels.some(l => l.name === 'ai-done');
+              return !hasAiTaskLabel && !hasAiDoneLabel;
+            });
+            
+            console.log(`Found ${readyIssues.length} ready issues to process`);
+            
+            for (const issue of readyIssues) {
+              await github.rest.issues.addLabels({
+                issue_number: issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['ai-task']
+              });
+              console.log(`Added ai-task label to issue #${issue.number}: ${issue.title}`);
+            }
+            
+            if (readyIssues.length > 0) {
+              console.log(`Triggered ${readyIssues.length} issues for AI processing`);
+            }
