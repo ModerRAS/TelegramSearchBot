@@ -101,7 +101,7 @@ jobs:
             fs.writeFileSync('prompt.txt',p);
           "
 
-          opencode --project-path . --file prompt.txt --output plan.md
+          cat prompt.txt | opencode run . --output plan.md
 
       - name: Post plan comment
         if: steps.opencode.outputs.result != '' && steps.find-comment.outputs.result == 'none'

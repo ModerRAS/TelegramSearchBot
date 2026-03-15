@@ -74,7 +74,7 @@ jobs:
 
           node -e "const fs=require('fs');const c=JSON.parse(process.env.COMMENTS_DATA);let p=fs.readFileSync('.github/workflows/prompts/ai-iterate-prompt.txt','utf8');p=p.replace(/{{issue_number}}/g,'%ISSUE_NUM%').replace(/{{pr_number}}/g,'%PR_NUMBER%').replace(/{{comments}}/g,c.join('\n\n'));fs.writeFileSync('prompt.txt',p);"
 
-          opencode --project-path . --file prompt.txt --output result.txt
+          cat prompt.txt | opencode run . --output result.txt
 
       - name: Check changes
         id: changes
