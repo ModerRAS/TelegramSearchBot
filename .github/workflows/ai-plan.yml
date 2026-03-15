@@ -89,6 +89,9 @@ jobs:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
           bun add -g opencode-ai
+          
+          # 确保配置文件中的占位符被正确替换
+          sed 's/MINIMAX_API_KEY/'"$MINIMAX_API_KEY"'/g' .github/workflows/oh-my-opencode.json > ~/.config/opencode/oh-my-opencode.json
 
           node -e "
             const fs=require('fs');
@@ -97,11 +100,11 @@ jobs:
             p=p.replace(/{{issue_number}}/g,d.number)
                .replace(/{{issue_title}}/g,d.title)
                .replace(/{{issue_body}}/g,d.body)
-                .replace(/{{issue_url}}/g,d.url);
+               .replace(/{{issue_url}}/g,d.url);
             fs.writeFileSync('prompt.txt',p);
           "
 
-          opencode . < prompt.txt
+          opencode . < prompt.txt --opencode-go=yes
 
       - name: Post plan comment
         if: steps.opencode.outputs.result != '' && steps.find-comment.outputs.result == 'none'
