@@ -27,7 +27,7 @@ jobs:
       - name: Install OpenCode and oh-my-opencode
         run: |
           bun add -g opencode-ai
-          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --opencode-go=yes
 
       - name: Copy oh-my-opencode config
         run: |
@@ -97,11 +97,11 @@ jobs:
             p=p.replace(/{{issue_number}}/g,d.number)
                .replace(/{{issue_title}}/g,d.title)
                .replace(/{{issue_body}}/g,d.body)
-               .replace(/{{issue_url}}/g,d.url);
+                .replace(/{{issue_url}}/g,d.url);
             fs.writeFileSync('prompt.txt',p);
           "
 
-          cat prompt.txt | opencode run . --output plan.md
+          opencode run --dir . <<< "$(cat prompt.txt)"
 
       - name: Post plan comment
         if: steps.opencode.outputs.result != '' && steps.find-comment.outputs.result == 'none'
