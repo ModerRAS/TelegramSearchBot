@@ -27,7 +27,7 @@ jobs:
       - name: Install OpenCode and oh-my-opencode
         run: |
           bun add -g opencode-ai
-          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --opencode-go=yes
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
 
       - name: Copy oh-my-opencode config
         run: |
