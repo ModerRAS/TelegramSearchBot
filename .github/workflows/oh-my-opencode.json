@@ -1,10 +1,10 @@
 {
-  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/dev/assets/oh-my-opencode.schema.json",
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/master/assets/oh-my-opencode.schema.json",
   "provider": {
     "minimax": {
       "npm": "@ai-sdk/anthropic",
       "options": {
-        "baseURL": "https://api.minimaxi.com/anthropic/v1",
+        "baseURL": "https://api.minimaxi.com/anthropic",
         "apiKey": "MINIMAX_API_KEY"
       },
       "models": {
