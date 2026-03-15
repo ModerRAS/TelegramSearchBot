@@ -57,6 +57,7 @@ jobs:
         id: find-comment
         uses: actions/github-script@v7
         with:
+          result-encoding: string
           script: |
             const data = JSON.parse('${{ steps.issue.outputs.result }}');
             const { data: comments } = await github.rest.issues.listComments({
