@@ -74,7 +74,7 @@ jobs:
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no 
           
           # 确保配置文件中的占位符被正确替换
-          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', '%MINIMAX_API_KEY%'; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
+          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
           
           node -e "
             const fs = require('fs');
@@ -123,7 +123,7 @@ jobs:
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no 
           
           # 确保配置文件中的占位符被正确替换
-          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', '%MINIMAX_API_KEY%'; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
+          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
           
           node -e "
             const fs = require('fs');
