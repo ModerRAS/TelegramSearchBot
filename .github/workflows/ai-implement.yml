@@ -46,8 +46,8 @@ jobs:
 
       - name: Set environment variables
         run: |
-          echo ISSUE_NUM=${{ steps.extract.outputs.issue_number }} >> %GITHUB_OUTPUT%
-          echo PR_NUMBER=${{ steps.extract.outputs.issue_number }} >> %GITHUB_OUTPUT%
+          echo "ISSUE_NUM=${{ steps.extract.outputs.issue_number }}" >> $env:GITHUB_ENV
+          echo "PR_NUMBER=${{ steps.extract.outputs.issue_number }}" >> $env:GITHUB_ENV
 
       - name: Get issue and plan
         id: issue
@@ -106,8 +106,8 @@ jobs:
           git config user.name "AI Agent"
           git config user.email "ai@github.local"
           git add -A
-          git commit -m "AI: Implement issue-%ISSUE_NUM%" 2>nul || exit 0
-          git push origin "ai/issue-%ISSUE_NUM%" 2>nul || exit 0
+          git commit -m "AI: Implement issue-$env:ISSUE_NUM" 2>nul || exit 0
+          git push origin "ai/issue-$env:ISSUE_NUM" 2>nul || exit 0
 
       - name: Build
         run: |
@@ -133,7 +133,7 @@ jobs:
           node -e "
             const fs = require('fs');
             let p = fs.readFileSync('.github/workflows/prompts/ai-fix-tests-prompt.txt','utf8');
-            p = p.replace(/{{issue_number}}/g, '%ISSUE_NUM%');
+            p = p.replace(/{{issue_number}}/g, '$env:ISSUE_NUM');
             fs.writeFileSync('fix_prompt.txt', p);
           "
           
@@ -149,15 +149,15 @@ jobs:
           git config user.name "AI Agent"
           git config user.email "ai@github.local"
           git add -A
-          git commit -m "AI: Fix tests issue-%ISSUE_NUM%" 2>nul || exit 0
-          git push origin "ai/issue-%ISSUE_NUM%" 2>nul || exit 0
+          git commit -m "AI: Fix tests issue-$env:ISSUE_NUM" 2>nul || exit 0
+          git push origin "ai/issue-$env:ISSUE_NUM" 2>nul || exit 0
 
       - name: Create PR
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create --base main --head "ai/issue-%ISSUE_NUM%" --title "AI: Issue #%ISSUE_NUM%" --body "AI implementation" 2>nul || echo PR exists
+          gh pr create --base main --head "ai/issue-$env:ISSUE_NUM" --title "AI: Issue #$env:ISSUE_NUM" --body "AI implementation" 2>nul || echo PR exists
 
       - name: Mark issue as done
         if: always()
@@ -165,7 +165,7 @@ jobs:
         with:
           script: |
             await github.rest.issues.addLabels({
-              issue_number: parseInt('%ISSUE_NUM%'),
+              issue_number: parseInt('$env:ISSUE_NUM'),
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: ['ai-done']
