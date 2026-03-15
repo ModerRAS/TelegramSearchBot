@@ -31,7 +31,7 @@ jobs:
 
       - name: Install OpenCode and oh-my-opencode
         run: |
-          npm install -g @opencode-ai/cli
+          bun add -g opencode-ai
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
 
       - name: Copy oh-my-opencode config
@@ -69,7 +69,7 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
-          npm install -g @opencode-ai/cli
+          bun add -g opencode-ai
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
           
           node -e "
@@ -115,7 +115,7 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
-          npm install -g @opencode-ai/cli
+          bun add -g opencode-ai
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
           
           node -e "
