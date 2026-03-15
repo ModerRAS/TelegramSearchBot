@@ -68,13 +68,17 @@ jobs:
         id: opencode
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          COMMENTS_DATA: ${{ steps.comments.outputs.result }}
         run: |
           bun add -g opencode-ai
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no 
+          
+          # 替换配置文件中的占位符
+          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', '%MINIMAX_API_KEY%'; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
 
           node -e "const fs=require('fs');const c=JSON.parse(process.env.COMMENTS_DATA);let p=fs.readFileSync('.github/workflows/prompts/ai-iterate-prompt.txt','utf8');p=p.replace(/{{issue_number}}/g,'%ISSUE_NUM%').replace(/{{pr_number}}/g,'%PR_NUMBER%').replace(/{{comments}}/g,c.join('\n\n'));fs.writeFileSync('prompt.txt',p);"
 
-          cat prompt.txt | opencode run --dir .
+          opencode . < prompt.txt --opencode-go=yes
 
       - name: Check changes
         id: changes
