@@ -1,5 +1,16 @@
 {
   "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/dev/assets/oh-my-opencode.schema.json",
+  "providers": {
+    "minimax-cn": {
+      "api": {
+        "type": "openai-compatible",
+        "baseURL": "https://api.minimax.chat/v1",
+        "env": {
+          "OPENAI_API_KEY": "MINIMAX_API_KEY"
+        }
+      }
+    }
+  },
   "agents": {
     "hephaestus": {
       "model": "minimax-cn/MiniMax-M2.5"
