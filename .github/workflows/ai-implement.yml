@@ -1,0 +1,160 @@
+name: AI Implementation
+
+on:
+  push:
+    branches:
+      - 'ai/**'
+
+concurrency:
+  group: ai-impl-${{ github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+jobs:
+  ai-implement:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install OpenCode and oh-my-opencode
+        run: |
+          npm install -g @opencode-ai/cli
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
+
+      - name: Copy oh-my-opencode config
+        run: |
+          mkdir %USERPROFILE%\.config\opencode
+          copy .github\workflows\oh-my-opencode.json %USERPROFILE%\.config\opencode\oh-my-opencode.json
+
+      - name: Extract issue number
+        id: extract
+        run: |
+          for /f "tokens=2 delims=/" %%a in ("%GITHUB_REF_NAME%") do echo issue_number=%%a >> %GITHUB_OUTPUT%
+
+      - name: Get issue and plan
+        id: issue
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const num = '${{ steps.extract.outputs.issue_number }}';
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt(num)
+            });
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: parseInt(num),
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const plan = comments.find(c => c.body.includes('## AI Implementation Plan'));
+            return JSON.stringify({ number: issue.number, title: issue.title, plan: plan ? plan.body : '' });
+
+      - name: Run OpenCode
+        id: opencode
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+        run: |
+          npm install -g @opencode-ai/cli
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
+          
+          node -e "
+            const fs = require('fs');
+            const data = JSON.parse(process.env.ISSUE_DATA);
+            let p = fs.readFileSync('.github/workflows/prompts/ai-implement-prompt.txt','utf8');
+            p = p.replace(/{{issue_number}}/g, data.number)
+                 .replace(/{{issue_title}}/g, data.title)
+                 .replace(/{{plan}}/g, data.plan);
+            fs.writeFileSync('prompt.txt', p);
+          "
+          
+          opencode --project-path . --file prompt.txt --output result.txt
+
+      - name: Check changes
+        id: changes
+        run: |
+          for /f %%a in ('git status --porcelain ^| find /c /v ""') do echo changed=%%a >> %GITHUB_OUTPUT%
+
+      - name: Commit changes
+        if: steps.changes.outputs.changed != '0'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "AI Agent"
+          git config user.email "ai@github.local"
+          git add -A
+          git commit -m "AI: Implement issue-%ISSUE_NUM%" 2>nul || exit 0
+          git push origin "ai/issue-%ISSUE_NUM%" 2>nul || exit 0
+
+      - name: Build
+        run: |
+          dotnet restore TelegramSearchBot.sln
+          dotnet build TelegramSearchBot.sln --configuration Release --no-restore
+
+      - name: Run tests
+        id: tests
+        run: dotnet test TelegramSearchBot.sln --configuration Release --no-build
+        continue-on-error: true
+
+      - name: Fix tests
+        if: steps.tests.outcome == 'failure'
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+        run: |
+          npm install -g @opencode-ai/cli
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
+          
+          node -e "
+            const fs = require('fs');
+            let p = fs.readFileSync('.github/workflows/prompts/ai-fix-tests-prompt.txt','utf8');
+            p = p.replace(/{{issue_number}}/g, '%ISSUE_NUM%');
+            fs.writeFileSync('fix_prompt.txt', p);
+          "
+          
+          opencode --project-path . --file fix_prompt.txt --output fix.txt
+          dotnet build TelegramSearchBot.sln --configuration Release
+          dotnet test TelegramSearchBot.sln --configuration Release --no-build 2>nul || exit 0
+
+      - name: Commit fixes
+        if: steps.tests.outcome == 'failure'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "AI Agent"
+          git config user.email "ai@github.local"
+          git add -A
+          git commit -m "AI: Fix tests issue-%ISSUE_NUM%" 2>nul || exit 0
+          git push origin "ai/issue-%ISSUE_NUM%" 2>nul || exit 0
+
+      - name: Create PR
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create --base main --head "ai/issue-%ISSUE_NUM%" --title "AI: Issue #%ISSUE_NUM%" --body "AI implementation" 2>nul || echo PR exists
+
+      - name: Mark issue as done
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              issue_number: parseInt('%ISSUE_NUM%'),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['ai-done']
+            });

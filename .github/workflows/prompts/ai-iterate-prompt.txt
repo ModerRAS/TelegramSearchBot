@@ -1,0 +1,13 @@
+/ulw-loop
+
+Apply the requested changes described in the PR comments.
+
+Issue: #{{issue_number}}
+PR Number: #{{pr_number}}
+
+Instructions:
+1. Read and understand the requested changes from the PR comments
+2. Implement the changes as requested
+3. Keep changes minimal and focused
+4. Run tests to verify the changes work correctly
+5. Commit and push the changes
