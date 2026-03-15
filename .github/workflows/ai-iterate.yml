@@ -112,6 +112,8 @@ jobs:
               issue_number: parseInt('${{ steps.extract.outputs.pr_number }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
+              body: body
+            });
 
       - name: Merge PR
         if: steps.changes.outputs.changed > 0
@@ -119,5 +121,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr merge --squash --delete-branch "ai/issue-$env:ISSUE_NUM" --auto 2>nul || echo "PR merge failed or already merged"
-              body: body
-            });
+
