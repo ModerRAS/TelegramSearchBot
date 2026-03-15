@@ -32,7 +32,7 @@ jobs:
       - name: Install OpenCode and oh-my-opencode
         run: |
           bun add -g opencode-ai
-          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --opencode-go=yes
 
       - name: Copy oh-my-opencode config
         run: |
@@ -70,11 +70,11 @@ jobs:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
           bun add -g opencode-ai
-          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --opencode-go=yes
 
           node -e "const fs=require('fs');const c=JSON.parse(process.env.COMMENTS_DATA);let p=fs.readFileSync('.github/workflows/prompts/ai-iterate-prompt.txt','utf8');p=p.replace(/{{issue_number}}/g,'%ISSUE_NUM%').replace(/{{pr_number}}/g,'%PR_NUMBER%').replace(/{{comments}}/g,c.join('\n\n'));fs.writeFileSync('prompt.txt',p);"
 
-          cat prompt.txt | opencode run . --output result.txt
+          cat prompt.txt | opencode run --dir .
 
       - name: Check changes
         id: changes
