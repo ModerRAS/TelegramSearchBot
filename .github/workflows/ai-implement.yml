@@ -154,10 +154,18 @@ jobs:
 
       - name: Create PR
         if: always()
+        id: create_pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr create --base main --head "ai/issue-$env:ISSUE_NUM" --title "AI: Issue #$env:ISSUE_NUM" --body "AI implementation" 2>nul || echo PR exists
+
+      - name: Merge PR
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge --squash --delete-branch "ai/issue-$env:ISSUE_NUM" --auto 2>nul || echo "PR merge failed or already merged"
 
       - name: Mark issue as done
         if: always()
