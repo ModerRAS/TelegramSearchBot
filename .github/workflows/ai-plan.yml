@@ -87,6 +87,7 @@ jobs:
         env:
           ISSUE_DATA: ${{ steps.issue.outputs.result }}
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          OPENCODE_GO: "yes"
         run: |
           bun add -g opencode-ai
 
@@ -97,11 +98,11 @@ jobs:
             p=p.replace(/{{issue_number}}/g,d.number)
                .replace(/{{issue_title}}/g,d.title)
                .replace(/{{issue_body}}/g,d.body)
-                .replace(/{{issue_url}}/g,d.url);
+               .replace(/{{issue_url}}/g,d.url);
             fs.writeFileSync('prompt.txt',p);
           "
 
-          opencode . < prompt.txt
+          opencode . < prompt.txt --opencode-go=yes
 
       - name: Post plan comment
         if: steps.opencode.outputs.result != '' && steps.find-comment.outputs.result == 'none'
