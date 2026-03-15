@@ -47,8 +47,8 @@ jobs:
 
       - name: Set environment variables
         run: |
-          echo ISSUE_NUM=${{ steps.extract.outputs.issue_number }} >> %GITHUB_OUTPUT%
-          echo PR_NUMBER=${{ steps.extract.outputs.pr_number }} >> %GITHUB_OUTPUT%
+          echo "ISSUE_NUM=${{ steps.extract.outputs.issue_number }}" >> $env:GITHUB_ENV
+          echo "PR_NUMBER=${{ steps.extract.outputs.pr_number }}" >> $env:GITHUB_ENV
 
       - name: Get PR comments
         id: comments
@@ -81,7 +81,7 @@ jobs:
           # 替换配置文件中的占位符
           powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
 
-          node -e "const fs=require('fs');const c=JSON.parse(process.env.COMMENTS_DATA);let p=fs.readFileSync('.github/workflows/prompts/ai-iterate-prompt.txt','utf8');p=p.replace(/{{issue_number}}/g,'%ISSUE_NUM%').replace(/{{pr_number}}/g,'%PR_NUMBER%').replace(/{{comments}}/g,c.join('\n\n'));fs.writeFileSync('prompt.txt',p);"
+          node -e "const fs=require('fs');const c=JSON.parse(process.env.COMMENTS_DATA);let p=fs.readFileSync('.github/workflows/prompts/ai-iterate-prompt.txt','utf8');p=p.replace(/{{issue_number}}/g,'$env:ISSUE_NUM').replace(/{{pr_number}}/g,'$env:PR_NUMBER').replace(/{{comments}}/g,c.join('\n\n'));fs.writeFileSync('prompt.txt',p);"
 
           opencode . < prompt.txt --opencode-go=yes
 
@@ -100,7 +100,7 @@ jobs:
           git config user.email "ai@github.local"
           git add -A
           git commit -m "AI: Iterate based on feedback" 2>nul
-          git push origin "ai/issue-%ISSUE_NUM%" 2>nul
+          git push origin "ai/issue-$env:ISSUE_NUM" 2>nul
 
       - name: Post iteration report
         if: steps.changes.outputs.changed > 0
