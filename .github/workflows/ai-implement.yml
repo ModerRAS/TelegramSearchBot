@@ -150,13 +150,6 @@ jobs:
         run: |
           gh pr create --base master --head "ai/issue-${{ env.ISSUE_NUM }}" --title "AI: Issue #${{ env.ISSUE_NUM }}" --body "AI implementation" || echo "PR exists"
 
-      - name: Merge PR
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr merge --squash --delete-branch "ai/issue-${{ env.ISSUE_NUM }}" --auto || echo "PR merge failed or already merged"
-
       - name: Cleanup temp files
         if: always()
         run: |

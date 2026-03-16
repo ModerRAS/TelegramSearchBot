@@ -151,11 +151,6 @@ jobs:
           git checkout -b "$BRANCH_NAME" main 2>/dev/null || git checkout -b "$BRANCH_NAME" master 2>/dev/null || git checkout -b "$BRANCH_NAME"
           git push -u origin "$BRANCH_NAME" || echo "Branch created locally"
 
-      - name: Cleanup temp files
-        if: always()
-        run: |
-          rm -f /tmp/prompt.txt /tmp/plan.md plan.md /tmp/issue_data.json 2>/dev/null || true
-
       - name: Remove ai-task label after planning
         if: steps.find-comment.outputs.result == 'none'
         uses: actions/github-script@v7
@@ -169,6 +164,11 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo
             });
+
+      - name: Cleanup temp files
+        if: always()
+        run: |
+          rm -f /tmp/prompt.txt /tmp/plan.md plan.md /tmp/issue_data.json 2>/dev/null || true
 
       - name: Cleanup label on failure
         if: failure() && steps.find-comment.outputs.result == 'none'
