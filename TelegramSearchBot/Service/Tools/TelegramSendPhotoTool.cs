@@ -1,3 +1,0 @@
-namespace TelegramSearchBot.Service.Tools
-{
-}

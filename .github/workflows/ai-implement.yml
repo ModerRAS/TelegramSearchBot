@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   ai-implement:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,30 +32,24 @@ jobs:
       - name: Install OpenCode and oh-my-opencode
         run: |
           bun add -g opencode-ai
-          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no 
 
       - name: Copy oh-my-opencode config
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
-          mkdir %USERPROFILE%\.config\opencode
-          # 复制并替换 opencode.json
-          powershell -Command "$content = Get-Content '.github/workflows/opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\opencode.json -Value $content"
-          # 复制并替换 oh-my-opencode.json
-          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
+          mkdir -p ~/.config/opencode
+          sed "s/MINIMAX_API_KEY/${MINIMAX_API_KEY}/g" .github/workflows/opencode.json > ~/.config/opencode/opencode.json
+          sed "s/MINIMAX_API_KEY/${MINIMAX_API_KEY}/g" .github/workflows/oh-my-opencode.json > ~/.config/opencode/oh-my-opencode.json
 
       - name: Extract issue number
         id: extract
         run: |
-          $ref = $env:GITHUB_REF_NAME
-          if ($ref -match 'ai/issue-(\d+)') {
-            Write-Output "issue_number=$($Matches[1])" >> $env:GITHUB_OUTPUT
-          }
+          echo "issue_number=$(echo ${{ github.ref_name }} | grep -oP 'ai/issue-\K\d+')" >> $GITHUB_OUTPUT
 
       - name: Set environment variables
         run: |
-          echo "ISSUE_NUM=${{ steps.extract.outputs.issue_number }}" >> $env:GITHUB_ENV
-          echo "PR_NUMBER=${{ steps.extract.outputs.issue_number }}" >> $env:GITHUB_ENV
+          echo "ISSUE_NUM=${{ steps.extract.outputs.issue_number }}" >> $GITHUB_ENV
+          echo "PR_NUMBER=${{ steps.extract.outputs.issue_number }}" >> $GITHUB_ENV
 
       - name: Get issue and plan
         id: issue
@@ -83,7 +77,6 @@ jobs:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           ISSUE_DATA: ${{ steps.issue.outputs.result }}
         run: |
-          # 创建临时 prompt 文件在 TEMP 目录
           node -e "
             const fs = require('fs');
             const data = JSON.parse(process.env.ISSUE_DATA);
@@ -91,17 +84,15 @@ jobs:
             p = p.replace(/{{issue_number}}/g, data.number)
                  .replace(/{{issue_title}}/g, data.title)
                  .replace(/{{plan}}/g, data.plan || 'No plan found');
-            const tempPath = process.env.TEMP + '\\\\prompt.txt';
-            fs.writeFileSync(tempPath, p);
+            fs.writeFileSync('/tmp/prompt.txt', p);
           "
           
-          # 运行 opencode
-          opencode run "$(type %TEMP%\prompt.txt)"
+          opencode run "$(cat /tmp/prompt.txt)"
 
       - name: Check changes
         id: changes
         run: |
-          for /f %%a in ('git status --porcelain ^| find /c /v ""') do echo changed=%%a >> %GITHUB_OUTPUT%
+          echo "changed=$(git status --porcelain | wc -l)" >> $GITHUB_OUTPUT
 
       - name: Commit changes
         if: steps.changes.outputs.changed != '0'
@@ -111,8 +102,8 @@ jobs:
           git config user.name "AI Agent"
           git config user.email "ai@github.local"
           git add -A
-          git commit -m "AI: Implement issue-$env:ISSUE_NUM" 2>nul || exit 0
-          git push origin "ai/issue-$env:ISSUE_NUM" 2>nul || exit 0
+          git commit -m "AI: Implement issue-${{ env.ISSUE_NUM }}" || true
+          git push origin "ai/issue-${{ env.ISSUE_NUM }}" || true
 
       - name: Build
         run: |
@@ -129,18 +120,16 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
-          # 创建临时 fix_prompt 文件在 TEMP 目录
           node -e "
             const fs = require('fs');
             let p = fs.readFileSync('.github/workflows/prompts/ai-fix-tests-prompt.txt','utf8');
-            p = p.replace(/{{issue_number}}/g, '$env:ISSUE_NUM');
-            const tempPath = process.env.TEMP + '\\\\fix_prompt.txt';
-            fs.writeFileSync(tempPath, p);
+            p = p.replace(/{{issue_number}}/g, '${{ env.ISSUE_NUM }}');
+            fs.writeFileSync('/tmp/fix_prompt.txt', p);
           "
           
-          opencode . < %TEMP%\fix_prompt.txt --opencode-go=yes
+          opencode . < /tmp/fix_prompt.txt --opencode-go=yes
           dotnet build TelegramSearchBot.sln --configuration Release
-          dotnet test TelegramSearchBot.sln --configuration Release --no-build 2>nul || exit 0
+          dotnet test TelegramSearchBot.sln --configuration Release --no-build || true
 
       - name: Commit fixes
         if: steps.tests.outcome == 'failure'
@@ -150,8 +139,8 @@ jobs:
           git config user.name "AI Agent"
           git config user.email "ai@github.local"
           git add -A
-          git commit -m "AI: Fix tests issue-$env:ISSUE_NUM" 2>nul || exit 0
-          git push origin "ai/issue-$env:ISSUE_NUM" 2>nul || exit 0
+          git commit -m "AI: Fix tests issue-${{ env.ISSUE_NUM }}" || true
+          git push origin "ai/issue-${{ env.ISSUE_NUM }}" || true
 
       - name: Create PR
         if: always()
@@ -159,19 +148,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create --base master --head "ai/issue-$env:ISSUE_NUM" --title "AI: Issue #$env:ISSUE_NUM" --body "AI implementation" 2>nul || echo PR exists
+          gh pr create --base master --head "ai/issue-${{ env.ISSUE_NUM }}" --title "AI: Issue #${{ env.ISSUE_NUM }}" --body "AI implementation" || echo "PR exists"
 
       - name: Merge PR
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr merge --squash --delete-branch "ai/issue-$env:ISSUE_NUM" --auto 2>nul || echo "PR merge failed or already merged"
+          gh pr merge --squash --delete-branch "ai/issue-${{ env.ISSUE_NUM }}" --auto || echo "PR merge failed or already merged"
 
       - name: Cleanup temp files
         if: always()
         run: |
-          del /q "%TEMP%\prompt.txt" "%TEMP%\fix_prompt.txt" 2>nul || exit 0
+          rm -f /tmp/prompt.txt /tmp/fix_prompt.txt
 
       - name: Mark issue as done
         if: always()
@@ -179,7 +168,7 @@ jobs:
         with:
           script: |
             await github.rest.issues.addLabels({
-              issue_number: parseInt('$env:ISSUE_NUM'),
+              issue_number: parseInt('${{ env.ISSUE_NUM }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: ['ai-done']
