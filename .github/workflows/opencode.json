@@ -5,7 +5,7 @@
     "minimax": {
       "npm": "@ai-sdk/anthropic",
       "options": {
-        "baseURL": "https://api.minimaxi.com/anthropic",
+        "baseURL": "https://api.minimaxi.com/anthropic/v1",
         "apiKey": "MINIMAX_API_KEY"
       },
       "models": {
