@@ -1,0 +1,15 @@
+The build failed for your implementation. Fix the build errors.
+
+Issue: #{{issue_number}}
+
+Instructions:
+1. Analyze the build errors from the previous step
+2. Fix the implementation to make the build pass
+3. Do NOT modify test files - fix the actual code
+4. Run build again to verify
+
+Common issues to check:
+- Missing using statements
+- Wrong class names or type references
+- Missing namespace imports
+- Incorrect method signatures
