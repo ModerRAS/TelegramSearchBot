@@ -107,27 +107,4 @@ jobs:
           git push origin "ai/issue-$env:ISSUE_NUM" 2>nul
 
       - name: Post iteration report
-        if: steps.changes.outputs.changed > 0
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const body = "## AI Iteration Report\n\nChanges made:\n- Applied requested changes from PR comments\n- Fixed identified issues\n\nFiles modified: See commit history\nTest results: See workflow logs";
-            await github.rest.issues.createComment({
-              issue_number: parseInt('${{ steps.extract.outputs.pr_number }}'),
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: body
-            });
-
-      - name: Merge PR
-        if: steps.changes.outputs.changed > 0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr merge --squash --delete-branch "ai/issue-$env:ISSUE_NUM" --auto 2>nul || echo "PR merge failed or already merged"
-
-      - name: Cleanup temp files
-        if: always()
-        run: |
-          del /q "%TEMP%\prompt.txt" 2>nul || exit 0
 
