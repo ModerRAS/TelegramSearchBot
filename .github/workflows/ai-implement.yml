@@ -149,8 +149,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr create --base master --head "ai/issue-${{ env.ISSUE_NUM }}" --title "AI: Issue #${{ env.ISSUE_NUM }}" --body "AI implementation" || echo "PR exists"
-
-      - name: Cleanup temp files
-        if: always()
-        run: |
-          rm -f /tmp/prompt.txt /tmp/fix_prompt.txt
