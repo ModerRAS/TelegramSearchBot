@@ -24,7 +24,7 @@ namespace TelegramSearchBot.Service.Tools {
             _sendMessage = sendMessage;
         }
 
-        [BuiltInTool("Sends a photo to the current chat using base64 encoded image data.")]
+        [BuiltInTool("Sends a photo to the current chat using base64 encoded image data.", Name = "send_photo_base64")]
         public async Task<SendPhotoResult> SendPhotoBase64(
             [BuiltInParameter("The base64 encoded image data (without the data URI prefix).", IsRequired = true)] string base64Data,
             [BuiltInParameter("Optional caption for the photo (max 1024 characters).", IsRequired = false)] string caption,
@@ -78,7 +78,7 @@ namespace TelegramSearchBot.Service.Tools {
             }
         }
 
-        [BuiltInTool("Sends a photo to the current chat using a file path.")]
+        [BuiltInTool("Sends a photo to the current chat using a file path.", Name = "send_photo_file")]
         public async Task<SendPhotoResult> SendPhotoFile(
             [BuiltInParameter("The file path to the image on the server.", IsRequired = true)] string filePath,
             [BuiltInParameter("Optional caption for the photo (max 1024 characters).", IsRequired = false)] string caption,
