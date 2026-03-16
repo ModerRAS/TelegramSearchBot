@@ -1,4 +1,6 @@
-You are an AI coding assistant using OpenCode. Analyze the following GitHub issue and generate a detailed implementation plan.
+/ulw-loop
+
+You are an AI coding assistant with oh-my-opencode. Analyze the following GitHub issue and generate a detailed implementation plan.
 
 Issue #{{issue_number}}: {{issue_title}}
 
