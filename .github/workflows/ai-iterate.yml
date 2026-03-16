@@ -42,8 +42,11 @@ jobs:
       - name: Extract issue number
         id: extract
         run: |
-          for /f "tokens=2 delims=/" %%a in ("%GITHUB_HEAD_REF%") do echo issue_number=%%a >> %GITHUB_OUTPUT%
-          echo pr_number=%GITHUB_PR_NUMBER% >> %GITHUB_OUTPUT%
+          $branch = $env:GITHUB_HEAD_REF
+          if ($branch -match 'ai/issue-(\d+)') {
+            Write-Output "issue_number=$($Matches[1])" >> $env:GITHUB_OUTPUT
+          }
+          Write-Output "pr_number=$env:GITHUB_PR_NUMBER" >> $env:GITHUB_OUTPUT
 
       - name: Set environment variables
         run: |
@@ -76,9 +79,11 @@ jobs:
           COMMENTS_DATA: ${{ steps.comments.outputs.result }}
         run: |
           bun add -g opencode-ai
-          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no 
           
-          # 替换配置文件中的占位符
+          # 复制并替换 opencode.json (本体配置)
+          powershell -Command "$content = Get-Content '.github/workflows/opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\opencode.json -Value $content"
+          
+          # 复制并替换 oh-my-opencode.json (插件配置)
           powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
 
           node -e "const fs=require('fs');const c=JSON.parse(process.env.COMMENTS_DATA);let p=fs.readFileSync('.github/workflows/prompts/ai-iterate-prompt.txt','utf8');p=p.replace(/{{issue_number}}/g,'$env:ISSUE_NUM').replace(/{{pr_number}}/g,'$env:PR_NUMBER').replace(/{{comments}}/g,c.join('\n\n'));fs.writeFileSync('prompt.txt',p);"
