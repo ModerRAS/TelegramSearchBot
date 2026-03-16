@@ -51,6 +51,31 @@ namespace TelegramSearchBot.Service.BotAPI {
         public Task SendDocument(byte[] inputFile, string FileName, long ChatId, int replyTo) => SendDocument(InputFile.FromStream(new MemoryStream(inputFile), FileName), ChatId, replyTo);
         public Task SendDocument(string inputFile, string FileName, long ChatId, int replyTo) => SendDocument(InputFile.FromStream(new MemoryStream(Encoding.UTF8.GetBytes(inputFile)), FileName), ChatId, replyTo);
 
+        public async Task SendPhotoAsync(InputFile photo, string caption, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2) {
+            await Send.AddTask(async () => {
+                await botClient.SendPhoto(
+                    chatId: chatId,
+                    photo: photo,
+                    caption: caption,
+                    parseMode: parseMode,
+                    replyParameters: new ReplyParameters() { MessageId = replyTo }
+                );
+            }, chatId < 0);
+        }
+
+        public async Task SendPhotoAsync(Stream inputFile, string caption, string fileName, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2) {
+            await SendPhotoAsync(InputFile.FromStream(inputFile, fileName), caption, chatId, replyTo, parseMode);
+        }
+
+        public async Task SendPhotoAsync(byte[] inputFile, string caption, string fileName, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2) {
+            await SendPhotoAsync(InputFile.FromStream(new MemoryStream(inputFile), fileName), caption, chatId, replyTo, parseMode);
+        }
+
+        public async Task SendPhotoAsyncBase64(string base64, string caption, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2) {
+            var bytes = Convert.FromBase64String(base64);
+            await SendPhotoAsync(bytes, caption, "photo.jpg", chatId, replyTo, parseMode);
+        }
+
         public Task SendMessage(string Text, Chat ChatId, int replyTo) => SendMessage(Text, ChatId.Id, replyTo);
         public async Task SendMessage(string Text, long ChatId, int replyTo) {
             await Send.AddTask(async () => {
