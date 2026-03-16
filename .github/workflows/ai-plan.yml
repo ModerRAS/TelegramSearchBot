@@ -123,9 +123,14 @@ jobs:
               try {
                 plan = fs.readFileSync('/tmp/plan.md', 'utf8');
               } catch (e2) {
-                plan = '## AI Implementation Plan\n\nNo plan generated.';
+                plan = '';
               }
             }
+            
+            if (!plan || plan.trim() === '' || plan.includes('No plan generated')) {
+              throw new Error('AI failed to generate a plan. Check opencode configuration and API key.');
+            }
+            
             const data = JSON.parse(fs.readFileSync('/tmp/issue_data.json', 'utf8'));
             await github.rest.issues.createComment({
               issue_number: data.number,
