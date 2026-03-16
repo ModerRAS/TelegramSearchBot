@@ -35,9 +35,9 @@ jobs:
         id: claude-review
         uses: anthropics/claude-code-action@beta
         env:
-          ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+          ANTHROPIC_BASE_URL: https://api.minimaxi.com/anthropic
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_api_key: ${{ secrets.MINIMAX_API_KEY }}
 
           # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
           # model: "claude-opus-4-20250514"
