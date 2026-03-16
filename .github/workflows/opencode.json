@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "model": "minimax/MiniMax-M2.5",
   "provider": {
     "minimax": {
       "npm": "@ai-sdk/anthropic",
