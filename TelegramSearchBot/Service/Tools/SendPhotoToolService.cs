@@ -7,6 +7,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Tools;
+using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Tools;
 
@@ -101,7 +102,8 @@ namespace TelegramSearchBot.Service.Tools {
                 }
 
                 var fileInfo = new FileInfo(filePath);
-                var photo = InputFile.FromFilePath(filePath);
+                using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                var photo = InputFile.FromStream(fileStream, fileInfo.Name);
 
                 var replyParameters = replyToMessageId.HasValue
                     ? new ReplyParameters { MessageId = replyToMessageId.Value }
