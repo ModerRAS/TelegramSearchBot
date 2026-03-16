@@ -16,3 +16,5 @@ Generate a comprehensive implementation plan that includes:
 4. Testing strategy
 
 Format the response as a GitHub comment with proper markdown. Start with "## AI Implementation Plan" and be specific about the implementation steps. Do NOT write any code yet - just the plan.
+
+IMPORTANT: After generating the plan, save it to a file called "plan.md" in the current directory. The workflow will read this file to post as a comment on the issue.

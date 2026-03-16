@@ -35,9 +35,14 @@ jobs:
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no 
 
       - name: Copy oh-my-opencode config
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
           mkdir %USERPROFILE%\.config\opencode
-          copy .github\workflows\oh-my-opencode.json %USERPROFILE%\.config\opencode\oh-my-opencode.json
+          # 复制并替换 opencode.json
+          powershell -Command "$content = Get-Content '.github/workflows/opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\opencode.json -Value $content"
+          # 复制并替换 oh-my-opencode.json
+          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
 
       - name: Extract issue number
         id: extract
@@ -78,25 +83,19 @@ jobs:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           ISSUE_DATA: ${{ steps.issue.outputs.result }}
         run: |
-          bun add -g opencode-ai
-          
-          # 复制并替换 opencode.json (本体配置)
-          powershell -Command "$content = Get-Content '.github/workflows/opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\opencode.json -Value $content"
-          
-          # 复制并替换 oh-my-opencode.json (插件配置)
-          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
-          
+          # 创建临时 prompt 文件在 TEMP 目录
           node -e "
             const fs = require('fs');
             const data = JSON.parse(process.env.ISSUE_DATA);
             let p = fs.readFileSync('.github/workflows/prompts/ai-implement-prompt.txt','utf8');
             p = p.replace(/{{issue_number}}/g, data.number)
                  .replace(/{{issue_title}}/g, data.title)
-                 .replace(/{{plan}}/g, data.plan);
-            fs.writeFileSync('prompt.txt', p);
+                 .replace(/{{plan}}/g, data.plan || 'No plan found');
+            const tempPath = process.env.TEMP + '\\\\prompt.txt';
+            fs.writeFileSync(tempPath, p);
           "
           
-          opencode . < prompt.txt --opencode-go=yes
+          opencode . < %TEMP%\prompt.txt --opencode-go=yes
 
       - name: Check changes
         id: changes
@@ -129,20 +128,16 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
-          bun add -g opencode-ai
-          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no 
-          
-          # 确保配置文件中的占位符被正确替换
-          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
-          
+          # 创建临时 fix_prompt 文件在 TEMP 目录
           node -e "
             const fs = require('fs');
             let p = fs.readFileSync('.github/workflows/prompts/ai-fix-tests-prompt.txt','utf8');
             p = p.replace(/{{issue_number}}/g, '$env:ISSUE_NUM');
-            fs.writeFileSync('fix_prompt.txt', p);
+            const tempPath = process.env.TEMP + '\\\\fix_prompt.txt';
+            fs.writeFileSync(tempPath, p);
           "
           
-          opencode . < fix_prompt.txt --opencode-go=yes
+          opencode . < %TEMP%\fix_prompt.txt --opencode-go=yes
           dotnet build TelegramSearchBot.sln --configuration Release
           dotnet test TelegramSearchBot.sln --configuration Release --no-build 2>nul || exit 0
 
@@ -163,7 +158,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create --base main --head "ai/issue-$env:ISSUE_NUM" --title "AI: Issue #$env:ISSUE_NUM" --body "AI implementation" 2>nul || echo PR exists
+          gh pr create --base master --head "ai/issue-$env:ISSUE_NUM" --title "AI: Issue #$env:ISSUE_NUM" --body "AI implementation" 2>nul || echo PR exists
 
       - name: Merge PR
         if: always()
@@ -171,6 +166,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr merge --squash --delete-branch "ai/issue-$env:ISSUE_NUM" --auto 2>nul || echo "PR merge failed or already merged"
+
+      - name: Cleanup temp files
+        if: always()
+        run: |
+          del /q "%TEMP%\prompt.txt" "%TEMP%\fix_prompt.txt" 2>nul || exit 0
 
       - name: Mark issue as done
         if: always()

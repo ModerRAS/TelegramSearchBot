@@ -4,7 +4,7 @@
     "minimax": {
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "baseURL": "https://api.minimaxi.com/v1",
+        "baseURL": "https://api.minimaxi.com/anthropic",
         "apiKey": "MINIMAX_API_KEY"
       },
       "models": {
