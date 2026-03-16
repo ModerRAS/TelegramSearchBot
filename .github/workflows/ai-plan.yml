@@ -63,7 +63,8 @@ jobs:
         with:
           result-encoding: string
           script: |
-            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            const jsonStr = '${{ steps.issue.outputs.result }}'.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+            const data = JSON.parse(jsonStr);
             const { data: comments } = await github.rest.issues.listComments({
               issue_number: data.number,
               owner: context.repo.owner,
@@ -77,7 +78,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            const jsonStr = '${{ steps.issue.outputs.result }}'.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+            const data = JSON.parse(jsonStr);
             await github.rest.issues.removeLabel({
               issue_number: data.number,
               name: 'ai-task',
@@ -123,7 +125,8 @@ jobs:
                 plan = '## AI Implementation Plan\n\nNo plan generated.';
               }
             }
-            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            const jsonStr = '${{ steps.issue.outputs.result }}'.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+            const data = JSON.parse(jsonStr);
             await github.rest.issues.createComment({
               issue_number: data.number,
               owner: context.repo.owner,
@@ -154,7 +157,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            const jsonStr = '${{ steps.issue.outputs.result }}'.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+            const data = JSON.parse(jsonStr);
             await github.rest.issues.removeLabel({
               issue_number: data.number,
               name: 'ai-task',
@@ -167,7 +171,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const data = JSON.parse('${{ steps.issue.outputs.result }}');
+            const jsonStr = '${{ steps.issue.outputs.result }}'.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+            const data = JSON.parse(jsonStr);
             await github.rest.issues.removeLabel({
               issue_number: data.number,
               name: 'ai-task',
