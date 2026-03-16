@@ -95,7 +95,8 @@ jobs:
             fs.writeFileSync(tempPath, p);
           "
           
-          opencode . < %TEMP%\prompt.txt --opencode-go=yes
+          # 运行 opencode
+          opencode run "$(type %TEMP%\prompt.txt)"
 
       - name: Check changes
         id: changes

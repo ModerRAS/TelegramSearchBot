@@ -105,7 +105,7 @@ jobs:
           "
 
           # 运行 opencode
-          opencode . < /tmp/prompt.txt --opencode-go=yes
+          opencode run "$(cat /tmp/prompt.txt)"
 
       - name: Post plan comment
         if: steps.find-comment.outputs.result == 'none'

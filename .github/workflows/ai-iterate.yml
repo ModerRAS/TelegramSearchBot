@@ -86,7 +86,8 @@ jobs:
           # 创建临时 prompt 文件在 TEMP 目录
           node -e "const fs=require('fs');const c=JSON.parse(process.env.COMMENTS_DATA);let p=fs.readFileSync('.github/workflows/prompts/ai-iterate-prompt.txt','utf8');p=p.replace(/{{issue_number}}/g,'$env:ISSUE_NUM').replace(/{{pr_number}}/g,'$env:PR_NUMBER').replace(/{{comments}}/g,c.join('\\n\\n'));fs.writeFileSync(process.env.TEMP + '\\\\prompt.txt',p);"
 
-          opencode . < %TEMP%\prompt.txt --opencode-go=yes
+          # 运行 opencode
+          opencode run "$(type %TEMP%\prompt.txt)"
 
       - name: Check changes
         id: changes
