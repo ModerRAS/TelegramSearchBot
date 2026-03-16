@@ -35,6 +35,10 @@ jobs:
           mkdir -p ~/.config/opencode
           sed "s/MINIMAX_API_KEY/${MINIMAX_API_KEY}/g" .github/workflows/opencode.json > ~/.config/opencode/opencode.json
           sed "s/MINIMAX_API_KEY/${MINIMAX_API_KEY}/g" .github/workflows/oh-my-opencode.json > ~/.config/opencode/oh-my-opencode.json
+          echo "=== opencode.json ===" 
+          cat ~/.config/opencode/opencode.json
+          echo "=== oh-my-opencode.json ==="
+          cat ~/.config/opencode/oh-my-opencode.json
 
       - name: Get issue details
         id: issue
