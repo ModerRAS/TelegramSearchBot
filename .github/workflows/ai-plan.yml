@@ -95,7 +95,8 @@ jobs:
           bun add -g opencode-ai
           
           # 确保配置文件中的占位符被正确替换
-          sed 's/MINIMAX_API_KEY/'"$MINIMAX_API_KEY"'/g' .github/workflows/oh-my-opencode.json > ~/.config/opencode/oh-my-opencode.json
+          sed "s/MINIMAX_API_KEY/${MINIMAX_API_KEY}/g" .github/workflows/opencode.json > ~/.config/opencode/opencode.json
+          sed "s/MINIMAX_API_KEY/${MINIMAX_API_KEY}/g" .github/workflows/oh-my-opencode.json > ~/.config/opencode/oh-my-opencode.json
 
           node -e "
             const fs=require('fs');
