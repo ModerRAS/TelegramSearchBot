@@ -43,11 +43,6 @@ namespace TelegramSearchBot.Interface {
         Task SendMessage(string Text, long ChatId);
         Task SplitAndSendTextMessage(string Text, Chat ChatId, int replyTo);
         Task SplitAndSendTextMessage(string Text, long ChatId, int replyTo);
-
-        Task SendPhotoAsync(InputFile photo, string caption, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2);
-        Task SendPhotoAsync(Stream inputFile, string caption, string fileName, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2);
-        Task SendPhotoAsync(byte[] inputFile, string caption, string fileName, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2);
-        Task SendPhotoAsyncBase64(string base64, string caption, long chatId, int replyTo, ParseMode parseMode = ParseMode.MarkdownV2);
         #endregion
 
         #region Streaming Methods
