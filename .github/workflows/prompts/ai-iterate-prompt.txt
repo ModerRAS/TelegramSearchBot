@@ -1,5 +1,3 @@
-/ulw-loop
-
 Apply the requested changes described in the PR comments.
 
 Issue: #{{issue_number}}

@@ -87,7 +87,7 @@ jobs:
             fs.writeFileSync('/tmp/prompt.txt', p);
           "
           
-          opencode run "$(cat /tmp/prompt.txt)"
+          opencode . < /tmp/prompt.txt
 
       - name: Check changes
         id: changes
@@ -127,7 +127,7 @@ jobs:
             fs.writeFileSync('/tmp/fix_prompt.txt', p);
           "
           
-          opencode . < /tmp/fix_prompt.txt --opencode-go=yes
+          opencode . < /tmp/fix_prompt.txt
           dotnet build TelegramSearchBot.sln --configuration Release
           dotnet test TelegramSearchBot.sln --configuration Release --no-build || true
 

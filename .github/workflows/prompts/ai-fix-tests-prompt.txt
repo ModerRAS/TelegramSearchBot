@@ -1,5 +1,3 @@
-/ulw-loop
-
 The tests failed for your implementation. Fix the failing tests.
 
 Issue: #{{issue_number}}

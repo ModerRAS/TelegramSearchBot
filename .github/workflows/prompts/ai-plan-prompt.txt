@@ -1,5 +1,3 @@
-/ulw-loop
-
 You are an AI coding assistant with oh-my-opencode. Analyze the following GitHub issue and generate a detailed implementation plan.
 
 Issue #{{issue_number}}: {{issue_title}}
@@ -18,5 +16,5 @@ Generate a comprehensive implementation plan that includes:
 IMPORTANT: 
 - Do NOT write any code yet - just create the plan
 - Format the response as a Markdown with "## AI Implementation Plan" as the heading
-- Save your plan to a file called "plan.md" in the current directory (this is required)
+- Save your plan to /tmp/plan.md (this is required - use absolute path /tmp/plan.md)
 - The workflow will read this file to post as a comment on the issue

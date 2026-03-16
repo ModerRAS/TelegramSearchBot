@@ -108,7 +108,7 @@ jobs:
                  .replace(/{{issue_url}}/g, data.url);
             fs.writeFileSync('/tmp/prompt.txt', p);
           "
-          opencode run "$(cat /tmp/prompt.txt)"
+          opencode . < /tmp/prompt.txt
 
       - name: Post plan comment
         if: steps.find-comment.outputs.result == 'none'
