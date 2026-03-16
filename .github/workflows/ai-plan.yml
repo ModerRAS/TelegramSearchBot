@@ -176,10 +176,14 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const data = JSON.parse(fs.readFileSync('/tmp/issue_data.json', 'utf8'));
-            await github.rest.issues.removeLabel({
-              issue_number: data.number,
-              name: 'ai-task',
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
+            try {
+              const data = JSON.parse(fs.readFileSync('/tmp/issue_data.json', 'utf8'));
+              await github.rest.issues.removeLabel({
+                issue_number: data.number,
+                name: 'ai-task',
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+            } catch (e) {
+              console.log('Could not remove label: ' + e.message);
+            }
