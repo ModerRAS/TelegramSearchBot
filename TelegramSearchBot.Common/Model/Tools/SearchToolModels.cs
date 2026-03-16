@@ -2,6 +2,11 @@ using System;
 using System.Collections.Generic;
 
 namespace TelegramSearchBot.Model.Tools {
+    public class ToolResult {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+    }
+
     public class SearchToolResult {
         public string Query { get; set; }
         public int TotalFound { get; set; }
