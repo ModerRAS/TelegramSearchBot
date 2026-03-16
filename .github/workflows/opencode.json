@@ -2,9 +2,16 @@
   "$schema": "https://opencode.ai/config.json",
   "provider": {
     "minimax": {
-      "api": "https://api.minimaxi.com/anthropic",
-      "apiKey": "MINIMAX_API_KEY",
-      "model": "MiniMax-M2.5"
+      "npm": "@ai-sdk/anthropic",
+      "options": {
+        "baseURL": "https://api.minimaxi.com/anthropic",
+        "apiKey": "MINIMAX_API_KEY"
+      },
+      "models": {
+        "MiniMax-M2.5": {
+          "name": "MiniMax-M2.5"
+        }
+      }
     }
   }
 }
