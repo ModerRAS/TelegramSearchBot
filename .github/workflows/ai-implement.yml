@@ -1,6 +1,9 @@
 name: AI Implementation
 
 on:
+  schedule:
+    - cron: '0 16 * * *'
+  workflow_dispatch:
   push:
     branches:
       - 'ai/**'
