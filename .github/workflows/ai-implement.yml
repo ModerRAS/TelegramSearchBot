@@ -45,12 +45,79 @@ jobs:
           sed "s/MINIMAX_API_KEY/${MINIMAX_API_KEY}/g" .github/workflows/opencode.json > ~/.config/opencode/opencode.json
           sed "s/MINIMAX_API_KEY/${MINIMAX_API_KEY}/g" .github/workflows/oh-my-opencode.json > ~/.config/opencode/oh-my-opencode.json
 
-      - name: Extract issue number
+      - name: Determine trigger type and get issue info
+        id: determine
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const isSchedule = context.eventName === 'schedule';
+            const isDispatch = context.eventName === 'workflow_dispatch';
+            const isPush = context.eventName === 'push';
+            
+            let issueNumber = null;
+            let branchName = null;
+            
+            if (isPush && '${{ github.ref_name }}'.startsWith('ai/issue-')) {
+              const match = '${{ github.ref_name }}'.match(/ai\/issue-(\d+)/);
+              if (match) {
+                issueNumber = parseInt(match[1]);
+                branchName = '${{ github.ref_name }}';
+              }
+            } else if (isDispatch) {
+              const inputs = context.payload.inputs;
+              if (inputs && inputs.issue_number) {
+                issueNumber = parseInt(inputs.issue_number);
+                branchName = 'ai/issue-' + issueNumber;
+              }
+            } else if (isSchedule) {
+              const { data: issues } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'ai-task',
+                per_page: 10
+              });
+              
+              const { data: comments } = await github.rest.issues.listComments({
+                issue_number: issues[0]?.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              
+              const hasPlan = comments.some(c => c.body.includes('## AI Implementation Plan'));
+              
+              if (issues.length > 0 && hasPlan) {
+                issueNumber = issues[0].number;
+                branchName = 'ai/issue-' + issueNumber;
+              }
+            }
+            
+            return JSON.stringify({ issueNumber, branchName });
+
+      - name: Set issue number
         id: extract
         run: |
-          echo "issue_number=$(echo ${{ github.ref_name }} | grep -oP 'ai/issue-\K\d+')" >> $GITHUB_OUTPUT
+          node -e "const d=JSON.parse(process.env.RESULT); console.log('issue_number='+(d.issueNumber||'')); console.log('branch_name='+(d.branchName||''))" >> $GITHUB_OUTPUT
+        env:
+          RESULT: ${{ steps.determine.outputs.result }}
+
+      - name: Skip if no issues to process
+        if: steps.extract.outputs.issue_number == ''
+        run: |
+          echo "SKIP=true" >> $GITHUB_OUTPUT
+          echo "No issues with plan found"
+
+      - name: Checkout branch
+        if: steps.extract.outputs.branch_name != ''
+        env:
+          BRANCH: ${{ steps.extract.outputs.branch_name }}
+        run: |
+          git fetch origin $BRANCH || git checkout -b $BRANCH || true
+          git checkout $BRANCH || true
 
       - name: Set environment variables
+        if: steps.extract.outputs.branch_name != ''
         run: |
           echo "ISSUE_NUM=${{ steps.extract.outputs.issue_number }}" >> $GITHUB_ENV
           echo "PR_NUMBER=${{ steps.extract.outputs.issue_number }}" >> $GITHUB_ENV
