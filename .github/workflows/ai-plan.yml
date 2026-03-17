@@ -2,7 +2,11 @@ name: AI Issue Planning
 
 on:
   schedule:
+<<<<<<< HEAD
     - cron: '0 * * * *'
+=======
+    - cron: '0 16 * * *'
+>>>>>>> ec818d417686ec92ac0ab694d6bb26f95fecbc1d
   workflow_dispatch:
 
 permissions:
