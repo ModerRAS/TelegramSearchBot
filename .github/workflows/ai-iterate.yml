@@ -47,11 +47,13 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
-          mkdir %USERPROFILE%\.config\opencode
-          # 复制并替换 opencode.json
-          powershell -Command "$content = Get-Content '.github/workflows/opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\opencode.json -Value $content"
-          # 复制并替换 oh-my-opencode.json
-          powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
+          mkdir $env:USERPROFILE\.config\opencode
+          $content = Get-Content '.github/workflows/opencode.json' -Raw
+          $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY
+          Set-Content -Path "$env:USERPROFILE\.config\opencode\opencode.json" -Value $content
+          $content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw
+          $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY
+          Set-Content -Path "$env:USERPROFILE\.config\opencode\oh-my-opencode.json" -Value $content
 
       - name: Determine trigger type and get PR info
         id: determine
