@@ -47,7 +47,7 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
-          mkdir $env:USERPROFILE\.config\opencode
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.config\opencode" | Out-Null
           $content = Get-Content '.github/workflows/opencode.json' -Raw
           $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY
           Set-Content -Path "$env:USERPROFILE\.config\opencode\opencode.json" -Value $content
@@ -202,5 +202,5 @@ jobs:
       - name: Cleanup temp files
         if: always()
         run: |
-          del /q "%TEMP%\prompt.txt" 2>nul || exit 0
+          Remove-Item -Force "$env:TEMP\prompt.txt" -ErrorAction SilentlyContinue
 
