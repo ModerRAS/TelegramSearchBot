@@ -25,13 +25,12 @@ permissions:
 
 jobs:
   ai-iterate:
-    if: github.event_name == 'schedule' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'ai/issue-')) || (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@ai'))
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'ai/issue-')) || (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@ai'))
     runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
           fetch-depth: 1
 
       - name: Setup bun
@@ -54,27 +53,96 @@ jobs:
           # 复制并替换 oh-my-opencode.json
           powershell -Command "$content = Get-Content '.github/workflows/oh-my-opencode.json' -Raw; $content = $content -replace 'MINIMAX_API_KEY', $env:MINIMAX_API_KEY; Set-Content -Path $env:USERPROFILE\\.config\\opencode\\oh-my-opencode.json -Value $content"
 
-      - name: Extract issue number
-        id: extract
+      - name: Determine trigger type and get PR info
+        id: determine
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const isSchedule = context.eventName === 'schedule';
+            const isDispatch = context.eventName === 'workflow_dispatch';
+            const isPR = context.eventName === 'pull_request';
+            const isComment = context.eventName === 'issue_comment';
+            
+            let issueNumber = null;
+            let prNumber = null;
+            let branchName = null;
+            
+            if (isDispatch && context.payload.inputs && context.payload.inputs.issue_number) {
+              issueNumber = parseInt(context.payload.inputs.issue_number);
+              prNumber = issueNumber;
+              branchName = 'ai/issue-' + issueNumber;
+            } else if (isPR) {
+              const match = context.payload.pull_request.head.ref.match(/ai\/issue-(\d+)/);
+              if (match) {
+                issueNumber = parseInt(match[1]);
+                prNumber = context.payload.pull_request.number;
+                branchName = context.payload.pull_request.head.ref;
+              }
+            } else if (isComment) {
+              const match = context.payload.issue.body.match(/#(\d+)/);
+              if (context.payload.issue.pull_request) {
+                prNumber = context.payload.issue.number;
+                const prMatch = context.payload.issue.head.ref.match(/ai\/issue-(\d+)/);
+                if (prMatch) {
+                  issueNumber = parseInt(prMatch[1]);
+                  branchName = context.payload.issue.head.ref;
+                }
+              }
+            } else if (isSchedule) {
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                head: 'ai/issue-'
+              });
+              if (prs.length > 0) {
+                const pr = prs[0];
+                const match = pr.head.ref.match(/ai\/issue-(\d+)/);
+                issueNumber = parseInt(match[1]);
+                prNumber = pr.number;
+                branchName = pr.head.ref;
+              }
+            }
+            
+            return JSON.stringify({ issueNumber, prNumber, branchName, isSchedule });
+
+      - name: Set issue/PR number from dispatch/schedule
+        id: set_issue_pr
+        if: steps.determine.outputs.result != '{}'
         run: |
-          $branch = $env:GITHUB_HEAD_REF
-          if ($branch -match 'ai/issue-(\d+)') {
-            Write-Output "issue_number=$($Matches[1])" >> $env:GITHUB_OUTPUT
-          }
-          Write-Output "pr_number=$env:GITHUB_PR_NUMBER" >> $env:GITHUB_OUTPUT
+          node -e "const d=JSON.parse(process.env.RESULT); console.log('issueNumber='+(d.issueNumber||'')); console.log('prNumber='+(d.prNumber||'')); console.log('branchName='+(d.branchName||''))" >> %GITHUB_OUTPUT%
+        env:
+          RESULT: ${{ steps.determine.outputs.result }}
+
+      - name: Skip if no PRs found
+        if: steps.determine.outputs.result == '{}' || steps.set_issue_pr.outputs.branchName == ''
+        run: |
+          echo "SKIP=true" >> %GITHUB_OUTPUT%
+          echo "No PRs found to iterate"
+
+      - name: Checkout branch for schedule trigger
+        if: steps.set_issue_pr.outputs.branchName != ''
+        env:
+          BRANCH: ${{ steps.set_issue_pr.outputs.branchName }}
+        run: |
+          git fetch origin %BRANCH%
+          git checkout %BRANCH%
 
       - name: Set environment variables
+        if: steps.set_issue_pr.outputs.branchName != ''
         run: |
-          echo "ISSUE_NUM=${{ steps.extract.outputs.issue_number }}" >> $env:GITHUB_ENV
-          echo "PR_NUMBER=${{ steps.extract.outputs.pr_number }}" >> $env:GITHUB_ENV
+          echo "ISSUE_NUM=${{ steps.set_issue_pr.outputs.issueNumber }}" >> %GITHUB_ENV%
+          echo "PR_NUMBER=${{ steps.set_issue_pr.outputs.prNumber }}" >> %GITHUB_ENV%
 
       - name: Get PR comments
+        if: steps.set_issue_pr.outputs.branchName != ''
         id: comments
         uses: actions/github-script@v7
         with:
           result-encoding: string
           script: |
-            const prNum = '${{ steps.extract.outputs.pr_number }}';
+            const prNum = '${{ env.PR_NUMBER }}';
             const { data: comments } = await github.rest.issues.listComments({
               issue_number: parseInt(prNum),
               owner: context.repo.owner,
@@ -123,7 +191,7 @@ jobs:
           script: |
             const body = "## AI Iteration Report\n\nChanges made:\n- Applied requested changes from PR comments\n- Fixed identified issues\n\nFiles modified: See commit history\nTest results: See workflow logs";
             await github.rest.issues.createComment({
-              issue_number: parseInt('${{ steps.extract.outputs.pr_number }}'),
+              issue_number: parseInt('${{ env.PR_NUMBER }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: body
