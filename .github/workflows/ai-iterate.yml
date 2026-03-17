@@ -157,17 +157,25 @@ jobs:
             return JSON.stringify(newComments.map(c => c.body));
 
       - name: Run OpenCode for changes
-        if: steps.comments.outputs.result != '[]'
+        if: steps.comments.outputs.result != '[]' && steps.comments.outputs.result != ''
         id: opencode
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           COMMENTS_DATA: ${{ steps.comments.outputs.result }}
         run: |
-          # 创建临时 prompt 文件在 TEMP 目录
-          node -e "const fs=require('fs');const c=JSON.parse(process.env.COMMENTS_DATA);let p=fs.readFileSync('.github/workflows/prompts/ai-iterate-prompt.txt','utf8');p=p.replace(/{{issue_number}}/g,'$env:ISSUE_NUM').replace(/{{pr_number}}/g,'$env:PR_NUMBER').replace(/{{comments}}/g,c.join('\\n\\n'));fs.writeFileSync(process.env.TEMP + '\\\\prompt.txt',p);"
-
-          # 运行 opencode
-          opencode run "$(type %TEMP%\prompt.txt)"
+          $comments = '${{ steps.comments.outputs.result }}'
+          if ($comments -eq '' -or $comments -eq '[]') {
+            Write-Host 'No new comments, skipping OpenCode'
+            exit 0
+          }
+          $c = $comments | ConvertFrom-Json
+          $prompt = Get-Content '.github/workflows/prompts/ai-iterate-prompt.txt' -Raw
+          $prompt = $prompt -replace '{{issue_number}}', '${{ env.ISSUE_NUM }}'
+          $prompt = $prompt -replace '{{pr_number}}', '${{ env.PR_NUMBER }}'
+          $commentText = ($c | ForEach-Object { $_ }) -join "`n`n"
+          $prompt = $prompt -replace '{{comments}}', $commentText
+          $prompt | Out-File -FilePath "$env:TEMP\prompt.txt" -Encoding UTF8
+          opencode run (Get-Content "$env:TEMP\prompt.txt" -Raw)
 
       - name: Check changes
         id: changes
