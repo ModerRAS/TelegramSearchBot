@@ -1,10 +1,20 @@
 name: AI Iteration
 
 on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to iterate'
+        required: false
+      pr_number:
+        description: 'PR number to iterate'
+        required: false
+
   pull_request:
     types: [opened, synchronize]
-  schedule:
-    - cron: '0 0 * * *'
+
   issue_comment:
     types: [created]
 
@@ -107,4 +117,20 @@ jobs:
           git push origin "ai/issue-$env:ISSUE_NUM" 2>nul
 
       - name: Post iteration report
+        if: steps.changes.outputs.changed > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = "## AI Iteration Report\n\nChanges made:\n- Applied requested changes from PR comments\n- Fixed identified issues\n\nFiles modified: See commit history\nTest results: See workflow logs";
+            await github.rest.issues.createComment({
+              issue_number: parseInt('${{ steps.extract.outputs.pr_number }}'),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Cleanup temp files
+        if: always()
+        run: |
+          del /q "%TEMP%\prompt.txt" 2>nul || exit 0
 
