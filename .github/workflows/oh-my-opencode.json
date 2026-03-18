@@ -1,75 +1,61 @@
 {
   "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/master/assets/oh-my-opencode.schema.json",
-  "provider": {
-    "minimax": {
-      "npm": "@ai-sdk/anthropic",
-      "options": {
-        "baseURL": "https://api.minimaxi.com/anthropic/v1",
-        "apiKey": "MINIMAX_API_KEY"
-      },
-      "models": {
-        "MiniMax-M2.5": {
-          "name": "MiniMax-M2.5"
-        }
-      }
-    }
-  },
   "agents": {
     "hephaestus": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "oracle": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "librarian": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "explore": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "multimodal-looker": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "prometheus": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "metis": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "momus": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "atlas": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "sisyphus": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     }
   },
   "categories": {
     "visual-engineering": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "ultrabrain": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "deep": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "artistry": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "quick": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "unspecified-low": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "unspecified-high": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     },
     "writing": {
-      "model": "minimax/MiniMax-M2.5"
+      "model": "minimax-cn-coding-plan/MiniMax-M2.5"
     }
   }
 }

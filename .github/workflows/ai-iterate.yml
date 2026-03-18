@@ -20,6 +20,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: read
+  id-token: write
 
 jobs:
   ai-iterate:
@@ -36,10 +37,29 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install OpenCode and oh-my-opencode
+      - name: Get opencode version
+        id: version
         run: |
-          bun add -g opencode-ai
-          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no 
+          VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+          echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
+
+      - name: Cache opencode
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.opencode/bin
+          key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+
+      - name: Install opencode
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Add opencode to PATH
+        run: echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+
+      - name: Install oh-my-opencode
+        run: |
+          bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
 
       - name: Copy oh-my-opencode config
         env:
@@ -154,16 +174,15 @@ jobs:
             );
             return JSON.stringify(newComments.map(c => c.body));
 
-      - name: Run OpenCode for changes
+      - name: Prepare prompt for iteration
         if: steps.comments.outputs.result != '[]' && steps.comments.outputs.result != ''
-        id: opencode
+        id: prepare_prompt
         env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           COMMENTS_DATA: ${{ steps.comments.outputs.result }}
         run: |
           $comments = '${{ steps.comments.outputs.result }}'
           if ($comments -eq '' -or $comments -eq '[]') {
-            Write-Host 'No new comments, skipping OpenCode'
+            Write-Host 'No new comments, skipping'
             exit 0
           }
           $c = $comments | ConvertFrom-Json
@@ -172,8 +191,20 @@ jobs:
           $prompt = $prompt -replace '{{pr_number}}', '${{ env.PR_NUMBER }}'
           $commentText = ($c | ForEach-Object { $_ }) -join "`n`n"
           $prompt = $prompt -replace '{{comments}}', $commentText
+          # Write to temp file for opencode action
           $prompt | Out-File -FilePath "$env:TEMP\prompt.txt" -Encoding UTF8
-          opencode run (Get-Content "$env:TEMP\prompt.txt" -Raw)
+          # Also output as environment variable for action
+          echo "PROMPT_CONTENT=$prompt" >> $env:GITHUB_ENV
+
+      - name: Run OpenCode for changes
+        if: steps.comments.outputs.result != '[]' && steps.comments.outputs.result != ''
+        id: opencode
+        run: opencode github run
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MODEL: minimax-cn-coding-plan/MiniMax-M2.5
+          AGENT: sisyphus
+          PROMPT: ${{ env.PROMPT_CONTENT }}
 
       - name: Check changes
         id: changes
@@ -208,5 +239,5 @@ jobs:
       - name: Cleanup temp files
         if: always()
         run: |
-          Remove-Item -Force "$env:TEMP\prompt.txt" -ErrorAction SilentlyContinue
+          Remove-Item -Force "$env:TEMP\prompt.txt" -ErrorAction SilentlyContinue || true
 

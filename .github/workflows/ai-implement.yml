@@ -16,6 +16,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: read
+  id-token: write
 
 jobs:
   ai-implement:
@@ -32,9 +33,28 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install OpenCode and oh-my-opencode
+      - name: Get opencode version
+        id: version
         run: |
-          bun add -g opencode-ai
+          VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+          echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
+
+      - name: Cache opencode
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.opencode/bin
+          key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+
+      - name: Install opencode
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Add opencode to PATH
+        run: echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+
+      - name: Install oh-my-opencode
+        run: |
           bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no
 
       - name: Copy oh-my-opencode config
@@ -124,6 +144,7 @@ jobs:
 
       - name: Get issue and plan
         id: issue
+        if: steps.extract.outputs.branch_name != ''
         uses: actions/github-script@v7
         with:
           result-encoding: string
@@ -142,23 +163,31 @@ jobs:
             const plan = comments.find(c => c.body.includes('## AI Implementation Plan'));
             return JSON.stringify({ number: issue.number, title: issue.title, plan: plan ? plan.body : '' });
 
-      - name: Run OpenCode
-        id: opencode
+      - name: Prepare prompt
+        if: steps.extract.outputs.branch_name != ''
+        id: prepare_prompt
         env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           ISSUE_DATA: ${{ steps.issue.outputs.result }}
         run: |
           node -e "
             const fs = require('fs');
-            const data = JSON.parse(process.env.ISSUE_DATA);
+            const data = JSON.parse(process.env.ISSUE_DATA || '{}');
             let p = fs.readFileSync('.github/workflows/prompts/ai-implement-prompt.txt','utf8');
-            p = p.replace(/{{issue_number}}/g, data.number)
-                 .replace(/{{issue_title}}/g, data.title)
+            p = p.replace(/{{issue_number}}/g, data.number || '')
+                 .replace(/{{issue_title}}/g, data.title || '')
                  .replace(/{{plan}}/g, data.plan || 'No plan found');
-            fs.writeFileSync('/tmp/prompt.txt', p);
-          "
-          
-          opencode run "$(cat /tmp/prompt.txt)"
+            console.log('prompt_content=' + p);
+          " >> $GITHUB_OUTPUT
+
+      - name: Run OpenCode
+        id: opencode
+        if: steps.extract.outputs.branch_name != ''
+        run: opencode github run
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MODEL: minimax-cn-coding-plan/MiniMax-M2.5
+          AGENT: sisyphus
+          PROMPT: ${{ steps.prepare_prompt.outputs.prompt_content }}
 
       - name: Check changes
         id: changes
@@ -183,20 +212,29 @@ jobs:
           dotnet build TelegramSearchBot.sln --configuration Release --no-restore
         continue-on-error: true
 
-      - name: Fix build
+      - name: Prepare build fix prompt
         if: steps.build.outcome == 'failure'
-        env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+        id: prepare_build_fix
         run: |
           node -e "
             const fs = require('fs');
             let p = fs.readFileSync('.github/workflows/prompts/ai-fix-build-prompt.txt','utf8');
             p = p.replace(/{{issue_number}}/g, '${{ env.ISSUE_NUM }}');
-            fs.writeFileSync('/tmp/fix_build_prompt.txt', p);
-          "
-          
-          opencode run "$(cat /tmp/fix_build_prompt.txt)"
-          dotnet build TelegramSearchBot.sln --configuration Release
+            console.log('prompt_content=' + p);
+          " >> $GITHUB_OUTPUT
+
+      - name: Fix build
+        if: steps.build.outcome == 'failure'
+        run: opencode github run
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MODEL: minimax-cn-coding-plan/MiniMax-M2.5
+          AGENT: sisyphus
+          PROMPT: ${{ steps.prepare_build_fix.outputs.prompt_content }}
+
+      - name: Rebuild after fix
+        if: steps.build.outcome == 'failure'
+        run: dotnet build TelegramSearchBot.sln --configuration Release
 
       - name: Commit build fixes
         if: steps.build.outcome == 'failure'
@@ -214,19 +252,29 @@ jobs:
         run: dotnet test TelegramSearchBot.sln --configuration Release --no-build
         continue-on-error: true
 
-      - name: Fix tests
+      - name: Prepare test fix prompt
         if: steps.tests.outcome == 'failure'
-        env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+        id: prepare_test_fix
         run: |
           node -e "
             const fs = require('fs');
             let p = fs.readFileSync('.github/workflows/prompts/ai-fix-tests-prompt.txt','utf8');
             p = p.replace(/{{issue_number}}/g, '${{ env.ISSUE_NUM }}');
-            fs.writeFileSync('/tmp/fix_prompt.txt', p);
-          "
-          
-          opencode run "$(cat /tmp/fix_prompt.txt)"
+            console.log('prompt_content=' + p);
+          " >> $GITHUB_OUTPUT
+
+      - name: Fix tests
+        if: steps.tests.outcome == 'failure'
+        run: opencode github run
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MODEL: minimax-cn-coding-plan/MiniMax-M2.5
+          AGENT: sisyphus
+          PROMPT: ${{ steps.prepare_test_fix.outputs.prompt_content }}
+
+      - name: Rebuild after test fix
+        if: steps.tests.outcome == 'failure'
+        run: |
           dotnet build TelegramSearchBot.sln --configuration Release
           dotnet test TelegramSearchBot.sln --configuration Release --no-build || true
 
@@ -248,8 +296,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr create --base master --head "ai/issue-${{ env.ISSUE_NUM }}" --title "AI: Issue #${{ env.ISSUE_NUM }}" --body "AI implementation" || echo "PR exists"
-
-      - name: Cleanup temp files
-        if: always()
-        run: |
-          rm -f /tmp/prompt.txt /tmp/fix_prompt.txt
