@@ -79,7 +79,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             };
 
             var serialized = OpenAIService.SerializeProviderHistory(history);
-            
+
             Assert.Equal(5, serialized.Count);
             Assert.Contains("tool_call", serialized[2].Content);
             Assert.Contains("bash", serialized[3].Content);

@@ -179,7 +179,7 @@ namespace TelegramSearchBot.Service.Mcp {
                     _process.Kill(true);
                     // Wait briefly for the process to actually exit
                     try {
-                    _process.WaitForExit(ProcessExitTimeoutMs);
+                        _process.WaitForExit(ProcessExitTimeoutMs);
                     } catch { }
                 }
             } catch { }

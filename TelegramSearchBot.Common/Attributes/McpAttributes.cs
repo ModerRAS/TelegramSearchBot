@@ -1,7 +1,6 @@
 using System;
 
-namespace TelegramSearchBot.Attributes
-{
+namespace TelegramSearchBot.Attributes {
     /// <summary>
     /// Marks a method as a tool that can be called by the LLM.
     /// Deprecated: Use <see cref="BuiltInToolAttribute"/> instead for built-in tools.
