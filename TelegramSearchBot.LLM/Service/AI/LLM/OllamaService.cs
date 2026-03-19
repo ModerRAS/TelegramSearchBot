@@ -202,7 +202,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
                         ChatId = ChatId,
-                        OriginalMessageId = (int)message.MessageId,
+                        OriginalMessageId = ( int ) message.MessageId,
                         UserId = message.FromUserId,
                         ModelName = modelName,
                         Provider = "Ollama",

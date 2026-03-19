@@ -170,7 +170,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     var builtInParamAttr = param.GetCustomAttribute<BuiltInParameterAttribute>();
                     var mcpParamAttr = param.GetCustomAttribute<McpParameterAttribute>();
                     var paramDescription = builtInParamAttr?.Description ?? mcpParamAttr?.Description ?? $"Parameter '{param.Name}'";
-                    var paramIsRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? (!param.IsOptional && !param.HasDefaultValue);
+                    var paramIsRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !param.IsOptional && !param.HasDefaultValue );
                     var paramType = MapToJsonSchemaType(param.ParameterType);
 
                     properties[param.Name] = new Dictionary<string, object> {
@@ -511,7 +511,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
             }
 
-            if (toolName == null || (!ToolRegistry.ContainsKey(toolName) && !ExternalToolRegistry.ContainsKey(toolName))) {
+            if (toolName == null || ( !ToolRegistry.ContainsKey(toolName) && !ExternalToolRegistry.ContainsKey(toolName) )) {
                 _sLogger?.LogWarning($"ParseToolElement: Unregistered tool '{element.Name.LocalName}'");
                 return (null, null);
             }
@@ -703,8 +703,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             if (result is Task taskResult) {
                 await taskResult;
-                if (taskResult.GetType().IsGenericType)
-                {
+                if (taskResult.GetType().IsGenericType) {
                     return ( ( dynamic ) taskResult ).Result;
                 }
                 return null;
@@ -900,7 +899,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             RegisterExternalTools(
                 toolInfos,
                 async (serverName, toolName, arguments) => {
-                    var objectArgs = arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
+                    var objectArgs = arguments.ToDictionary(kvp => kvp.Key, kvp => ( object ) kvp.Value);
                     var result = await mcpServerManager.CallToolAsync(serverName, toolName, objectArgs);
                     if (result.IsError) {
                         return $"Error: {string.Join("\n", result.Content?.Select(c => c.Text ?? "") ?? Enumerable.Empty<string>())}";

@@ -22,7 +22,7 @@ namespace TelegramSearchBot.Model.Tools {
         /// 在累积内容末尾追加标记
         /// </summary>
         public static string AppendMarker(string accumulatedContent) {
-            return (accumulatedContent ?? string.Empty) + Marker;
+            return ( accumulatedContent ?? string.Empty ) + Marker;
         }
 
         /// <summary>
