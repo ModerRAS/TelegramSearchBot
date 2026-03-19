@@ -54,7 +54,7 @@ namespace TelegramSearchBot.Service.Storage {
             var existingUserInGroup = await DataContext.UsersWithGroup
                 .FirstOrDefaultAsync(s => s.UserId == messageOption.UserId &&
                                          s.GroupId == messageOption.ChatId);
-            
+
             if (existingUserInGroup == null) {
                 // 使用 try-catch 处理并发插入导致的唯一约束冲突
                 try {
@@ -75,7 +75,7 @@ namespace TelegramSearchBot.Service.Storage {
 
             var existingUserData = await DataContext.UserData
                 .FirstOrDefaultAsync(s => s.Id == messageOption.User.Id);
-            
+
             if (existingUserData == null && messageOption.User != null) {
                 try {
                     await DataContext.UserData.AddAsync(new UserData() {
@@ -96,7 +96,7 @@ namespace TelegramSearchBot.Service.Storage {
 
             var existingGroupData = await DataContext.GroupData
                 .FirstOrDefaultAsync(s => s.Id == messageOption.Chat.Id);
-            
+
             if (existingGroupData == null && messageOption.Chat != null) {
                 try {
                     await DataContext.GroupData.AddAsync(new GroupData() {
@@ -112,7 +112,7 @@ namespace TelegramSearchBot.Service.Storage {
                     DataContext.ChangeTracker.Clear();
                 }
             }
-            
+
             var message = new Message() {
                 GroupId = messageOption.ChatId,
                 MessageId = messageOption.MessageId,
@@ -123,7 +123,7 @@ namespace TelegramSearchBot.Service.Storage {
             if (messageOption.ReplyTo != 0) {
                 message.ReplyToMessageId = messageOption.ReplyTo;
             }
-            
+
             await DataContext.Messages.AddAsync(message);
             await DataContext.SaveChangesAsync();
             return message.Id;
