@@ -5,6 +5,6 @@ namespace TelegramSearchBot.Model {
         /// <summary>
         /// The original user message ID, used as default reply target for tool actions (e.g. sending photos).
         /// </summary>
-        public int MessageId { get; set; }
+        public long MessageId { get; set; }
     }
 }

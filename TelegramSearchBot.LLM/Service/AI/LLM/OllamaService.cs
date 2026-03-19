@@ -174,7 +174,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         string toolResultString;
                         bool isError = false;
                         try {
-                            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = (int)message.MessageId };
+                            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
                             toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
@@ -202,7 +202,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
                         ChatId = ChatId,
-                        OriginalMessageId = (int)message.MessageId,
+                        OriginalMessageId = message.MessageId,
                         UserId = message.FromUserId,
                         ModelName = modelName,
                         Provider = "Ollama",
