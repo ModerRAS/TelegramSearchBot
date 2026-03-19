@@ -133,9 +133,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 sb.AppendLine($"    <description>{description}</description>");
                 sb.AppendLine($"    <parameters>");
                 foreach (var param in method.GetParameters()) {
+                    // Skip injected context parameters (e.g. ToolContext) that are not part of the tool API
+                    if (param.ParameterType == typeof(ToolContext)) continue;
+
                     // Check both attribute types
                     var builtInParamAttr = param.GetCustomAttribute<BuiltInParameterAttribute>();
                     var mcpParamAttr = param.GetCustomAttribute<McpParameterAttribute>();
+
+                    // Skip parameters that have no tool parameter attribute - they are internally injected
+                    if (builtInParamAttr == null && mcpParamAttr == null) continue;
+
                     var paramDescription = builtInParamAttr?.Description ?? mcpParamAttr?.Description ?? $"Parameter '{param.Name}'";
                     var paramIsRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !param.IsOptional && !param.HasDefaultValue && !( param.ParameterType.IsValueType && Nullable.GetUnderlyingType(param.ParameterType) == null ) );
                     var paramType = GetSimplifiedTypeName(param.ParameterType);
@@ -626,6 +633,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private static void ValidateRequiredParameters(string toolName, Dictionary<string, string> arguments) {
             var methodParams = ToolRegistry[toolName].Method.GetParameters();
             foreach (var param in methodParams) {
+                // Skip injected context parameters
+                if (param.ParameterType == typeof(ToolContext)) continue;
+
                 if (!arguments.ContainsKey(param.Name) &&
                     !param.IsOptional &&
                     !param.HasDefaultValue) {
