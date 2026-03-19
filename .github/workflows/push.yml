@@ -6,6 +6,7 @@ name: Push To ClickOnce
 on:
   push:
     branches: [ "master" ]
+  workflow_dispatch:
 
 jobs:
 
