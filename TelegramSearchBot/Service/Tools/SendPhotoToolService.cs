@@ -115,6 +115,14 @@ namespace TelegramSearchBot.Service.Tools {
                 // Read the entire file into memory to avoid file stream lifetime issues
                 // when the send is queued through the rate limiter
                 var fileInfo = new FileInfo(filePath);
+                const long maxFileSizeBytes = 10 * 1024 * 1024; // Telegram photo limit: 10 MB
+                if (fileInfo.Length > maxFileSizeBytes) {
+                    return new SendPhotoResult {
+                        Success = false,
+                        ChatId = toolContext.ChatId,
+                        Error = $"File is too large ({fileInfo.Length / 1024 / 1024}MB). Maximum allowed size is 10MB."
+                    };
+                }
                 var fileBytes = await File.ReadAllBytesAsync(filePath);
                 var photo = InputFile.FromStream(new MemoryStream(fileBytes), fileInfo.Name);
 
