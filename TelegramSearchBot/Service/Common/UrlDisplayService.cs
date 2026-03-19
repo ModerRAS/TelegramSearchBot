@@ -29,7 +29,7 @@ namespace TelegramSearchBot.Service.Common {
             try {
                 var uri = new Uri(url);
                 var domain = uri.Host;
-                
+
                 if (domain.Length > DomainMaxLength) {
                     domain = domain.Substring(0, DomainMaxLength) + "...";
                 }
