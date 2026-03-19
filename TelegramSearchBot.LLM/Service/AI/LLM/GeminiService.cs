@@ -313,7 +313,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     string toolResult;
                     bool isError = false;
                     try {
-                        var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId };
+                        var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = (int)message.MessageId };
                         var result = await McpToolHelper.ExecuteRegisteredToolAsync(
                             firstToolCall.toolName,
                             firstToolCall.arguments,

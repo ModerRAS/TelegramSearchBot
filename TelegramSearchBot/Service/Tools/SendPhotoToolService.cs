@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -19,9 +20,20 @@ namespace TelegramSearchBot.Service.Tools {
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
 
+        private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(120);
+
         public SendPhotoToolService(ITelegramBotClient botClient, SendMessage sendMessage) {
             _botClient = botClient;
             _sendMessage = sendMessage;
+        }
+
+        /// <summary>
+        /// Resolves the effective reply-to message ID. Uses the explicitly provided value if set,
+        /// otherwise falls back to the ToolContext.MessageId (the original user message).
+        /// </summary>
+        private static ReplyParameters GetReplyParameters(int? explicitReplyToMessageId, ToolContext toolContext) {
+            var messageId = explicitReplyToMessageId ?? (toolContext.MessageId != 0 ? toolContext.MessageId : (int?)null);
+            return messageId.HasValue ? new ReplyParameters { MessageId = messageId.Value } : null;
         }
 
         [BuiltInTool("Sends a photo to the current chat using base64 encoded image data.", Name = "send_photo_base64")]
@@ -51,17 +63,16 @@ namespace TelegramSearchBot.Service.Tools {
                 }
 
                 var photo = InputFile.FromStream(new MemoryStream(imageBytes), "photo.png");
+                var replyParameters = GetReplyParameters(replyToMessageId, toolContext);
 
-                var replyParameters = replyToMessageId.HasValue
-                    ? new ReplyParameters { MessageId = replyToMessageId.Value }
-                    : null;
-
+                using var cts = new CancellationTokenSource(SendTimeout);
                 var message = await _sendMessage.AddTaskWithResult(async () => await _botClient.SendPhoto(
                     chatId: toolContext.ChatId,
                     photo: photo,
                     caption: string.IsNullOrEmpty(caption) ? null : caption.Length > 1024 ? caption.Substring(0, 1024) : caption,
                     parseMode: ParseMode.Html,
-                    replyParameters: replyParameters
+                    replyParameters: replyParameters,
+                    cancellationToken: cts.Token
                 ), toolContext.ChatId);
 
                 return new SendPhotoResult {
@@ -101,20 +112,22 @@ namespace TelegramSearchBot.Service.Tools {
                     };
                 }
 
+                // Read the entire file into memory to avoid file stream lifetime issues
+                // when the send is queued through the rate limiter
                 var fileInfo = new FileInfo(filePath);
-                using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-                var photo = InputFile.FromStream(fileStream, fileInfo.Name);
+                var fileBytes = await File.ReadAllBytesAsync(filePath);
+                var photo = InputFile.FromStream(new MemoryStream(fileBytes), fileInfo.Name);
 
-                var replyParameters = replyToMessageId.HasValue
-                    ? new ReplyParameters { MessageId = replyToMessageId.Value }
-                    : null;
+                var replyParameters = GetReplyParameters(replyToMessageId, toolContext);
 
+                using var cts = new CancellationTokenSource(SendTimeout);
                 var message = await _sendMessage.AddTaskWithResult(async () => await _botClient.SendPhoto(
                     chatId: toolContext.ChatId,
                     photo: photo,
                     caption: string.IsNullOrEmpty(caption) ? null : caption.Length > 1024 ? caption.Substring(0, 1024) : caption,
                     parseMode: ParseMode.Html,
-                    replyParameters: replyParameters
+                    replyParameters: replyParameters,
+                    cancellationToken: cts.Token
                 ), toolContext.ChatId);
 
                 return new SendPhotoResult {
