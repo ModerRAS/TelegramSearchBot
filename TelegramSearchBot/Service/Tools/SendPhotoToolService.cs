@@ -41,7 +41,7 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("The base64 encoded image data (without the data URI prefix).")] string base64Data,
             ToolContext toolContext,
             [BuiltInParameter("Optional caption for the photo (max 1024 characters).", IsRequired = false)] string caption = null,
-            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] long? replyToMessageId = null) {
+            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] int? replyToMessageId = null) {
             try {
                 byte[] imageBytes;
                 try {
@@ -94,7 +94,7 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("The file path to the image on the server.")] string filePath,
             ToolContext toolContext,
             [BuiltInParameter("Optional caption for the photo (max 1024 characters).", IsRequired = false)] string caption = null,
-            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] long? replyToMessageId = null) {
+            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] int? replyToMessageId = null) {
             try {
                 if (string.IsNullOrWhiteSpace(filePath)) {
                     return new SendPhotoResult {
