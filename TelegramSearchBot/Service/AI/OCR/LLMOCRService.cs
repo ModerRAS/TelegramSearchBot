@@ -4,8 +4,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SkiaSharp;
 using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface.AI.OCR;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.AI.OCR;
 
 namespace TelegramSearchBot.Service.AI.OCR {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
@@ -28,7 +28,7 @@ namespace TelegramSearchBot.Service.AI.OCR {
                 var tg_img = SKBitmap.Decode(file);
                 var tg_img_data = tg_img.Encode(SKEncodedImageFormat.Jpeg, 99);
                 var tempPath = Path.GetTempFileName() + ".jpg";
-                
+
                 try {
                     using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write)) {
                         tg_img_data.SaveTo(fs);

@@ -21,7 +21,7 @@ namespace TelegramSearchBot.Model.AI {
     public static class OCRConfStateExtensions {
         public static string GetDescription(this OCRConfState state) {
             var fieldInfo = state.GetType().GetField(state.ToString());
-            var attributes = (DescriptionAttribute[])fieldInfo.GetCustomAttributes(typeof(DescriptionAttribute), false);
+            var attributes = ( DescriptionAttribute[] ) fieldInfo.GetCustomAttributes(typeof(DescriptionAttribute), false);
             return attributes.Length > 0 ? attributes[0].Description : state.ToString();
         }
     }

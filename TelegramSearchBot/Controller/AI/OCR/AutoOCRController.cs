@@ -70,11 +70,11 @@ namespace TelegramSearchBot.Controller.AI.OCR {
             try {
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
-                
+
                 var engine = await GetOCREngineAsync();
-                var ocrService = _ocrServices.FirstOrDefault(s => s.Engine == engine) 
+                var ocrService = _ocrServices.FirstOrDefault(s => s.Engine == engine)
                     ?? _ocrServices.First(s => s.Engine == OCREngine.PaddleOCR);
-                
+
                 logger.LogInformation($"使用OCR引擎: {engine}");
                 OcrStr = await ocrService.ExecuteAsync(new MemoryStream(PhotoStream));
                 if (!string.IsNullOrWhiteSpace(OcrStr)) {

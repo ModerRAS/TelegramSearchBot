@@ -50,7 +50,7 @@ namespace TelegramSearchBot.Service.Manage {
 
         public async Task<(bool, string)> ExecuteAsync(string command, long chatId) {
             var redis = new EditOCRConfRedisHelper(connectionMultiplexer, chatId);
-            
+
             var currentState = await redis.GetStateAsync();
             if (string.IsNullOrEmpty(currentState)) {
                 currentState = OCRConfState.MainMenu.GetDescription();
@@ -78,7 +78,7 @@ namespace TelegramSearchBot.Service.Manage {
             var sb = new StringBuilder();
             sb.AppendLine("🔧 OCR配置");
             sb.AppendLine();
-            
+
             var currentEngine = await GetCurrentEngineAsync();
             sb.AppendLine($"当前OCR引擎: {currentEngine}");
             sb.AppendLine();
@@ -98,7 +98,7 @@ namespace TelegramSearchBot.Service.Manage {
             } else if (command == "2" || command == "LLM") {
                 await SetEngineAsync(OCREngine.LLM);
                 await redis.SetStateAsync(OCRConfState.SelectingLLMChannel.GetDescription());
-                
+
                 var channels = await GetAvailableLLMChannelsAsync();
                 var sb = new StringBuilder();
                 sb.AppendLine("已切换到LLM引擎");
@@ -117,16 +117,16 @@ namespace TelegramSearchBot.Service.Manage {
             if (int.TryParse(command, out var channelId)) {
                 var channel = await DataContext.LLMChannels
                     .FirstOrDefaultAsync(c => c.Id == channelId);
-                
+
                 if (channel != null) {
                     await redis.SetChannelIdAsync(channelId);
                     await redis.SetStateAsync(OCRConfState.SelectingLLMModel.GetDescription());
-                    
+
                     var models = await DataContext.ChannelsWithModel
                         .Where(m => m.LLMChannelId == channelId && !m.IsDeleted)
                         .Select(m => m.ModelName)
                         .ToListAsync();
-                    
+
                     var sb = new StringBuilder();
                     sb.AppendLine($"已选择渠道: {channel.Name}");
                     sb.AppendLine();
@@ -153,7 +153,7 @@ namespace TelegramSearchBot.Service.Manage {
 
             await SetLLMConfigAsync(channelId.Value, command);
             await redis.DeleteKeysAsync();
-            
+
             return (true, $"OCR配置完成！\n引擎: LLM\n渠道ID: {channelId}\n模型: {command}");
         }
 
@@ -162,27 +162,27 @@ namespace TelegramSearchBot.Service.Manage {
             sb.AppendLine("📋 OCR配置详情");
             sb.AppendLine();
             sb.AppendLine($"引擎: {await GetCurrentEngineAsync()}");
-            
+
             var engineConfig = await DataContext.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == OCREngineKey);
-            
+
             if (engineConfig?.Value == OCREngine.LLM.ToString()) {
                 var channelConfig = await DataContext.AppConfigurationItems
                     .FirstOrDefaultAsync(x => x.Key == OCRLLMChannelIdKey);
                 var modelConfig = await DataContext.AppConfigurationItems
                     .FirstOrDefaultAsync(x => x.Key == OCRLLMModelNameKey);
-                
+
                 if (channelConfig != null && int.TryParse(channelConfig.Value, out var channelId)) {
                     var channel = await DataContext.LLMChannels
                         .FirstOrDefaultAsync(c => c.Id == channelId);
                     sb.AppendLine($"LLM渠道: {channel?.Name ?? "未找到"} ({channelId})");
                 }
-                
+
                 if (modelConfig != null) {
                     sb.AppendLine($"LLM模型: {modelConfig.Value}");
                 }
             }
-            
+
             sb.AppendLine();
             sb.AppendLine("输入\"返回\"返回主菜单");
 
@@ -199,7 +199,7 @@ namespace TelegramSearchBot.Service.Manage {
         private async Task SetEngineAsync(OCREngine engine) {
             var config = await DataContext.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == OCREngineKey);
-            
+
             if (config == null) {
                 await DataContext.AppConfigurationItems.AddAsync(new AppConfigurationItem {
                     Key = OCREngineKey,
@@ -208,7 +208,7 @@ namespace TelegramSearchBot.Service.Manage {
             } else {
                 config.Value = engine.ToString();
             }
-            
+
             await DataContext.SaveChangesAsync();
         }
 
@@ -220,7 +220,7 @@ namespace TelegramSearchBot.Service.Manage {
         private async Task SetConfigAsync(string key, string value) {
             var config = await DataContext.AppConfigurationItems
                 .FirstOrDefaultAsync(x => x.Key == key);
-            
+
             if (config == null) {
                 await DataContext.AppConfigurationItems.AddAsync(new AppConfigurationItem {
                     Key = key,
@@ -229,7 +229,7 @@ namespace TelegramSearchBot.Service.Manage {
             } else {
                 config.Value = value;
             }
-            
+
             await DataContext.SaveChangesAsync();
         }
 
