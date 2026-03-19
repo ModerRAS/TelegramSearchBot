@@ -8,12 +8,12 @@ namespace TelegramSearchBot.Interface.Tools {
             string base64Data,
             ToolContext toolContext,
             string caption = null,
-            int? replyToMessageId = null);
+            long? replyToMessageId = null);
 
         Task<SendPhotoResult> SendPhotoFile(
             string filePath,
             ToolContext toolContext,
             string caption = null,
-            int? replyToMessageId = null);
+            long? replyToMessageId = null);
     }
 }
