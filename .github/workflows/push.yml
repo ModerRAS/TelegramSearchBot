@@ -6,6 +6,7 @@ name: Push To ClickOnce
 on:
   push:
     branches: [ "master" ]
+  workflow_dispatch:
 
 jobs:
 
@@ -33,6 +34,11 @@ jobs:
         key: tg-bot-api-win-x64-${{ hashFiles('.github/workflows/push.yml') }}
         restore-keys: |
           tg-bot-api-win-x64-
+    - name: Install gperf
+      if: steps.cache-tg-bot-api.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        choco install gperf -y
     - name: Install vcpkg
       if: steps.cache-tg-bot-api.outputs.cache-hit != 'true'
       shell: pwsh
