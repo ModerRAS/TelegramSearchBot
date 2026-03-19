@@ -26,30 +26,59 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
     - name: Clear NuGet cache
       run: dotnet nuget locals all --clear
+
+    # =========================================================================
+    # TELEGRAM-BOT-API BUILD STEPS (REFACTORED WITH PROPER CACHING)
+    # =========================================================================
+
+    - name: Get telegram-bot-api commit hash
+      id: tg-commit
+      shell: pwsh
+      run: |
+        $hash = git ls-remote https://github.com/tdlib/telegram-bot-api.git HEAD | ForEach-Object { $_.Split("`t")[0] }
+        Write-Output "TG_COMMIT_HASH=$hash" | Tee-Object -FilePath $env:GITHUB_OUTPUT -Append
+        Write-Output "tg-commit-hash=$hash"
+
+    - name: Cache vcpkg
+      id: cache-vcpkg
+      uses: actions/cache@v4
+      with:
+        path: C:\vcpkg
+        key: vcpkg-x64-windows-static-v3-${{ runner.os }}
+        restore-keys: |
+          vcpkg-x64-windows-static-v3-
+
+    - name: Install vcpkg
+      if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+        C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
     - name: Cache telegram-bot-api build
       id: cache-tg-bot-api
       uses: actions/cache@v4
       with:
-        path: telegram-bot-api-bin
-        key: tg-bot-api-win-x64-${{ hashFiles('.github/workflows/push.yml') }}
+        path: |
+          telegram-bot-api
+          telegram-bot-api-bin
+        key: tg-bot-api-win-x64-${{ steps.tg-commit.outputs.tg-commit-hash }}
         restore-keys: |
           tg-bot-api-win-x64-
+
     - name: Install gperf
       if: steps.cache-tg-bot-api.outputs.cache-hit != 'true'
       shell: pwsh
       run: |
         choco install gperf -y
-    - name: Install vcpkg
-      if: steps.cache-tg-bot-api.outputs.cache-hit != 'true'
-      shell: pwsh
-      run: |
-        git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-        C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
     - name: Build telegram-bot-api from source
       if: steps.cache-tg-bot-api.outputs.cache-hit != 'true'
       shell: pwsh
       run: |
-        git clone --recursive https://github.com/tdlib/telegram-bot-api.git
+        if (!(Test-Path "telegram-bot-api")) {
+          git clone --recursive https://github.com/tdlib/telegram-bot-api.git
+        }
         C:\vcpkg\vcpkg.exe install openssl:x64-windows-static zlib:x64-windows-static --no-print-usage
         Push-Location telegram-bot-api
         New-Item -ItemType Directory -Force build | Out-Null
@@ -63,10 +92,16 @@ jobs:
         Pop-Location
         New-Item -ItemType Directory -Force telegram-bot-api-bin | Out-Null
         Copy-Item "telegram-bot-api\build\Release\telegram-bot-api.exe" "telegram-bot-api-bin\telegram-bot-api.exe"
+
     - name: Copy telegram-bot-api binary to project
       shell: pwsh
       run: |
         Copy-Item "telegram-bot-api-bin\telegram-bot-api.exe" "TelegramSearchBot\telegram-bot-api.exe"
+
+    # =========================================================================
+    # END TELEGRAM-BOT-API BUILD STEPS
+    # =========================================================================
+
     - name: Restore dependencies
       run: dotnet restore --force --no-cache /p:BuildWithNetFrameworkHostedCompiler=true
     - name: Build
