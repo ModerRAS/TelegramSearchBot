@@ -47,7 +47,6 @@ jobs:
         key: vcpkg-x64-windows-static-v3-${{ runner.os }}
         restore-keys: |
           vcpkg-x64-windows-static-v3-
-
     - name: Install vcpkg
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
       shell: pwsh
