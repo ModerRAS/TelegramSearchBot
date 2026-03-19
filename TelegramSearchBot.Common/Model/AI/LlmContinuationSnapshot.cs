@@ -35,9 +35,9 @@ namespace TelegramSearchBot.Model.AI {
         public long ChatId { get; set; }
 
         /// <summary>
-        /// The original user message ID (for reply context, int for Telegram API compatibility)
+        /// The original user message ID (for reply context)
         /// </summary>
-        public int OriginalMessageId { get; set; }
+        public long OriginalMessageId { get; set; }
 
         /// <summary>
         /// The user ID who initiated the conversation

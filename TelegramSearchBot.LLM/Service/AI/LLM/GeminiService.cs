@@ -313,7 +313,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     string toolResult;
                     bool isError = false;
                     try {
-                        var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId };
+                        var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
                         var result = await McpToolHelper.ExecuteRegisteredToolAsync(
                             firstToolCall.toolName,
                             firstToolCall.arguments,
@@ -341,7 +341,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 executionContext.IterationLimitReached = true;
                 executionContext.SnapshotData = new LlmContinuationSnapshot {
                     ChatId = ChatId,
-                    OriginalMessageId = (int)message.MessageId,
+                    OriginalMessageId = message.MessageId,
                     UserId = message.FromUserId,
                     ModelName = modelName,
                     Provider = "Gemini",
