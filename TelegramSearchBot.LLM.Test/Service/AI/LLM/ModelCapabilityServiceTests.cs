@@ -67,8 +67,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task GetModelCapabilities_WithCapabilities_ReturnsCorrectModel() {
             // Arrange
             var channel = new LLMChannel {
-                Name = "test", Gateway = "gw", ApiKey = "key",
-                Provider = LLMProvider.OpenAI, Parallel = 1, Priority = 1
+                Name = "test",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
             };
             _dbContext.LLMChannels.Add(channel);
             await _dbContext.SaveChangesAsync();
@@ -106,8 +110,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task GetToolCallingSupportedModels_ReturnsCorrectModels() {
             // Arrange
             var channel = new LLMChannel {
-                Name = "test", Gateway = "gw", ApiKey = "key",
-                Provider = LLMProvider.OpenAI, Parallel = 1, Priority = 1
+                Name = "test",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
             };
             _dbContext.LLMChannels.Add(channel);
             await _dbContext.SaveChangesAsync();
@@ -138,7 +146,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             await _dbContext.SaveChangesAsync();
 
             // Act
-            var result = (await _service.GetToolCallingSupportedModels()).ToList();
+            var result = ( await _service.GetToolCallingSupportedModels() ).ToList();
 
             // Assert
             Assert.Single(result);
@@ -149,8 +157,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task GetVisionSupportedModels_ReturnsCorrectModels() {
             // Arrange
             var channel = new LLMChannel {
-                Name = "test", Gateway = "gw", ApiKey = "key",
-                Provider = LLMProvider.OpenAI, Parallel = 1, Priority = 1
+                Name = "test",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
             };
             _dbContext.LLMChannels.Add(channel);
             await _dbContext.SaveChangesAsync();
@@ -170,7 +182,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             await _dbContext.SaveChangesAsync();
 
             // Act
-            var result = (await _service.GetVisionSupportedModels()).ToList();
+            var result = ( await _service.GetVisionSupportedModels() ).ToList();
 
             // Assert
             Assert.Single(result);
@@ -181,8 +193,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task GetEmbeddingModels_ReturnsCorrectModels() {
             // Arrange
             var channel = new LLMChannel {
-                Name = "test", Gateway = "gw", ApiKey = "key",
-                Provider = LLMProvider.OpenAI, Parallel = 1, Priority = 1
+                Name = "test",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
             };
             _dbContext.LLMChannels.Add(channel);
             await _dbContext.SaveChangesAsync();
@@ -202,7 +218,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             await _dbContext.SaveChangesAsync();
 
             // Act
-            var result = (await _service.GetEmbeddingModels()).ToList();
+            var result = ( await _service.GetEmbeddingModels() ).ToList();
 
             // Assert
             Assert.Single(result);
@@ -213,8 +229,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task CleanupOldCapabilities_RemovesOldEntries() {
             // Arrange
             var channel = new LLMChannel {
-                Name = "test", Gateway = "gw", ApiKey = "key",
-                Provider = LLMProvider.OpenAI, Parallel = 1, Priority = 1
+                Name = "test",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
             };
             _dbContext.LLMChannels.Add(channel);
             await _dbContext.SaveChangesAsync();

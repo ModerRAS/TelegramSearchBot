@@ -286,7 +286,7 @@ namespace TelegramSearchBot.Service.Tools {
         private static int CountOccurrences(string text, string pattern) {
             int count = 0;
             int index = 0;
-            while ((index = text.IndexOf(pattern, index, StringComparison.Ordinal)) != -1) {
+            while (( index = text.IndexOf(pattern, index, StringComparison.Ordinal) ) != -1) {
                 count++;
                 index += pattern.Length;
             }
@@ -296,8 +296,8 @@ namespace TelegramSearchBot.Service.Tools {
         private static string FormatFileSize(long bytes) {
             if (bytes < 1024) return $"{bytes}B";
             if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1}KB";
-            if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1}MB";
-            return $"{bytes / (1024.0 * 1024 * 1024):F1}GB";
+            if (bytes < 1024 * 1024 * 1024) return $"{bytes / ( 1024.0 * 1024 ):F1}MB";
+            return $"{bytes / ( 1024.0 * 1024 * 1024 ):F1}GB";
         }
     }
 }

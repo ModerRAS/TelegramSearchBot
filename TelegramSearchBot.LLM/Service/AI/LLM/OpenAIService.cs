@@ -719,10 +719,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
             }
             // Common error patterns when a model/API doesn't support tool calling
-            return message.Contains("tools", StringComparison.OrdinalIgnoreCase) && 
-                   (message.Contains("not supported", StringComparison.OrdinalIgnoreCase) || 
+            return message.Contains("tools", StringComparison.OrdinalIgnoreCase) &&
+                   ( message.Contains("not supported", StringComparison.OrdinalIgnoreCase) ||
                     message.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase)) ||
+                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase) ) ||
                    message.Contains("unrecognized request argument", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -860,7 +860,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
                         ChatId = ChatId,
-                        OriginalMessageId = (int)message.MessageId,
+                        OriginalMessageId = ( int ) message.MessageId,
                         UserId = message.FromUserId,
                         ModelName = modelName,
                         Provider = "OpenAI",
@@ -967,7 +967,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
                         ChatId = ChatId,
-                        OriginalMessageId = (int)message.MessageId,
+                        OriginalMessageId = ( int ) message.MessageId,
                         UserId = message.FromUserId,
                         ModelName = modelName,
                         Provider = "OpenAI",

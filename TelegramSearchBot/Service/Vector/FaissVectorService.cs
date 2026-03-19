@@ -75,7 +75,7 @@ namespace TelegramSearchBot.Service.Vector {
             try {
                 // 尝试生成一个简单的测试向量
                 var testVector = await _generalLLMService.GenerateEmbeddingsAsync("test", CancellationToken.None);
-                
+
                 if (testVector == null || testVector.Length == 0) {
                     _logger.LogWarning("嵌入模型不可用或返回空向量，已禁用FAISS向量服务");
                     _isEnabled = false;
@@ -680,14 +680,14 @@ namespace TelegramSearchBot.Service.Vector {
         public async Task<float[]> GenerateVectorAsync(string text) {
             try {
                 var vector = await _generalLLMService.GenerateEmbeddingsAsync(text);
-                
+
                 // 如果返回空向量，记录警告并禁用服务
                 if (vector == null || vector.Length == 0) {
                     _logger.LogWarning("嵌入模型返回空向量，FAISS向量服务已禁用");
                     _isEnabled = false;
                     return Array.Empty<float>();
                 }
-                
+
                 return vector;
             } catch (Exception ex) {
                 _logger.LogWarning(ex, "生成向量时出错，FAISS向量服务已禁用");
