@@ -13,8 +13,17 @@ namespace TelegramSearchBot.Common {
             }
             try {
                 var config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(Path.Combine(WorkDir, "Config.json")));
-                BaseUrl = config.BaseUrl;
-                IsLocalAPI = config.IsLocalAPI;
+                EnableLocalBotAPI = config.EnableLocalBotAPI;
+                TelegramBotApiId = config.TelegramBotApiId;
+                TelegramBotApiHash = config.TelegramBotApiHash;
+                LocalBotApiPort = config.LocalBotApiPort;
+                if (config.EnableLocalBotAPI) {
+                    BaseUrl = $"http://127.0.0.1:{config.LocalBotApiPort}";
+                    IsLocalAPI = true;
+                } else {
+                    BaseUrl = config.BaseUrl;
+                    IsLocalAPI = config.IsLocalAPI;
+                }
                 BotToken = config.BotToken;
                 AdminId = config.AdminId;
                 EnableAutoOCR = config.EnableAutoOCR;
@@ -44,6 +53,10 @@ namespace TelegramSearchBot.Common {
         public static readonly long AdminId;
         public static readonly bool EnableAutoOCR;
         public static readonly bool EnableAutoASR;
+        public static readonly bool EnableLocalBotAPI;
+        public static readonly string TelegramBotApiId;
+        public static readonly string TelegramBotApiHash;
+        public static readonly int LocalBotApiPort;
         public static readonly string WorkDir;
         public static readonly int TaskDelayTimeout;
         public static readonly bool SameServer;
@@ -70,6 +83,10 @@ namespace TelegramSearchBot.Common {
         public bool EnableAutoASR { get; set; } = false;
         //public string WorkDir { get; set; } = "/data/TelegramSearchBot";
         public bool IsLocalAPI { get; set; } = false;
+        public bool EnableLocalBotAPI { get; set; } = false;
+        public string TelegramBotApiId { get; set; }
+        public string TelegramBotApiHash { get; set; }
+        public int LocalBotApiPort { get; set; } = 8081;
         public bool SameServer { get; set; } = false;
         public int TaskDelayTimeout { get; set; } = 1000;
         public string OllamaModelName { get; set; } = "qwen2.5:72b-instruct-q2_K";
