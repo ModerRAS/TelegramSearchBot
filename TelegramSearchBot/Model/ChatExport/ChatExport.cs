@@ -8,6 +8,8 @@ namespace TelegramSearchBot.Model.ChatExport {
         public string Type { get; set; }
         public long Id { get; set; }
         public List<Message> Messages { get; set; }
+        [JsonProperty("messages_count")]
+        public int? MessagesCount { get; set; }
     }
 
     public class Message {
@@ -16,6 +18,7 @@ namespace TelegramSearchBot.Model.ChatExport {
         public DateTime Date { get; set; }
         public string Date_Unixtime { get; set; }
         public string From { get; set; }
+        [JsonProperty("from_id")]
         public string From_Id { get; set; }
         public List<TextItem> Text { get; set; }
         public List<TextEntity> Text_Entities { get; set; }
@@ -40,6 +43,34 @@ namespace TelegramSearchBot.Model.ChatExport {
         public string MimeType { get; set; }
         [JsonProperty("duration_seconds")]
         public int? DurationSeconds { get; set; }
+        public string Video { get; set; }
+        [JsonProperty("video_file_size")]
+        public int? VideoFileSize { get; set; }
+        public string Voice { get; set; }
+        [JsonProperty("voice_file_size")]
+        public int? VoiceFileSize { get; set; }
+        [JsonProperty("video_note")]
+        public string VideoNote { get; set; }
+        public StickerInfo Sticker { get; set; }
+        public string Location { get; set; }
+        public ContactInfo Contact { get; set; }
+        public PollInfo Poll { get; set; }
+        public string Game { get; set; }
+        public string Dice { get; set; }
+        [JsonProperty("forwarded_from")]
+        public string ForwardedFrom { get; set; }
+        [JsonProperty("saved_messages")]
+        public string SavedMessages { get; set; }
+        public string Actor { get; set; }
+        public string Action { get; set; }
+        [JsonProperty("action_type")]
+        public string ActionType { get; set; }
+        public List<ReactionInfo> Reactions { get; set; }
+        [JsonProperty("via_bot")]
+        public string ViaBot { get; set; }
+        public string Caption { get; set; }
+        [JsonProperty("caption_entities")]
+        public List<TextEntity> Caption_Entities { get; set; }
     }
 
     public class TextItem {
@@ -56,5 +87,41 @@ namespace TelegramSearchBot.Model.ChatExport {
         public string Language { get; set; }
         [JsonProperty("document_id")]
         public string DocumentId { get; set; }
+    }
+
+    public class StickerInfo {
+        [JsonProperty("emoji")]
+        public string Emoji { get; set; }
+        [JsonProperty("sticker_set_id")]
+        public string StickerSetId { get; set; }
+    }
+
+    public class ContactInfo {
+        [JsonProperty("phone_number")]
+        public string PhoneNumber { get; set; }
+        [JsonProperty("first_name")]
+        public string FirstName { get; set; }
+        [JsonProperty("last_name")]
+        public string LastName { get; set; }
+    }
+
+    public class PollInfo {
+        public string Question { get; set; }
+        public List<PollOption> Options { get; set; }
+        [JsonProperty("total_voters")]
+        public int? TotalVoters { get; set; }
+    }
+
+    public class PollOption {
+        public string Text { get; set; }
+        public int Voters { get; set; }
+    }
+
+    public class ReactionInfo {
+        public string Type { get; set; }
+        public string Emoji { get; set; }
+        [JsonProperty("document_id")]
+        public string DocumentId { get; set; }
+        public int Count { get; set; }
     }
 }

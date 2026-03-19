@@ -117,8 +117,9 @@ namespace TelegramSearchBot.Service.Manage {
         }
 
         private string GetMessageText(ExportMessage message) {
+            var result = new System.Text.StringBuilder();
+
             if (message.Text_Entities != null && message.Text_Entities.Count > 0) {
-                var result = new System.Text.StringBuilder();
                 foreach (var entity in message.Text_Entities) {
                     switch (entity.Type) {
                         case "plain":
@@ -168,9 +169,61 @@ namespace TelegramSearchBot.Service.Manage {
                             break;
                     }
                 }
-                return result.ToString();
+            } else if (message.Text != null && message.Text.Count > 0) {
+                foreach (var item in message.Text) {
+                    if (!string.IsNullOrEmpty(item.Text)) {
+                        result.Append(item.Text);
+                    }
+                }
             }
-            return string.Empty;
+
+            if (!string.IsNullOrEmpty(message.Caption)) {
+                if (result.Length > 0) result.AppendLine();
+                result.Append(message.Caption);
+            }
+
+            if (message.Sticker != null) {
+                if (result.Length > 0) result.AppendLine();
+                result.Append($"[贴纸: {message.Sticker.Emoji ?? "?"}]");
+            }
+
+            if (message.Voice != null) {
+                if (result.Length > 0) result.AppendLine();
+                result.Append("[语音消息]");
+            }
+
+            if (message.Video != null) {
+                if (result.Length > 0) result.AppendLine();
+                result.Append("[视频]");
+            }
+
+            if (message.VideoNote != null) {
+                if (result.Length > 0) result.AppendLine();
+                result.Append("[视频消息]");
+            }
+
+            if (!string.IsNullOrEmpty(message.Poll?.Question)) {
+                if (result.Length > 0) result.AppendLine();
+                result.Append($"[投票: {message.Poll.Question}]");
+            }
+
+            if (message.Contact != null) {
+                if (result.Length > 0) result.AppendLine();
+                var name = $"{message.Contact.FirstName} {message.Contact.LastName}".Trim();
+                result.Append($"[联系人: {name}]");
+            }
+
+            if (message.Location != null) {
+                if (result.Length > 0) result.AppendLine();
+                result.Append("[位置]");
+            }
+
+            if (!string.IsNullOrEmpty(message.Action)) {
+                if (result.Length > 0) result.AppendLine();
+                result.Append($"[服务消息: {message.Action}]");
+            }
+
+            return result.ToString();
         }
 
         public async Task ExecuteAsync(string command) {
