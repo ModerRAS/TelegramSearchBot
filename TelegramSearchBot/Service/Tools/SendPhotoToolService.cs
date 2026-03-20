@@ -32,8 +32,8 @@ namespace TelegramSearchBot.Service.Tools {
         /// otherwise falls back to the ToolContext.MessageId (the original user message).
         /// </summary>
         private static ReplyParameters GetReplyParameters(long? explicitReplyToMessageId, ToolContext toolContext) {
-            var messageId = explicitReplyToMessageId ?? (toolContext.MessageId != 0 ? toolContext.MessageId : (long?)null);
-            return messageId.HasValue ? new ReplyParameters { MessageId = messageId.Value } : null;
+            long? messageId = explicitReplyToMessageId ?? ( toolContext.MessageId != 0 ? toolContext.MessageId : ( long? ) null );
+            return messageId.HasValue ? new ReplyParameters { MessageId = ( int ) messageId.Value } : null;
         }
 
         [BuiltInTool("Sends a photo to the current chat using base64 encoded image data.", Name = "send_photo_base64")]
