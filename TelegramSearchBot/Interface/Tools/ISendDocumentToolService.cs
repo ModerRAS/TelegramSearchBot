@@ -8,6 +8,6 @@ namespace TelegramSearchBot.Interface.Tools {
             string filePath,
             ToolContext toolContext,
             string caption = null,
-            int? replyToMessageId = null);
+            long? replyToMessageId = null);
     }
 }

@@ -31,9 +31,9 @@ namespace TelegramSearchBot.Service.Tools {
         /// Resolves the effective reply-to message ID. Uses the explicitly provided value if set,
         /// otherwise falls back to the ToolContext.MessageId (the original user message).
         /// </summary>
-        private static ReplyParameters GetReplyParameters(int? explicitReplyToMessageId, ToolContext toolContext) {
-            long? messageId = explicitReplyToMessageId ?? (toolContext.MessageId != 0 ? toolContext.MessageId : (long?)null);
-            return messageId.HasValue ? new ReplyParameters { MessageId = (int)messageId.Value } : null;
+        private static ReplyParameters GetReplyParameters(long? explicitReplyToMessageId, ToolContext toolContext) {
+            long? messageId = explicitReplyToMessageId ?? ( toolContext.MessageId != 0 ? toolContext.MessageId : ( long? ) null );
+            return messageId.HasValue ? new ReplyParameters { MessageId = ( int ) messageId.Value } : null;
         }
 
         [BuiltInTool("Sends a video to the current chat using a file path.", Name = "send_video_file")]
@@ -41,7 +41,7 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("The file path to the video on the server.")] string filePath,
             ToolContext toolContext,
             [BuiltInParameter("Optional caption for the video (max 1024 characters).", IsRequired = false)] string caption = null,
-            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] int? replyToMessageId = null) {
+            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] long? replyToMessageId = null) {
             try {
                 if (string.IsNullOrWhiteSpace(filePath)) {
                     return new SendVideoResult {

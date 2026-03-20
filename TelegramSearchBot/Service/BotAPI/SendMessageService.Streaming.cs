@@ -359,7 +359,7 @@ namespace TelegramSearchBot.Service.BotAPI {
             }
 
             // Generate a unique draftId to avoid collisions for concurrent requests to the same message
-            int draftId = unchecked((int)(chatId ^ replyTo ^ DateTime.UtcNow.Ticks));
+            int draftId = unchecked(( int ) ( chatId ^ replyTo ^ DateTime.UtcNow.Ticks ));
             string latestContent = null;
             bool draftStarted = false;
 

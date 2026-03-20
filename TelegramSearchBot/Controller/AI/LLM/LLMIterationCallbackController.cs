@@ -154,7 +154,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 List<Model.Data.Message> sentMessagesForDb = await _sendMessageService.SendDraftStream(
                     resumeStream,
                     snapshot.ChatId,
-                    (int)snapshot.OriginalMessageId,
+                    ( int ) snapshot.OriginalMessageId,
                     initialContent,
                     CancellationToken.None
                 );
@@ -198,7 +198,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                         snapshot.ChatId,
                         $"⚠️ AI 再次达到最大迭代次数限制（{Env.MaxToolCycles} 次），已完成 {executionContext.SnapshotData.CyclesSoFar} 次循环，是否继续迭代？",
                         replyMarkup: keyboard,
-                        replyParameters: new ReplyParameters { MessageId = (int)snapshot.OriginalMessageId }
+                        replyParameters: new ReplyParameters { MessageId = ( int ) snapshot.OriginalMessageId }
                     );
                 }
             } finally {

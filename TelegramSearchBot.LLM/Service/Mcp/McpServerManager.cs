@@ -152,7 +152,7 @@ namespace TelegramSearchBot.Service.Mcp {
             if (_clients.TryRemove(serverName, out var client)) {
                 try {
                     await client.DisconnectAsync();
-                    (client as IDisposable)?.Dispose();
+                    ( client as IDisposable )?.Dispose();
                 } catch (Exception ex) {
                     _logger.LogWarning(ex, "Error disconnecting MCP server '{Name}'", serverName);
                 }
@@ -293,7 +293,7 @@ namespace TelegramSearchBot.Service.Mcp {
         public void Dispose() {
             foreach (var kvp in _clients) {
                 try {
-                    (kvp.Value as IDisposable)?.Dispose();
+                    ( kvp.Value as IDisposable )?.Dispose();
                 } catch { }
             }
             _clients.Clear();
