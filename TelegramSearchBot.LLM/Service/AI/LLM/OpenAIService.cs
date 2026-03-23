@@ -719,10 +719,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
             }
             // Common error patterns when a model/API doesn't support tool calling
-            return message.Contains("tools", StringComparison.OrdinalIgnoreCase) && 
-                   (message.Contains("not supported", StringComparison.OrdinalIgnoreCase) || 
+            return message.Contains("tools", StringComparison.OrdinalIgnoreCase) &&
+                   ( message.Contains("not supported", StringComparison.OrdinalIgnoreCase) ||
                     message.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase)) ||
+                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase) ) ||
                    message.Contains("unrecognized request argument", StringComparison.OrdinalIgnoreCase);
         }
 

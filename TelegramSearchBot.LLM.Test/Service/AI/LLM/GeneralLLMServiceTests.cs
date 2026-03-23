@@ -102,12 +102,20 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task GetChannelsAsync_WithModel_ReturnsOrderedChannels() {
             // Arrange
             var channel1 = new LLMChannel {
-                Name = "ch1", Gateway = "gw1", ApiKey = "key1",
-                Provider = LLMProvider.OpenAI, Parallel = 2, Priority = 1
+                Name = "ch1",
+                Gateway = "gw1",
+                ApiKey = "key1",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 2,
+                Priority = 1
             };
             var channel2 = new LLMChannel {
-                Name = "ch2", Gateway = "gw2", ApiKey = "key2",
-                Provider = LLMProvider.OpenAI, Parallel = 3, Priority = 10
+                Name = "ch2",
+                Gateway = "gw2",
+                ApiKey = "key2",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 3,
+                Priority = 10
             };
             _dbContext.LLMChannels.AddRange(channel1, channel2);
             await _dbContext.SaveChangesAsync();
@@ -130,7 +138,10 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task ExecAsync_NoModelConfigured_YieldsNoResults() {
             // Arrange - no group settings configured
             var message = new TelegramSearchBot.Model.Data.Message {
-                Content = "test", GroupId = 123, MessageId = 1, FromUserId = 1
+                Content = "test",
+                GroupId = 123,
+                MessageId = 1,
+                FromUserId = 1
             };
 
             // Act
@@ -153,8 +164,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task GetAvailableCapacityAsync_WithChannels_ReturnsCapacity() {
             // Arrange
             var channel = new LLMChannel {
-                Name = "ch1", Gateway = "gw1", ApiKey = "key1",
-                Provider = LLMProvider.OpenAI, Parallel = 5, Priority = 1
+                Name = "ch1",
+                Gateway = "gw1",
+                ApiKey = "key1",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 5,
+                Priority = 1
             };
             _dbContext.LLMChannels.Add(channel);
             await _dbContext.SaveChangesAsync();
