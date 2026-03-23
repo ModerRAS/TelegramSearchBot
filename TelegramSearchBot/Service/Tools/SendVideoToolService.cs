@@ -68,7 +68,7 @@ namespace TelegramSearchBot.Service.Tools {
                     return new SendVideoResult {
                         Success = false,
                         ChatId = toolContext.ChatId,
-                        Error = $"File is too large ({fileInfo.Length / 1024 / 1024}MB). Maximum allowed size is {(Env.IsLocalAPI ? "2GB" : "50MB")}."
+                        Error = $"File is too large ({fileInfo.Length / 1024 / 1024}MB). Maximum allowed size is {( Env.IsLocalAPI ? "2GB" : "50MB" )}."
                     };
                 }
 
