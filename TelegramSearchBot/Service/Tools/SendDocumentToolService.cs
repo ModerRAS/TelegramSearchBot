@@ -6,6 +6,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Manager;
@@ -60,12 +61,14 @@ namespace TelegramSearchBot.Service.Tools {
                 }
 
                 var fileInfo = new FileInfo(filePath);
-                const long maxFileSizeBytes = 2L * 1024 * 1024 * 1024;
+                long maxFileSizeBytes = Env.IsLocalAPI
+                    ? 2L * 1024 * 1024 * 1024  // Local API: 2GB
+                    : 50 * 1024 * 1024;         // Bot API: 50MB
                 if (fileInfo.Length > maxFileSizeBytes) {
                     return new SendDocumentResult {
                         Success = false,
                         ChatId = toolContext.ChatId,
-                        Error = $"File is too large ({fileInfo.Length / 1024 / 1024 / 1024}GB). Maximum allowed size is 2GB."
+                        Error = $"File is too large ({fileInfo.Length / 1024 / 1024}MB). Maximum allowed size is {(Env.IsLocalAPI ? "2GB" : "50MB")}."
                     };
                 }
 
