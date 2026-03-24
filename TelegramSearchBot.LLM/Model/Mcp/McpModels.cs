@@ -156,5 +156,12 @@ namespace TelegramSearchBot.Model.Mcp {
 
         [JsonProperty("enabled")]
         public bool Enabled { get; set; } = true;
+
+        /// <summary>
+        /// Timeout in seconds for MCP JSON-RPC requests (e.g., tool calls).
+        /// Defaults to 30 seconds. Increase for long-running tools like image/video generation.
+        /// </summary>
+        [JsonProperty("timeoutSeconds")]
+        public int TimeoutSeconds { get; set; } = 30;
     }
 }

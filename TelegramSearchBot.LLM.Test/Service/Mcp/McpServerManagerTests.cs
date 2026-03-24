@@ -295,5 +295,107 @@ namespace TelegramSearchBot.Test.Service.Mcp {
             var configs = await _manager.GetServerConfigsAsync();
             Assert.Equal(2, configs.Count);
         }
+
+        [Fact]
+        public async Task UpdateServerConfigAsync_UpdatesTimeout() {
+            var config = new McpServerConfig {
+                Name = "timeout-test",
+                Command = "test",
+                Enabled = false,
+                TimeoutSeconds = 30,
+            };
+            await _manager.AddServerAsync(config);
+
+            await _manager.UpdateServerConfigAsync("timeout-test", c => {
+                c.TimeoutSeconds = 120;
+            });
+
+            var configs = await _manager.GetServerConfigsAsync();
+            var updated = configs.First(c => c.Name == "timeout-test");
+            Assert.Equal(120, updated.TimeoutSeconds);
+        }
+
+        [Fact]
+        public async Task UpdateServerConfigAsync_PreservesUnchangedFields() {
+            var config = new McpServerConfig {
+                Name = "preserve-test",
+                Command = "my-command",
+                Args = new() { "arg1", "arg2" },
+                Env = new() { { "KEY", "value" } },
+                Enabled = false,
+                TimeoutSeconds = 60,
+            };
+            await _manager.AddServerAsync(config);
+
+            // Only update timeout
+            await _manager.UpdateServerConfigAsync("preserve-test", c => {
+                c.TimeoutSeconds = 300;
+            });
+
+            var configs = await _manager.GetServerConfigsAsync();
+            var updated = configs.First(c => c.Name == "preserve-test");
+            Assert.Equal("my-command", updated.Command);
+            Assert.Equal(new List<string> { "arg1", "arg2" }, updated.Args);
+            Assert.Equal("value", updated.Env["KEY"]);
+            Assert.False(updated.Enabled);
+            Assert.Equal(300, updated.TimeoutSeconds);
+        }
+
+        [Fact]
+        public async Task UpdateServerConfigAsync_NonExistentServer_ThrowsInvalidOperationException() {
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                _manager.UpdateServerConfigAsync("nonexistent", c => c.TimeoutSeconds = 60));
+        }
+
+        [Fact]
+        public async Task UpdateServerConfigAsync_NullPatch_ThrowsArgumentNullException() {
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+                _manager.UpdateServerConfigAsync("test", null));
+        }
+
+        [Fact]
+        public async Task UpdateServerConfigAsync_EmptyName_ThrowsArgumentException() {
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                _manager.UpdateServerConfigAsync("", c => c.TimeoutSeconds = 60));
+        }
+
+        [Fact]
+        public async Task McpServerConfig_DefaultTimeout_Is30() {
+            var config = new McpServerConfig { Name = "default-test", Command = "test" };
+            Assert.Equal(30, config.TimeoutSeconds);
+        }
+
+        [Fact]
+        public async Task McpServerConfig_TimeoutSerializationRoundtrip() {
+            var config = new McpServerConfig {
+                Name = "serial-test",
+                Command = "test",
+                TimeoutSeconds = 120,
+                Enabled = false,
+            };
+            await _manager.AddServerAsync(config);
+
+            var configs = await _manager.GetServerConfigsAsync();
+            var loaded = configs.First(c => c.Name == "serial-test");
+            Assert.Equal(120, loaded.TimeoutSeconds);
+        }
+
+        [Fact]
+        public async Task McpServerConfig_OldConfigWithoutTimeout_DefaultsTo30() {
+            // Simulate an old config stored without timeoutSeconds field
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+            var key = "MCP:ServerConfig:" + "old-config";
+            var oldJson = """{"name":"old-config","command":"test","args":[],"env":{},"enabled":false}""";
+            db.AppConfigurationItems.Add(new TelegramSearchBot.Model.Data.AppConfigurationItem {
+                Key = key,
+                Value = oldJson,
+            });
+            await db.SaveChangesAsync();
+
+            var configs = await _manager.GetServerConfigsAsync();
+            var loaded = configs.First(c => c.Name == "old-config");
+            Assert.Equal(30, loaded.TimeoutSeconds);
+        }
     }
 }

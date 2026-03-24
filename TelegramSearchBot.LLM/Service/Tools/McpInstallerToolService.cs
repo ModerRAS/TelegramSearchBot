@@ -57,6 +57,7 @@ namespace TelegramSearchBot.Service.Tools {
                     sb.AppendLine($"Server: {config.Name}");
                     sb.AppendLine($"  Command: {config.Command} {string.Join(" ", config.Args)}");
                     sb.AppendLine($"  Enabled: {config.Enabled}");
+                    sb.AppendLine($"  Timeout: {config.TimeoutSeconds}s");
 
                     var serverTools = externalTools.Where(t => t.serverName == config.Name).ToList();
                     if (serverTools.Any()) {
@@ -182,6 +183,95 @@ Only available to admin users.")]
             } catch (Exception ex) {
                 _logger.LogError(ex, "Error removing MCP server: {Name}", name);
                 return $"Error removing MCP server '{name}': {ex.Message}";
+            }
+        }
+
+        [BuiltInTool(@"Update the configuration of an existing MCP server (patch-style partial update).
+Supports changing timeout, environment variables, enabled status, command, and args.
+After updating, the server will be automatically reconnected with the new settings.
+Only available to admin users.")]
+        public async Task<string> UpdateMcpServer(
+            [BuiltInParameter("The name of the MCP server to update")] string name,
+            ToolContext toolContext,
+            [BuiltInParameter("New timeout in seconds for tool calls (e.g., '120' for 2 minutes). Leave empty to keep current value.", IsRequired = false)] string timeout = null,
+            [BuiltInParameter("New enabled status ('true' or 'false'). Leave empty to keep current value.", IsRequired = false)] string enabled = null,
+            [BuiltInParameter("New environment variables in KEY=VALUE format, semicolon-separated. This replaces all existing env vars. Leave empty to keep current.", IsRequired = false)] string env = null,
+            [BuiltInParameter("New command to start the MCP server. Leave empty to keep current.", IsRequired = false)] string command = null,
+            [BuiltInParameter("New space-separated command arguments. Leave empty to keep current.", IsRequired = false)] string args = null) {
+
+            if (toolContext == null || toolContext.UserId != Env.AdminId) {
+                return "Error: MCP server management is only available to admin users.";
+            }
+
+            try {
+                if (string.IsNullOrWhiteSpace(name)) {
+                    return "Error: Server name is required.";
+                }
+
+                var configs = await _mcpServerManager.GetServerConfigsAsync();
+                if (!configs.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) {
+                    return $"Error: MCP server '{name}' not found. Use ListMcpServers to see available servers.";
+                }
+
+                // Parse and validate timeout before applying
+                int? parsedTimeout = null;
+                if (!string.IsNullOrWhiteSpace(timeout)) {
+                    if (!int.TryParse(timeout, out var t) || t <= 0) {
+                        return "Error: timeout must be a positive integer (seconds).";
+                    }
+                    parsedTimeout = t;
+                }
+
+                bool? parsedEnabled = null;
+                if (!string.IsNullOrWhiteSpace(enabled)) {
+                    if (!bool.TryParse(enabled, out var e)) {
+                        return "Error: enabled must be 'true' or 'false'.";
+                    }
+                    parsedEnabled = e;
+                }
+
+                var changes = new List<string>();
+
+                await _mcpServerManager.UpdateServerConfigAsync(name, config => {
+                    if (parsedTimeout.HasValue) {
+                        config.TimeoutSeconds = parsedTimeout.Value;
+                        changes.Add($"timeout → {parsedTimeout.Value}s");
+                    }
+                    if (parsedEnabled.HasValue) {
+                        config.Enabled = parsedEnabled.Value;
+                        changes.Add($"enabled → {parsedEnabled.Value}");
+                    }
+                    if (!string.IsNullOrWhiteSpace(env)) {
+                        config.Env = new Dictionary<string, string>();
+                        foreach (var pair in env.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
+                            var parts = pair.Split('=', 2);
+                            if (parts.Length == 2) {
+                                config.Env[parts[0].Trim()] = parts[1].Trim();
+                            }
+                        }
+                        changes.Add($"env → {config.Env.Count} variable(s)");
+                    }
+                    if (!string.IsNullOrWhiteSpace(command)) {
+                        config.Command = command.Trim();
+                        changes.Add($"command → {config.Command}");
+                    }
+                    if (!string.IsNullOrWhiteSpace(args)) {
+                        config.Args = args.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+                        changes.Add($"args → {string.Join(" ", config.Args)}");
+                    }
+                });
+
+                // Re-register tools with McpToolHelper to reflect any changes
+                McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+
+                if (!changes.Any()) {
+                    return $"No changes were applied to MCP server '{name}'. Provide at least one parameter to update.";
+                }
+
+                return $"Successfully updated MCP server '{name}':\n" + string.Join("\n", changes.Select(c => $"  • {c}"));
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Error updating MCP server: {Name}", name);
+                return $"Error updating MCP server '{name}': {ex.Message}";
             }
         }
 

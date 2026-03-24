@@ -260,5 +260,93 @@ namespace TelegramSearchBot.Test.Service.Tools {
             Assert.NotNull(config);
             Assert.Equal("/nonexistent/binary_new", config.Command);
         }
+
+        [Fact]
+        public async Task UpdateMcpServer_NonAdmin_ReturnsError() {
+            var result = await _service.UpdateMcpServer("test", _nonAdminContext, timeout: "120");
+            Assert.Contains("Error", result);
+            Assert.Contains("admin", result, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task UpdateMcpServer_NonExistent_ReturnsNotFound() {
+            var result = await _service.UpdateMcpServer("nonexistent", _adminContext, timeout: "120");
+            Assert.Contains("not found", result, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task UpdateMcpServer_EmptyName_ReturnsError() {
+            var result = await _service.UpdateMcpServer("", _adminContext, timeout: "120");
+            Assert.Contains("Error", result);
+            Assert.Contains("name", result, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task UpdateMcpServer_InvalidTimeout_ReturnsError() {
+            await _service.AddMcpServer("timeout-test", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext);
+            var result = await _service.UpdateMcpServer("timeout-test", _adminContext, timeout: "abc");
+            Assert.Contains("Error", result);
+            Assert.Contains("positive integer", result);
+        }
+
+        [Fact]
+        public async Task UpdateMcpServer_NegativeTimeout_ReturnsError() {
+            await _service.AddMcpServer("neg-timeout", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext);
+            var result = await _service.UpdateMcpServer("neg-timeout", _adminContext, timeout: "-5");
+            Assert.Contains("Error", result);
+        }
+
+        [Fact]
+        public async Task UpdateMcpServer_InvalidEnabled_ReturnsError() {
+            await _service.AddMcpServer("enabled-test", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext);
+            var result = await _service.UpdateMcpServer("enabled-test", _adminContext, enabled: "maybe");
+            Assert.Contains("Error", result);
+            Assert.Contains("'true' or 'false'", result);
+        }
+
+        [Fact]
+        public async Task UpdateMcpServer_UpdateTimeout_Success() {
+            await _service.AddMcpServer("update-timeout", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext);
+
+            var result = await _service.UpdateMcpServer("update-timeout", _adminContext, timeout: "120");
+            Assert.Contains("Successfully updated", result);
+            Assert.Contains("120s", result);
+
+            var configs = await _mcpServerManager.GetServerConfigsAsync();
+            var config = configs.First(c => c.Name == "update-timeout");
+            Assert.Equal(120, config.TimeoutSeconds);
+        }
+
+        [Fact]
+        public async Task UpdateMcpServer_UpdateEnv_Success() {
+            await _service.AddMcpServer("update-env", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext);
+
+            var result = await _service.UpdateMcpServer("update-env", _adminContext, env: "KEY1=val1;KEY2=val2");
+            Assert.Contains("Successfully updated", result);
+            Assert.Contains("2 variable(s)", result);
+
+            var configs = await _mcpServerManager.GetServerConfigsAsync();
+            var config = configs.First(c => c.Name == "update-env");
+            Assert.Equal("val1", config.Env["KEY1"]);
+            Assert.Equal("val2", config.Env["KEY2"]);
+        }
+
+        [Fact]
+        public async Task UpdateMcpServer_NoChanges_ReturnsNoChangesMessage() {
+            await _service.AddMcpServer("no-change", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext);
+
+            var result = await _service.UpdateMcpServer("no-change", _adminContext);
+            Assert.Contains("No changes", result);
+        }
+
+        [Fact]
+        public async Task ListMcpServers_ShowsTimeout() {
+            await _service.AddMcpServer("list-timeout", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext);
+            // Update timeout to 120s
+            await _service.UpdateMcpServer("list-timeout", _adminContext, timeout: "120");
+
+            var result = await _service.ListMcpServers();
+            Assert.Contains("Timeout: 120s", result);
+        }
     }
 }
