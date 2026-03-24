@@ -5,7 +5,7 @@ namespace TelegramSearchBot.Helper {
     public class EditMcpConfRedisHelper {
         private readonly IConnectionMultiplexer _connection;
         private readonly long _chatId;
-        private IDatabase _database;
+        private readonly IDatabase _database;
 
         public EditMcpConfRedisHelper(IConnectionMultiplexer connection, long chatId) {
             _connection = connection;

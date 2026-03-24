@@ -22,13 +22,20 @@ namespace TelegramSearchBot.Service.Manage {
 
         private readonly Dictionary<string, Func<EditMcpConfRedisHelper, string, Task<(bool, string)>>> _stateHandlers;
 
-        // Field IDs for editing: 1=command, 2=args, 3=env(add), 4=timeout, 5=enabled
+        private const string EnvPrefix = "env:";
+        private const string FieldIdCommand = "1";
+        private const string FieldIdArgs = "2";
+        private const string FieldIdEnv = "3";
+        private const string FieldIdTimeout = "4";
+        private const string FieldIdEnabled = "5";
+
+        // Field IDs for editing
         private readonly Dictionary<string, string> _fieldNames = new() {
-            { "1", "命令(Command)" },
-            { "2", "参数(Args)" },
-            { "3", "环境变量(写入)" },
-            { "4", "超时时间(Timeout)" },
-            { "5", "启用/禁用(Enabled)" }
+            { FieldIdCommand, "命令(Command)" },
+            { FieldIdArgs, "参数(Args)" },
+            { FieldIdEnv, "环境变量(写入)" },
+            { FieldIdTimeout, "超时时间(Timeout)" },
+            { FieldIdEnabled, "启用/禁用(Enabled)" }
         };
 
         public EditMcpConfService(
@@ -176,7 +183,7 @@ namespace TelegramSearchBot.Service.Manage {
 
             // Store env key temporarily - append with env: prefix
             var data = await redis.GetDataAsync();
-            await redis.SetDataAsync($"{data}|env:{key}");
+            await redis.SetDataAsync($"{data}|{EnvPrefix}{key}");
             await redis.SetStateAsync(McpConfState.AddingEnvValue.GetDescription());
             return (true, $"请输入环境变量 {key} 的值：");
         }
@@ -224,11 +231,11 @@ namespace TelegramSearchBot.Service.Manage {
 
             // Parse env vars
             for (int i = 3; i < parts.Length; i++) {
-                if (parts[i].StartsWith("env:")) {
-                    var envPair = parts[i].Substring(4); // Remove "env:" prefix
+                if (parts[i].StartsWith(EnvPrefix)) {
+                    var envPair = parts[i][EnvPrefix.Length..];
                     var eqIdx = envPair.IndexOf('=');
                     if (eqIdx > 0) {
-                        config.Env[envPair.Substring(0, eqIdx)] = envPair.Substring(eqIdx + 1);
+                        config.Env[envPair[..eqIdx]] = envPair[(eqIdx + 1)..];
                     }
                 }
             }
@@ -319,7 +326,7 @@ namespace TelegramSearchBot.Service.Manage {
 
             var data = await redis.GetDataAsync();
 
-            if (field == "3") {
+            if (field == FieldIdEnv) {
                 // Env var editing: go to env key input
                 await redis.SetDataAsync($"{data}|3");
                 await redis.SetStateAsync(McpConfState.EditingEnvKey.GetDescription());
@@ -330,10 +337,10 @@ namespace TelegramSearchBot.Service.Manage {
             await redis.SetStateAsync(McpConfState.EditingInputValue.GetDescription());
 
             return field switch {
-                "1" => (true, "请输入新的启动命令："),
-                "2" => (true, "请输入新的命令参数（空格分隔）："),
-                "4" => (true, "请输入新的超时时间（秒）："),
-                "5" => (true, "请输入新的状态（true=启用, false=禁用）："),
+                FieldIdCommand => (true, "请输入新的启动命令："),
+                FieldIdArgs => (true, "请输入新的命令参数（空格分隔）："),
+                FieldIdTimeout => (true, "请输入新的超时时间（秒）："),
+                FieldIdEnabled => (true, "请输入新的状态（true=启用, false=禁用）："),
                 _ => (true, "请输入新的值：")
             };
         }
@@ -354,15 +361,15 @@ namespace TelegramSearchBot.Service.Manage {
                 string changeDescription = "";
                 await _mcpServerManager.UpdateServerConfigAsync(serverName, config => {
                     switch (field) {
-                        case "1": // Command
+                        case FieldIdCommand:
                             config.Command = value;
                             changeDescription = $"命令已更新为: {value}";
                             break;
-                        case "2": // Args
+                        case FieldIdArgs:
                             config.Args = value.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
                             changeDescription = $"参数已更新为: {value}";
                             break;
-                        case "4": // Timeout
+                        case FieldIdTimeout:
                             if (int.TryParse(value, out var timeout) && timeout > 0) {
                                 config.TimeoutSeconds = timeout;
                                 changeDescription = $"超时时间已更新为: {timeout}s";
@@ -370,7 +377,7 @@ namespace TelegramSearchBot.Service.Manage {
                                 changeDescription = "❌ 超时时间必须为正整数";
                             }
                             break;
-                        case "5": // Enabled
+                        case FieldIdEnabled:
                             if (bool.TryParse(value, out var enabled)) {
                                 config.Enabled = enabled;
                                 changeDescription = $"状态已更新为: {(enabled ? "启用" : "禁用")}";
