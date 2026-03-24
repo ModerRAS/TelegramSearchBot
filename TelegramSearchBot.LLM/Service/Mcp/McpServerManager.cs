@@ -290,6 +290,52 @@ namespace TelegramSearchBot.Service.Mcp {
             _toolToServer.Clear();
         }
 
+        public async Task UpdateServerConfigAsync(string serverName, Action<McpServerConfig> patchAction) {
+            if (string.IsNullOrWhiteSpace(serverName)) throw new ArgumentException("Server name is required.", nameof(serverName));
+            if (patchAction == null) throw new ArgumentNullException(nameof(patchAction));
+
+            // Load existing config from cache or DB
+            if (!_serverConfigs.TryGetValue(serverName, out var config)) {
+                var configs = await LoadConfigsFromDbAsync();
+                config = configs.FirstOrDefault(c => c.Name == serverName);
+                if (config == null) {
+                    throw new InvalidOperationException($"MCP server '{serverName}' not found.");
+                }
+            }
+
+            // Determine if server was running before the update
+            var wasRunning = _clients.TryGetValue(serverName, out var existingClient)
+                && existingClient.IsConnected && existingClient.IsProcessAlive;
+
+            // Apply the patch
+            patchAction(config);
+
+            // Ensure the name was not changed by the patch (name is identity, not mutable)
+            if (config.Name != serverName) {
+                config.Name = serverName;
+                _logger.LogWarning("Patch action attempted to rename MCP server '{ServerName}'. Name change was reverted.", serverName);
+            }
+
+            // Save updated config
+            await SaveConfigToDbAsync(config);
+            _serverConfigs[serverName] = config;
+
+            _logger.LogInformation("Updated MCP server config: {Name}", serverName);
+
+            // Reconnect if enabled, disconnect if it was running but is now disabled
+            if (config.Enabled) {
+                try {
+                    await ConnectToServerAsync(config);
+                    _logger.LogInformation("Reconnected MCP server '{Name}' after config update.", serverName);
+                } catch (Exception ex) {
+                    _logger.LogWarning(ex, "Failed to reconnect MCP server '{Name}' after config update.", serverName);
+                }
+            } else if (wasRunning) {
+                await DisconnectServerAsync(serverName);
+                _logger.LogInformation("Disconnected MCP server '{Name}' after being disabled by config update.", serverName);
+            }
+        }
+
         public void Dispose() {
             foreach (var kvp in _clients) {
                 try {
