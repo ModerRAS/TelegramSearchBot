@@ -243,13 +243,20 @@ Only available to admin users.")]
                     }
                     if (!string.IsNullOrWhiteSpace(env)) {
                         config.Env = new Dictionary<string, string>();
+                        var skippedPairs = new List<string>();
                         foreach (var pair in env.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
                             var parts = pair.Split('=', 2);
-                            if (parts.Length == 2) {
+                            if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0])) {
                                 config.Env[parts[0].Trim()] = parts[1].Trim();
+                            } else {
+                                skippedPairs.Add(pair);
                             }
                         }
-                        changes.Add($"env → {config.Env.Count} variable(s)");
+                        var envMsg = $"env → {config.Env.Count} variable(s)";
+                        if (skippedPairs.Any()) {
+                            envMsg += $" (skipped {skippedPairs.Count} malformed pair(s): {string.Join(", ", skippedPairs.Select(p => $"'{p}'"))})";
+                        }
+                        changes.Add(envMsg);
                     }
                     if (!string.IsNullOrWhiteSpace(command)) {
                         config.Command = command.Trim();

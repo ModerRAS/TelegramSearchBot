@@ -210,6 +210,9 @@ namespace TelegramSearchBot.Service.Mcp {
 
                 // Read response with configurable timeout
                 var timeoutSeconds = _config.TimeoutSeconds > 0 ? _config.TimeoutSeconds : 30;
+                if (_config.TimeoutSeconds <= 0) {
+                    _logger.LogWarning("[MCP:{ServerName}] Invalid TimeoutSeconds ({Timeout}), falling back to 30s.", ServerName, _config.TimeoutSeconds);
+                }
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 

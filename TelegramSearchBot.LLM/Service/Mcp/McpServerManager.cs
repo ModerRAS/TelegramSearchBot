@@ -310,8 +310,11 @@ namespace TelegramSearchBot.Service.Mcp {
             // Apply the patch
             patchAction(config);
 
-            // Ensure the name was not changed by the patch
-            config.Name = serverName;
+            // Ensure the name was not changed by the patch (name is identity, not mutable)
+            if (config.Name != serverName) {
+                config.Name = serverName;
+                _logger.LogWarning("Patch action attempted to rename MCP server '{ServerName}'. Name change was reverted.", serverName);
+            }
 
             // Save updated config
             await SaveConfigToDbAsync(config);
@@ -319,14 +322,17 @@ namespace TelegramSearchBot.Service.Mcp {
 
             _logger.LogInformation("Updated MCP server config: {Name}", serverName);
 
-            // Reconnect if it was running, or connect if it's now enabled
-            if (wasRunning || config.Enabled) {
+            // Reconnect if enabled, disconnect if it was running but is now disabled
+            if (config.Enabled) {
                 try {
                     await ConnectToServerAsync(config);
                     _logger.LogInformation("Reconnected MCP server '{Name}' after config update.", serverName);
                 } catch (Exception ex) {
                     _logger.LogWarning(ex, "Failed to reconnect MCP server '{Name}' after config update.", serverName);
                 }
+            } else if (wasRunning) {
+                await DisconnectServerAsync(serverName);
+                _logger.LogInformation("Disconnected MCP server '{Name}' after being disabled by config update.", serverName);
             }
         }
 
