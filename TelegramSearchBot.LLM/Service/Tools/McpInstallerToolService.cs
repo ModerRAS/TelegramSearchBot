@@ -59,6 +59,10 @@ namespace TelegramSearchBot.Service.Tools {
                     sb.AppendLine($"  Enabled: {config.Enabled}");
                     sb.AppendLine($"  Timeout: {config.TimeoutSeconds}s");
 
+                    if (config.Env.Any()) {
+                        sb.AppendLine($"  Env vars ({config.Env.Count}): {string.Join(", ", config.Env.Keys)}");
+                    }
+
                     var serverTools = externalTools.Where(t => t.serverName == config.Name).ToList();
                     if (serverTools.Any()) {
                         sb.AppendLine($"  Tools ({serverTools.Count}):");
@@ -186,8 +190,9 @@ Only available to admin users.")]
             }
         }
 
-        [BuiltInTool(@"Update the configuration of an existing MCP server (patch-style partial update).
-Supports changing timeout, environment variables, enabled status, command, and args.
+        [BuiltInTool(@"Update the configuration of an existing MCP server (write-only patch-style partial update).
+Supports changing timeout, enabled status, command, and args.
+Environment variables are merged (added/overwritten) without exposing existing values - this is a write-only operation for security.
 After updating, the server will be automatically reconnected with the new settings.
 Only available to admin users.")]
         public async Task<string> UpdateMcpServer(
@@ -195,7 +200,7 @@ Only available to admin users.")]
             ToolContext toolContext,
             [BuiltInParameter("New timeout in seconds for tool calls (e.g., '120' for 2 minutes). Leave empty to keep current value.", IsRequired = false)] string timeout = null,
             [BuiltInParameter("New enabled status ('true' or 'false'). Leave empty to keep current value.", IsRequired = false)] string enabled = null,
-            [BuiltInParameter("New environment variables in KEY=VALUE format, semicolon-separated. This replaces all existing env vars. Leave empty to keep current.", IsRequired = false)] string env = null,
+            [BuiltInParameter("Environment variables to add or update in KEY=VALUE format, semicolon-separated. These are MERGED into existing env vars (existing keys not mentioned are preserved). Leave empty to keep current.", IsRequired = false)] string env = null,
             [BuiltInParameter("New command to start the MCP server. Leave empty to keep current.", IsRequired = false)] string command = null,
             [BuiltInParameter("New space-separated command arguments. Leave empty to keep current.", IsRequired = false)] string args = null) {
 
@@ -242,19 +247,21 @@ Only available to admin users.")]
                         changes.Add($"enabled → {parsedEnabled.Value}");
                     }
                     if (!string.IsNullOrWhiteSpace(env)) {
-                        config.Env = new Dictionary<string, string>();
+                        // Merge env vars: add/overwrite provided keys, preserve existing untouched keys
+                        var addedKeys = new List<string>();
                         var skippedPairs = new List<string>();
                         foreach (var pair in env.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
                             var parts = pair.Split('=', 2);
                             if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0])) {
                                 config.Env[parts[0].Trim()] = parts[1].Trim();
+                                addedKeys.Add(parts[0].Trim());
                             } else {
                                 skippedPairs.Add(pair);
                             }
                         }
-                        var envMsg = $"env → {config.Env.Count} variable(s)";
+                        var envMsg = $"env → merged {addedKeys.Count} variable(s): {string.Join(", ", addedKeys)}";
                         if (skippedPairs.Any()) {
-                            envMsg += $" (skipped {skippedPairs.Count} malformed pair(s): {string.Join(", ", skippedPairs.Select(p => $"'{p}'"))})";
+                            envMsg += $" (skipped {skippedPairs.Count} malformed pair(s))";
                         }
                         changes.Add(envMsg);
                     }

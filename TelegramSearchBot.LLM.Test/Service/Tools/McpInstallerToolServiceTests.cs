@@ -318,17 +318,21 @@ namespace TelegramSearchBot.Test.Service.Tools {
         }
 
         [Fact]
-        public async Task UpdateMcpServer_UpdateEnv_Success() {
-            await _service.AddMcpServer("update-env", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext);
+        public async Task UpdateMcpServer_UpdateEnv_MergesVariables() {
+            // Add server with initial env var
+            await _service.AddMcpServer("update-env", "/nonexistent/binary_12345_that_does_not_exist", "", _adminContext, "EXISTING_KEY=original");
 
+            // Update by adding new vars - should merge, not replace
             var result = await _service.UpdateMcpServer("update-env", _adminContext, env: "KEY1=val1;KEY2=val2");
             Assert.Contains("Successfully updated", result);
-            Assert.Contains("2 variable(s)", result);
+            Assert.Contains("merged 2 variable(s)", result);
 
             var configs = await _mcpServerManager.GetServerConfigsAsync();
             var config = configs.First(c => c.Name == "update-env");
             Assert.Equal("val1", config.Env["KEY1"]);
             Assert.Equal("val2", config.Env["KEY2"]);
+            // Original env var should still be there
+            Assert.Equal("original", config.Env["EXISTING_KEY"]);
         }
 
         [Fact]
