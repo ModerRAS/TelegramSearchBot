@@ -16,11 +16,12 @@
    - OpenAI API
    - Gemini API
    - 可配置多模型通道管理
+   - **MCP (Model Context Protocol) 工具支持**
 5. 高级功能:
    - 短链接映射服务
    - 消息扩展存储
    - 记忆图谱功能
-   - 私有Bot API支持
+   - **内置Telegram Bot API服务支持（2GB大文件/50MB云端）**
    - 群组黑名单/设置管理
 
 详细功能说明请参考: [Docs/Bot_Commands_User_Guide.md](Docs/Bot_Commands_User_Guide.md)
@@ -40,15 +41,22 @@
   "EnableAutoOCR": false,
   "EnableAutoASR": false,
   "IsLocalAPI": false,
+  "EnableLocalBotAPI": false,
+  "TelegramBotApiId": "",
+  "TelegramBotApiHash": "",
+  "LocalBotApiPort": 8081,
   "SameServer": false,
   "TaskDelayTimeout": 1000,
   "OllamaModelName": "qwen2.5:72b-instruct-q2_K",
   "EnableVideoASR": false,
   "EnableOpenAI": false,
   "OpenAIModelName": "gpt-4o",
+  "MaxToolCycles": 25,
   "OLTPAuth": "",
   "OLTPAuthUrl": "",
-  "OLTPName": ""
+  "OLTPName": "",
+  "BraveApiKey": "",
+  "EnableAccounting": false
 }
 ```
 
@@ -57,17 +65,25 @@
   - `BotToken`: 从@BotFather获取的Telegram机器人token
   - `AdminId`: 管理员Telegram用户ID(必须为数字)
 
+- **本地Bot API服务**:
+  - `EnableLocalBotAPI`: 是否启用内置Telegram Bot API服务(默认false)
+  - `TelegramBotApiId`: Telegram Bot API的API ID（从my.telegram.org获取）
+  - `TelegramBotApiHash`: Telegram Bot API的API Hash（从my.telegram.org获取）
+  - `LocalBotApiPort`: 本地Bot API服务端口(默认8081)
+  - **优势**: 启用后可发送最大2GB文件（vs 云端50MB限制）
+
 - **AI相关**:
   - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")
   - `EnableOpenAI`: 是否启用OpenAI(默认false)
   - `OpenAIModelName`: OpenAI模型名称(默认"gpt-4o")
+  - `MaxToolCycles`: LLM工具调用最大迭代次数(默认25)，防止无限循环
 
 - **日志推送**:
   - `OLTPAuth`: OLTP日志推送认证密钥
   - `OLTPAuthUrl`: OLTP日志推送URL
   - `OLTPName`: OLTP日志推送名称
 
-完整配置参考: [Env.cs](TelegramSearchBot/Env.cs)
+完整配置参考: [Env.cs](TelegramSearchBot.Common/Env.cs)
 
 ## 向量搜索功能
 基于FAISS的向量搜索系统，提供强大的语义搜索能力：
@@ -75,8 +91,17 @@
 - ✅ **对话段语义理解** - 基于完整对话上下文而非单条消息
 - ✅ **自动向量化** - 消息自动分组为对话段并生成向量
 - ✅ **高效检索** - 使用FAISS进行快速相似度搜索
+- ✅ **LLM迭代限制** - 防止无限工具调用循环（默认25次）
 
-详细文档: [TelegramSearchBot/README_FaissVectorSearch.md](TelegramSearchBot/README_FaissVectorSearch.md)
+详细文档: [Docs/README_FaissVectorSearch.md](Docs/README_FaissVectorSearch.md)
+
+## MCP (Model Context Protocol) 支持
+通过MCP协议扩展机器人能力，支持外部工具服务器：
+- ✅ **内置工具**: 发送文件、搜索、URL处理等24+内置工具
+- ✅ **外部MCP服务器**: 可动态添加第三方MCP服务器
+- ✅ **管理员管理**: 通过指令管理MCP服务器（`新建渠道`等）
+
+详细文档: [Docs/README_MCP.md](Docs/README_MCP.md)
 
 ## 使用方法
 
@@ -103,6 +128,7 @@ graph TD
     B --> D[多媒体处理]
     B --> E[LLM交互]
     B --> F[向量搜索]
+    B --> Q[MCP工具]
     C --> G[(SQLite)]
     C --> H[Lucene索引]
     F --> I[对话段生成]
@@ -113,6 +139,8 @@ graph TD
     E --> N[Ollama]
     E --> O[OpenAI]
     E --> P[Gemini]
+    Q --> R[MCP Servers]
+    R --> S[External Tools]
 ```
 
 详细架构设计: [Docs/Existing_Codebase_Overview.md](Docs/Existing_Codebase_Overview.md)
