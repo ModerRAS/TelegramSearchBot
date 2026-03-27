@@ -2,33 +2,30 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Lucene.Net.Analysis.Cn.Smart;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
-using Lucene.Net.Util;
 using TelegramSearchBot.Search.Model;
-using TelegramSearchBot.Search.Tokenizer;
 using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Tokenizer.Abstractions;
 
 namespace TelegramSearchBot.Search.Service {
     public class SimpleSearchService {
-        private readonly UnifiedTokenizer _tokenizer;
+        private readonly ITokenizer _tokenizer;
         private readonly ExtFieldQueryOptimizer _extOptimizer;
         private readonly Func<string, Task>? _log;
 
-        public SimpleSearchService(UnifiedTokenizer tokenizer, ExtFieldQueryOptimizer extOptimizer, Func<string, Task>? log) {
+        public SimpleSearchService(ITokenizer tokenizer, ExtFieldQueryOptimizer extOptimizer, Func<string, Task>? log) {
             _tokenizer = tokenizer;
             _extOptimizer = extOptimizer;
             _log = log;
         }
 
         private List<string> GetKeyWords(string query) {
-            return _tokenizer.SafeTokenize(query);
+            return _tokenizer.SafeTokenize(query).ToList();
         }
 
         private (Query Query, string[] Terms) ParseSimpleQuery(string query, IndexReader reader) {
             _ = reader; // 保留参数以兼容未来扩展
-            _ = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48); // 与原实现保持一致，虽然当前未使用
 
             var booleanQuery = new BooleanQuery();
             var terms = GetKeyWords(query).ToArray();

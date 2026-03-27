@@ -31,6 +31,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.LLM", "Te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.LLM.Test", "TelegramSearchBot.LLM.Test\TelegramSearchBot.LLM.Test.csproj", "{60EB5F23-139A-4BD3-96F7-DE3A1C3BE8E1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Tokenizer", "TelegramSearchBot.Tokenizer\TelegramSearchBot.Tokenizer.csproj", "{61FC5852-27DB-41B0-90A7-6502D56DFB81}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Tokenizer.Tests", "TelegramSearchBot.Tokenizer.Tests\TelegramSearchBot.Tokenizer.Tests.csproj", "{BCABB144-0B45-40B1-B384-86486C8C1BF1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -137,6 +141,30 @@ Global
 		{60EB5F23-139A-4BD3-96F7-DE3A1C3BE8E1}.Release|x64.Build.0 = Release|Any CPU
 		{60EB5F23-139A-4BD3-96F7-DE3A1C3BE8E1}.Release|x86.ActiveCfg = Release|Any CPU
 		{60EB5F23-139A-4BD3-96F7-DE3A1C3BE8E1}.Release|x86.Build.0 = Release|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Debug|x64.Build.0 = Debug|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Debug|x86.Build.0 = Debug|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Release|Any CPU.Build.0 = Release|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Release|x64.ActiveCfg = Release|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Release|x64.Build.0 = Release|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Release|x86.ActiveCfg = Release|Any CPU
+		{61FC5852-27DB-41B0-90A7-6502D56DFB81}.Release|x86.Build.0 = Release|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Debug|x64.Build.0 = Debug|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Debug|x86.Build.0 = Debug|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Release|x64.ActiveCfg = Release|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Release|x64.Build.0 = Release|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Release|x86.ActiveCfg = Release|Any CPU
+		{BCABB144-0B45-40B1-B384-86486C8C1BF1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
