@@ -2,14 +2,28 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Lucene.Net.Analysis;
-using Lucene.Net.Analysis.Cn.Smart;
-using Lucene.Net.Analysis.TokenAttributes;
-using Lucene.Net.Util;
 using TelegramSearchBot.Search.Exception;
+using TelegramSearchBot.Tokenizer.Abstractions;
 
 namespace TelegramSearchBot.Search.Tool {
     public static class SearchHelper {
+        private static ITokenizer? _tokenizer;
+
+        /// <summary>
+        /// 设置用于分词的 tokenizer 实例。
+        /// 如果未设置，则使用默认的 SmartChineseTokenizer。
+        /// </summary>
+        public static void SetTokenizer(ITokenizer tokenizer) {
+            _tokenizer = tokenizer;
+        }
+
+        private static ITokenizer GetTokenizer() {
+            if (_tokenizer == null) {
+                _tokenizer = new TelegramSearchBot.Tokenizer.Implementations.SmartChineseTokenizer();
+            }
+            return _tokenizer;
+        }
+
         /// <summary>
         /// 在给定的 <paramref name="text"/> 中，根据用户输入的单条查询 <paramref name="query"/>（主要为中文）
         /// 寻找最匹配的 token 或连续子串，并返回一个长度不超过 <paramref name="totalLength"/> 的原文片段。
@@ -30,7 +44,7 @@ namespace TelegramSearchBot.Search.Tool {
         /// 当 <paramref name="text"/> 或 <paramref name="query"/> 为 null/空，或 <paramref name="totalLength"/> <= 0 时抛出。
         /// </exception>
         /// <exception cref="TelegramSearchBot.Search.Exception.SearchProcessingException">
-        /// 当分词或内部处理发生异常（例如 SmartChineseAnalyzer 抛出异常）时抛出，inner exception 包含底层错误信息。
+        /// 当分词或内部处理发生异常（例如 Analyzer 抛出异常）时抛出，inner exception 包含底层错误信息。
         /// </exception>
         public static string FindBestSnippet(string text, string query, int totalLength) {
             if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(query) || totalLength <= 0) {
@@ -38,15 +52,17 @@ namespace TelegramSearchBot.Search.Tool {
             }
 
             try {
+                var tokenizer = GetTokenizer();
+
                 // 分词 query -> tokens
-                var queryTokens = Tokenize(query);
+                var queryTokens = tokenizer.Tokenize(query).ToList();
                 if (queryTokens.Count == 0) {
                     // 无有效 query token：按需求未匹配返回空字符串
                     return string.Empty;
                 }
 
                 // 分词 text -> tokens 及其原文范围
-                var textTokens = TokenizeWithOffsets(text);
+                var textTokens = tokenizer.TokenizeWithOffsets(text);
                 if (textTokens.Count == 0) {
                     return string.Empty;
                 }
@@ -131,66 +147,30 @@ namespace TelegramSearchBot.Search.Tool {
             return null;
         }
 
-        private static List<string> Tokenize(string input) {
-            var tokens = new List<string>();
-            using Analyzer analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
-            using var tokenStream = analyzer.GetTokenStream("f", input);
-            tokenStream.Reset();
-            var termAttr = tokenStream.GetAttribute<ICharTermAttribute>();
-            while (tokenStream.IncrementToken()) {
-                var term = termAttr.ToString();
-                if (!string.IsNullOrWhiteSpace(term)) {
-                    tokens.Add(term);
-                }
-            }
-            tokenStream.End();
-            return tokens;
-        }
-
-        private static List<(int start, int end, string term)> TokenizeWithOffsets(string input) {
-            var tokens = new List<(int start, int end, string term)>();
-            using Analyzer analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
-            using var tokenStream = analyzer.GetTokenStream("f", input);
-            tokenStream.Reset();
-            var termAttr = tokenStream.GetAttribute<ICharTermAttribute>();
-            var offsetAttr = tokenStream.GetAttribute<IOffsetAttribute>();
-            while (tokenStream.IncrementToken()) {
-                var term = termAttr.ToString();
-                if (string.IsNullOrWhiteSpace(term)) continue;
-                var start = offsetAttr.StartOffset;
-                var end = offsetAttr.EndOffset;
-                if (start >= 0 && end >= start && end <= input.Length) {
-                    tokens.Add((start, end, term));
-                }
-            }
-            tokenStream.End();
-            return tokens;
-        }
-
         private static (int start, int end, string term)? FindExactMatch(
-            List<(int start, int end, string term)> textTokens,
+            IReadOnlyList<TokenWithOffset> textTokens,
             List<string> queryTokens) {
             var qset = new HashSet<string>(queryTokens.Select(t => t.ToLowerInvariant()));
             foreach (var t in textTokens) {
-                var tt = t.term.ToLowerInvariant();
+                var tt = t.Term.ToLowerInvariant();
                 if (qset.Contains(tt)) {
-                    return t;
+                    return (t.Start, t.End, t.Term);
                 }
             }
             return null;
         }
 
         private static (int start, int end, string term)? FindLongestCommonSubstrMatch(
-                List<(int start, int end, string term)> textTokens,
+                IReadOnlyList<TokenWithOffset> textTokens,
                 List<string> queryTokens) {
             int bestScore = 0;
             (int start, int end, string term)? best = null;
             foreach (var t in textTokens) {
                 foreach (var q in queryTokens) {
-                    var score = LongestCommonSubstringLength(t.term, q);
+                    var score = LongestCommonSubstringLength(t.Term, q);
                     if (score > bestScore && score >= 2) {
                         bestScore = score;
-                        best = t;
+                        best = (t.Start, t.End, t.Term);
                     }
                 }
             }

@@ -48,7 +48,7 @@ namespace TelegramSearchBot.Model.Mcp {
     public static class McpConfStateExtensions {
         public static string GetDescription(this McpConfState state) {
             var fieldInfo = state.GetType().GetField(state.ToString());
-            var attributes = (DescriptionAttribute[])fieldInfo.GetCustomAttributes(typeof(DescriptionAttribute), false);
+            var attributes = ( DescriptionAttribute[] ) fieldInfo.GetCustomAttributes(typeof(DescriptionAttribute), false);
             return attributes.Length > 0 ? attributes[0].Description : state.ToString();
         }
     }

@@ -96,7 +96,7 @@ namespace TelegramSearchBot.Test.Manage {
             var stateKey = $"mcpconf:{chatId}:state";
             var dataKey = $"mcpconf:{chatId}:data";
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_adding_name")
                 .ReturnsAsync("mcp_adding_command")
@@ -106,7 +106,7 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync("mcp_adding_env_key")
                 .ReturnsAsync("mcp_adding_timeout");
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)dataKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) dataKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync("my-server")                                              // call 3: HandleAddingCommandAsync
                 .ReturnsAsync("my-server|uvx")                                          // call 4: HandleAddingArgsAsync
                 .ReturnsAsync("my-server|uvx|minimax-mcp")                              // call 5: HandleAddingEnvKeyAsync("API_KEY")
@@ -164,7 +164,7 @@ namespace TelegramSearchBot.Test.Manage {
             var stateKey = $"mcpconf:{chatId}:state";
             var dataKey = $"mcpconf:{chatId}:data";
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_adding_name")
                 .ReturnsAsync("mcp_adding_command")
@@ -172,7 +172,7 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync("mcp_adding_env_key")
                 .ReturnsAsync("mcp_adding_timeout");
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)dataKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) dataKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync("simple-server")          // call 3: HandleAddingCommandAsync
                 .ReturnsAsync("simple-server|echo")     // call 4: HandleAddingArgsAsync
                 .ReturnsAsync("simple-server|echo|");   // call 6: HandleAddingTimeoutAsync
@@ -204,7 +204,7 @@ namespace TelegramSearchBot.Test.Manage {
 
             SetupServers(new McpServerConfig { Name = "existing", Command = "test" });
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_adding_name");
 
@@ -221,17 +221,19 @@ namespace TelegramSearchBot.Test.Manage {
             var dataKey = $"mcpconf:{chatId}:data";
 
             SetupServers(new McpServerConfig {
-                Name = "edit-test", Command = "npx",
-                Enabled = true, TimeoutSeconds = 30
+                Name = "edit-test",
+                Command = "npx",
+                Enabled = true,
+                TimeoutSeconds = 30
             });
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_editing_select_server")
                 .ReturnsAsync("mcp_editing_select_field")
                 .ReturnsAsync("mcp_editing_input_value");
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)dataKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) dataKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync("edit-test")              // call 3: HandleEditingSelectFieldAsync
                 .ReturnsAsync("edit-test|4");           // call 4: HandleEditingInputValueAsync
 
@@ -266,18 +268,19 @@ namespace TelegramSearchBot.Test.Manage {
             var dataKey = $"mcpconf:{chatId}:data";
 
             SetupServers(new McpServerConfig {
-                Name = "env-test", Command = "npx",
+                Name = "env-test",
+                Command = "npx",
                 Env = new Dictionary<string, string> { { "SECRET", "hidden-value" } }
             });
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_editing_select_server")
                 .ReturnsAsync("mcp_editing_select_field")
                 .ReturnsAsync("mcp_editing_env_key")
                 .ReturnsAsync("mcp_editing_env_value");
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)dataKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) dataKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync("env-test")               // call 3: HandleEditingSelectFieldAsync
                 .ReturnsAsync("env-test|3")             // call 4: HandleEditingEnvKeyAsync
                 .ReturnsAsync("env-test|3|NEW_KEY");    // call 5: HandleEditingEnvValueAsync
@@ -314,12 +317,12 @@ namespace TelegramSearchBot.Test.Manage {
 
             SetupServers(new McpServerConfig { Name = "delete-me", Command = "test" });
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_deleting_select_server")
                 .ReturnsAsync("mcp_deleting_confirm");
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)dataKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) dataKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync("delete-me");             // call 3: HandleDeletingConfirmAsync
 
             _mcpServerManagerMock.Setup(m => m.RemoveServerAsync("delete-me"))
@@ -347,12 +350,12 @@ namespace TelegramSearchBot.Test.Manage {
 
             SetupServers(new McpServerConfig { Name = "keep-me", Command = "test" });
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_deleting_select_server")
                 .ReturnsAsync("mcp_deleting_confirm");
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)dataKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) dataKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync("keep-me");               // call 3: HandleDeletingConfirmAsync
 
             await _service.ExecuteAsync("删除MCP服务器", chatId);
@@ -381,7 +384,7 @@ namespace TelegramSearchBot.Test.Manage {
 
             SetupServers(new McpServerConfig { Name = "real-server", Command = "test" });
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_editing_select_server");
 
@@ -399,12 +402,12 @@ namespace TelegramSearchBot.Test.Manage {
 
             SetupServers(new McpServerConfig { Name = "field-test", Command = "test" });
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)stateKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) stateKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisValue.Null)
                 .ReturnsAsync("mcp_editing_select_server")
                 .ReturnsAsync("mcp_editing_select_field");
 
-            _dbMock.SetupSequence(d => d.StringGetAsync((RedisKey)dataKey, It.IsAny<CommandFlags>()))
+            _dbMock.SetupSequence(d => d.StringGetAsync(( RedisKey ) dataKey, It.IsAny<CommandFlags>()))
                 .ReturnsAsync("field-test");            // call 3: HandleEditingSelectFieldAsync
 
             await _service.ExecuteAsync("编辑MCP服务器", chatId);
@@ -423,7 +426,8 @@ namespace TelegramSearchBot.Test.Manage {
         [Fact]
         public async Task ListServers_EnvKeysOnly_NeverShowsValues() {
             SetupServers(new McpServerConfig {
-                Name = "secret-server", Command = "test",
+                Name = "secret-server",
+                Command = "test",
                 Env = new Dictionary<string, string> {
                     { "API_KEY", "sk-super-secret-key-12345" },
                     { "DB_PASS", "my-database-password" }
