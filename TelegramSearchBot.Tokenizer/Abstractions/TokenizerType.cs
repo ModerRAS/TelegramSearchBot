@@ -1,6 +1,5 @@
 namespace TelegramSearchBot.Tokenizer.Abstractions;
 
-public enum TokenizerType
-{
+public enum TokenizerType {
     SmartChinese
 }

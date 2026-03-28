@@ -10,13 +10,11 @@ using TelegramSearchBot.Tokenizer.Abstractions;
 
 namespace TelegramSearchBot.Tokenizer.Implementations;
 
-public class SmartChineseTokenizer : ITokenizer
-{
+public class SmartChineseTokenizer : ITokenizer {
     private readonly Analyzer _analyzer;
     private readonly Action<string>? _logAction;
 
-    public SmartChineseTokenizer(Action<string>? logAction = null)
-    {
+    public SmartChineseTokenizer(Action<string>? logAction = null) {
         _analyzer = new SmartChineseAnalyzer(LuceneVersion.LUCENE_48);
         _logAction = logAction;
         Metadata = new TokenizerMetadata("SmartChinese", "Chinese", true);
@@ -24,26 +22,20 @@ public class SmartChineseTokenizer : ITokenizer
 
     public TokenizerMetadata Metadata { get; }
 
-    public IReadOnlyList<string> Tokenize(string text)
-    {
+    public IReadOnlyList<string> Tokenize(string text) {
         var keywords = new HashSet<string>();
-        try
-        {
+        try {
             using var reader = new StringReader(text);
             using var tokenStream = _analyzer.GetTokenStream(fieldName: null, reader);
             tokenStream.Reset();
             var termAttribute = tokenStream.GetAttribute<ICharTermAttribute>();
-            while (tokenStream.IncrementToken())
-            {
+            while (tokenStream.IncrementToken()) {
                 var keyword = termAttribute.ToString();
-                if (!string.IsNullOrWhiteSpace(keyword))
-                {
+                if (!string.IsNullOrWhiteSpace(keyword)) {
                     keywords.Add(keyword);
                 }
             }
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             _logAction?.Invoke($"分词处理失败: {ex.Message}, Text: {text}");
             keywords.Add(text);
         }
@@ -51,14 +43,10 @@ public class SmartChineseTokenizer : ITokenizer
         return keywords.ToList();
     }
 
-    public IReadOnlyList<string> SafeTokenize(string text)
-    {
-        try
-        {
+    public IReadOnlyList<string> SafeTokenize(string text) {
+        try {
             return Tokenize(text);
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             _logAction?.Invoke($"分词处理失败，使用原始文本: {ex.Message}, Text: {text}");
 
             return text
@@ -69,34 +57,27 @@ public class SmartChineseTokenizer : ITokenizer
         }
     }
 
-    public IReadOnlyList<TokenWithOffset> TokenizeWithOffsets(string text)
-    {
+    public IReadOnlyList<TokenWithOffset> TokenizeWithOffsets(string text) {
         var tokens = new List<TokenWithOffset>();
-        try
-        {
+        try {
             using var reader = new StringReader(text);
             using var tokenStream = _analyzer.GetTokenStream(fieldName: null, reader);
             tokenStream.Reset();
             var termAttribute = tokenStream.GetAttribute<ICharTermAttribute>();
             var offsetAttribute = tokenStream.GetAttribute<Lucene.Net.Analysis.TokenAttributes.IOffsetAttribute>();
-            while (tokenStream.IncrementToken())
-            {
+            while (tokenStream.IncrementToken()) {
                 var term = termAttribute.ToString();
                 if (string.IsNullOrWhiteSpace(term)) continue;
                 var start = offsetAttribute.StartOffset;
                 var end = offsetAttribute.EndOffset;
-                if (start >= 0 && end >= start && end <= text.Length)
-                {
+                if (start >= 0 && end >= start && end <= text.Length) {
                     tokens.Add(new TokenWithOffset(start, end, term));
                 }
             }
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             _logAction?.Invoke($"分词处理失败: {ex.Message}, Text: {text}");
             // Fallback: return the whole text as a single token
-            if (!string.IsNullOrEmpty(text))
-            {
+            if (!string.IsNullOrEmpty(text)) {
                 tokens.Add(new TokenWithOffset(0, text.Length, text));
             }
         }

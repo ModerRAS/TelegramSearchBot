@@ -8,7 +8,7 @@ using TelegramSearchBot.Tokenizer.Abstractions;
 namespace TelegramSearchBot.Search.Tool {
     public static class SearchHelper {
         private static ITokenizer? _tokenizer;
-        
+
         /// <summary>
         /// 设置用于分词的 tokenizer 实例。
         /// 如果未设置，则使用默认的 SmartChineseTokenizer。
@@ -16,7 +16,7 @@ namespace TelegramSearchBot.Search.Tool {
         public static void SetTokenizer(ITokenizer tokenizer) {
             _tokenizer = tokenizer;
         }
-        
+
         private static ITokenizer GetTokenizer() {
             if (_tokenizer == null) {
                 _tokenizer = new TelegramSearchBot.Tokenizer.Implementations.SmartChineseTokenizer();
@@ -53,7 +53,7 @@ namespace TelegramSearchBot.Search.Tool {
 
             try {
                 var tokenizer = GetTokenizer();
-                
+
                 // 分词 query -> tokens
                 var queryTokens = tokenizer.Tokenize(query).ToList();
                 if (queryTokens.Count == 0) {
