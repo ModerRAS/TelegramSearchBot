@@ -310,6 +310,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         firstToolCall.toolName,
                         JsonConvert.SerializeObject(firstToolCall.arguments));
 
+                    // Add tool call indicator to output
+                    currentMessageBuilder.Append($"\n\n🔧 `{firstToolCall.toolName}`\n\n");
+                    yield return currentMessageBuilder.ToString();
+
                     string toolResult;
                     bool isError = false;
                     try {

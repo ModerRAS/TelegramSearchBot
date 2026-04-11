@@ -820,6 +820,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         }
                         providerHistory.Add(assistantMessage);
 
+                        // Add tool call indicator to output
+                        var toolNames = string.Join(", ", chatToolCalls.Select(tc => $"`{tc.FunctionName}`"));
+                        currentMessageContentBuilder.Append($"\n\n🔧 {toolNames}\n\n");
+                        yield return currentMessageContentBuilder.ToString();
+
                         // Execute each tool call
                         foreach (var toolCall in chatToolCalls) {
                             string toolName = toolCall.FunctionName;
@@ -937,6 +942,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
                         }
 
+                        // Add tool call indicator to output
+                        currentMessageContentBuilder.Append($"\n\n🔧 `{parsedToolName}`\n\n");
+                        yield return currentMessageContentBuilder.ToString();
+
                         string toolResultString;
                         bool isError = false;
                         try {
@@ -1053,6 +1062,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         Dictionary<string, string> toolArguments = firstToolCall.arguments;
 
                         _logger.LogInformation("{ServiceName}: LLM requested tool (resume): {ToolName}", ServiceName, parsedToolName);
+
+                        // Add tool call indicator to output
+                        var toolIndicator = $"\n\n🔧 `{parsedToolName}`\n\n";
+                        newContentBuilder.Append(toolIndicator);
+                        fullContentBuilder.Append(toolIndicator);
+                        yield return newContentBuilder.ToString();
 
                         string toolResultString;
                         bool isError = false;
