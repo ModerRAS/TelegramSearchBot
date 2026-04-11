@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -41,14 +42,41 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private void AddMessageToHistory(List<GenerativeAI.Types.Content> chatHistory, long fromUserId, string content) {
-            if (string.IsNullOrWhiteSpace(content)) return;
-            content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
+            AddMessageToHistory(chatHistory, fromUserId, content, null);
+        }
+
+        private void AddMessageToHistory(List<GenerativeAI.Types.Content> chatHistory, long fromUserId, string content, List<byte[]> images) {
+            if (string.IsNullOrWhiteSpace(content) && (images == null || images.Count == 0)) return;
+            if (!string.IsNullOrWhiteSpace(content)) {
+                content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
+            }
 
             var role = fromUserId == Env.BotId ? Roles.Model : Roles.User;
-            chatHistory.Add(new Content(content, role));
+
+            if (images != null && images.Count > 0 && role == Roles.User) {
+                var parts = new List<Part>();
+                if (!string.IsNullOrWhiteSpace(content)) {
+                    parts.Add(new Part { Text = content.Trim() });
+                }
+                foreach (var imageBytes in images) {
+                    parts.Add(new Part {
+                        InlineData = new GenerativeAI.Types.Blob {
+                            MimeType = "image/png",
+                            Data = Convert.ToBase64String(imageBytes)
+                        }
+                    });
+                }
+                chatHistory.Add(new Content { Parts = parts, Role = role });
+            } else {
+                chatHistory.Add(new Content(content?.Trim() ?? "", role));
+            }
         }
 
         public async Task<List<GenerativeAI.Types.Content>> GetChatHistory(long chatId, Message inputMessage = null) {
+            return await GetChatHistory(chatId, inputMessage, false);
+        }
+
+        public async Task<List<GenerativeAI.Types.Content>> GetChatHistory(long chatId, Message inputMessage, bool supportsVision) {
             var messages = await _dbContext.Messages.AsNoTracking()
                             .Where(m => m.GroupId == chatId && m.DateTime > DateTime.UtcNow.AddHours(-1))
                             .OrderBy(m => m.DateTime)
@@ -71,6 +99,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var str = new StringBuilder();
             Message previous = null;
             var userCache = new Dictionary<long, UserData>();
+            var pendingImages = new List<byte[]>();
 
             foreach (var message in messages) {
                 if (previous == null && !chatHistory.Any() && message.FromUserId == Env.BotId) {
@@ -79,8 +108,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 if (previous != null && ( previous.FromUserId == Env.BotId ) != ( message.FromUserId == Env.BotId )) {
-                    AddMessageToHistory(chatHistory, previous.FromUserId, str.ToString());
+                    AddMessageToHistory(chatHistory, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
                     str.Clear();
+                    pendingImages.Clear();
                 }
 
                 str.Append($"[{message.DateTime:yyyy-MM-dd HH:mm:ss zzz}]");
@@ -100,14 +130,67 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
                 str.Append(": ").Append(message.Content).Append("\n");
 
+                // 如果模型支持视觉，尝试加载消息关联的图片
+                if (supportsVision && message.FromUserId != Env.BotId) {
+                    var imageBytes = TryLoadMessagePhoto(message.GroupId, message.MessageId);
+                    if (imageBytes != null) {
+                        pendingImages.Add(imageBytes);
+                    }
+                }
+
                 previous = message;
             }
 
             if (previous != null && str.Length > 0) {
-                AddMessageToHistory(chatHistory, previous.FromUserId, str.ToString());
+                AddMessageToHistory(chatHistory, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
             }
 
             return chatHistory;
+        }
+
+        /// <summary>
+        /// 检查模型是否支持视觉能力
+        /// </summary>
+        private async Task<bool> CheckVisionSupport(string modelName, int channelId) {
+            try {
+                var channelWithModel = await _dbContext.ChannelsWithModel
+                    .Include(c => c.Capabilities)
+                    .FirstOrDefaultAsync(c => c.ModelName == modelName && c.LLMChannelId == channelId && !c.IsDeleted);
+
+                if (channelWithModel?.Capabilities != null) {
+                    return channelWithModel.Capabilities.Any(c =>
+                        c.CapabilityName == "vision" && c.CapabilityValue == "true");
+                }
+
+                return false;
+            } catch (Exception ex) {
+                _logger.LogDebug(ex, "检查模型视觉能力时出错: {ModelName}", modelName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 尝试加载消息关联的图片文件，转换为PNG格式的字节数组
+        /// </summary>
+        private byte[] TryLoadMessagePhoto(long chatId, long messageId) {
+            try {
+                var dirPath = Path.Combine(Env.WorkDir, "Photos", $"{chatId}");
+                if (!Directory.Exists(dirPath)) return null;
+
+                var files = Directory.GetFiles(dirPath, $"{messageId}.*");
+                if (files.Length == 0) return null;
+
+                var filePath = files[0];
+                using var fileStream = File.OpenRead(filePath);
+                var bitmap = SKBitmap.Decode(fileStream);
+                if (bitmap == null) return null;
+
+                var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 90);
+                return encoded?.ToArray();
+            } catch (Exception ex) {
+                _logger.LogDebug(ex, "无法加载消息图片: ChatId={ChatId}, MessageId={MessageId}", chatId, messageId);
+                return null;
+            }
         }
 
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
@@ -276,7 +359,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
             var fullResponse = new StringBuilder();
 
-            var history = await GetChatHistory(ChatId, message);
+            var history = await GetChatHistory(ChatId, message, await CheckVisionSupport(modelName, channel.Id));
             if (!_chatSessions.TryGetValue(ChatId, out var chatSession)) {
                 chatSession = model.StartChat(history: history);
                 _chatSessions[ChatId] = chatSession;

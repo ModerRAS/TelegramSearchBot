@@ -10,6 +10,8 @@ namespace TelegramSearchBot.Model.AI {
         OpenAI,
         Ollama,
         Gemini,
-        MiniMax = 4
+        MiniMax = 4,
+        LMStudio = 5,
+        Anthropic = 6
     }
 }
