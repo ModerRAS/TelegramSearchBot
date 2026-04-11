@@ -239,6 +239,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return await GetOpenRouterModelsWithCapabilities(channel);
             }
 
+            // 检查是否为LMStudio（通过capabilities字段检测）
+            if (channel.Provider == LLMProvider.LMStudio) {
+                return await GetLMStudioModelsWithCapabilities(channel);
+            }
+
 
             using var httpClient = _httpClientFactory.CreateClient();
 
@@ -553,6 +558,131 @@ namespace TelegramSearchBot.Service.AI.LLM {
             } catch (Exception ex) {
                 string modelDataStr = modelData?.ToString() ?? "null";
                 _logger.LogError(ex, "解析OpenRouter模型能力时出错: {ModelData}", modelDataStr);
+                return null;
+            }
+        }
+
+        // --- LMStudio Capability Detection ---
+
+        /// <summary>
+        /// 获取LMStudio模型及其能力信息
+        /// LMStudio在/v1/models返回的模型对象中包含capabilities数组
+        /// </summary>
+        private async Task<IEnumerable<ModelWithCapabilities>> GetLMStudioModelsWithCapabilities(LLMChannel channel) {
+            try {
+                var httpClient = _httpClientFactory.CreateClient();
+                if (!string.IsNullOrEmpty(channel.ApiKey)) {
+                    httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {channel.ApiKey}");
+                }
+
+                var gatewayBase = channel.Gateway.TrimEnd('/');
+                var modelsUrl = gatewayBase.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
+                    ? $"{gatewayBase}/models"
+                    : $"{gatewayBase}/v1/models";
+
+                var response = await httpClient.GetAsync(modelsUrl);
+                if (response.IsSuccessStatusCode) {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var modelsData = JsonConvert.DeserializeObject<dynamic>(content);
+
+                    var results = new List<ModelWithCapabilities>();
+                    if (modelsData?.data != null) {
+                        foreach (var modelData in modelsData.data) {
+                            var modelWithCaps = ParseLMStudioModelCapabilities(modelData);
+                            if (modelWithCaps != null) {
+                                results.Add(modelWithCaps);
+                            }
+                        }
+                    }
+
+                    _logger.LogInformation("获取到 {Count} 个LMStudio模型及其能力信息", results.Count);
+                    return results;
+                } else {
+                    _logger.LogWarning("获取LMStudio模型失败: {StatusCode}", response.StatusCode);
+                    // 回退到通用方式
+                    var genericModels = await GetGenericOpenAICompatibleModels(channel);
+                    return genericModels.Select(m => InferOpenAIModelCapabilities(m));
+                }
+            } catch (Exception ex) {
+                _logger.LogError(ex, "获取LMStudio模型能力时出错");
+                return new List<ModelWithCapabilities>();
+            }
+        }
+
+        /// <summary>
+        /// 解析LMStudio模型能力信息
+        /// LMStudio模型包含capabilities数组，如["tool_use", "vision", "chat", "text-completion"]
+        /// </summary>
+        private ModelWithCapabilities ParseLMStudioModelCapabilities(dynamic modelData) {
+            try {
+                string modelId = modelData.id?.ToString();
+                if (string.IsNullOrEmpty(modelId)) {
+                    return null;
+                }
+
+                var model = new ModelWithCapabilities { ModelName = modelId };
+
+                // 基本能力
+                model.SetCapability("streaming", true);
+                model.SetCapability("chat", true);
+
+                // 解析LMStudio的capabilities数组
+                if (modelData.capabilities != null) {
+                    foreach (var capability in modelData.capabilities) {
+                        string capStr = capability.ToString().ToLower();
+                        switch (capStr) {
+                            case "tool_use":
+                                model.SetCapability("function_calling", true);
+                                model.SetCapability("tool_calls", true);
+                                break;
+                            case "vision":
+                                model.SetCapability("vision", true);
+                                model.SetCapability("multimodal", true);
+                                model.SetCapability("image_content", true);
+                                break;
+                            case "embeddings":
+                                model.SetCapability("embedding", true);
+                                model.SetCapability("text_embedding", true);
+                                break;
+                            case "chat":
+                                model.SetCapability("chat", true);
+                                break;
+                            case "text-completion":
+                                model.SetCapability("text_generation", true);
+                                break;
+                        }
+                    }
+                }
+
+                // 解析LMStudio扩展字段
+                if (modelData.type != null) {
+                    string modelType = modelData.type.ToString().ToLower();
+                    if (modelType == "vlm") {
+                        model.SetCapability("vision", true);
+                        model.SetCapability("multimodal", true);
+                    } else if (modelType == "embeddings") {
+                        model.SetCapability("embedding", true);
+                    }
+                }
+
+                if (modelData.max_context_length != null) {
+                    model.SetCapability("input_token_limit", modelData.max_context_length.ToString());
+                }
+
+                if (modelData.arch != null) {
+                    model.SetCapability("model_family", modelData.arch.ToString());
+                }
+
+                if (modelData.quantization != null) {
+                    model.SetCapability("quantization", modelData.quantization.ToString());
+                }
+
+                model.SetCapability("provider", "LMStudio");
+
+                return model;
+            } catch (Exception ex) {
+                string modelDataStr = modelData?.ToString() ?? "null";
+                _logger.LogError(ex, "解析LMStudio模型能力时出错: {ModelData}", modelDataStr);
                 return null;
             }
         }
