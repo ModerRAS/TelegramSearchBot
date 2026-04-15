@@ -27,8 +27,8 @@
     <PackageReference Include="FFMpegCore" Version="5.4.0" />
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00016" />
     <PackageReference Include="Lucene.Net.Analysis.SmartCn" Version="4.8.0-beta00016" />
-    <PackageReference Include="Magick.NET-Q16-HDRI-AnyCPU" Version="14.10.3" />
-    <PackageReference Include="Markdig" Version="1.0.1" />
+    <PackageReference Include="Magick.NET-Q16-HDRI-AnyCPU" Version="14.12.0" />
+    <PackageReference Include="Markdig" Version="1.1.2" />
     <PackageReference Include="MediatR" Version="14.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
@@ -36,16 +36,16 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.6" />
     <PackageReference Include="Microsoft.Garnet" Version="1.0.99" />
     <PackageReference Include="NCrontab" Version="3.4.0" />
     <PackageReference Include="Nito.AsyncEx" Version="5.1.2" />
     <PackageReference Include="OllamaSharp" Version="5.4.18" />
-    <PackageReference Include="OpenAI" Version="2.9.0" />
+    <PackageReference Include="OpenAI" Version="2.10.0" />
     <PackageReference Include="PuppeteerSharp" Version="21.1.1" />
     <PackageReference Include="RateLimiter" Version="2.2.0" />
-    <PackageReference Include="Scriban" Version="6.5.3" />
+    <PackageReference Include="Scriban" Version="7.1.0" />
     <PackageReference Include="Scrutor" Version="7.0.0" />
     <PackageReference Include="Serilog" Version="4.3.1" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
@@ -57,10 +57,10 @@
     <PackageReference Include="SkiaSharp" Version="3.119.2" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.2" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />
-    <PackageReference Include="StackExchange.Redis" Version="2.11.8" />
+    <PackageReference Include="StackExchange.Redis" Version="2.12.14" />
     <PackageReference Include="Stateless" Version="5.20.1" />
     <PackageReference Include="System.Linq.Async" Version="7.0.0" />
-    <PackageReference Include="Telegram.Bot" Version="22.9.5" />
+    <PackageReference Include="Telegram.Bot" Version="22.9.6.1" />
     <PackageReference Include="Teru.Code.WechatQrcode.Lite" Version="1.0.0.20230813" />
     <PackageReference Include="Whisper.net" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
@@ -78,12 +78,12 @@
     <PackageReference Include="Sdcb.PaddleOCR" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleInference.runtime.win64.mkl" Version="3.1.0.54" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.6" />
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.6" />
     <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.3" />
     <PackageReference Include="FaissNet" Version="1.1.0" />
