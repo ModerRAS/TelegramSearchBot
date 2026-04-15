@@ -285,16 +285,24 @@ namespace TelegramSearchBot.Service.Scheduler {
 
                 var groupResults = new List<string>();
                 foreach (var message in groupMessages) {
-                    // 添加消息内容
                     if (!string.IsNullOrEmpty(message.Content)) {
-                        groupResults.Add(message.Content);
+                        var filteredContent = WordCloudTextFilter.FilterText(message.Content);
+                        if (!string.IsNullOrWhiteSpace(filteredContent)) {
+                            groupResults.Add(filteredContent);
+                        }
                     }
 
-                    // 添加所有扩展值
                     if (message.MessageExtensions != null) {
-                        groupResults.AddRange(message.MessageExtensions
-                            .Select(e => e.Value)
-                            .Where(v => !string.IsNullOrEmpty(v)));
+                        foreach (var ext in message.MessageExtensions) {
+                            if (!WordCloudTextFilter.ShouldIncludeExtension(ext.Name)) {
+                                continue;
+                            }
+                            
+                            var filteredValue = WordCloudTextFilter.FilterText(ext.Value);
+                            if (!string.IsNullOrWhiteSpace(filteredValue)) {
+                                groupResults.Add(filteredValue);
+                            }
+                        }
                     }
                 }
 
