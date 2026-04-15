@@ -57,8 +57,8 @@ namespace TelegramSearchBot.Model.AI {
         /// <summary>
         /// 获取能力值
         /// </summary>
-        public string GetCapability(string capabilityName) {
-            return Capabilities.TryGetValue(capabilityName, out var value) ? value : string.Empty;
+        public string? GetCapability(string capabilityName) {
+            return Capabilities.TryGetValue(capabilityName, out var value) ? value : null;
         }
 
         /// <summary>
