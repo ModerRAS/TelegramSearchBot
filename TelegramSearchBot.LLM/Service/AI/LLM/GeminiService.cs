@@ -393,8 +393,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         firstToolCall.toolName,
                         JsonConvert.SerializeObject(firstToolCall.arguments));
 
-                    // Add tool call indicator to output
-                    currentMessageBuilder.Append($"\n\n🔧 `{firstToolCall.toolName}`\n\n");
+                    currentMessageBuilder.Append(McpToolHelper.FormatToolCallDisplay(firstToolCall.toolName, firstToolCall.arguments));
                     yield return currentMessageBuilder.ToString();
 
                     string toolResult;
