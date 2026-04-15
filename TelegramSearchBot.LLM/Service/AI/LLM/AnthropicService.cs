@@ -581,9 +581,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                     trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = responseText });
 
-                    // Show tool call indicators
-                    var toolNames = string.Join(", ", toolUseBlocks.Select(t => $"`{t.name}`"));
-                    currentMessageContentBuilder.Append($"\n\n🔧 {toolNames}\n\n");
+                    var toolNamesBuilder = new StringBuilder();
+                    foreach (var (id, name, inputJson) in toolUseBlocks) {
+                        Dictionary<string, string> argsDict = null;
+                        if (!string.IsNullOrWhiteSpace(inputJson)) {
+                            try {
+                                argsDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson)
+                                    .ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
+                            } catch { }
+                        }
+                        argsDict ??= new Dictionary<string, string>();
+                        toolNamesBuilder.Append(McpToolHelper.FormatToolCallDisplay(name, argsDict));
+                    }
+                    currentMessageContentBuilder.Append(toolNamesBuilder.ToString());
                     yield return currentMessageContentBuilder.ToString();
 
                     // Execute tools and build tool result message
@@ -715,7 +725,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
                     }
 
-                    currentMessageContentBuilder.Append($"\n\n🔧 `{parsedToolName}`\n\n");
+                    currentMessageContentBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
                     yield return currentMessageContentBuilder.ToString();
 
                     string toolResultString;
@@ -845,7 +855,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                     _logger.LogInformation("{ServiceName}: LLM requested tool (resume): {ToolName}", ServiceName, parsedToolName);
 
-                    var toolIndicator = $"\n\n🔧 `{parsedToolName}`\n\n";
+                    var toolIndicator = McpToolHelper.FormatToolCallDisplay(parsedToolName, firstToolCall.arguments);
                     newContentBuilder.Append(toolIndicator);
                     fullContentBuilder.Append(toolIndicator);
                     yield return newContentBuilder.ToString();

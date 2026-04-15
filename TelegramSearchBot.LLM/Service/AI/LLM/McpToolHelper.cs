@@ -811,6 +811,33 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
             }
         }
+
+        private const int MaxToolParamDisplayLength = 100;
+
+        /// <summary>
+        /// Formats tool call information for display to user, including tool name and a summary of parameters.
+        /// Long parameter values are truncated to MaxToolParamDisplayLength characters.
+        /// </summary>
+        /// <param name="toolName">The name of the tool being called</param>
+        /// <param name="arguments">Dictionary of tool arguments</param>
+        /// <returns>A formatted string like "🔧 `tool_name` [param1: value1, param2: value2...]"</returns>
+        public static string FormatToolCallDisplay(string toolName, Dictionary<string, string> arguments) {
+            if (arguments == null || !arguments.Any()) {
+                return $"\n\n🔧 `{toolName}`\n\n";
+            }
+
+            var paramSummaries = new List<string>();
+            foreach (var kvp in arguments) {
+                string value = kvp.Value ?? "null";
+                if (value.Length > MaxToolParamDisplayLength) {
+                    value = value.Substring(0, MaxToolParamDisplayLength) + "...";
+                }
+                value = value.Replace("\n", " ").Replace("\r", " ");
+                paramSummaries.Add($"{kvp.Key}: {value}");
+            }
+
+            return $"\n\n🔧 `{toolName}` [{string.Join(", ", paramSummaries)}]\n\n";
+        }
         /// <summary>
         /// Register external MCP tools from connected MCP servers.
         /// These tools are added to the system prompt and routed to the MCP server for execution.

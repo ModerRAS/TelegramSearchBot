@@ -1027,9 +1027,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         }
                         providerHistory.Add(assistantMessage);
 
-                        // Add tool call indicator to output
-                        var toolNames = string.Join(", ", chatToolCalls.Select(tc => $"`{tc.FunctionName}`"));
-                        currentMessageContentBuilder.Append($"\n\n🔧 {toolNames}\n\n");
+                        var toolIndicators = new StringBuilder();
+                        foreach (var toolCall in chatToolCalls) {
+                            var argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
+                            var argsDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(argsJson)
+                                ?? new Dictionary<string, string>();
+                            toolIndicators.Append(McpToolHelper.FormatToolCallDisplay(toolCall.FunctionName, argsDict));
+                        }
+                        currentMessageContentBuilder.Append(toolIndicators.ToString());
                         yield return currentMessageContentBuilder.ToString();
 
                         // Execute each tool call
@@ -1150,8 +1155,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
                         }
 
-                        // Add tool call indicator to output
-                        currentMessageContentBuilder.Append($"\n\n🔧 `{parsedToolName}`\n\n");
+                        currentMessageContentBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
                         yield return currentMessageContentBuilder.ToString();
 
                         string toolResultString;
@@ -1271,8 +1275,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                         _logger.LogInformation("{ServiceName}: LLM requested tool (resume): {ToolName}", ServiceName, parsedToolName);
 
-                        // Add tool call indicator to output
-                        var toolIndicator = $"\n\n🔧 `{parsedToolName}`\n\n";
+                        var toolIndicator = McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments);
                         newContentBuilder.Append(toolIndicator);
                         fullContentBuilder.Append(toolIndicator);
                         yield return newContentBuilder.ToString();
