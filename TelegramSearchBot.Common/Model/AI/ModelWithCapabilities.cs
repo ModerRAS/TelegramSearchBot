@@ -12,7 +12,7 @@ namespace TelegramSearchBot.Model.AI {
         /// <summary>
         /// 模型名称
         /// </summary>
-        public string ModelName { get; set; }
+        public string ModelName { get; set; } = null!;
 
         /// <summary>
         /// 模型能力字典，键为能力名称，值为能力值/描述
@@ -58,7 +58,7 @@ namespace TelegramSearchBot.Model.AI {
         /// 获取能力值
         /// </summary>
         public string GetCapability(string capabilityName) {
-            return Capabilities.TryGetValue(capabilityName, out var value) ? value : null;
+            return Capabilities.TryGetValue(capabilityName, out var value) ? value : string.Empty;
         }
 
         /// <summary>

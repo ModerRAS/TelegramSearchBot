@@ -10,12 +10,12 @@ namespace TelegramSearchBot.Model.AI {
         /// <summary>
         /// Role: "system", "assistant", "user"
         /// </summary>
-        public string Role { get; set; }
+        public string Role { get; set; } = null!;
 
         /// <summary>
         /// The text content of the message
         /// </summary>
-        public string Content { get; set; }
+        public string Content { get; set; } = null!;
     }
 
     /// <summary>
@@ -27,7 +27,7 @@ namespace TelegramSearchBot.Model.AI {
         /// <summary>
         /// Unique identifier for this snapshot
         /// </summary>
-        public string SnapshotId { get; set; }
+        public string SnapshotId { get; set; } = null!;
 
         /// <summary>
         /// The Telegram chat ID where the conversation is happening
@@ -47,12 +47,12 @@ namespace TelegramSearchBot.Model.AI {
         /// <summary>
         /// The LLM model name being used
         /// </summary>
-        public string ModelName { get; set; }
+        public string ModelName { get; set; } = null!;
 
         /// <summary>
         /// The LLM provider (e.g., "OpenAI", "Ollama", "Gemini")
         /// </summary>
-        public string Provider { get; set; }
+        public string Provider { get; set; } = null!;
 
         /// <summary>
         /// The LLM channel ID being used
@@ -62,12 +62,12 @@ namespace TelegramSearchBot.Model.AI {
         /// <summary>
         /// Serialized conversation history (all messages including system, user, assistant, tool results)
         /// </summary>
-        public List<SerializedChatMessage> ProviderHistory { get; set; } = new();
+        public List<SerializedChatMessage> ProviderHistory { get; set; } = [];
 
         /// <summary>
         /// The last accumulated content that was displayed to the user
         /// </summary>
-        public string LastAccumulatedContent { get; set; }
+        public string LastAccumulatedContent { get; set; } = null!;
 
         /// <summary>
         /// Number of tool cycles completed so far
