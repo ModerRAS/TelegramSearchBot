@@ -233,7 +233,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private void AddMessageToHistory(List<MessageParam> history, long fromUserId, string content, List<byte[]> images) {
-            if (string.IsNullOrWhiteSpace(content) && (images == null || images.Count == 0)) return;
+            if (string.IsNullOrWhiteSpace(content) && ( images == null || images.Count == 0 )) return;
             if (!string.IsNullOrWhiteSpace(content)) {
                 content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
             }
@@ -482,9 +482,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private static bool IsToolCallingNotSupportedError(Exception ex) {
             var message = ex.Message ?? "";
             return message.Contains("tools", StringComparison.OrdinalIgnoreCase) &&
-                   (message.Contains("not supported", StringComparison.OrdinalIgnoreCase) ||
+                   ( message.Contains("not supported", StringComparison.OrdinalIgnoreCase) ||
                     message.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase));
+                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase) );
         }
 
         /// <summary>

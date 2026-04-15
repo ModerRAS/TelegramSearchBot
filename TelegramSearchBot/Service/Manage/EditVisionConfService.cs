@@ -146,7 +146,7 @@ namespace TelegramSearchBot.Service.Manage {
             await redis.SetDataAsync($"{channelId}|{selectedModel.Id}");
             await redis.SetStateAsync(VisionConfState.ToggleVision.GetDescription());
 
-            return (true, $"模型 {selectedModel.ModelName} 当前视觉状态: {(currentVision ? "✅ 已启用" : "❌ 未启用")}\n请输入 开启 或 关闭 来切换视觉支持：");
+            return (true, $"模型 {selectedModel.ModelName} 当前视觉状态: {( currentVision ? "✅ 已启用" : "❌ 未启用" )}\n请输入 开启 或 关闭 来切换视觉支持：");
         }
 
         private async Task<(bool, string)> HandleToggleVisionAsync(EditVisionConfRedisHelper redis, string command) {

@@ -123,7 +123,7 @@ namespace TelegramSearchBot.Helper {
         private static bool ContainsExcessiveUrlEncoding(string text) {
             // 计算URL编码的出现次数
             int urlEncodingCount = UrlEncodingRegex.Matches(text).Count;
-            
+
             // 如果文本中URL编码超过5个，或者超过文本长度的20%，认为是不可读内容
             if (urlEncodingCount > 5) {
                 return true;
@@ -142,7 +142,7 @@ namespace TelegramSearchBot.Helper {
         /// </summary>
         private static bool IsBase64Content(string text) {
             var trimmed = text.Trim();
-            
+
             // 太短的不是Base64内容
             if (trimmed.Length < 40) {
                 return false;
@@ -155,8 +155,8 @@ namespace TelegramSearchBot.Helper {
 
             // 检查是否有过多的Base64特征字符
             int base64Chars = trimmed.Count(c => c == '+' || c == '/' || c == '=');
-            double ratio = (double)base64Chars / trimmed.Length;
-            
+            double ratio = ( double ) base64Chars / trimmed.Length;
+
             // Base64中+/=通常占比较固定
             if (ratio > 0.05 && ratio < 0.35 && trimmed.Length > 60) {
                 return true;
@@ -171,7 +171,7 @@ namespace TelegramSearchBot.Helper {
         private static string CleanWhitespace(string text) {
             // 将多个空白字符替换为单个空格
             var cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
-            
+
             // 去除首尾空白
             return cleaned.Trim();
         }
