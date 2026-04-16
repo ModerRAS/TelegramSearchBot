@@ -4,7 +4,7 @@
 ![Build Status](https://github.com/ModerRAS/TelegramSearchBot/actions/workflows/push.yml/badge.svg)
 
 ## 功能列表
-1. 群聊消息存储并支持中文分词搜索 (Lucene)
+1. 群聊消息存储并支持中文分词搜索 (Lucene.NET)
 2. **向量搜索功能 (FAISS)**: 基于对话段的语义搜索，无需额外服务依赖
 3. 群聊消息中多媒体内容自动处理:
    - 图片自动下载并OCR存储 (PaddleOCR)
@@ -13,8 +13,9 @@
    - 发送图片附带`打印`指令时自动OCR回复
 4. 大语言模型集成:
    - Ollama本地模型
-   - OpenAI API
-   - Gemini API
+   - OpenAI API (GPT-4o, GPT-4o-mini等)
+   - Google Gemini API
+   - Anthropic Claude API
    - 可配置多模型通道管理
    - **MCP (Model Context Protocol) 工具支持**
 5. 高级功能:
@@ -23,6 +24,8 @@
    - 记忆图谱功能
    - **内置Telegram Bot API服务支持（2GB大文件/50MB云端）**
    - 群组黑名单/设置管理
+   - Sequential Thinking 思考链支持
+   - Brave 搜索集成
 
 详细功能说明请参考: [Docs/Bot_Commands_User_Guide.md](Docs/Bot_Commands_User_Guide.md)
 
@@ -139,11 +142,32 @@ graph TD
     E --> N[Ollama]
     E --> O[OpenAI]
     E --> P[Gemini]
+    E --> PA[Anthropic]
     Q --> R[MCP Servers]
     R --> S[External Tools]
 ```
 
-详细架构设计: [Docs/Existing_Codebase_Overview.md](Docs/Existing_Codebase_Overview.md)
+详细架构设计: [Docs/Architecture_Overview.md](Docs/Architecture_Overview.md)
+
+## 技术栈
+- **运行时**: .NET 10.0
+- **数据库**: SQLite + EF Core 10.0
+- **搜索**: Lucene.NET (全文) + FAISS (向量)
+- **AI**: Ollama, OpenAI, Gemini, Anthropic
+
+## 构建与运行
+```bash
+# 构建
+dotnet build TelegramSearchBot.sln --configuration Release
+
+# 运行
+dotnet run --project TelegramSearchBot
+
+# 发布
+dotnet publish -r win-x64 --self-contained
+```
+
+详细文档: [Docs/Build_and_Test_Guide.md](Docs/Build_and_Test_Guide.md)
 
 ## License
 这里曾经是一个FOSSA Status的，但是因为经常报错烦了，遂删之。
