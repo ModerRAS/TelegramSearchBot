@@ -297,7 +297,7 @@ namespace TelegramSearchBot.Service.Scheduler {
                             if (!WordCloudTextFilter.ShouldIncludeExtension(ext.Name)) {
                                 continue;
                             }
-                            
+
                             var filteredValue = WordCloudTextFilter.FilterText(ext.Value);
                             if (!string.IsNullOrWhiteSpace(filteredValue)) {
                                 groupResults.Add(filteredValue);

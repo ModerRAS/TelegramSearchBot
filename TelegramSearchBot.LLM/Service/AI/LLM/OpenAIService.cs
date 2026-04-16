@@ -701,7 +701,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private void AddMessageToHistory(List<ChatMessage> ChatHistory, long fromUserId, string content, List<byte[]> images) {
-            if (string.IsNullOrWhiteSpace(content) && (images == null || images.Count == 0)) return;
+            if (string.IsNullOrWhiteSpace(content) && ( images == null || images.Count == 0 )) return;
             if (!string.IsNullOrWhiteSpace(content)) {
                 content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
             }

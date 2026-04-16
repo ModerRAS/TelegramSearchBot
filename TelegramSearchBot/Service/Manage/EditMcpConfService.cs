@@ -235,7 +235,7 @@ namespace TelegramSearchBot.Service.Manage {
                     var envPair = parts[i][EnvPrefix.Length..];
                     var eqIdx = envPair.IndexOf('=');
                     if (eqIdx > 0) {
-                        config.Env[envPair[..eqIdx]] = envPair[(eqIdx + 1)..];
+                        config.Env[envPair[..eqIdx]] = envPair[( eqIdx + 1 )..];
                     }
                 }
             }
@@ -380,7 +380,7 @@ namespace TelegramSearchBot.Service.Manage {
                         case FieldIdEnabled:
                             if (bool.TryParse(value, out var enabled)) {
                                 config.Enabled = enabled;
-                                changeDescription = $"状态已更新为: {(enabled ? "启用" : "禁用")}";
+                                changeDescription = $"状态已更新为: {( enabled ? "启用" : "禁用" )}";
                             } else {
                                 changeDescription = "❌ 请输入 true 或 false";
                             }

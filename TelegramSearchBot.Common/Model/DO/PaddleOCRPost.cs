@@ -6,6 +6,6 @@ using Newtonsoft.Json;
 namespace TelegramSearchBot.Common.Model.DO {
     public class PaddleOCRPost {
         [JsonProperty("images")]
-        public List<string> Images { get; set; }
+        public List<string> Images { get; set; } = [];
     }
 }

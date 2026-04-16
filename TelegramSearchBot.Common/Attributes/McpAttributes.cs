@@ -16,7 +16,7 @@ namespace TelegramSearchBot.Attributes {
         /// <summary>
         /// Optional. If specified, this name will be used for the tool instead of the method name.
         /// </summary>
-        public string Name { get; set; }
+        public string Name { get; set; } = null!;
 
         public McpToolAttribute(string description) {
             Description = description;
