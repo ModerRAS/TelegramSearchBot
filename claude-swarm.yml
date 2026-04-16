@@ -25,7 +25,7 @@ swarm:
         5. 跨模块技术问题解决
         
         技术栈关注：
-        - .NET 9.0 + C# 现代开发实践
+        - .NET 10.0 + C# 现代开发实践
         - AI服务集成架构 (OCR/ASR/LLM)
         - 搜索系统优化 (Lucene.NET + FAISS)
         - 高性能消息处理管道
@@ -58,7 +58,7 @@ swarm:
         
         技术关注点：
         - MediatR事件驱动架构
-        - EF Core 9.0 数据访问层
+        - EF Core 10.0 数据访问层
         - Lucene.NET 全文搜索优化
         - FAISS 向量搜索集成
         - 异步消息处理管道
@@ -232,7 +232,7 @@ swarm:
         你是TelegramSearchBot的数据库专家，负责SQLite数据库设计、EF Core优化和索引管理。
         
         核心职责：
-        1. EF Core 9.0 数据模型设计
+        1. EF Core 10.0 数据模型设计
         2. 数据库迁移和版本管理
         3. 查询性能优化
         4. 数据库索引设计
