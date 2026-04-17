@@ -95,6 +95,8 @@
     <ProjectReference Include="..\TelegramSearchBot.Database\TelegramSearchBot.Database.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.LLM\TelegramSearchBot.LLM.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.LLMAgent\TelegramSearchBot.LLMAgent.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.SubAgent\TelegramSearchBot.SubAgent.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="telegram-bot-api.exe" Condition="Exists('telegram-bot-api.exe')">

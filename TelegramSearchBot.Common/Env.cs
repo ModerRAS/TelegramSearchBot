@@ -42,6 +42,12 @@ namespace TelegramSearchBot.Common {
                 BraveApiKey = config.BraveApiKey;
                 EnableAccounting = config.EnableAccounting;
                 MaxToolCycles = config.MaxToolCycles;
+                EnableLLMAgentProcess = config.EnableLLMAgentProcess;
+                AgentHeartbeatIntervalSeconds = config.AgentHeartbeatIntervalSeconds;
+                AgentHeartbeatTimeoutSeconds = config.AgentHeartbeatTimeoutSeconds;
+                AgentChunkPollingIntervalMilliseconds = config.AgentChunkPollingIntervalMilliseconds;
+                AgentIdleTimeoutMinutes = config.AgentIdleTimeoutMinutes;
+                MaxConcurrentAgents = config.MaxConcurrentAgents;
             } catch {
             }
 
@@ -73,6 +79,12 @@ namespace TelegramSearchBot.Common {
         public static string BraveApiKey { get; set; } = null!;
         public static bool EnableAccounting { get; set; } = false;
         public static int MaxToolCycles { get; set; }
+        public static bool EnableLLMAgentProcess { get; set; } = false;
+        public static int AgentHeartbeatIntervalSeconds { get; set; } = 10;
+        public static int AgentHeartbeatTimeoutSeconds { get; set; } = 60;
+        public static int AgentChunkPollingIntervalMilliseconds { get; set; } = 200;
+        public static int AgentIdleTimeoutMinutes { get; set; } = 15;
+        public static int MaxConcurrentAgents { get; set; } = 8;
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
     }
@@ -100,5 +112,11 @@ namespace TelegramSearchBot.Common {
         public string BraveApiKey { get; set; } = null!;
         public bool EnableAccounting { get; set; } = false;
         public int MaxToolCycles { get; set; } = 25;
+        public bool EnableLLMAgentProcess { get; set; } = false;
+        public int AgentHeartbeatIntervalSeconds { get; set; } = 10;
+        public int AgentHeartbeatTimeoutSeconds { get; set; } = 60;
+        public int AgentChunkPollingIntervalMilliseconds { get; set; } = 200;
+        public int AgentIdleTimeoutMinutes { get; set; } = 15;
+        public int MaxConcurrentAgents { get; set; } = 8;
     }
 }

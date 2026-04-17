@@ -54,6 +54,12 @@
   "EnableVideoASR": false,
   "EnableOpenAI": false,
   "OpenAIModelName": "gpt-4o",
+  "EnableLLMAgentProcess": false,
+  "AgentHeartbeatIntervalSeconds": 10,
+  "AgentHeartbeatTimeoutSeconds": 60,
+  "AgentChunkPollingIntervalMilliseconds": 200,
+  "AgentIdleTimeoutMinutes": 15,
+  "MaxConcurrentAgents": 8,
   "MaxToolCycles": 25,
   "OLTPAuth": "",
   "OLTPAuthUrl": "",
@@ -79,6 +85,12 @@
   - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")
   - `EnableOpenAI`: 是否启用OpenAI(默认false)
   - `OpenAIModelName`: OpenAI模型名称(默认"gpt-4o")
+  - `EnableLLMAgentProcess`: 是否启用独立 LLM Agent 进程模式(默认false)
+  - `AgentHeartbeatIntervalSeconds`: Agent 心跳上报间隔(默认10秒)
+  - `AgentHeartbeatTimeoutSeconds`: 主进程判定 Agent 失活的超时时间(默认60秒)
+  - `AgentChunkPollingIntervalMilliseconds`: 主进程轮询流式输出块的间隔(默认200毫秒)
+  - `AgentIdleTimeoutMinutes`: Agent 空闲超时时间(默认15分钟)
+  - `MaxConcurrentAgents`: 同时允许的 Agent 进程数上限(默认8)
   - `MaxToolCycles`: LLM工具调用最大迭代次数(默认25)，防止无限循环
 
 - **日志推送**:
