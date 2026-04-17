@@ -183,6 +183,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+            if (!Env.EnableLLMAgentProcess) {
+                _logger.LogDebug("LLM agent process mode disabled – AgentRegistryService will not start");
+                return;
+            }
+
             while (!stoppingToken.IsCancellationRequested) {
                 try {
                     await RunMaintenanceOnceAsync(stoppingToken);

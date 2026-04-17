@@ -29,6 +29,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+            if (!Env.EnableLLMAgentProcess) {
+                _logger.LogDebug("LLM agent process mode disabled – TelegramTaskConsumer will not start");
+                return;
+            }
+
             while (!stoppingToken.IsCancellationRequested) {
                 try {
                     // Use a 2-second block time so BRPOP returns well within SE.Redis's 5 s async timeout.

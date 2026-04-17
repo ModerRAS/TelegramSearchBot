@@ -6,8 +6,10 @@ using StackExchange.Redis;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
+using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Service.Tools;
 
 namespace TelegramSearchBot.LLMAgent {
     public static class LLMAgentProgram {
@@ -23,7 +25,10 @@ namespace TelegramSearchBot.LLMAgent {
 
             using var services = BuildServices(port);
             var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("LLMAgent");
-            McpToolHelper.EnsureInitialized(typeof(Service.AgentToolService).Assembly, services, logger);
+            McpToolHelper.EnsureInitialized(
+                typeof(Service.AgentToolService).Assembly,
+                typeof(FileToolService).Assembly,
+                services, logger);
 
             var loop = services.GetRequiredService<Service.AgentLoopService>();
             using var shutdownCts = new CancellationTokenSource();
@@ -63,6 +68,8 @@ namespace TelegramSearchBot.LLMAgent {
             services.AddScoped<AnthropicService>();
             services.AddScoped<Service.ToolExecutor>();
             services.AddScoped<Service.AgentToolService>();
+            services.AddScoped<IFileToolService, FileToolService>();
+            services.AddScoped<IBashToolService, BashToolService>();
             services.AddScoped<Service.IAgentTaskExecutor, Service.LlmServiceProxy>();
             services.AddScoped<Service.LlmServiceProxy>();
             services.AddSingleton<Service.GarnetClient>();

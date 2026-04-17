@@ -52,9 +52,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+            if (!Env.EnableLLMAgentProcess) {
+                return;
+            }
+
             while (!stoppingToken.IsCancellationRequested) {
-                await RunPollCycleAsync(stoppingToken);
-                await Task.Delay(Math.Max(50, Env.AgentChunkPollingIntervalMilliseconds), stoppingToken);
+                try {
+                    await RunPollCycleAsync(stoppingToken);
+                } catch (OperationCanceledException) {
+                    break;
+                } catch (RedisException) {
+                    // Transient Redis failure – wait before retrying
+                }
+
+                try {
+                    await Task.Delay(Math.Max(50, Env.AgentChunkPollingIntervalMilliseconds), stoppingToken);
+                } catch (OperationCanceledException) {
+                    break;
+                }
             }
         }
 

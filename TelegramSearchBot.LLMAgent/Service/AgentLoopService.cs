@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using StackExchange.Redis;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Model.AI;
 
@@ -42,7 +43,15 @@ namespace TelegramSearchBot.LLMAgent.Service {
                         break;
                     }
 
-                    var payload = await _garnetClient.BRPopAsync(LlmAgentRedisKeys.AgentTaskQueue, TimeSpan.FromSeconds(5));
+                    string? payload;
+                    try {
+                        payload = await _garnetClient.BRPopAsync(LlmAgentRedisKeys.AgentTaskQueue, TimeSpan.FromSeconds(2));
+                    } catch (RedisException ex) {
+                        _logger.LogWarning(ex, "Redis error during BRPOP, retrying in 1s");
+                        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+                        continue;
+                    }
+
                     if (string.IsNullOrWhiteSpace(payload)) {
                         continue;
                     }
@@ -186,9 +195,17 @@ namespace TelegramSearchBot.LLMAgent.Service {
 
         private async Task RunHeartbeatAsync(AgentSessionInfo session, CancellationToken cancellationToken) {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(Math.Max(1, Env.AgentHeartbeatIntervalSeconds)));
-            while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken)) {
-                session.LastHeartbeatUtc = DateTime.UtcNow;
-                await _rpcClient.SaveSessionAsync(session);
+            try {
+                while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken)) {
+                    try {
+                        session.LastHeartbeatUtc = DateTime.UtcNow;
+                        await _rpcClient.SaveSessionAsync(session);
+                    } catch (RedisException ex) {
+                        _logger.LogWarning(ex, "Redis error during heartbeat, will retry next tick");
+                    }
+                }
+            } catch (OperationCanceledException) {
+                // Normal shutdown – heartbeat stops
             }
         }
 
