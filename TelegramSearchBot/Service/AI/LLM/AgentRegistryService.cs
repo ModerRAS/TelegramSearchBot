@@ -184,8 +184,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
             while (!stoppingToken.IsCancellationRequested) {
-                await RunMaintenanceOnceAsync(stoppingToken);
-                await Task.Delay(TimeSpan.FromSeconds(Math.Max(5, Env.AgentHeartbeatIntervalSeconds)), stoppingToken);
+                try {
+                    await RunMaintenanceOnceAsync(stoppingToken);
+                } catch (OperationCanceledException) {
+                    break;
+                } catch (RedisException ex) {
+                    _logger.LogWarning(ex, "Redis error in AgentRegistryService maintenance, retrying in 5 s");
+                } catch (Exception ex) {
+                    _logger.LogError(ex, "Unexpected error in AgentRegistryService maintenance");
+                }
+
+                try {
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(5, Env.AgentHeartbeatIntervalSeconds)), stoppingToken);
+                } catch (OperationCanceledException) {
+                    break;
+                }
             }
         }
 
