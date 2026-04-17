@@ -11,7 +11,9 @@ namespace TelegramSearchBot.Model.AI {
         Pending = 0,
         Running = 1,
         Completed = 2,
-        Failed = 3
+        Failed = 3,
+        Recovering = 4,
+        Cancelled = 5
     }
 
     public enum AgentChunkType {
@@ -81,6 +83,7 @@ namespace TelegramSearchBot.Model.AI {
         public List<AgentHistoryMessage> History { get; set; } = [];
         public LlmContinuationSnapshot? ContinuationSnapshot { get; set; }
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+        public int RecoveryAttempt { get; set; }
     }
 
     public sealed class AgentStreamChunk {
@@ -121,7 +124,61 @@ namespace TelegramSearchBot.Model.AI {
         public DateTime StartedAtUtc { get; set; } = DateTime.UtcNow;
         public DateTime LastHeartbeatUtc { get; set; } = DateTime.UtcNow;
         public DateTime LastActiveAtUtc { get; set; } = DateTime.UtcNow;
+        public DateTime ShutdownRequestedAtUtc { get; set; } = DateTime.MinValue;
         public string ErrorMessage { get; set; } = string.Empty;
+    }
+
+    public sealed class AgentControlCommand {
+        public long ChatId { get; set; }
+        public string Action { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public DateTime RequestedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public sealed class AgentDeadLetterEntry {
+        public string TaskId { get; set; } = string.Empty;
+        public long ChatId { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public int RecoveryAttempt { get; set; }
+        public string Payload { get; set; } = string.Empty;
+        public string LastContent { get; set; } = string.Empty;
+        public DateTime FailedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public sealed class SubAgentTaskEnvelope {
+        public string RequestId { get; set; } = Guid.NewGuid().ToString("N");
+        public string Type { get; set; } = "echo";
+        public string Payload { get; set; } = string.Empty;
+        public SubAgentMcpExecuteRequest? McpExecute { get; set; }
+        public SubAgentBackgroundTaskRequest? BackgroundTask { get; set; }
+        public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public sealed class SubAgentMcpExecuteRequest {
+        public string ServerName { get; set; } = "subagent";
+        public string Command { get; set; } = string.Empty;
+        public List<string> Args { get; set; } = [];
+        public Dictionary<string, string> Env { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public int TimeoutSeconds { get; set; } = 30;
+        public string ToolName { get; set; } = string.Empty;
+        public Dictionary<string, object?> Arguments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public sealed class SubAgentBackgroundTaskRequest {
+        public string Command { get; set; } = string.Empty;
+        public List<string> Args { get; set; } = [];
+        public Dictionary<string, string> Env { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public string WorkingDirectory { get; set; } = string.Empty;
+        public int TimeoutSeconds { get; set; } = 30;
+    }
+
+    public sealed class SubAgentTaskResult {
+        public string RequestId { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string Result { get; set; } = string.Empty;
+        public string ErrorMessage { get; set; } = string.Empty;
+        public int ExitCode { get; set; }
+        public DateTime CompletedAtUtc { get; set; } = DateTime.UtcNow;
     }
 
     public static class LlmAgentRedisKeys {
@@ -129,11 +186,14 @@ namespace TelegramSearchBot.Model.AI {
         public const string AgentTaskDeadLetterQueue = "AGENT_TASKS:DEAD";
         public const string TelegramTaskQueue = "TELEGRAM_TASKS";
         public const string ActiveTaskSet = "AGENT_ACTIVE_TASKS";
+        public const string SubAgentTaskQueue = "SUBAGENT_TASKS";
 
         public static string AgentTaskState(string taskId) => $"AGENT_TASK:{taskId}";
         public static string AgentChunks(string taskId) => $"AGENT_CHUNKS:{taskId}";
         public static string AgentChunkIndex(string taskId) => $"AGENT_CHUNK_INDEX:{taskId}";
         public static string AgentSession(long chatId) => $"AGENT_SESSION:{chatId}";
+        public static string AgentControl(long chatId) => $"AGENT_CONTROL:{chatId}";
         public static string TelegramResult(string requestId) => $"TELEGRAM_RESULT:{requestId}";
+        public static string SubAgentResult(string requestId) => $"SUBAGENT_RESULT:{requestId}";
     }
 }

@@ -66,6 +66,7 @@ namespace TelegramSearchBot.Extension {
                 .AddHostedService<SendMessage>()
                 .AddSingleton<ChunkPollingService>()
                 .AddHostedService(sp => sp.GetRequiredService<ChunkPollingService>())
+                .AddSingleton<IAgentProcessLauncher, LlmAgentProcessLauncher>()
                 .AddSingleton<AgentRegistryService>()
                 .AddHostedService(sp => sp.GetRequiredService<AgentRegistryService>())
                 .AddHostedService<TelegramTaskConsumer>()

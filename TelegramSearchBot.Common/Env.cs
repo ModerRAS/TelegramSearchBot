@@ -48,6 +48,11 @@ namespace TelegramSearchBot.Common {
                 AgentChunkPollingIntervalMilliseconds = config.AgentChunkPollingIntervalMilliseconds;
                 AgentIdleTimeoutMinutes = config.AgentIdleTimeoutMinutes;
                 MaxConcurrentAgents = config.MaxConcurrentAgents;
+                AgentTaskTimeoutSeconds = config.AgentTaskTimeoutSeconds;
+                AgentShutdownGracePeriodSeconds = config.AgentShutdownGracePeriodSeconds;
+                AgentMaxRecoveryAttempts = config.AgentMaxRecoveryAttempts;
+                AgentQueueBacklogWarningThreshold = config.AgentQueueBacklogWarningThreshold;
+                AgentProcessMemoryLimitMb = config.AgentProcessMemoryLimitMb;
             } catch {
             }
 
@@ -85,6 +90,11 @@ namespace TelegramSearchBot.Common {
         public static int AgentChunkPollingIntervalMilliseconds { get; set; } = 200;
         public static int AgentIdleTimeoutMinutes { get; set; } = 15;
         public static int MaxConcurrentAgents { get; set; } = 8;
+        public static int AgentTaskTimeoutSeconds { get; set; } = 300;
+        public static int AgentShutdownGracePeriodSeconds { get; set; } = 15;
+        public static int AgentMaxRecoveryAttempts { get; set; } = 2;
+        public static int AgentQueueBacklogWarningThreshold { get; set; } = 20;
+        public static int AgentProcessMemoryLimitMb { get; set; } = 256;
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
     }
@@ -118,5 +128,10 @@ namespace TelegramSearchBot.Common {
         public int AgentChunkPollingIntervalMilliseconds { get; set; } = 200;
         public int AgentIdleTimeoutMinutes { get; set; } = 15;
         public int MaxConcurrentAgents { get; set; } = 8;
+        public int AgentTaskTimeoutSeconds { get; set; } = 300;
+        public int AgentShutdownGracePeriodSeconds { get; set; } = 15;
+        public int AgentMaxRecoveryAttempts { get; set; } = 2;
+        public int AgentQueueBacklogWarningThreshold { get; set; } = 20;
+        public int AgentProcessMemoryLimitMb { get; set; } = 256;
     }
 }
