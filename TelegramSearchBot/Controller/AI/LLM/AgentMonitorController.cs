@@ -62,8 +62,10 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 var db = _redis.GetDatabase();
                 var pending = await db.ListLengthAsync(TelegramSearchBot.Model.AI.LlmAgentRedisKeys.AgentTaskQueue);
                 var telegramTasks = await db.ListLengthAsync(TelegramSearchBot.Model.AI.LlmAgentRedisKeys.TelegramTaskQueue);
+                var deadLetter = await db.ListLengthAsync(TelegramSearchBot.Model.AI.LlmAgentRedisKeys.AgentTaskDeadLetterQueue);
                 var sessions = await _agentRegistryService.ListActiveAsync();
-                var stats = $"Agents={sessions.Count}\nPendingAgentTasks={pending}\nPendingTelegramTasks={telegramTasks}";
+                var processing = sessions.Count(x => !string.IsNullOrWhiteSpace(x.CurrentTaskId));
+                var stats = $"Agents={sessions.Count}\nProcessingAgents={processing}\nPendingAgentTasks={pending}\nPendingTelegramTasks={telegramTasks}\nDeadLetterTasks={deadLetter}";
                 await _sendMessageService.SendMessage(stats, message.Chat.Id, message.MessageId);
                 return;
             }

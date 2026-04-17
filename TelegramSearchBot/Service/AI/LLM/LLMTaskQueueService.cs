@@ -76,13 +76,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         private async Task<AgentTaskStreamHandle> EnqueueTaskAsync(AgentExecutionTask task) {
             var db = _redis.GetDatabase();
-            await db.ListLeftPushAsync(LlmAgentRedisKeys.AgentTaskQueue, JsonConvert.SerializeObject(task));
+            var payload = JsonConvert.SerializeObject(task);
+            await db.ListLeftPushAsync(LlmAgentRedisKeys.AgentTaskQueue, payload);
             await db.HashSetAsync(LlmAgentRedisKeys.AgentTaskState(task.TaskId), [
                 new HashEntry("status", AgentTaskStatus.Pending.ToString()),
                 new HashEntry("chatId", task.ChatId),
                 new HashEntry("messageId", task.MessageId),
                 new HashEntry("modelName", task.ModelName),
-                new HashEntry("createdAtUtc", task.CreatedAtUtc.ToString("O"))
+                new HashEntry("createdAtUtc", task.CreatedAtUtc.ToString("O")),
+                new HashEntry("updatedAtUtc", DateTime.UtcNow.ToString("O")),
+                new HashEntry("payload", payload),
+                new HashEntry("recoveryCount", 0),
+                new HashEntry("maxRecoveryAttempts", Env.AgentMaxRecoveryAttempts),
+                new HashEntry("lastContent", string.Empty)
             ]);
 
             return _chunkPollingService.TrackTask(task.TaskId);
@@ -178,16 +184,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 .Where(x => userIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, cancellationToken);
             var messageIds = history.Select(x => x.Id).ToList();
-            var extensions = await _dbContext.MessageExtensions.AsNoTracking()
+            var extensionRecords = await _dbContext.MessageExtensions.AsNoTracking()
                 .Where(x => messageIds.Contains(x.MessageDataId))
+                .ToListAsync(cancellationToken);
+            var extensions = extensionRecords
                 .GroupBy(x => x.MessageDataId)
-                .ToDictionaryAsync(
+                .ToDictionary(
                     x => x.Key,
                     x => x.Select(e => new AgentMessageExtensionSnapshot {
                         Name = e.Name,
                         Value = e.Value
-                    }).ToList(),
-                    cancellationToken);
+                    }).ToList());
 
             return history.Select(message => {
                 users.TryGetValue(message.FromUserId, out var user);
