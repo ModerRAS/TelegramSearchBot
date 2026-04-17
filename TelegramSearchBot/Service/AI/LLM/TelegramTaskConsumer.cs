@@ -30,57 +30,65 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
             while (!stoppingToken.IsCancellationRequested) {
-                var result = await _redis.GetDatabase().ExecuteAsync("BRPOP", LlmAgentRedisKeys.TelegramTaskQueue, 5);
-                if (result.IsNull) {
-                    continue;
-                }
-
-                var parts = (RedisResult[])result!;
-                if (parts.Length != 2) {
-                    continue;
-                }
-
-                var payload = parts[1].ToString();
-                if (string.IsNullOrWhiteSpace(payload)) {
-                    continue;
-                }
-
-                var task = JsonConvert.DeserializeObject<TelegramAgentToolTask>(payload);
-                if (task == null) {
-                    continue;
-                }
-
-                var response = new TelegramAgentToolResult {
-                    RequestId = task.RequestId,
-                    Success = false
-                };
-
                 try {
-                    if (!task.ToolName.Equals("send_message", StringComparison.OrdinalIgnoreCase)) {
-                        throw new InvalidOperationException($"Unsupported telegram tool: {task.ToolName}");
+                    // Use a 2-second block time so BRPOP returns well within SE.Redis's 5 s async timeout.
+                    var result = await _redis.GetDatabase().ExecuteAsync("BRPOP", LlmAgentRedisKeys.TelegramTaskQueue, 2);
+                    if (result.IsNull) {
+                        continue;
                     }
 
-                    if (!task.Arguments.TryGetValue("text", out var text) || string.IsNullOrWhiteSpace(text)) {
-                        throw new InvalidOperationException("send_message 缺少 text 参数。");
+                    var parts = (RedisResult[])result!;
+                    if (parts.Length != 2) {
+                        continue;
                     }
 
-                    var chatId = task.Arguments.TryGetValue("chatId", out var chatIdString) && long.TryParse(chatIdString, out var parsedChatId)
-                        ? parsedChatId
-                        : task.ChatId;
+                    var payload = parts[1].ToString();
+                    if (string.IsNullOrWhiteSpace(payload)) {
+                        continue;
+                    }
 
-                    var sent = await _sendMessage.AddTaskWithResult(() => _botClient.SendMessage(chatId, text, cancellationToken: stoppingToken), chatId);
-                    response.Success = true;
-                    response.TelegramMessageId = sent.MessageId;
-                    response.Result = sent.MessageId.ToString();
-                } catch (Exception ex) {
-                    _logger.LogError(ex, "Failed to execute telegram task {RequestId}", task.RequestId);
-                    response.ErrorMessage = ex.Message;
+                    var task = JsonConvert.DeserializeObject<TelegramAgentToolTask>(payload);
+                    if (task == null) {
+                        continue;
+                    }
+
+                    var response = new TelegramAgentToolResult {
+                        RequestId = task.RequestId,
+                        Success = false
+                    };
+
+                    try {
+                        if (!task.ToolName.Equals("send_message", StringComparison.OrdinalIgnoreCase)) {
+                            throw new InvalidOperationException($"Unsupported telegram tool: {task.ToolName}");
+                        }
+
+                        if (!task.Arguments.TryGetValue("text", out var text) || string.IsNullOrWhiteSpace(text)) {
+                            throw new InvalidOperationException("send_message 缺少 text 参数。");
+                        }
+
+                        var chatId = task.Arguments.TryGetValue("chatId", out var chatIdString) && long.TryParse(chatIdString, out var parsedChatId)
+                            ? parsedChatId
+                            : task.ChatId;
+
+                        var sent = await _sendMessage.AddTaskWithResult(() => _botClient.SendMessage(chatId, text, cancellationToken: stoppingToken), chatId);
+                        response.Success = true;
+                        response.TelegramMessageId = sent.MessageId;
+                        response.Result = sent.MessageId.ToString();
+                    } catch (Exception ex) when (ex is not OperationCanceledException) {
+                        _logger.LogError(ex, "Failed to execute telegram task {RequestId}", task.RequestId);
+                        response.ErrorMessage = ex.Message;
+                    }
+
+                    await _redis.GetDatabase().StringSetAsync(
+                        LlmAgentRedisKeys.TelegramResult(task.RequestId),
+                        JsonConvert.SerializeObject(response),
+                        TimeSpan.FromMinutes(5));
+                } catch (OperationCanceledException) {
+                    break;
+                } catch (RedisException ex) {
+                    _logger.LogWarning(ex, "Redis error in TelegramTaskConsumer, retrying in 1 s");
+                    await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
                 }
-
-                await _redis.GetDatabase().StringSetAsync(
-                    LlmAgentRedisKeys.TelegramResult(task.RequestId),
-                    JsonConvert.SerializeObject(response),
-                    TimeSpan.FromMinutes(5));
             }
         }
     }
