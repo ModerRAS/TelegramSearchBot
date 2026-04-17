@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Serilog;
 using StackExchange.Redis;
 using Telegram.Bot;
@@ -28,6 +29,7 @@ using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Mcp;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Scheduler;
@@ -164,6 +166,18 @@ namespace TelegramSearchBot.AppBootstrap {
                 Log.Information("External MCP servers initialized.");
             } catch (Exception ex) {
                 Log.Warning(ex, "Failed to initialize external MCP servers. Continuing without them.");
+            }
+
+            // Export tool definitions to Redis so agent processes can discover available tools
+            try {
+                var redis = service.GetRequiredService<IConnectionMultiplexer>();
+                var toolDefs = McpToolHelper.ExportToolDefinitions();
+                var json = JsonConvert.SerializeObject(toolDefs);
+                await redis.GetDatabase().StringSetAsync(
+                    LlmAgentRedisKeys.AgentToolDefs, json, TimeSpan.FromHours(24));
+                Log.Information("Exported {Count} tool definitions to Redis for agent discovery.", toolDefs.Count);
+            } catch (Exception ex) {
+                Log.Warning(ex, "Failed to export tool definitions to Redis. Agent processes may have limited tools.");
             }
 
             // SQLite 数据库初始化
