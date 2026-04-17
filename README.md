@@ -54,6 +54,17 @@
   "EnableVideoASR": false,
   "EnableOpenAI": false,
   "OpenAIModelName": "gpt-4o",
+  "EnableLLMAgentProcess": false,
+  "AgentHeartbeatIntervalSeconds": 10,
+  "AgentHeartbeatTimeoutSeconds": 60,
+  "AgentChunkPollingIntervalMilliseconds": 200,
+  "AgentIdleTimeoutMinutes": 15,
+  "MaxConcurrentAgents": 8,
+  "AgentTaskTimeoutSeconds": 300,
+  "AgentShutdownGracePeriodSeconds": 15,
+  "AgentMaxRecoveryAttempts": 2,
+  "AgentQueueBacklogWarningThreshold": 20,
+  "AgentProcessMemoryLimitMb": 256,
   "MaxToolCycles": 25,
   "OLTPAuth": "",
   "OLTPAuthUrl": "",
@@ -79,7 +90,20 @@
   - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")
   - `EnableOpenAI`: 是否启用OpenAI(默认false)
   - `OpenAIModelName`: OpenAI模型名称(默认"gpt-4o")
+  - `EnableLLMAgentProcess`: 是否启用独立 LLM Agent 进程模式(默认false)
+  - `AgentHeartbeatIntervalSeconds`: Agent 心跳上报间隔(默认10秒)
+  - `AgentHeartbeatTimeoutSeconds`: 主进程判定 Agent 失活的超时时间(默认60秒)
+  - `AgentChunkPollingIntervalMilliseconds`: 主进程轮询流式输出块的间隔(默认200毫秒)
+  - `AgentIdleTimeoutMinutes`: Agent 空闲超时时间(默认15分钟)
+  - `MaxConcurrentAgents`: 同时允许的 Agent 进程数上限(默认8)
+  - `AgentTaskTimeoutSeconds`: 单个 Agent 任务无进展时的超时时间(默认300秒)
+  - `AgentShutdownGracePeriodSeconds`: Agent 收到停机请求后的优雅退出等待时间(默认15秒)
+  - `AgentMaxRecoveryAttempts`: Agent 崩溃或超时后的最大恢复重试次数(默认2)
+  - `AgentQueueBacklogWarningThreshold`: Agent 任务队列告警阈值(默认20)
+  - `AgentProcessMemoryLimitMb`: Agent 进程工作集上限(默认256MB)
   - `MaxToolCycles`: LLM工具调用最大迭代次数(默认25)，防止无限循环
+
+启用 `EnableLLMAgentProcess=true` 后，主进程会负责任务排队、Telegram 发消息和流式转发；独立 Agent 进程负责执行 LLM 循环、本地工具和故障恢复。主进程会在 Agent 心跳超时、任务超时或配置切换时执行恢复、重试、死信投递和优雅停机。
 
 - **日志推送**:
   - `OLTPAuth`: OLTP日志推送认证密钥

@@ -32,6 +32,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         public ISendMessageService SendMessageService { get; set; }
         public IGeneralLLMService GeneralLLMService { get; set; }
         public ILlmContinuationService ContinuationService { get; set; }
+        public LLMTaskQueueService LlmTaskQueueService { get; set; }
         public GeneralLLMController(
             MessageService messageService,
             ITelegramBotClient botClient,
@@ -41,7 +42,8 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             AdminService adminService,
             ISendMessageService SendMessageService,
             IGeneralLLMService generalLLMService,
-            ILlmContinuationService continuationService
+            ILlmContinuationService continuationService,
+            LLMTaskQueueService llmTaskQueueService
             ) {
             this.logger = logger;
             this.botClient = botClient;
@@ -52,6 +54,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             this.SendMessageService = SendMessageService;
             GeneralLLMService = generalLLMService;
             ContinuationService = continuationService;
+            LlmTaskQueueService = llmTaskQueueService;
 
         }
         public async Task ExecuteAsync(PipelineContext p) {
@@ -116,8 +119,19 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
                 // Use execution context to detect iteration limit (no stream pollution)
                 var executionContext = new LlmExecutionContext();
-                IAsyncEnumerable<string> fullMessageStream = GeneralLLMService.ExecAsync(
-                    inputLlMessage, e.Message.Chat.Id, executionContext, CancellationToken.None);
+                IAsyncEnumerable<string> fullMessageStream;
+                AgentTaskStreamHandle? agentTaskHandle = null;
+                if (Env.EnableLLMAgentProcess) {
+                    agentTaskHandle = await LlmTaskQueueService.EnqueueMessageTaskAsync(
+                        e.Message,
+                        service.BotName,
+                        Env.BotId,
+                        CancellationToken.None);
+                    fullMessageStream = agentTaskHandle.ReadSnapshotsAsync(CancellationToken.None);
+                } else {
+                    fullMessageStream = GeneralLLMService.ExecAsync(
+                        inputLlMessage, e.Message.Chat.Id, executionContext, CancellationToken.None);
+                }
 
                 // Use sendMessageDraft API for LLM streaming (better performance, no send+edit)
                 List<Model.Data.Message> sentMessagesForDb = await SendMessageService.SendDraftStream(
@@ -144,6 +158,31 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                         ReplyTo = dbMessage.ReplyToMessageId,
                         UserId = dbMessage.FromUserId,
                     });
+                }
+
+                if (agentTaskHandle != null) {
+                    var terminalChunk = await agentTaskHandle.Completion;
+                    if (terminalChunk.Type == AgentChunkType.Error) {
+                        await SendMessageService.SendMessage($"AI Agent 执行失败：{terminalChunk.ErrorMessage}", e.Message.Chat.Id, e.Message.MessageId);
+                    } else if (terminalChunk.Type == AgentChunkType.IterationLimitReached && terminalChunk.ContinuationSnapshot != null) {
+                        var snapshotId = await ContinuationService.SaveSnapshotAsync(terminalChunk.ContinuationSnapshot);
+
+                        var keyboard = new InlineKeyboardMarkup(new[] {
+                            new[] {
+                                InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{snapshotId}"),
+                                InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{snapshotId}"),
+                            }
+                        });
+
+                        await botClient.SendMessage(
+                            e.Message.Chat.Id,
+                            $"⚠️ AI 已达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？",
+                            replyMarkup: keyboard,
+                            replyParameters: new ReplyParameters { MessageId = e.Message.MessageId }
+                        );
+                    }
+
+                    return;
                 }
 
                 // Check if the iteration limit was reached via execution context

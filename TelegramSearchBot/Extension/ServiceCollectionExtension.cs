@@ -27,6 +27,7 @@ using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.View;
@@ -63,6 +64,12 @@ namespace TelegramSearchBot.Extension {
                 .AddSingleton<SendMessage>()
                 .AddHostedService<TelegramCommandRegistryService>()
                 .AddHostedService<SendMessage>()
+                .AddSingleton<ChunkPollingService>()
+                .AddHostedService(sp => sp.GetRequiredService<ChunkPollingService>())
+                .AddSingleton<IAgentProcessLauncher, LlmAgentProcessLauncher>()
+                .AddSingleton<AgentRegistryService>()
+                .AddHostedService(sp => sp.GetRequiredService<AgentRegistryService>())
+                .AddHostedService<TelegramTaskConsumer>()
                 .AddSingleton<Func<string, Task>>(sp => sp.GetRequiredService<SendMessage>().Log)
                 .AddSingleton<LuceneManager>()
                 .AddSingleton<PaddleOCR>()

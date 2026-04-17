@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -17,56 +16,76 @@ using Serilog;
 namespace TelegramSearchBot.AppBootstrap {
     public class AppBootstrap {
         public sealed class ChildProcessManager : IDisposable {
-            private SafeJobHandle? _handle;
+            private readonly List<SafeJobHandle> _handles = [];
             private bool _disposed;
-
-            public ChildProcessManager() {
-                _handle = new SafeJobHandle(CreateJobObject(IntPtr.Zero, null));
-
-                var info = new JOBOBJECT_BASIC_LIMIT_INFORMATION {
-                    LimitFlags = 0x2000
-                };
-
-                var extendedInfo = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
-                    BasicLimitInformation = info
-                };
-
-                var length = Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
-                var extendedInfoPtr = Marshal.AllocHGlobal(length);
-                Marshal.StructureToPtr(extendedInfo, extendedInfoPtr, false);
-
-                if (!SetInformationJobObject(_handle, JobObjectInfoType.ExtendedLimitInformation, extendedInfoPtr, ( uint ) length)) {
-                    throw new InvalidOperationException("Unable to set information", new Win32Exception());
-                }
-            }
 
             public void Dispose() {
                 if (_disposed) return;
 
-                _handle?.Dispose();
-                _handle = null;
+                foreach (var handle in _handles) {
+                    handle.Dispose();
+                }
+                _handles.Clear();
                 _disposed = true;
             }
 
-            [MemberNotNull(nameof(_handle))]
             private void ValidateDisposed() {
-                ObjectDisposedException.ThrowIf(_disposed || _handle is null, this);
+                ObjectDisposedException.ThrowIf(_disposed, this);
             }
 
-            public void AddProcess(SafeProcessHandle processHandle) {
+            public void AddProcess(SafeProcessHandle processHandle, long? processMemoryLimitBytes = null) {
                 ValidateDisposed();
-                if (!AssignProcessToJobObject(_handle, processHandle)) {
+                var jobHandle = CreateConfiguredJobHandle(processMemoryLimitBytes);
+                if (!AssignProcessToJobObject(jobHandle, processHandle)) {
+                    jobHandle.Dispose();
                     throw new InvalidOperationException("Unable to add the process");
                 }
+                _handles.Add(jobHandle);
             }
 
-            public void AddProcess(Process process) {
-                AddProcess(process.SafeHandle);
+            public void AddProcess(Process process, long? processMemoryLimitBytes = null) {
+                AddProcess(process.SafeHandle, processMemoryLimitBytes);
             }
 
-            public void AddProcess(int processId) {
+            public void AddProcess(int processId, long? processMemoryLimitBytes = null) {
                 using var process = Process.GetProcessById(processId);
-                AddProcess(process);
+                AddProcess(process, processMemoryLimitBytes);
+            }
+
+            private static SafeJobHandle CreateConfiguredJobHandle(long? processMemoryLimitBytes) {
+                var handle = new SafeJobHandle(CreateJobObject(IntPtr.Zero, null));
+                if (handle.IsInvalid) {
+                    throw new InvalidOperationException("Unable to create job object", new Win32Exception());
+                }
+
+                var limitFlags = JobObjectLimitFlags.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                if (processMemoryLimitBytes.HasValue && processMemoryLimitBytes.Value > 0) {
+                    limitFlags |= JobObjectLimitFlags.JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+                }
+
+                var info = new JOBOBJECT_BASIC_LIMIT_INFORMATION {
+                    LimitFlags = (uint)limitFlags
+                };
+
+                var extendedInfo = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+                    BasicLimitInformation = info,
+                    ProcessMemoryLimit = processMemoryLimitBytes.HasValue && processMemoryLimitBytes.Value > 0
+                        ? (UIntPtr)processMemoryLimitBytes.Value
+                        : UIntPtr.Zero
+                };
+
+                var length = Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+                var extendedInfoPtr = Marshal.AllocHGlobal(length);
+                try {
+                    Marshal.StructureToPtr(extendedInfo, extendedInfoPtr, false);
+                    if (!SetInformationJobObject(handle, JobObjectInfoType.ExtendedLimitInformation, extendedInfoPtr, (uint)length)) {
+                        throw new InvalidOperationException("Unable to set information", new Win32Exception());
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(extendedInfoPtr);
+                }
+
+                return handle;
             }
 
             private sealed class SafeJobHandle : SafeHandleZeroOrMinusOneIsInvalid {
@@ -140,10 +159,16 @@ namespace TelegramSearchBot.AppBootstrap {
                 SecurityLimitInformation = 5,
                 GroupInformation = 11
             }
+
+            [Flags]
+            private enum JobObjectLimitFlags : uint {
+                JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x00000100,
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+            }
         }
 
         public static ChildProcessManager childProcessManager = new ChildProcessManager();
-        public static void Fork(string[] args) {
+        public static void Fork(string[] args, long? processMemoryLimitBytes = null) {
             string exePath = Environment.ProcessPath;
 
             // 将参数数组转换为空格分隔的字符串，并正确处理包含空格的参数
@@ -162,7 +187,7 @@ namespace TelegramSearchBot.AppBootstrap {
             if (newProcess == null) {
                 throw new Exception("启动新进程失败");
             }
-            childProcessManager.AddProcess(newProcess);
+            childProcessManager.AddProcess(newProcess, processMemoryLimitBytes);
             Log.Logger.Information($"主进程：{args[0]} {args[1]}已启动");
         }
         private static Dictionary<string, DateTime> ForkLock = new Dictionary<string, DateTime>();
@@ -181,7 +206,7 @@ namespace TelegramSearchBot.AppBootstrap {
             }
         }
 
-        public static Process Fork(string exePath, string[] args) {
+        public static Process Fork(string exePath, string[] args, long? processMemoryLimitBytes = null) {
             // 将参数数组转换为空格分隔的字符串，并正确处理包含空格的参数
             string arguments = string.Join(" ", args.Select(arg => $"{arg}"));
 
@@ -198,7 +223,7 @@ namespace TelegramSearchBot.AppBootstrap {
             if (newProcess == null) {
                 throw new Exception("启动新进程失败");
             }
-            childProcessManager.AddProcess(newProcess);
+            childProcessManager.AddProcess(newProcess, processMemoryLimitBytes);
             Log.Logger.Information($"进程：{exePath} {string.Join(" ", args)}已启动");
             return newProcess;
         }
