@@ -15,30 +15,59 @@ namespace TelegramSearchBot.LLM.Test.Service.AI.LLM {
         }
 
         [Fact]
-        public async Task PublishChunkAsync_WritesSerializedChunkToRedisList() {
+        public async Task PublishSnapshotAsync_WritesSerializedChunkToRedisString() {
             RedisKey capturedKey = default;
             RedisValue capturedValue = default;
 
-            _dbMock.Setup(d => d.ListRightPushAsync(
+            _dbMock.Setup(d => d.StringSetAsync(
                     It.IsAny<RedisKey>(),
                     It.IsAny<RedisValue>(),
-                    It.IsAny<When>(),
+                    It.IsAny<Expiration>(),
+                    It.IsAny<ValueCondition>(),
                     It.IsAny<CommandFlags>()))
-                .Callback<RedisKey, RedisValue, When, CommandFlags>((key, value, _, _) => {
+                .Callback<RedisKey, RedisValue, Expiration, ValueCondition, CommandFlags>((key, value, _, _, _) => {
                     capturedKey = key;
                     capturedValue = value;
                 })
-                .ReturnsAsync(1);
+                .ReturnsAsync(true);
 
             var client = new GarnetClient(_redisMock.Object);
-            await client.PublishChunkAsync(new AgentStreamChunk {
+            await client.PublishSnapshotAsync(new AgentStreamChunk {
                 TaskId = "task-1",
                 Type = AgentChunkType.Snapshot,
                 Content = "hello"
             });
 
-            Assert.Equal(LlmAgentRedisKeys.AgentChunks("task-1"), capturedKey.ToString());
+            Assert.Equal(LlmAgentRedisKeys.AgentSnapshot("task-1"), capturedKey.ToString());
             Assert.Contains("\"Content\":\"hello\"", capturedValue.ToString());
+        }
+
+        [Fact]
+        public async Task PublishTerminalAsync_WritesTerminalChunkToRedisString() {
+            RedisKey capturedKey = default;
+            RedisValue capturedValue = default;
+
+            _dbMock.Setup(d => d.StringSetAsync(
+                    It.IsAny<RedisKey>(),
+                    It.IsAny<RedisValue>(),
+                    It.IsAny<Expiration>(),
+                    It.IsAny<ValueCondition>(),
+                    It.IsAny<CommandFlags>()))
+                .Callback<RedisKey, RedisValue, Expiration, ValueCondition, CommandFlags>((key, value, _, _, _) => {
+                    capturedKey = key;
+                    capturedValue = value;
+                })
+                .ReturnsAsync(true);
+
+            var client = new GarnetClient(_redisMock.Object);
+            await client.PublishTerminalAsync(new AgentStreamChunk {
+                TaskId = "task-1",
+                Type = AgentChunkType.Done,
+                Content = ""
+            });
+
+            Assert.Equal(LlmAgentRedisKeys.AgentTerminal("task-1"), capturedKey.ToString());
+            Assert.Contains("\"Type\":1", capturedValue.ToString()); // AgentChunkType.Done = 1
         }
     }
 }

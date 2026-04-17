@@ -74,35 +74,45 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private async Task PollTaskAsync(string taskId, TrackedTask tracked, CancellationToken cancellationToken) {
-            var values = await _redis.GetDatabase().ListRangeAsync(LlmAgentRedisKeys.AgentChunks(taskId), tracked.NextIndex, -1);
-            if (values.Length == 0) {
+            var db = _redis.GetDatabase();
+
+            // Check for terminal chunk first (Done/Error/IterationLimitReached)
+            var terminalJson = await db.StringGetAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
+            if (terminalJson.HasValue) {
+                var terminal = JsonConvert.DeserializeObject<AgentStreamChunk>(terminalJson.ToString());
+                if (terminal != null) {
+                    // Deliver any final snapshot content before the terminal chunk
+                    if (!string.IsNullOrEmpty(terminal.Content) && terminal.Content != tracked.LastContent) {
+                        await tracked.Channel.Writer.WriteAsync(terminal, cancellationToken);
+                    }
+                    tracked.Completion.TrySetResult(terminal);
+                    tracked.Channel.Writer.TryComplete();
+                    _trackedTasks.TryRemove(taskId, out _);
+                    // Cleanup keys (use TTL as safety net, no race condition)
+                    _ = db.KeyDeleteAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
+                    _ = db.KeyDeleteAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
+                    return;
+                }
+            }
+
+            // Check for snapshot updates
+            var snapshotJson = await db.StringGetAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
+            if (!snapshotJson.HasValue) {
+                // No snapshot yet - check task state for early completion/failure
                 await TryCompleteFromTaskStateAsync(taskId, tracked, cancellationToken);
                 return;
             }
 
-            foreach (var value in values) {
-                var chunk = JsonConvert.DeserializeObject<AgentStreamChunk>(value.ToString());
-                if (chunk == null) {
-                    tracked.NextIndex++;
-                    continue;
-                }
+            var snapshotStr = snapshotJson.ToString();
+            if (snapshotStr == tracked.LastSnapshotJson) {
+                return; // No change since last poll
+            }
 
+            tracked.LastSnapshotJson = snapshotStr;
+            var chunk = JsonConvert.DeserializeObject<AgentStreamChunk>(snapshotStr);
+            if (chunk != null && chunk.Content != tracked.LastContent) {
+                tracked.LastContent = chunk.Content;
                 await tracked.Channel.Writer.WriteAsync(chunk, cancellationToken);
-                tracked.NextIndex++;
-                await _redis.GetDatabase().StringSetAsync(
-                    LlmAgentRedisKeys.AgentChunkIndex(taskId),
-                    tracked.NextIndex,
-                    TimeSpan.FromHours(1),
-                    When.Always);
-
-                if (chunk.Type is AgentChunkType.Done or AgentChunkType.Error or AgentChunkType.IterationLimitReached) {
-                    tracked.Completion.TrySetResult(chunk);
-                    tracked.Channel.Writer.TryComplete();
-                    _trackedTasks.TryRemove(taskId, out _);
-                    await _redis.GetDatabase().KeyDeleteAsync(LlmAgentRedisKeys.AgentChunkIndex(taskId));
-                    await _redis.GetDatabase().KeyDeleteAsync(LlmAgentRedisKeys.AgentChunks(taskId));
-                    break;
-                }
             }
         }
 
@@ -140,14 +150,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             tracked.Completion.TrySetResult(chunk);
             tracked.Channel.Writer.TryComplete();
             _trackedTasks.TryRemove(taskId, out _);
-            await _redis.GetDatabase().KeyDeleteAsync(LlmAgentRedisKeys.AgentChunkIndex(taskId));
-            await _redis.GetDatabase().KeyDeleteAsync(LlmAgentRedisKeys.AgentChunks(taskId));
+            _ = _redis.GetDatabase().KeyDeleteAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
+            _ = _redis.GetDatabase().KeyDeleteAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
         }
 
         private sealed class TrackedTask {
             public Channel<AgentStreamChunk> Channel { get; } = System.Threading.Channels.Channel.CreateUnbounded<AgentStreamChunk>();
             public TaskCompletionSource<AgentStreamChunk> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            public long NextIndex { get; set; }
+            public string? LastSnapshotJson { get; set; }
+            public string? LastContent { get; set; }
             public AgentTaskStreamHandle Handle => new AgentTaskStreamHandle(Channel, Completion.Task);
         }
     }

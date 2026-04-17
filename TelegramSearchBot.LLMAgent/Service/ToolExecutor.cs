@@ -20,26 +20,40 @@ namespace TelegramSearchBot.LLMAgent.Service {
             return Task.FromResult(Convert.ToString(result, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
         }
 
-        public async Task<string> SendMessageAsync(long chatId, string text, long userId, long messageId, CancellationToken cancellationToken) {
+        public Task<string> SendMessageAsync(long chatId, string text, long userId, long messageId, CancellationToken cancellationToken) {
+            return ExecuteRemoteToolAsync("send_message", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                ["chatId"] = chatId.ToString(),
+                ["text"] = text
+            }, chatId, userId, messageId, cancellationToken);
+        }
+
+        /// <summary>
+        /// Executes a tool on the main process via Redis IPC.
+        /// Pushes a TelegramAgentToolTask to the TELEGRAM_TASKS queue and waits for the result.
+        /// </summary>
+        public async Task<string> ExecuteRemoteToolAsync(
+            string toolName,
+            Dictionary<string, string> arguments,
+            long chatId, long userId, long messageId,
+            CancellationToken cancellationToken,
+            TimeSpan? timeout = null) {
             var task = new TelegramAgentToolTask {
-                ToolName = "send_message",
+                ToolName = toolName,
                 ChatId = chatId,
                 UserId = userId,
                 MessageId = messageId,
-                Arguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
-                    ["chatId"] = chatId.ToString(),
-                    ["text"] = text
-                }
+                Arguments = arguments
             };
 
             await _garnetClient.RPushAsync(LlmAgentRedisKeys.TelegramTaskQueue, JsonConvert.SerializeObject(task));
-            var result = await _rpcClient.WaitForTelegramResultAsync(task.RequestId, TimeSpan.FromSeconds(30), cancellationToken);
+            var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(60);
+            var result = await _rpcClient.WaitForTelegramResultAsync(task.RequestId, effectiveTimeout, cancellationToken);
             if (result == null) {
-                throw new TimeoutException("Timed out waiting for TELEGRAM_RESULT.");
+                throw new TimeoutException($"Timed out waiting for remote tool '{toolName}' result after {effectiveTimeout.TotalSeconds}s.");
             }
 
             if (!result.Success) {
-                throw new InvalidOperationException(result.ErrorMessage);
+                throw new InvalidOperationException($"Remote tool '{toolName}' failed: {result.ErrorMessage}");
             }
 
             return string.IsNullOrWhiteSpace(result.Result) ? "ok" : result.Result;

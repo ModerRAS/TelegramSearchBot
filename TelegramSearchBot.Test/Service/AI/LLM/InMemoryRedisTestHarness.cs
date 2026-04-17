@@ -105,6 +105,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                     return true;
                 });
 
+            // SE.Redis 2.12+ Expiration/ValueCondition overload
+            Database.Setup(d => d.StringSetAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<Expiration>(), It.IsAny<ValueCondition>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync((RedisKey key, RedisValue value, Expiration _, ValueCondition _, CommandFlags _) => {
+                    _strings[key.ToString()] = value.ToString();
+                    return true;
+                });
+
             Database.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync((RedisKey key, CommandFlags _) => _strings.TryGetValue(key.ToString(), out var value) ? (RedisValue)value : RedisValue.Null);
 

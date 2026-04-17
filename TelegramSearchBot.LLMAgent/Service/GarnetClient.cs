@@ -5,6 +5,7 @@ using TelegramSearchBot.Model.AI;
 namespace TelegramSearchBot.LLMAgent.Service {
     public sealed class GarnetClient {
         private readonly IConnectionMultiplexer _redis;
+        private static readonly TimeSpan ChunkTtl = TimeSpan.FromHours(1);
 
         public GarnetClient(IConnectionMultiplexer redis) {
             _redis = redis;
@@ -32,8 +33,26 @@ namespace TelegramSearchBot.LLMAgent.Service {
             return null;
         }
 
-        public Task PublishChunkAsync(AgentStreamChunk chunk) {
-            return RPushAsync(LlmAgentRedisKeys.AgentChunks(chunk.TaskId), JsonConvert.SerializeObject(chunk));
+        /// <summary>
+        /// Publishes a snapshot chunk by overwriting the latest snapshot key (SET, not LIST).
+        /// Only keeps the most recent snapshot to avoid memory accumulation.
+        /// </summary>
+        public Task PublishSnapshotAsync(AgentStreamChunk chunk) {
+            return _redis.GetDatabase().StringSetAsync(
+                LlmAgentRedisKeys.AgentSnapshot(chunk.TaskId),
+                JsonConvert.SerializeObject(chunk),
+                ChunkTtl);
+        }
+
+        /// <summary>
+        /// Publishes a terminal chunk (Done/Error/IterationLimitReached) as a separate key.
+        /// The polling side checks this key to detect completion.
+        /// </summary>
+        public Task PublishTerminalAsync(AgentStreamChunk chunk) {
+            return _redis.GetDatabase().StringSetAsync(
+                LlmAgentRedisKeys.AgentTerminal(chunk.TaskId),
+                JsonConvert.SerializeObject(chunk),
+                ChunkTtl);
         }
     }
 }

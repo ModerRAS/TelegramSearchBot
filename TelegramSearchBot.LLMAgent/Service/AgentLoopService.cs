@@ -143,7 +143,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
                         continue;
                     }
 
-                    await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
+                    await _garnetClient.PublishSnapshotAsync(new AgentStreamChunk {
                         TaskId = task.TaskId,
                         Type = AgentChunkType.Snapshot,
                         Sequence = sequence++,
@@ -152,7 +152,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 }
 
                 if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
-                    await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
+                    await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
                         TaskId = task.TaskId,
                         Type = AgentChunkType.IterationLimitReached,
                         Sequence = sequence++,
@@ -166,7 +166,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
                         ["completedAtUtc"] = DateTime.UtcNow.ToString("O")
                     });
                 } else {
-                    await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
+                    await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
                         TaskId = task.TaskId,
                         Type = AgentChunkType.Done,
                         Sequence = sequence,
@@ -179,7 +179,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 }
             } catch (Exception ex) {
                 _logger.LogError(ex, "Agent task {TaskId} failed", task.TaskId);
-                await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
+                await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
                     TaskId = task.TaskId,
                     Type = AgentChunkType.Error,
                     Sequence = sequence,

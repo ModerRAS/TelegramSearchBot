@@ -2,12 +2,14 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using StackExchange.Redis;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Tools;
 
@@ -30,6 +32,9 @@ namespace TelegramSearchBot.LLMAgent {
                 typeof(FileToolService).Assembly,
                 services, logger);
 
+            // Import tool definitions from Redis and register as proxy tools
+            await RegisterProxyToolsFromRedisAsync(services, logger);
+
             var loop = services.GetRequiredService<Service.AgentLoopService>();
             using var shutdownCts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, eventArgs) => {
@@ -39,6 +44,42 @@ namespace TelegramSearchBot.LLMAgent {
             AppDomain.CurrentDomain.ProcessExit += (_, _) => shutdownCts.Cancel();
 
             await loop.RunAsync(chatId, port, shutdownCts.Token);
+        }
+
+        private static async Task RegisterProxyToolsFromRedisAsync(ServiceProvider services, ILogger logger) {
+            try {
+                var redis = services.GetRequiredService<IConnectionMultiplexer>();
+                var json = await redis.GetDatabase().StringGetAsync(LlmAgentRedisKeys.AgentToolDefs);
+                if (!json.HasValue || string.IsNullOrWhiteSpace(json.ToString())) {
+                    logger.LogWarning("No tool definitions found in Redis. Agent will have limited tools.");
+                    return;
+                }
+
+                var toolDefs = JsonConvert.DeserializeObject<List<ProxyToolDefinition>>(json.ToString());
+                if (toolDefs == null || toolDefs.Count == 0) {
+                    logger.LogWarning("Empty tool definitions from Redis.");
+                    return;
+                }
+
+                var toolExecutor = services.GetRequiredService<Service.ToolExecutor>();
+
+                // Register proxy tools with an executor that routes to the main process via Redis IPC
+                McpToolHelper.RegisterProxyTools(toolDefs, async (toolName, arguments) => {
+                    // Resolve chatId/userId/messageId from ToolContext if needed
+                    // These will be set by the calling code in McpToolHelper before invoking
+                    long remoteChatId = 0, remoteUserId = 0, remoteMessageId = 0;
+                    if (arguments.TryGetValue("__chatId", out var cid)) { long.TryParse(cid, out remoteChatId); arguments.Remove("__chatId"); }
+                    if (arguments.TryGetValue("__userId", out var uid)) { long.TryParse(uid, out remoteUserId); arguments.Remove("__userId"); }
+                    if (arguments.TryGetValue("__messageId", out var mid)) { long.TryParse(mid, out remoteMessageId); arguments.Remove("__messageId"); }
+
+                    return await toolExecutor.ExecuteRemoteToolAsync(
+                        toolName, arguments, remoteChatId, remoteUserId, remoteMessageId, CancellationToken.None);
+                });
+
+                logger.LogInformation("Imported {Count} tool definitions from Redis.", toolDefs.Count);
+            } catch (Exception ex) {
+                logger.LogWarning(ex, "Failed to import tool definitions from Redis. Agent will have limited tools.");
+            }
         }
 
         private static string[] NormalizeArgs(string[] args) {

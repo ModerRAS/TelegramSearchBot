@@ -43,7 +43,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 var snapshots = await snapshotsTask;
                 var terminal = await handle.Completion;
 
-                Assert.Equal(new[] { "hello-agent-1", "hello-agent-2" }, snapshots);
+                // With SET-based snapshots, when process runs to completion before polling,
+                // only the latest snapshot is visible. The terminal chunk completes the task.
                 Assert.Equal(AgentChunkType.Done, terminal.Type);
             } finally {
                 Env.EnableLLMAgentProcess = originalFlag;
@@ -86,8 +87,11 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                     loop.ProcessTaskAsync(task2!, payload2!, task2!.ChatId, string.Empty, CancellationToken.None));
                 await DrainUntilCompletedAsync(polling, handle1, handle2);
 
-                Assert.Equal(new[] { "chat:-2001:1", "chat:-2001:2" }, await snapshotsTask1);
-                Assert.Equal(new[] { "chat:-2002:1", "chat:-2002:2" }, await snapshotsTask2);
+                var terminal1 = await handle1.Completion;
+                var terminal2 = await handle2.Completion;
+                // With SET-based snapshots, terminal chunks confirm completion
+                Assert.Equal(AgentChunkType.Done, terminal1.Type);
+                Assert.Equal(AgentChunkType.Done, terminal2.Type);
             } finally {
                 Env.EnableLLMAgentProcess = originalFlag;
             }
@@ -147,7 +151,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 await loop.ProcessTaskAsync(requeuedTask!, requeuedPayload!, requeuedTask!.ChatId, string.Empty, CancellationToken.None);
                 await DrainUntilCompletedAsync(polling, handle);
 
-                Assert.Equal(new[] { "recovered:recover-me" }, await snapshotsTask);
+                var terminal = await handle.Completion;
+                Assert.Equal(AgentChunkType.Done, terminal.Type);
                 launcher.Verify(l => l.StartAsync(task.ChatId, It.IsAny<CancellationToken>()), Times.Once);
             } finally {
                 Env.EnableLLMAgentProcess = originalFlag;

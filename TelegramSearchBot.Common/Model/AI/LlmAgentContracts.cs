@@ -181,15 +181,37 @@ namespace TelegramSearchBot.Model.AI {
         public DateTime CompletedAtUtc { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// Serializable tool definition for exporting main-process tool descriptions to Redis,
+    /// so that agent processes can register them as proxy tools.
+    /// </summary>
+    public sealed class ProxyToolDefinition {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public List<ProxyToolParameter> Parameters { get; set; } = [];
+    }
+
+    public sealed class ProxyToolParameter {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = "string";
+        public string Description { get; set; } = string.Empty;
+        public bool Required { get; set; }
+    }
+
     public static class LlmAgentRedisKeys {
         public const string AgentTaskQueue = "AGENT_TASKS";
         public const string AgentTaskDeadLetterQueue = "AGENT_TASKS:DEAD";
         public const string TelegramTaskQueue = "TELEGRAM_TASKS";
         public const string ActiveTaskSet = "AGENT_ACTIVE_TASKS";
         public const string SubAgentTaskQueue = "SUBAGENT_TASKS";
+        public const string AgentToolDefs = "AGENT_TOOL_DEFS";
 
         public static string AgentTaskState(string taskId) => $"AGENT_TASK:{taskId}";
+        public static string AgentSnapshot(string taskId) => $"AGENT_SNAPSHOT:{taskId}";
+        public static string AgentTerminal(string taskId) => $"AGENT_TERMINAL:{taskId}";
+        [Obsolete("Use AgentSnapshot/AgentTerminal instead")]
         public static string AgentChunks(string taskId) => $"AGENT_CHUNKS:{taskId}";
+        [Obsolete("Use AgentSnapshot/AgentTerminal instead")]
         public static string AgentChunkIndex(string taskId) => $"AGENT_CHUNK_INDEX:{taskId}";
         public static string AgentSession(long chatId) => $"AGENT_SESSION:{chatId}";
         public static string AgentControl(long chatId) => $"AGENT_CONTROL:{chatId}";
