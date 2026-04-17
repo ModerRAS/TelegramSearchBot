@@ -41,12 +41,23 @@ namespace TelegramSearchBot.LLMAgent.Service {
         }
         public async Task<string?> StringGetAsync(string key) => (await Db.StringGetAsync(key)).ToString();
 
-        public Task SaveTaskStateAsync(string taskId, AgentTaskStatus status, string? error = null) {
+        public Task SaveTaskStateAsync(string taskId, AgentTaskStatus status, string? error = null, IReadOnlyDictionary<string, string>? extraFields = null) {
             var key = LlmAgentRedisKeys.AgentTaskState(taskId);
-            return Task.WhenAll(
+            var tasks = new List<Task> {
                 HashSetAsync(key, "status", status.ToString()),
                 HashSetAsync(key, "updatedAtUtc", DateTime.UtcNow.ToString("O")),
-                HashSetAsync(key, "error", error ?? string.Empty));
+                HashSetAsync(key, "error", error ?? string.Empty)
+            };
+
+            if (extraFields != null) {
+                tasks.AddRange(extraFields.Select(entry => HashSetAsync(key, entry.Key, entry.Value ?? string.Empty)));
+            }
+
+            return Task.WhenAll(tasks);
+        }
+
+        public Task<Dictionary<string, string>> GetTaskStateAsync(string taskId) {
+            return HashGetAllAsync(LlmAgentRedisKeys.AgentTaskState(taskId));
         }
 
         public async Task SaveSessionAsync(AgentSessionInfo session) {
@@ -60,6 +71,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 ["startedAtUtc"] = session.StartedAtUtc.ToString("O"),
                 ["lastHeartbeatUtc"] = session.LastHeartbeatUtc.ToString("O"),
                 ["lastActiveAtUtc"] = session.LastActiveAtUtc.ToString("O"),
+                ["shutdownRequestedAtUtc"] = session.ShutdownRequestedAtUtc == DateTime.MinValue ? string.Empty : session.ShutdownRequestedAtUtc.ToString("O"),
                 ["error"] = session.ErrorMessage
             };
 
@@ -85,6 +97,25 @@ namespace TelegramSearchBot.LLMAgent.Service {
             }
 
             return null;
+        }
+
+        public Task RequestShutdownAsync(long chatId, string reason) {
+            var command = new AgentControlCommand {
+                ChatId = chatId,
+                Action = "shutdown",
+                Reason = reason,
+                RequestedAtUtc = DateTime.UtcNow
+            };
+
+            return StringSetAsync(
+                LlmAgentRedisKeys.AgentControl(chatId),
+                JsonConvert.SerializeObject(command),
+                TimeSpan.FromSeconds(Math.Max(Env.AgentShutdownGracePeriodSeconds * 2, 30)));
+        }
+
+        public async Task<AgentControlCommand?> GetControlCommandAsync(long chatId) {
+            var json = await StringGetAsync(LlmAgentRedisKeys.AgentControl(chatId));
+            return string.IsNullOrWhiteSpace(json) ? null : JsonConvert.DeserializeObject<AgentControlCommand>(json);
         }
     }
 }

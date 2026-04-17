@@ -24,7 +24,14 @@ namespace TelegramSearchBot.SubAgent {
             services.AddSingleton<Service.SubAgentService>();
 
             using var provider = services.BuildServiceProvider();
-            await provider.GetRequiredService<Service.SubAgentService>().RunAsync(CancellationToken.None);
+            using var shutdownCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) => {
+                eventArgs.Cancel = true;
+                shutdownCts.Cancel();
+            };
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => shutdownCts.Cancel();
+
+            await provider.GetRequiredService<Service.SubAgentService>().RunAsync(shutdownCts.Token);
         }
     }
 }

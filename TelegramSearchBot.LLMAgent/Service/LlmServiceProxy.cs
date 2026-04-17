@@ -9,7 +9,7 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.LLMAgent.Service {
-    public sealed class LlmServiceProxy {
+    public sealed class LlmServiceProxy : IAgentTaskExecutor {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<LlmServiceProxy> _logger;
 

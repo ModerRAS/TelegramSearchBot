@@ -36,6 +36,12 @@ namespace TelegramSearchBot.LLMAgent.Service {
 
             try {
                 while (!cancellationToken.IsCancellationRequested) {
+                    if (await IsShutdownRequestedAsync(chatId)) {
+                        session.Status = "shutting_down";
+                        await _rpcClient.SaveSessionAsync(session);
+                        break;
+                    }
+
                     var payload = await _garnetClient.BRPopAsync(LlmAgentRedisKeys.AgentTaskQueue, TimeSpan.FromSeconds(5));
                     if (string.IsNullOrWhiteSpace(payload)) {
                         continue;
@@ -50,58 +56,49 @@ namespace TelegramSearchBot.LLMAgent.Service {
                         continue;
                     }
 
+                    if (await IsShutdownRequestedAsync(chatId)) {
+                        await _garnetClient.RPushAsync(LlmAgentRedisKeys.AgentTaskQueue, payload);
+                        session.Status = "shutting_down";
+                        await _rpcClient.SaveSessionAsync(session);
+                        break;
+                    }
+
                     session.Status = "processing";
                     session.CurrentTaskId = task.TaskId;
                     session.LastActiveAtUtc = DateTime.UtcNow;
                     await _rpcClient.SaveSessionAsync(session);
-                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Running);
 
-                    using var scope = _serviceProvider.CreateScope();
-                    var proxy = scope.ServiceProvider.GetRequiredService<LlmServiceProxy>();
-                    var executionContext = new LlmExecutionContext();
-                    var sequence = 0;
+                    var taskState = await _rpcClient.GetTaskStateAsync(task.TaskId);
+                    var recoveredContent = taskState.TryGetValue("lastContent", out var existingContent)
+                        ? existingContent
+                        : string.Empty;
+                    var recoveryAttempt = taskState.TryGetValue("recoveryCount", out var recoveryCountString) &&
+                                          int.TryParse(recoveryCountString, out var recoveryAttemptValue)
+                        ? recoveryAttemptValue
+                        : 0;
 
+                    task.RecoveryAttempt = recoveryAttempt;
+
+                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Running, null, new Dictionary<string, string> {
+                        ["payload"] = payload,
+                        ["workerChatId"] = chatId.ToString(),
+                        ["startedAtUtc"] = DateTime.UtcNow.ToString("O"),
+                        ["recoveryCount"] = recoveryAttempt.ToString()
+                    });
+
+                    var shouldStopAfterTask = false;
                     try {
-                        await foreach (var snapshot in proxy.CallAsync(task, executionContext, cancellationToken).WithCancellation(cancellationToken)) {
-                            await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
-                                TaskId = task.TaskId,
-                                Type = AgentChunkType.Snapshot,
-                                Sequence = sequence++,
-                                Content = snapshot
-                            });
-                        }
-
-                        if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
-                            await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
-                                TaskId = task.TaskId,
-                                Type = AgentChunkType.IterationLimitReached,
-                                Sequence = sequence++,
-                                Content = executionContext.SnapshotData.LastAccumulatedContent ?? string.Empty,
-                                ContinuationSnapshot = executionContext.SnapshotData
-                            });
-                        } else {
-                            await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
-                                TaskId = task.TaskId,
-                                Type = AgentChunkType.Done,
-                                Sequence = sequence,
-                            });
-                        }
-
-                        await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Completed);
-                    } catch (Exception ex) {
-                        _logger.LogError(ex, "Agent task {TaskId} failed", task.TaskId);
-                        await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
-                            TaskId = task.TaskId,
-                            Type = AgentChunkType.Error,
-                            Sequence = sequence,
-                            ErrorMessage = ex.Message
-                        });
-                        await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Failed, ex.Message);
+                        await ProcessTaskAsync(task, payload, chatId, recoveredContent, cancellationToken);
                     } finally {
-                        session.Status = "idle";
+                        session.Status = await IsShutdownRequestedAsync(chatId) ? "shutting_down" : "idle";
                         session.CurrentTaskId = string.Empty;
                         session.LastActiveAtUtc = DateTime.UtcNow;
                         await _rpcClient.SaveSessionAsync(session);
+                        shouldStopAfterTask = session.Status == "shutting_down";
+                    }
+
+                    if (shouldStopAfterTask) {
+                        break;
                     }
                 }
             } finally {
@@ -109,7 +106,81 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 session.Status = "stopped";
                 session.LastHeartbeatUtc = DateTime.UtcNow;
                 await _rpcClient.SaveSessionAsync(session);
+                await _rpcClient.KeyDeleteAsync(LlmAgentRedisKeys.AgentControl(chatId));
                 await heartbeatTask;
+            }
+        }
+
+        public async Task ProcessTaskAsync(
+            AgentExecutionTask task,
+            string payload,
+            long workerChatId,
+            string recoveredContent,
+            CancellationToken cancellationToken) {
+            using var scope = _serviceProvider.CreateScope();
+            var executor = scope.ServiceProvider.GetRequiredService<IAgentTaskExecutor>();
+            var executionContext = new LlmExecutionContext();
+            var sequence = 0;
+            var suppressUntilRecoveryCatchup = !string.IsNullOrWhiteSpace(recoveredContent);
+
+            try {
+                await foreach (var snapshot in executor.CallAsync(task, executionContext, cancellationToken).WithCancellation(cancellationToken)) {
+                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Running, null, new Dictionary<string, string> {
+                        ["lastContent"] = snapshot,
+                        ["lastSequence"] = sequence.ToString()
+                    });
+
+                    if (!ShouldPublishSnapshot(snapshot, recoveredContent, ref suppressUntilRecoveryCatchup)) {
+                        continue;
+                    }
+
+                    await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
+                        TaskId = task.TaskId,
+                        Type = AgentChunkType.Snapshot,
+                        Sequence = sequence++,
+                        Content = snapshot
+                    });
+                }
+
+                if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
+                    await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
+                        TaskId = task.TaskId,
+                        Type = AgentChunkType.IterationLimitReached,
+                        Sequence = sequence++,
+                        Content = executionContext.SnapshotData.LastAccumulatedContent ?? string.Empty,
+                        ContinuationSnapshot = executionContext.SnapshotData
+                    });
+                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Completed, null, new Dictionary<string, string> {
+                        ["payload"] = payload,
+                        ["workerChatId"] = workerChatId.ToString(),
+                        ["lastContent"] = executionContext.SnapshotData.LastAccumulatedContent ?? string.Empty,
+                        ["completedAtUtc"] = DateTime.UtcNow.ToString("O")
+                    });
+                } else {
+                    await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
+                        TaskId = task.TaskId,
+                        Type = AgentChunkType.Done,
+                        Sequence = sequence,
+                    });
+                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Completed, null, new Dictionary<string, string> {
+                        ["payload"] = payload,
+                        ["workerChatId"] = workerChatId.ToString(),
+                        ["completedAtUtc"] = DateTime.UtcNow.ToString("O")
+                    });
+                }
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Agent task {TaskId} failed", task.TaskId);
+                await _garnetClient.PublishChunkAsync(new AgentStreamChunk {
+                    TaskId = task.TaskId,
+                    Type = AgentChunkType.Error,
+                    Sequence = sequence,
+                    ErrorMessage = ex.Message
+                });
+                await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Failed, ex.Message, new Dictionary<string, string> {
+                    ["payload"] = payload,
+                    ["workerChatId"] = workerChatId.ToString(),
+                    ["failedAtUtc"] = DateTime.UtcNow.ToString("O")
+                });
             }
         }
 
@@ -119,6 +190,38 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 session.LastHeartbeatUtc = DateTime.UtcNow;
                 await _rpcClient.SaveSessionAsync(session);
             }
+        }
+
+        private async Task<bool> IsShutdownRequestedAsync(long chatId) {
+            var command = await _rpcClient.GetControlCommandAsync(chatId);
+            return command != null && command.Action.Equals("shutdown", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ShouldPublishSnapshot(string snapshot, string recoveredContent, ref bool suppressUntilRecoveryCatchup) {
+            if (!suppressUntilRecoveryCatchup) {
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(recoveredContent)) {
+                suppressUntilRecoveryCatchup = false;
+                return true;
+            }
+
+            if (string.Equals(snapshot, recoveredContent, StringComparison.Ordinal)) {
+                return false;
+            }
+
+            if (snapshot.Length < recoveredContent.Length && recoveredContent.StartsWith(snapshot, StringComparison.Ordinal)) {
+                return false;
+            }
+
+            if (snapshot.StartsWith(recoveredContent, StringComparison.Ordinal)) {
+                suppressUntilRecoveryCatchup = false;
+                return snapshot.Length > recoveredContent.Length;
+            }
+
+            suppressUntilRecoveryCatchup = false;
+            return true;
         }
     }
 }

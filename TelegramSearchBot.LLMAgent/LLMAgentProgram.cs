@@ -26,7 +26,14 @@ namespace TelegramSearchBot.LLMAgent {
             McpToolHelper.EnsureInitialized(typeof(Service.AgentToolService).Assembly, services, logger);
 
             var loop = services.GetRequiredService<Service.AgentLoopService>();
-            await loop.RunAsync(chatId, port, CancellationToken.None);
+            using var shutdownCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) => {
+                eventArgs.Cancel = true;
+                shutdownCts.Cancel();
+            };
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => shutdownCts.Cancel();
+
+            await loop.RunAsync(chatId, port, shutdownCts.Token);
         }
 
         private static string[] NormalizeArgs(string[] args) {
@@ -56,6 +63,7 @@ namespace TelegramSearchBot.LLMAgent {
             services.AddScoped<AnthropicService>();
             services.AddScoped<Service.ToolExecutor>();
             services.AddScoped<Service.AgentToolService>();
+            services.AddScoped<Service.IAgentTaskExecutor, Service.LlmServiceProxy>();
             services.AddScoped<Service.LlmServiceProxy>();
             services.AddSingleton<Service.GarnetClient>();
             services.AddSingleton<Service.GarnetRpcClient>();
