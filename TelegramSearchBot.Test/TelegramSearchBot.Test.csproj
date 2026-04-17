@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
     <ProjectReference Include="..\TelegramSearchBot.Database\TelegramSearchBot.Database.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.LLMAgent\TelegramSearchBot.LLMAgent.csproj" />
     <ProjectReference Include="..\TelegramSearchBot\TelegramSearchBot.csproj" />
   </ItemGroup>
   <ItemGroup>
