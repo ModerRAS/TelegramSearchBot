@@ -171,11 +171,8 @@ namespace TelegramSearchBot.AppBootstrap {
             // Export tool definitions to Redis so agent processes can discover available tools
             try {
                 var redis = service.GetRequiredService<IConnectionMultiplexer>();
-                var toolDefs = McpToolHelper.ExportToolDefinitions();
-                var json = JsonConvert.SerializeObject(toolDefs);
-                await redis.GetDatabase().StringSetAsync(
-                    LlmAgentRedisKeys.AgentToolDefs, json, TimeSpan.FromHours(24));
-                Log.Information("Exported {Count} tool definitions to Redis for agent discovery.", toolDefs.Count);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(redis);
+                Log.Information("Exported tool definitions to Redis for agent discovery.");
             } catch (Exception ex) {
                 Log.Warning(ex, "Failed to export tool definitions to Redis. Agent processes may have limited tools.");
             }

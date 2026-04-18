@@ -123,6 +123,7 @@ namespace TelegramSearchBot.Service.BotAPI {
 
             string latestMarkdownSnapshot = null;
             string markdownActuallySynced = null;
+            bool lastSyncComplete = true;
             List<string> chunksForDb = new List<string>();
             bool isFirstSync = true;
 
@@ -147,10 +148,9 @@ namespace TelegramSearchBot.Service.BotAPI {
 
                     lastApiSyncTime = DateTime.UtcNow;
                     isFirstSync = false;
-                    markdownActuallySynced = latestMarkdownSnapshot;
 
-                    chunksForDb = MessageFormatHelper.SplitMarkdownIntoChunks(markdownActuallySynced, 1900);
-                    if (!chunksForDb.Any() && !string.IsNullOrEmpty(markdownActuallySynced)) {
+                    chunksForDb = MessageFormatHelper.SplitMarkdownIntoChunks(latestMarkdownSnapshot, 1900);
+                    if (!chunksForDb.Any() && !string.IsNullOrEmpty(latestMarkdownSnapshot)) {
                         chunksForDb.Add(string.Empty);
                     }
 
@@ -159,10 +159,14 @@ namespace TelegramSearchBot.Service.BotAPI {
                     );
                     sentTelegramMessages = syncResult.UpdatedMessages;
                     lastSentHtmlPerMessageId = syncResult.UpdatedHtmlMap;
+                    lastSyncComplete = syncResult.SyncComplete;
+                    if (lastSyncComplete) {
+                        markdownActuallySynced = latestMarkdownSnapshot;
+                    }
                 }
             } catch (OperationCanceledException) { logger.LogInformation("SendFullMessageStream: Stream consumption cancelled."); } catch (Exception ex) { logger.LogError(ex, "SendFullMessageStream: Error during stream consumption."); }
 
-            if (latestMarkdownSnapshot != null && latestMarkdownSnapshot != markdownActuallySynced) {
+            if (latestMarkdownSnapshot != null && (latestMarkdownSnapshot != markdownActuallySynced || !lastSyncComplete)) {
                 logger.LogInformation("SendFullMessageStream: Performing final synchronization for the absolute latest content.");
                 chunksForDb = MessageFormatHelper.SplitMarkdownIntoChunks(latestMarkdownSnapshot, 1900);
                 if (!chunksForDb.Any() && !string.IsNullOrEmpty(latestMarkdownSnapshot)) chunksForDb.Add(string.Empty);
@@ -191,7 +195,7 @@ namespace TelegramSearchBot.Service.BotAPI {
         /// <param name="currentHtmlMap">当前HTML内容映射</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>更新后的消息列表和HTML映射</returns>
-        private async Task<(List<Message> UpdatedMessages, Dictionary<int, string> UpdatedHtmlMap)> SynchronizeTelegramMessagesInternalAsync(
+        private async Task<(List<Message> UpdatedMessages, Dictionary<int, string> UpdatedHtmlMap, bool SyncComplete)> SynchronizeTelegramMessagesInternalAsync(
             long chatId,
             int originalReplyTo,
             List<string> newMarkdownChunks,
@@ -201,6 +205,7 @@ namespace TelegramSearchBot.Service.BotAPI {
             List<Message> nextTgMessagesState = new List<Message>();
             Dictionary<int, string> nextHtmlMap = new Dictionary<int, string>(currentHtmlMap);
             int effectiveReplyTo = originalReplyTo;
+            bool syncComplete = true;
 
             for (int i = 0; i < newMarkdownChunks.Count; i++) {
                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
@@ -270,7 +275,10 @@ namespace TelegramSearchBot.Service.BotAPI {
                             } else {
                                 this.logger.LogWarning($"SynchronizeMessages: Sending new TG message for chunk {i} returned null or invalid Message object.");
                             }
-                        } catch (Exception ex) { this.logger.LogError(ex, $"SynchronizeMessages: Error sending new TG message for chunk {i}."); }
+                        } catch (Exception ex) {
+                            this.logger.LogError(ex, $"SynchronizeMessages: Error sending new TG message for chunk {i}.");
+                            syncComplete = false;
+                        }
                     }
                 }
             }
@@ -283,7 +291,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                     nextHtmlMap.Remove(currentTgMessages[i].MessageId);
                 } catch (Exception ex) { this.logger.LogError(ex, $"SynchronizeMessages: Error deleting superfluous TG message {currentTgMessages[i].MessageId}."); }
             }
-            return (nextTgMessagesState, nextHtmlMap);
+            return (nextTgMessagesState, nextHtmlMap, syncComplete);
         }
 
         /// <summary>
