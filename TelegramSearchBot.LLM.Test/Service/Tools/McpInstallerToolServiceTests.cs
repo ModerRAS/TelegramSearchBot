@@ -16,6 +16,7 @@ using TelegramSearchBot.Model.Mcp;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Mcp;
 using TelegramSearchBot.Service.Tools;
+using StackExchange.Redis;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Service.Tools {
@@ -50,7 +51,10 @@ namespace TelegramSearchBot.Test.Service.Tools {
             _mcpServerManager = new McpServerManager(managerLoggerMock.Object, scopeFactory);
 
             var serviceLoggerMock = new Mock<ILogger<McpInstallerToolService>>();
-            _service = new McpInstallerToolService(serviceLoggerMock.Object, _mcpServerManager);
+            var redisMock = new Mock<IConnectionMultiplexer>();
+            var dbMock = new Mock<IDatabase>();
+            redisMock.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(dbMock.Object);
+            _service = new McpInstallerToolService(serviceLoggerMock.Object, _mcpServerManager, redisMock.Object);
 
             _adminContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
             _nonAdminContext = new ToolContext { ChatId = 1, UserId = long.MaxValue - 1 };

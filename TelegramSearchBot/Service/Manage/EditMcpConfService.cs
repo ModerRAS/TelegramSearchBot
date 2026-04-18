@@ -243,6 +243,7 @@ namespace TelegramSearchBot.Service.Manage {
             try {
                 await _mcpServerManager.AddServerAsync(config);
                 McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(connectionMultiplexer);
 
                 var tools = _mcpServerManager.GetAllExternalTools()
                     .Where(t => t.serverName == name).ToList();
@@ -389,6 +390,7 @@ namespace TelegramSearchBot.Service.Manage {
                 });
 
                 McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(connectionMultiplexer);
                 await redis.DeleteKeysAsync();
                 return (true, $"✅ MCP服务器 '{serverName}' {changeDescription}");
             } catch (Exception ex) {
@@ -430,6 +432,7 @@ namespace TelegramSearchBot.Service.Manage {
                 });
 
                 McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(connectionMultiplexer);
                 await redis.DeleteKeysAsync();
                 return (true, $"✅ MCP服务器 '{serverName}' 环境变量 '{envKey}' 已设置。");
             } catch (Exception ex) {
@@ -480,6 +483,7 @@ namespace TelegramSearchBot.Service.Manage {
                 try {
                     await _mcpServerManager.RemoveServerAsync(serverName);
                     McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                    await McpToolHelper.RefreshAgentToolDefsInRedisAsync(connectionMultiplexer);
                     await redis.DeleteKeysAsync();
                     return (true, $"✅ MCP服务器 '{serverName}' 已删除。");
                 } catch (Exception ex) {
@@ -544,6 +548,7 @@ namespace TelegramSearchBot.Service.Manage {
                 await _mcpServerManager.ShutdownAllAsync();
                 await _mcpServerManager.InitializeAllServersAsync();
                 McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(connectionMultiplexer);
 
                 var tools = _mcpServerManager.GetAllExternalTools();
                 return (true, $"✅ MCP服务器已重启。共 {tools.Count} 个工具可用。");

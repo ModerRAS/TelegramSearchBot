@@ -81,10 +81,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (terminalJson.HasValue) {
                 var terminal = JsonConvert.DeserializeObject<AgentStreamChunk>(terminalJson.ToString());
                 if (terminal != null) {
-                    // Deliver any final snapshot content before the terminal chunk
-                    if (!string.IsNullOrEmpty(terminal.Content) && terminal.Content != tracked.LastContent) {
+                    // Before completing, read the final snapshot from Redis and deliver it
+                    // so the consumer (SendDraftStream/SendFullMessageStream) sees the last content.
+                    await DeliverFinalSnapshotAsync(taskId, tracked, db, cancellationToken);
+
+                    // For IterationLimitReached, also deliver the terminal content if different
+                    if (terminal.Type == AgentChunkType.IterationLimitReached
+                        && !string.IsNullOrEmpty(terminal.Content)
+                        && terminal.Content != tracked.LastContent) {
                         await tracked.Channel.Writer.WriteAsync(terminal, cancellationToken);
+                        tracked.LastContent = terminal.Content;
                     }
+
                     tracked.Completion.TrySetResult(terminal);
                     tracked.Channel.Writer.TryComplete();
                     _trackedTasks.TryRemove(taskId, out _);
@@ -117,7 +125,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private async Task TryCompleteFromTaskStateAsync(string taskId, TrackedTask tracked, CancellationToken cancellationToken) {
-            var entries = await _redis.GetDatabase().HashGetAllAsync(LlmAgentRedisKeys.AgentTaskState(taskId));
+            var db = _redis.GetDatabase();
+            var entries = await db.HashGetAllAsync(LlmAgentRedisKeys.AgentTaskState(taskId));
             if (entries.Length == 0) {
                 return;
             }
@@ -138,6 +147,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             if (status == AgentTaskStatus.Completed) {
+                // Deliver the final snapshot before completing
+                await DeliverFinalSnapshotAsync(taskId, tracked, db, cancellationToken);
+
+                // Also check task state for lastContent as a fallback
+                var lastContentEntry = entries.FirstOrDefault(x => x.Name == "lastContent");
+                if (lastContentEntry.Value.HasValue) {
+                    var lastContent = lastContentEntry.Value.ToString();
+                    if (!string.IsNullOrEmpty(lastContent) && lastContent != tracked.LastContent) {
+                        await tracked.Channel.Writer.WriteAsync(new AgentStreamChunk {
+                            TaskId = taskId,
+                            Type = AgentChunkType.Snapshot,
+                            Content = lastContent
+                        }, cancellationToken);
+                        tracked.LastContent = lastContent;
+                    }
+                }
+
                 await CompleteTrackedTaskAsync(taskId, tracked, new AgentStreamChunk {
                     TaskId = taskId,
                     Type = AgentChunkType.Done
@@ -146,12 +172,30 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private async Task CompleteTrackedTaskAsync(string taskId, TrackedTask tracked, AgentStreamChunk chunk, CancellationToken cancellationToken) {
-            await tracked.Channel.Writer.WriteAsync(chunk, cancellationToken);
             tracked.Completion.TrySetResult(chunk);
             tracked.Channel.Writer.TryComplete();
             _trackedTasks.TryRemove(taskId, out _);
             _ = _redis.GetDatabase().KeyDeleteAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
             _ = _redis.GetDatabase().KeyDeleteAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
+        }
+
+        /// <summary>
+        /// Read the final snapshot from Redis and deliver it to the channel if it
+        /// differs from the last content already delivered.
+        /// </summary>
+        private async Task DeliverFinalSnapshotAsync(string taskId, TrackedTask tracked, IDatabase db, CancellationToken cancellationToken) {
+            try {
+                var snapshotJson = await db.StringGetAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
+                if (!snapshotJson.HasValue) return;
+
+                var snapshot = JsonConvert.DeserializeObject<AgentStreamChunk>(snapshotJson.ToString());
+                if (snapshot != null && !string.IsNullOrEmpty(snapshot.Content) && snapshot.Content != tracked.LastContent) {
+                    tracked.LastContent = snapshot.Content;
+                    await tracked.Channel.Writer.WriteAsync(snapshot, cancellationToken);
+                }
+            } catch (Exception) {
+                // Best-effort: don't let snapshot read failure prevent task completion
+            }
         }
 
         private sealed class TrackedTask {

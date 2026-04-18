@@ -24,14 +24,17 @@ namespace TelegramSearchBot.Service.Tools {
     public class McpInstallerToolService : IService, IMcpInstallerToolService {
         private readonly ILogger<McpInstallerToolService> _logger;
         private readonly IMcpServerManager _mcpServerManager;
+        private readonly StackExchange.Redis.IConnectionMultiplexer _redis;
 
         public string ServiceName => "McpInstallerToolService";
 
         public McpInstallerToolService(
             ILogger<McpInstallerToolService> logger,
-            IMcpServerManager mcpServerManager) {
+            IMcpServerManager mcpServerManager,
+            StackExchange.Redis.IConnectionMultiplexer redis) {
             _logger = logger;
             _mcpServerManager = mcpServerManager;
+            _redis = redis;
         }
 
         [BuiltInTool("List all configured MCP (Model Context Protocol) tool servers and their status. Shows server name, command, and available tools.")]
@@ -132,6 +135,7 @@ Only available to admin users.")]
 
                 // Re-register tools with McpToolHelper so new tools appear in LLM prompts
                 McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(_redis);
 
                 // Check if tools were discovered
                 var tools = _mcpServerManager.GetAllExternalTools()
@@ -182,6 +186,7 @@ Only available to admin users.")]
 
                 // Re-register tools with McpToolHelper to remove stale tool entries
                 McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(_redis);
 
                 return $"Successfully removed MCP server '{name}'.";
             } catch (Exception ex) {
@@ -277,6 +282,7 @@ Only available to admin users.")]
 
                 // Re-register tools with McpToolHelper to reflect any changes
                 McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(_redis);
 
                 if (!changes.Any()) {
                     return $"No changes were applied to MCP server '{name}'. Provide at least one parameter to update.";
@@ -301,6 +307,7 @@ Only available to admin users.")]
 
                 // Re-register tools with McpToolHelper so they appear in LLM prompts
                 McpToolHelper.RegisterExternalMcpTools(_mcpServerManager);
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(_redis);
 
                 var tools = _mcpServerManager.GetAllExternalTools();
                 return $"Successfully restarted MCP servers. {tools.Count} external tools available.";

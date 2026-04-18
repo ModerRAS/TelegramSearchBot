@@ -1061,6 +1061,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
+        /// Re-exports tool definitions to Redis so that newly spawned agent processes
+        /// discover the latest available tools (including any MCP servers added/removed at runtime).
+        /// </summary>
+        public static async Task RefreshAgentToolDefsInRedisAsync(StackExchange.Redis.IConnectionMultiplexer redis) {
+            var toolDefs = ExportToolDefinitions();
+            var json = JsonConvert.SerializeObject(toolDefs);
+            await redis.GetDatabase().StringSetAsync(
+                LlmAgentRedisKeys.AgentToolDefs, json, TimeSpan.FromHours(24));
+        }
+
+        /// <summary>
         /// Registers proxy tools that are executed remotely via IPC (e.g., agent calling main process tools).
         /// Unlike RegisterExternalTools, this preserves original tool names without any prefix.
         /// Tools already registered locally (in ToolRegistry) are skipped.
