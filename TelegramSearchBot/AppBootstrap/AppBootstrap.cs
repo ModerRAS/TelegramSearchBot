@@ -168,7 +168,7 @@ namespace TelegramSearchBot.AppBootstrap {
         }
 
         public static ChildProcessManager childProcessManager = new ChildProcessManager();
-        public static void Fork(string[] args, long? processMemoryLimitBytes = null) {
+        public static Process Fork(string[] args, long? processMemoryLimitBytes = null) {
             string exePath = Environment.ProcessPath;
 
             // 将参数数组转换为空格分隔的字符串，并正确处理包含空格的参数
@@ -188,7 +188,8 @@ namespace TelegramSearchBot.AppBootstrap {
                 throw new Exception("启动新进程失败");
             }
             childProcessManager.AddProcess(newProcess, processMemoryLimitBytes);
-            Log.Logger.Information($"主进程：{args[0]} {args[1]}已启动");
+            Log.Logger.Information($"主进程：{string.Join(" ", args)}已启动");
+            return newProcess;
         }
         private static Dictionary<string, DateTime> ForkLock = new Dictionary<string, DateTime>();
         private static readonly AsyncLock _asyncLock = new AsyncLock();
