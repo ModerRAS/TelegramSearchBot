@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Telegram.Bot;
@@ -14,6 +13,7 @@ using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Service.Search;
 using Xunit;
 using Message = TelegramSearchBot.Model.Data.Message;
 using SearchOption = TelegramSearchBot.Model.SearchOption;
@@ -26,17 +26,12 @@ namespace TelegramSearchBot.Test.Service.BotAPI {
         }
     }
 
-    public class TestDataDbContext : DataDbContext {
-        public TestDataDbContext(DbContextOptions<DataDbContext> options) : base(options) { }
-        public virtual DbSet<SearchPageCache> SearchPageCaches { get; set; } = null!;
-    }
-
     public class SendServiceTests {
         private Mock<ITelegramBotClient> _mockBotClient = null!;
         private Mock<SendMessage> _mockSendMessage = null!;
         private Mock<ILogger<SendMessage>> _mockLogger = null!;
-        private Mock<TestDataDbContext> _mockDbContext = null!;
-        private Mock<IMediator> _mockMediator = null!;
+        private SearchCacheDbContext _searchCacheDbContext = null!;
+        private SearchOptionStorageService _searchOptionStorageService = null!;
         private SendService _sendService = null!;
 
         public SendServiceTests() {
@@ -44,38 +39,15 @@ namespace TelegramSearchBot.Test.Service.BotAPI {
             _mockLogger = new Mock<ILogger<SendMessage>>();
             _mockSendMessage = new Mock<SendMessage>(_mockBotClient.Object, _mockLogger.Object);
 
-            var mockSearchPageCaches = new Mock<DbSet<SearchPageCache>>();
-            var data = new List<SearchPageCache>();
-
-            mockSearchPageCaches.As<IQueryable<SearchPageCache>>()
-                .Setup(m => m.Provider)
-                .Returns(data.AsQueryable().Provider);
-            mockSearchPageCaches.As<IQueryable<SearchPageCache>>()
-                .Setup(m => m.Expression)
-                .Returns(data.AsQueryable().Expression);
-            mockSearchPageCaches.As<IQueryable<SearchPageCache>>()
-                .Setup(m => m.ElementType)
-                .Returns(data.AsQueryable().ElementType);
-            mockSearchPageCaches.As<IQueryable<SearchPageCache>>()
-                .Setup(m => m.GetEnumerator())
-                .Returns(data.AsQueryable().GetEnumerator());
-
-            mockSearchPageCaches.Setup(m => m.AddAsync(It.IsAny<SearchPageCache>(), It.IsAny<CancellationToken>()))
-                .Callback<SearchPageCache, CancellationToken>((cache, _) => {
-                    data.Add(cache);
-                })
-                .Returns(ValueTask.FromResult(default(EntityEntry<SearchPageCache>)));
-
-            var options = new DbContextOptionsBuilder<DataDbContext>()
-                .UseInMemoryDatabase(databaseName: "TestDatabase")
+            var options = new DbContextOptionsBuilder<SearchCacheDbContext>()
+                .UseInMemoryDatabase(databaseName: $"SendServiceTests_{Guid.NewGuid():N}")
                 .Options;
-            _mockDbContext = new Mock<TestDataDbContext>(options);
-            _mockDbContext.Setup(x => x.SearchPageCaches).Returns(mockSearchPageCaches.Object);
-            _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
+            _searchCacheDbContext = new SearchCacheDbContext(options);
+            _searchOptionStorageService = new SearchOptionStorageService(
+                _searchCacheDbContext,
+                Mock.Of<ILogger<SearchOptionStorageService>>());
 
-            _mockMediator = new Mock<IMediator>();
-
-            _sendService = new SendService(_mockBotClient.Object, _mockSendMessage.Object, _mockDbContext.Object);
+            _sendService = new SendService(_mockBotClient.Object, _mockSendMessage.Object, _searchOptionStorageService);
         }
 
         [Fact]
@@ -88,8 +60,8 @@ namespace TelegramSearchBot.Test.Service.BotAPI {
         [Fact]
         public void Constructor_WithNullParameters_ThrowsException() {
             // Arrange & Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new SendService(null, _mockSendMessage.Object, _mockDbContext.Object));
-            Assert.Throws<ArgumentNullException>(() => new SendService(_mockBotClient.Object, null, _mockDbContext.Object));
+            Assert.Throws<ArgumentNullException>(() => new SendService(null, _mockSendMessage.Object, _searchOptionStorageService));
+            Assert.Throws<ArgumentNullException>(() => new SendService(_mockBotClient.Object, null, _searchOptionStorageService));
             Assert.Throws<ArgumentNullException>(() => new SendService(_mockBotClient.Object, _mockSendMessage.Object, null));
         }
 
@@ -175,6 +147,7 @@ namespace TelegramSearchBot.Test.Service.BotAPI {
             // Assert
             Assert.Equal(2, buttons.Count);
             Assert.Equal("下一页", buttons[0].Text);
+            Assert.Equal(2, await _searchCacheDbContext.SearchPageCaches.CountAsync());
         }
 
         [Fact]
