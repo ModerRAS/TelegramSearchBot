@@ -45,6 +45,7 @@
   "EnableAutoASR": false,
   "IsLocalAPI": false,
   "EnableLocalBotAPI": false,
+  "ExternalLocalBotApiBaseUrl": "",
   "TelegramBotApiId": "",
   "TelegramBotApiHash": "",
   "LocalBotApiPort": 8081,
@@ -80,11 +81,13 @@
   - `AdminId`: 管理员Telegram用户ID(必须为数字)
 
 - **本地Bot API服务**:
-  - `EnableLocalBotAPI`: 是否启用内置Telegram Bot API服务(默认false)
+  - `EnableLocalBotAPI`: 是否启用内置 Telegram Bot API 服务(默认false)
+  - `ExternalLocalBotApiBaseUrl`: 外部本地 Bot API 地址；配置后会自动按本地 API 模式运行，无需再手动设置 `BaseUrl`/`IsLocalAPI`
   - `TelegramBotApiId`: Telegram Bot API的API ID（从my.telegram.org获取）
   - `TelegramBotApiHash`: Telegram Bot API的API Hash（从my.telegram.org获取）
   - `LocalBotApiPort`: 本地Bot API服务端口(默认8081)
-  - **优势**: 启用后可发送最大2GB文件（vs 云端50MB限制）
+  - **说明**: `EnableLocalBotAPI=true` 时会启动内置 `telegram-bot-api.exe`；若使用外部 local API，请保持 `EnableLocalBotAPI=false` 并填写 `ExternalLocalBotApiBaseUrl`
+  - **优势**: 使用本地 Bot API（内置或外部）后可发送最大2GB文件（vs 云端50MB限制）
 
 - **AI相关**:
   - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")
