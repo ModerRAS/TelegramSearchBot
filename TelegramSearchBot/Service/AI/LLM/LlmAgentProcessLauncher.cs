@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using TelegramSearchBot.AppBootstrap;
@@ -11,14 +10,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public Task<int> StartAsync(long chatId, CancellationToken cancellationToken = default) {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var dllPath = Path.Combine(AppContext.BaseDirectory, "TelegramSearchBot.LLMAgent.dll");
-            if (!File.Exists(dllPath)) {
-                throw new FileNotFoundException("LLMAgent executable not found.", dllPath);
-            }
-
             var process = AppBootstrap.AppBootstrap.Fork(
-                "dotnet",
-                [dllPath, chatId.ToString(), Env.SchedulerPort.ToString()],
+                ["LLMAgent", chatId.ToString(), Env.SchedulerPort.ToString()],
                 GetMemoryLimitBytes());
             return Task.FromResult(process.Id);
         }
