@@ -180,8 +180,10 @@ namespace TelegramSearchBot.AppBootstrap {
             // SQLite 数据库初始化
             using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
                 var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
+                var searchCacheContext = serviceScope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
                 //context.Database.EnsureCreated();
                 context.Database.Migrate();
+                await searchCacheContext.Database.EnsureCreatedAsync();
             }
 
             // 启动Host，SchedulerService作为HostedService会自动启动

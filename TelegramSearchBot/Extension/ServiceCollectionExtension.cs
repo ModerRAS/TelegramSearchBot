@@ -47,10 +47,18 @@ namespace TelegramSearchBot.Extension {
                 ConnectionMultiplexer.Connect(redisConnectionString));
         }
 
+        private static string BuildSqliteConnectionString(string databaseFileName) {
+            return $"Data Source={Path.Combine(Env.WorkDir, databaseFileName)};Cache=Shared;Mode=ReadWriteCreate;";
+        }
+
         public static IServiceCollection AddDatabase(this IServiceCollection services) {
-            return services.AddDbContext<DataDbContext>(options => {
-                options.UseSqlite($"Data Source={Path.Combine(Env.WorkDir, "Data.sqlite")};Cache=Shared;Mode=ReadWriteCreate;");
-            }, ServiceLifetime.Transient);
+            return services
+                .AddDbContext<DataDbContext>(options => {
+                    options.UseSqlite(BuildSqliteConnectionString("Data.sqlite"));
+                }, ServiceLifetime.Transient)
+                .AddDbContext<SearchCacheDbContext>(options => {
+                    options.UseSqlite(BuildSqliteConnectionString("SearchCache.sqlite"));
+                }, ServiceLifetime.Transient);
         }
 
         public static IServiceCollection AddHttpClients(this IServiceCollection services) {

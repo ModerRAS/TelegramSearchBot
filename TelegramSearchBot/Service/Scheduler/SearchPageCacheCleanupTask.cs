@@ -32,7 +32,7 @@ namespace TelegramSearchBot.Service.Scheduler {
 
             try {
                 using var scope = _serviceProvider.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+                var dbContext = scope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
                 var cutoffUtc = DateTime.UtcNow.AddMonths(-1);
                 _logger.LogInformation("开始清理 {CutoffUtc} 之前的 SearchPageCache 记录", cutoffUtc);
 

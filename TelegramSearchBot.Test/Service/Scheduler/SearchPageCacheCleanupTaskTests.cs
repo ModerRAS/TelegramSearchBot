@@ -21,21 +21,21 @@ namespace TelegramSearchBot.Test.Service.Scheduler {
             _connection.Open();
 
             var services = new ServiceCollection();
-            services.AddDbContext<DataDbContext>(
+            services.AddDbContext<SearchCacheDbContext>(
                 options => options.UseSqlite(_connection),
                 ServiceLifetime.Transient);
 
             _serviceProvider = services.BuildServiceProvider();
 
             using var scope = _serviceProvider.CreateScope();
-            using var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+            using var dbContext = scope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
             dbContext.Database.EnsureCreated();
         }
 
         [Fact]
         public async Task ExecuteAsync_DeletesExpiredCaches_AndKeepsRecentEntries() {
             using (var scope = _serviceProvider.CreateScope()) {
-                using var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+                using var dbContext = scope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
                 dbContext.SearchPageCaches.AddRange(
                     new SearchPageCache {
                         UUID = "expired-cache",
@@ -63,7 +63,7 @@ namespace TelegramSearchBot.Test.Service.Scheduler {
             await task.ExecuteAsync();
 
             using var verificationScope = _serviceProvider.CreateScope();
-            using var verificationContext = verificationScope.ServiceProvider.GetRequiredService<DataDbContext>();
+            using var verificationContext = verificationScope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
             var caches = await verificationContext.SearchPageCaches
                 .OrderBy(cache => cache.UUID)
                 .ToListAsync();

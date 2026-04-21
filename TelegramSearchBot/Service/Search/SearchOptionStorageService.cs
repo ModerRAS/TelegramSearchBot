@@ -18,14 +18,14 @@ namespace TelegramSearchBot.Service.Search {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class SearchOptionStorageService : IService {
         public string ServiceName => "SearchOptionStorageService";
-        private readonly DataDbContext _dataDbContext;
+        private readonly SearchCacheDbContext _searchCacheDbContext;
         private readonly ILogger<SearchOptionStorageService> _logger;
 
         public SearchOptionStorageService(
-            DataDbContext dataDbContext,
+            SearchCacheDbContext searchCacheDbContext,
             ILogger<SearchOptionStorageService> logger) {
             // 初始化搜索选项存储服务
-            _dataDbContext = dataDbContext ?? throw new ArgumentNullException(nameof(dataDbContext));
+            _searchCacheDbContext = searchCacheDbContext ?? throw new ArgumentNullException(nameof(searchCacheDbContext));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
         /// <summary>
@@ -43,7 +43,7 @@ namespace TelegramSearchBot.Service.Search {
 
             try {
                 // 从SearchPageCaches表中查找缓存
-                var cache = await _dataDbContext.SearchPageCaches
+                var cache = await _searchCacheDbContext.SearchPageCaches
                     .AsNoTracking()
                     .FirstOrDefaultAsync(c => c.UUID == UUID)
                     .ConfigureAwait(false);
@@ -59,8 +59,8 @@ namespace TelegramSearchBot.Service.Search {
                 var result = cache.GetSearchOption();
 
                 // 查询成功后删除记录
-                _dataDbContext.SearchPageCaches.Remove(cache);
-                await _dataDbContext.SaveChangesAsync().ConfigureAwait(false);
+                _searchCacheDbContext.SearchPageCaches.Remove(cache);
+                await _searchCacheDbContext.SaveChangesAsync().ConfigureAwait(false);
 
                 return result;
             } catch (Exception ex) {
@@ -87,8 +87,8 @@ namespace TelegramSearchBot.Service.Search {
                 };
                 cache.SetSearchOption(searchOption);
 
-                _dataDbContext.SearchPageCaches.Add(cache);
-                await _dataDbContext.SaveChangesAsync().ConfigureAwait(false);
+                _searchCacheDbContext.SearchPageCaches.Add(cache);
+                await _searchCacheDbContext.SaveChangesAsync().ConfigureAwait(false);
 
                 return uuid;
             } catch (Exception ex) {
@@ -146,14 +146,12 @@ namespace TelegramSearchBot.Service.Search {
         public async Task<int> CleanupOldSearchPageCachesAsync(TimeSpan timeSpan) {
             try {
                 var cutoffTime = DateTime.UtcNow.Subtract(timeSpan);
-                var oldCaches = _dataDbContext.SearchPageCaches
-                    .Where(c => c.CreatedTime < cutoffTime);
-
-                int deletedCount = await oldCaches.CountAsync().ConfigureAwait(false);
+                int deletedCount = await _searchCacheDbContext.SearchPageCaches
+                    .Where(c => c.CreatedTime < cutoffTime)
+                    .ExecuteDeleteAsync()
+                    .ConfigureAwait(false);
 
                 if (deletedCount > 0) {
-                    _dataDbContext.SearchPageCaches.RemoveRange(oldCaches);
-                    await _dataDbContext.SaveChangesAsync().ConfigureAwait(false);
                     _logger.LogInformation("Deleted {Count} old search page caches older than {Date}",
                         deletedCount, cutoffTime);
                 }
