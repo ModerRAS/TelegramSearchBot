@@ -183,7 +183,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 var searchCacheContext = serviceScope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
                 //context.Database.EnsureCreated();
                 context.Database.Migrate();
-                await searchCacheContext.Database.EnsureCreatedAsync();
+                await searchCacheContext.Database.MigrateAsync();
             }
 
             // 启动Host，SchedulerService作为HostedService会自动启动
