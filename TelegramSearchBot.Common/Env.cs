@@ -11,52 +11,85 @@ namespace TelegramSearchBot.Common {
             if (!Directory.Exists(WorkDir)) {
                 Directory.CreateDirectory(WorkDir);
             }
+            var config = new Config();
             try {
-                var config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(Path.Combine(WorkDir, "Config.json")));
-                if (config is null) return;
-                EnableLocalBotAPI = config.EnableLocalBotAPI;
-                TelegramBotApiId = config.TelegramBotApiId;
-                TelegramBotApiHash = config.TelegramBotApiHash;
-                LocalBotApiPort = config.LocalBotApiPort;
-                if (config.EnableLocalBotAPI) {
-                    BaseUrl = $"http://127.0.0.1:{config.LocalBotApiPort}";
-                    IsLocalAPI = true;
-                } else {
-                    BaseUrl = config.BaseUrl;
-                    IsLocalAPI = config.IsLocalAPI;
+                var loadedConfig = JsonConvert.DeserializeObject<Config>(File.ReadAllText(Path.Combine(WorkDir, "Config.json")));
+                if (loadedConfig is not null) {
+                    config = loadedConfig;
                 }
-                BotToken = config.BotToken;
-                AdminId = config.AdminId;
-                EnableAutoOCR = config.EnableAutoOCR;
-                EnableAutoASR = config.EnableAutoASR;
-                //WorkDir = config.WorkDir;
-                TaskDelayTimeout = config.TaskDelayTimeout;
-                SameServer = config.SameServer;
-                OllamaModelName = config.OllamaModelName;
-                EnableVideoASR = config.EnableVideoASR;
-                EnableOpenAI = config.EnableOpenAI;
-                OpenAIModelName = config.OpenAIModelName;
-                OLTPAuth = config.OLTPAuth;
-                OLTPAuthUrl = config.OLTPAuthUrl;
-                OLTPName = config.OLTPName;
-                BraveApiKey = config.BraveApiKey;
-                EnableAccounting = config.EnableAccounting;
-                MaxToolCycles = config.MaxToolCycles;
-                EnableLLMAgentProcess = config.EnableLLMAgentProcess;
-                AgentHeartbeatIntervalSeconds = config.AgentHeartbeatIntervalSeconds;
-                AgentHeartbeatTimeoutSeconds = config.AgentHeartbeatTimeoutSeconds;
-                AgentChunkPollingIntervalMilliseconds = config.AgentChunkPollingIntervalMilliseconds;
-                AgentIdleTimeoutMinutes = config.AgentIdleTimeoutMinutes;
-                MaxConcurrentAgents = config.MaxConcurrentAgents;
-                AgentTaskTimeoutSeconds = config.AgentTaskTimeoutSeconds;
-                AgentShutdownGracePeriodSeconds = config.AgentShutdownGracePeriodSeconds;
-                AgentMaxRecoveryAttempts = config.AgentMaxRecoveryAttempts;
-                AgentQueueBacklogWarningThreshold = config.AgentQueueBacklogWarningThreshold;
-                AgentProcessMemoryLimitMb = config.AgentProcessMemoryLimitMb;
             } catch {
             }
 
+            var botApiEndpoint = ResolveBotApiEndpoint(config);
+            EnableLocalBotAPI = config.EnableLocalBotAPI;
+            TelegramBotApiId = config.TelegramBotApiId;
+            TelegramBotApiHash = config.TelegramBotApiHash;
+            LocalBotApiPort = config.LocalBotApiPort;
+            ExternalLocalBotApiBaseUrl = botApiEndpoint.ExternalLocalBotApiBaseUrl;
+            BaseUrl = botApiEndpoint.BaseUrl;
+            IsLocalAPI = botApiEndpoint.IsLocalApi;
+            BotToken = config.BotToken;
+            AdminId = config.AdminId;
+            EnableAutoOCR = config.EnableAutoOCR;
+            EnableAutoASR = config.EnableAutoASR;
+            //WorkDir = config.WorkDir;
+            TaskDelayTimeout = config.TaskDelayTimeout;
+            SameServer = config.SameServer;
+            OllamaModelName = config.OllamaModelName;
+            EnableVideoASR = config.EnableVideoASR;
+            EnableOpenAI = config.EnableOpenAI;
+            OpenAIModelName = config.OpenAIModelName;
+            OLTPAuth = config.OLTPAuth;
+            OLTPAuthUrl = config.OLTPAuthUrl;
+            OLTPName = config.OLTPName;
+            BraveApiKey = config.BraveApiKey;
+            EnableAccounting = config.EnableAccounting;
+            MaxToolCycles = config.MaxToolCycles;
+            EnableLLMAgentProcess = config.EnableLLMAgentProcess;
+            AgentHeartbeatIntervalSeconds = config.AgentHeartbeatIntervalSeconds;
+            AgentHeartbeatTimeoutSeconds = config.AgentHeartbeatTimeoutSeconds;
+            AgentChunkPollingIntervalMilliseconds = config.AgentChunkPollingIntervalMilliseconds;
+            AgentIdleTimeoutMinutes = config.AgentIdleTimeoutMinutes;
+            MaxConcurrentAgents = config.MaxConcurrentAgents;
+            AgentTaskTimeoutSeconds = config.AgentTaskTimeoutSeconds;
+            AgentShutdownGracePeriodSeconds = config.AgentShutdownGracePeriodSeconds;
+            AgentMaxRecoveryAttempts = config.AgentMaxRecoveryAttempts;
+            AgentQueueBacklogWarningThreshold = config.AgentQueueBacklogWarningThreshold;
+            AgentProcessMemoryLimitMb = config.AgentProcessMemoryLimitMb;
         }
+
+        public static BotApiEndpointSettings ResolveBotApiEndpoint(Config config) {
+            ArgumentNullException.ThrowIfNull(config);
+
+            var normalizedExternalLocalBotApiBaseUrl = NormalizeBaseUrl(config.ExternalLocalBotApiBaseUrl, string.Empty);
+            if (config.EnableLocalBotAPI) {
+                return new BotApiEndpointSettings(
+                    $"http://127.0.0.1:{config.LocalBotApiPort}",
+                    true,
+                    normalizedExternalLocalBotApiBaseUrl);
+            }
+
+            if (!string.IsNullOrWhiteSpace(normalizedExternalLocalBotApiBaseUrl)) {
+                return new BotApiEndpointSettings(
+                    normalizedExternalLocalBotApiBaseUrl,
+                    true,
+                    normalizedExternalLocalBotApiBaseUrl);
+            }
+
+            return new BotApiEndpointSettings(
+                NormalizeBaseUrl(config.BaseUrl, "https://api.telegram.org"),
+                config.IsLocalAPI,
+                normalizedExternalLocalBotApiBaseUrl);
+        }
+
+        private static string NormalizeBaseUrl(string? baseUrl, string fallback) {
+            if (string.IsNullOrWhiteSpace(baseUrl)) {
+                return fallback;
+            }
+
+            return baseUrl.Trim().TrimEnd('/');
+        }
+
         public static readonly string BaseUrl = null!;
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
         public static readonly bool IsLocalAPI;
@@ -69,6 +102,7 @@ namespace TelegramSearchBot.Common {
         public static readonly string TelegramBotApiId = null!;
         public static readonly string TelegramBotApiHash = null!;
         public static readonly int LocalBotApiPort;
+        public static readonly string ExternalLocalBotApiBaseUrl = string.Empty;
         public static readonly string WorkDir = null!;
         public static readonly int TaskDelayTimeout;
         public static readonly bool SameServer;
@@ -107,6 +141,7 @@ namespace TelegramSearchBot.Common {
         //public string WorkDir { get; set; } = "/data/TelegramSearchBot";
         public bool IsLocalAPI { get; set; } = false;
         public bool EnableLocalBotAPI { get; set; } = false;
+        public string ExternalLocalBotApiBaseUrl { get; set; } = string.Empty;
         public string TelegramBotApiId { get; set; } = null!;
         public string TelegramBotApiHash { get; set; } = null!;
         public int LocalBotApiPort { get; set; } = 8081;
@@ -134,4 +169,6 @@ namespace TelegramSearchBot.Common {
         public int AgentQueueBacklogWarningThreshold { get; set; } = 20;
         public int AgentProcessMemoryLimitMb { get; set; } = 256;
     }
+
+    public sealed record BotApiEndpointSettings(string BaseUrl, bool IsLocalApi, string ExternalLocalBotApiBaseUrl);
 }

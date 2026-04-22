@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -17,10 +18,16 @@ namespace TelegramSearchBot.AppBootstrap {
     public class AppBootstrap {
         public sealed class ChildProcessManager : IDisposable {
             private readonly List<SafeJobHandle> _handles = [];
+            private readonly List<Process> _processes = [];
             private bool _disposed;
 
             public void Dispose() {
                 if (_disposed) return;
+
+                foreach (var process in _processes) {
+                    process.Dispose();
+                }
+                _processes.Clear();
 
                 foreach (var handle in _handles) {
                     handle.Dispose();
@@ -44,11 +51,13 @@ namespace TelegramSearchBot.AppBootstrap {
             }
 
             public void AddProcess(Process process, long? processMemoryLimitBytes = null) {
+                ValidateDisposed();
                 AddProcess(process.SafeHandle, processMemoryLimitBytes);
+                _processes.Add(process);
             }
 
             public void AddProcess(int processId, long? processMemoryLimitBytes = null) {
-                using var process = Process.GetProcessById(processId);
+                var process = Process.GetProcessById(processId);
                 AddProcess(process, processMemoryLimitBytes);
             }
 
@@ -170,26 +179,8 @@ namespace TelegramSearchBot.AppBootstrap {
         public static ChildProcessManager childProcessManager = new ChildProcessManager();
         public static Process Fork(string[] args, long? processMemoryLimitBytes = null) {
             string exePath = Environment.ProcessPath;
-
-            // 将参数数组转换为空格分隔的字符串，并正确处理包含空格的参数
-            string arguments = string.Join(" ", args.Select(arg => $"{arg}"));
-
-            // 启动新的进程（自己）
-            ProcessStartInfo startInfo = new ProcessStartInfo {
-                FileName = exePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            var newProcess = Process.Start(startInfo);
-            if (newProcess == null) {
-                throw new Exception("启动新进程失败");
-            }
-            childProcessManager.AddProcess(newProcess, processMemoryLimitBytes);
-            Log.Logger.Information($"主进程：{string.Join(" ", args)}已启动");
-            return newProcess;
+            var startInfo = CreateManagedStartInfo(exePath, args, Environment.CurrentDirectory);
+            return StartManagedProcess(startInfo, $"主进程：{string.Join(" ", args)}", processMemoryLimitBytes);
         }
         private static Dictionary<string, DateTime> ForkLock = new Dictionary<string, DateTime>();
         private static readonly AsyncLock _asyncLock = new AsyncLock();
@@ -208,30 +199,14 @@ namespace TelegramSearchBot.AppBootstrap {
         }
 
         public static Process Fork(string exePath, string[] args, long? processMemoryLimitBytes = null) {
-            // 将参数数组转换为空格分隔的字符串，并正确处理包含空格的参数
-            string arguments = string.Join(" ", args.Select(arg => $"{arg}"));
-
-            // 启动新的进程（自己）
-            ProcessStartInfo startInfo = new ProcessStartInfo {
-                FileName = exePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            var newProcess = Process.Start(startInfo);
-            if (newProcess == null) {
-                throw new Exception("启动新进程失败");
-            }
-            childProcessManager.AddProcess(newProcess, processMemoryLimitBytes);
-            Log.Logger.Information($"进程：{exePath} {string.Join(" ", args)}已启动");
-            return newProcess;
+            var workingDirectory = Path.GetDirectoryName(exePath);
+            var startInfo = CreateManagedStartInfo(exePath, args, string.IsNullOrWhiteSpace(workingDirectory) ? Environment.CurrentDirectory : workingDirectory);
+            return StartManagedProcess(startInfo, $"进程：{exePath} {string.Join(" ", args)}", processMemoryLimitBytes);
         }
         public static async Task RateLimitForkAsync(string exePath, string[] args) {
             using (await _asyncLock.LockAsync()) {
                 if (ForkLock.ContainsKey(exePath)) {
-                    if (DateTime.UtcNow - ForkLock[args[0]] > TimeSpan.FromMinutes(5)) {
+                    if (DateTime.UtcNow - ForkLock[exePath] > TimeSpan.FromMinutes(5)) {
                         Fork(exePath, args);
                         ForkLock[exePath] = DateTime.UtcNow;
                     }
@@ -248,6 +223,60 @@ namespace TelegramSearchBot.AppBootstrap {
         private const string StartupMethodName = "Startup";
 
         private const string TargetNamespace = "TelegramSearchBot.AppBootstrap";
+
+        private static ProcessStartInfo CreateManagedStartInfo(string exePath, IEnumerable<string> args, string workingDirectory) {
+            var startInfo = new ProcessStartInfo {
+                FileName = exePath,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
+                CreateNoWindow = true,
+                WorkingDirectory = workingDirectory
+            };
+
+            foreach (var arg in args) {
+                startInfo.ArgumentList.Add(arg);
+            }
+
+            return startInfo;
+        }
+
+        private static Process StartManagedProcess(ProcessStartInfo startInfo, string processDisplayName, long? processMemoryLimitBytes) {
+            var process = new Process {
+                StartInfo = startInfo,
+                EnableRaisingEvents = true
+            };
+
+            process.OutputDataReceived += (_, e) => {
+                if (!string.IsNullOrWhiteSpace(e.Data)) {
+                    Log.Logger.Information("[{Process}] {Message}", processDisplayName, e.Data);
+                }
+            };
+            process.ErrorDataReceived += (_, e) => {
+                if (!string.IsNullOrWhiteSpace(e.Data)) {
+                    Log.Logger.Warning("[{Process}] {Message}", processDisplayName, e.Data);
+                }
+            };
+            process.Exited += (_, _) => {
+                try {
+                    Log.Logger.Information("[{Process}] exited with code {ExitCode}", processDisplayName, process.ExitCode);
+                } catch {
+                }
+            };
+
+            if (!process.Start()) {
+                throw new Exception("启动新进程失败");
+            }
+
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            childProcessManager.AddProcess(process, processMemoryLimitBytes);
+            Log.Logger.Information("{Process}已启动", processDisplayName);
+            return process;
+        }
 
         /// <summary>
         /// 尝试根据第一个命令行参数通过反射查找并执行相应的 Bootstrap 类的 Startup 方法。
