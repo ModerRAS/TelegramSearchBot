@@ -34,7 +34,9 @@
 
 *   **`BotCommandAttribute.cs`**: **此特性专门用于向 Telegram注册机器人命令及其描述，本身不直接影响程序的核心业务逻辑执行流程，主要负责命令的声明和元数据提供。**
     *   *与 Orleans 的相关性*: 命令处理将被重构。此特性声明的命令信息可用于配置 `CommandParsingGrain` 或特定的命令 Grains。
-*   **`McpAttributes.cs`**: 与模型上下文协议 (MCP) 相关的特性（如果使用）。
+*   **`McpAttributes.cs`**: 与模型上下文协议 (MCP) 相关的特性。
+    *   **注意**: 已弃用，请使用 `BuiltInToolAttribute` 代替。
+*   **`BuiltInToolAttributes.cs`**: 定义内置工具的属性，通过 `McpToolHelper` 自动扫描注册。
 
 ### 3. `Comparer/`
 
@@ -150,6 +152,8 @@
 
 *   **`Model/AI/`**
     *   **`LLMProvider.cs`**: 可能是一个枚举或常量类，用于定义支持的LLM提供商类型（如 OpenAI, Ollama）。
+    *   **`LLMConfState.cs`**: LLM 配置状态管理。
+    *   **`LlmContinuationSnapshot.cs`**: LLM 迭代继续快照，用于保存和恢复对话状态。
 
 *   **`Model/Bilibili/`**: 包含与Bilibili服务交互时使用的数据模型。
     *   **`BiliOpusInfo.cs`**: 表示Bilibili动态（Opus）的信息，如作者、内容、图片、发布时间等。
@@ -195,6 +199,8 @@
 *   **`Service/AI/`**: 与 AI 功能相关的服务。
     *   `LLM/`: `BaseLlmService.cs` (用户反馈 `ILLMService` 未使用，搜索显示此基类未被直接子类化使用，可能已废弃), `GeneralLLMService.cs`, `McpToolHelper.cs`, `OllamaService.cs`, `OpenAIService.cs`。
     *   *与 Orleans 的相关性*: LLM 相关逻辑将由 `LlmProcessingGrain` 调用或整合。
+*   **`Service/AI/LLM/McpToolHelper.cs`**: **管理内置工具和外部 MCP 服务器的核心类。扫描标记有 `BuiltInToolAttribute` 的方法，生成工具 XML 描述供 LLM 使用。**
+*   **`Service/AI/LLM/LlmContinuationSnapshot.cs`**: 用于保存 LLM 迭代快照，实现对话继续/停止功能。
 *   **`Service/Bilibili/`**: 用于 Bilibili 集成的服务。
     *   `BiliApiService.cs`, `DownloadService.cs`, `TelegramFileCacheService.cs`, `IBiliApiService.cs`, `IDownloadService.cs`, `ITelegramFileCacheService.cs`。
     *   *与 Orleans 的相关性*: 逻辑将由与 Bilibili 相关的 Grains 调用或移入其中。
@@ -217,6 +223,10 @@
     *   *与 Orleans 的相关性*: 此服务可能会保留并注入到需要持久化或查询消息数据的 Grains 中，或者 Grains 可能使用 Orleans 持久性提供程序直接管理自己的状态。
 *   **`Service/Tools/`**: **此目录包含作为工具注入到LLM中的服务。这些服务通过特定注解被 `Service/AI/LLM/McpToolHelper.cs` 发现并集成到LLM的工具调用流程中。**
     *   `DuckDuckGoToolService.cs`, `ShortUrlToolService.cs`。
+    *   **`FileToolService.cs`**: 管理员专用文件操作工具（ReadFile, WriteFile, EditFile, SearchText, ListFiles）。
+    *   **`SendPhotoToolService.cs`**: 发送图片工具（send_photo_base64, send_photo_file）。
+    *   **`SendVideoToolService.cs`**: 发送视频工具（send_video_file）。
+    *   **`SendDocumentToolService.cs`**: 发送文件工具（send_document_file）。
 
 ### 17. `Sink/`
 

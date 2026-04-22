@@ -1,89 +1,94 @@
 using System;
-using System.Text.RegularExpressions;
-using Microsoft.Extensions.Logging;
+using System.Linq;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Common {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class UrlDisplayService : IService {
+        private const int DefaultMaxDisplayLength = 60;
+
         public string ServiceName => nameof(UrlDisplayService);
 
-        private readonly ILogger<UrlDisplayService> _logger;
-        private const int DefaultMaxLength = 80;
-        private const int DomainMaxLength = 30;
-
-        public UrlDisplayService(ILogger<UrlDisplayService> logger) {
-            _logger = logger;
-        }
-
-        public string TruncateUrl(string url, int maxLength = DefaultMaxLength) {
-            if (string.IsNullOrWhiteSpace(url)) {
-                return url;
-            }
-
-            if (url.Length <= maxLength) {
-                return url;
-            }
-
-            try {
-                var uri = new Uri(url);
-                var domain = uri.Host;
-
-                if (domain.Length > DomainMaxLength) {
-                    domain = domain.Substring(0, DomainMaxLength) + "...";
-                }
-
-                var path = uri.AbsolutePath;
-                if (path.Length > 20) {
-                    path = "..." + path.Substring(path.Length - 20);
-                }
-
-                return $"{uri.Scheme}://{domain}{path}";
-            } catch (UriFormatException) {
-                var truncated = url.Substring(0, maxLength - 3) + "...";
-                return truncated;
-            }
-        }
-
-        public string FormatUrlForDisplay(string text, bool disablePreview = false) {
-            if (string.IsNullOrWhiteSpace(text)) {
-                return text;
-            }
-
-            var urlPattern = @"(https?://[^\s]+)";
-            var result = Regex.Replace(text, urlPattern, match => {
-                var url = match.Value;
-                if (url.Length > DefaultMaxLength) {
-                    return TruncateUrl(url);
-                }
-                return url;
-            });
-
-            return result;
-        }
-
         public bool IsUrlOnlyMessage(string text) {
+            return TryGetStandaloneUrl(text, out _);
+        }
+
+        public bool TryFormatUrlOnlyMessage(string text, out string markdownText) {
+            markdownText = string.Empty;
+            if (!TryGetStandaloneUrl(text, out var url)) {
+                return false;
+            }
+
+            var label = EscapeMarkdownLinkText(BuildDisplayLabel(url));
+            markdownText = $"[打开链接：{label}](<{url}>)";
+            return true;
+        }
+
+        public string BuildDisplayLabel(string url, int maxLength = DefaultMaxDisplayLength) {
+            if (string.IsNullOrWhiteSpace(url)) {
+                return string.Empty;
+            }
+
+            var trimmedUrl = url.Trim();
+            if (!Uri.TryCreate(trimmedUrl, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host)) {
+                return Truncate(trimmedUrl, maxLength);
+            }
+
+            var builder = uri.Host;
+            var lastSegment = uri.Segments
+                .Select(static segment => segment.Trim('/'))
+                .LastOrDefault(static segment => !string.IsNullOrWhiteSpace(segment));
+
+            if (!string.IsNullOrWhiteSpace(lastSegment)) {
+                builder += "/" + Uri.UnescapeDataString(lastSegment);
+            } else if (!string.IsNullOrWhiteSpace(uri.AbsolutePath) && uri.AbsolutePath != "/") {
+                builder += uri.AbsolutePath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(uri.Query)) {
+                builder += "?...";
+            }
+
+            if (!string.IsNullOrWhiteSpace(uri.Fragment)) {
+                builder += "#...";
+            }
+
+            return Truncate(builder, maxLength);
+        }
+
+        private static bool TryGetStandaloneUrl(string text, out string url) {
+            url = string.Empty;
             if (string.IsNullOrWhiteSpace(text)) {
                 return false;
             }
 
             var trimmed = text.Trim();
-            return Uri.TryCreate(trimmed, UriKind.Absolute, out _);
+            if (!Uri.TryCreate(trimmed, UriKind.Absolute, out _)) {
+                return false;
+            }
+
+            url = trimmed;
+            return true;
         }
 
-        public string GetMessagePreview(string text, int maxLines = 3) {
-            if (string.IsNullOrWhiteSpace(text)) {
-                return text;
+        private static string EscapeMarkdownLinkText(string text) {
+            return text
+                .Replace("\\", "\\\\", StringComparison.Ordinal)
+                .Replace("[", "\\[", StringComparison.Ordinal)
+                .Replace("]", "\\]", StringComparison.Ordinal);
+        }
+
+        private static string Truncate(string value, int maxLength) {
+            if (value.Length <= maxLength) {
+                return value;
             }
 
-            var lines = text.Split('\n');
-            if (lines.Length <= maxLines) {
-                return FormatUrlForDisplay(text);
+            if (maxLength <= 3) {
+                return value.Substring(0, maxLength);
             }
 
-            var preview = string.Join("\n", lines, 0, maxLines);
-            return FormatUrlForDisplay(preview) + "\n...";
+            return value.Substring(0, maxLength - 3) + "...";
         }
     }
 }

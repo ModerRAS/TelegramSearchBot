@@ -36,6 +36,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly ISendMessageService _sendMessageService;
         private readonly MessageService _messageService;
         private readonly ILlmContinuationService _continuationService;
+        private readonly LLMTaskQueueService _llmTaskQueueService;
 
         public List<Type> Dependencies => new List<Type>();
 
@@ -45,13 +46,15 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             IGeneralLLMService generalLLMService,
             ISendMessageService sendMessageService,
             MessageService messageService,
-            ILlmContinuationService continuationService) {
+            ILlmContinuationService continuationService,
+            LLMTaskQueueService llmTaskQueueService) {
             _logger = logger;
             _botClient = botClient;
             _generalLLMService = generalLLMService;
             _sendMessageService = sendMessageService;
             _messageService = messageService;
             _continuationService = continuationService;
+            _llmTaskQueueService = llmTaskQueueService;
         }
 
         public async Task ExecuteAsync(PipelineContext p) {
@@ -146,15 +149,27 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
                 // Resume with full context — yields only NEW content (not re-sending old history)
                 var executionContext = new LlmExecutionContext();
-                IAsyncEnumerable<string> resumeStream = _generalLLMService.ResumeFromSnapshotAsync(
-                    snapshot, executionContext, CancellationToken.None);
+                AgentTaskStreamHandle? agentTaskHandle = null;
+                IAsyncEnumerable<string> resumeStream;
+                if (Env.EnableLLMAgentProcess) {
+                    var me = await _botClient.GetMe();
+                    agentTaskHandle = await _llmTaskQueueService.EnqueueContinuationTaskAsync(
+                        snapshot,
+                        me.Username ?? string.Empty,
+                        me.Id,
+                        CancellationToken.None);
+                    resumeStream = agentTaskHandle.ReadSnapshotsAsync(CancellationToken.None);
+                } else {
+                    resumeStream = _generalLLMService.ResumeFromSnapshotAsync(
+                        snapshot, executionContext, CancellationToken.None);
+                }
 
                 var initialContent = $"{snapshot.ModelName} 继续迭代中...";
                 // Use SendDraftStream for continuation — only new content is streamed
                 List<Model.Data.Message> sentMessagesForDb = await _sendMessageService.SendDraftStream(
                     resumeStream,
                     snapshot.ChatId,
-                    snapshot.OriginalMessageId,
+                    ( int ) snapshot.OriginalMessageId,
                     initialContent,
                     CancellationToken.None
                 );
@@ -181,6 +196,31 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 // Delete the used snapshot
                 await _continuationService.DeleteSnapshotAsync(snapshotId);
 
+                if (agentTaskHandle != null) {
+                    var terminalChunk = await agentTaskHandle.Completion;
+                    if (terminalChunk.Type == AgentChunkType.Error) {
+                        await _sendMessageService.SendMessage($"AI Agent 执行失败：{terminalChunk.ErrorMessage}", snapshot.ChatId, (int)snapshot.OriginalMessageId);
+                    } else if (terminalChunk.Type == AgentChunkType.IterationLimitReached && terminalChunk.ContinuationSnapshot != null) {
+                        var newSnapshotId = await _continuationService.SaveSnapshotAsync(terminalChunk.ContinuationSnapshot);
+
+                        var keyboard = new InlineKeyboardMarkup(new[] {
+                            new[] {
+                                InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{newSnapshotId}"),
+                                InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{newSnapshotId}"),
+                            }
+                        });
+
+                        await _botClient.SendMessage(
+                            snapshot.ChatId,
+                            $"⚠️ AI 再次达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？",
+                            replyMarkup: keyboard,
+                            replyParameters: new ReplyParameters { MessageId = (int)snapshot.OriginalMessageId }
+                        );
+                    }
+
+                    return;
+                }
+
                 // If iteration limit reached again, save new snapshot and show prompt
                 if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
                     _logger.LogInformation("Iteration limit reached again after continuation for ChatId {ChatId}.", snapshot.ChatId);
@@ -198,7 +238,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                         snapshot.ChatId,
                         $"⚠️ AI 再次达到最大迭代次数限制（{Env.MaxToolCycles} 次），已完成 {executionContext.SnapshotData.CyclesSoFar} 次循环，是否继续迭代？",
                         replyMarkup: keyboard,
-                        replyParameters: new ReplyParameters { MessageId = snapshot.OriginalMessageId }
+                        replyParameters: new ReplyParameters { MessageId = ( int ) snapshot.OriginalMessageId }
                     );
                 }
             } finally {

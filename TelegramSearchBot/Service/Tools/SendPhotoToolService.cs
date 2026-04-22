@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -19,17 +20,28 @@ namespace TelegramSearchBot.Service.Tools {
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
 
+        private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(120);
+
         public SendPhotoToolService(ITelegramBotClient botClient, SendMessage sendMessage) {
             _botClient = botClient;
             _sendMessage = sendMessage;
         }
 
+        /// <summary>
+        /// Resolves the effective reply-to message ID. Uses the explicitly provided value if set,
+        /// otherwise falls back to the ToolContext.MessageId (the original user message).
+        /// </summary>
+        private static ReplyParameters GetReplyParameters(long? explicitReplyToMessageId, ToolContext toolContext) {
+            long? messageId = explicitReplyToMessageId ?? ( toolContext.MessageId != 0 ? toolContext.MessageId : ( long? ) null );
+            return messageId.HasValue ? new ReplyParameters { MessageId = ( int ) messageId.Value } : null;
+        }
+
         [BuiltInTool("Sends a photo to the current chat using base64 encoded image data.", Name = "send_photo_base64")]
         public async Task<SendPhotoResult> SendPhotoBase64(
-            [BuiltInParameter("The base64 encoded image data (without the data URI prefix).", IsRequired = true)] string base64Data,
-            [BuiltInParameter("Optional caption for the photo (max 1024 characters).", IsRequired = false)] string caption,
+            [BuiltInParameter("The base64 encoded image data (without the data URI prefix).")] string base64Data,
             ToolContext toolContext,
-            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] int? replyToMessageId = null) {
+            [BuiltInParameter("Optional caption for the photo (max 1024 characters).", IsRequired = false)] string caption = null,
+            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] long? replyToMessageId = null) {
             try {
                 byte[] imageBytes;
                 try {
@@ -51,17 +63,16 @@ namespace TelegramSearchBot.Service.Tools {
                 }
 
                 var photo = InputFile.FromStream(new MemoryStream(imageBytes), "photo.png");
+                var replyParameters = GetReplyParameters(replyToMessageId, toolContext);
 
-                var replyParameters = replyToMessageId.HasValue
-                    ? new ReplyParameters { MessageId = replyToMessageId.Value }
-                    : null;
-
+                using var cts = new CancellationTokenSource(SendTimeout);
                 var message = await _sendMessage.AddTaskWithResult(async () => await _botClient.SendPhoto(
                     chatId: toolContext.ChatId,
                     photo: photo,
                     caption: string.IsNullOrEmpty(caption) ? null : caption.Length > 1024 ? caption.Substring(0, 1024) : caption,
                     parseMode: ParseMode.Html,
-                    replyParameters: replyParameters
+                    replyParameters: replyParameters,
+                    cancellationToken: cts.Token
                 ), toolContext.ChatId);
 
                 return new SendPhotoResult {
@@ -80,10 +91,10 @@ namespace TelegramSearchBot.Service.Tools {
 
         [BuiltInTool("Sends a photo to the current chat using a file path.", Name = "send_photo_file")]
         public async Task<SendPhotoResult> SendPhotoFile(
-            [BuiltInParameter("The file path to the image on the server.", IsRequired = true)] string filePath,
-            [BuiltInParameter("Optional caption for the photo (max 1024 characters).", IsRequired = false)] string caption,
+            [BuiltInParameter("The file path to the image on the server.")] string filePath,
             ToolContext toolContext,
-            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] int? replyToMessageId = null) {
+            [BuiltInParameter("Optional caption for the photo (max 1024 characters).", IsRequired = false)] string caption = null,
+            [BuiltInParameter("Optional message ID to reply to.", IsRequired = false)] long? replyToMessageId = null) {
             try {
                 if (string.IsNullOrWhiteSpace(filePath)) {
                     return new SendPhotoResult {
@@ -101,20 +112,30 @@ namespace TelegramSearchBot.Service.Tools {
                     };
                 }
 
+                // Read the entire file into memory to avoid file stream lifetime issues
+                // when the send is queued through the rate limiter
                 var fileInfo = new FileInfo(filePath);
-                using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-                var photo = InputFile.FromStream(fileStream, fileInfo.Name);
+                const long maxFileSizeBytes = 10 * 1024 * 1024; // Telegram photo limit: 10 MB
+                if (fileInfo.Length > maxFileSizeBytes) {
+                    return new SendPhotoResult {
+                        Success = false,
+                        ChatId = toolContext.ChatId,
+                        Error = $"File is too large ({fileInfo.Length / 1024 / 1024}MB). Maximum allowed size is 10MB."
+                    };
+                }
+                var fileBytes = await File.ReadAllBytesAsync(filePath);
+                var photo = InputFile.FromStream(new MemoryStream(fileBytes), fileInfo.Name);
 
-                var replyParameters = replyToMessageId.HasValue
-                    ? new ReplyParameters { MessageId = replyToMessageId.Value }
-                    : null;
+                var replyParameters = GetReplyParameters(replyToMessageId, toolContext);
 
+                using var cts = new CancellationTokenSource(SendTimeout);
                 var message = await _sendMessage.AddTaskWithResult(async () => await _botClient.SendPhoto(
                     chatId: toolContext.ChatId,
                     photo: photo,
                     caption: string.IsNullOrEmpty(caption) ? null : caption.Length > 1024 ? caption.Substring(0, 1024) : caption,
                     parseMode: ParseMode.Html,
-                    replyParameters: replyParameters
+                    replyParameters: replyParameters,
+                    cancellationToken: cts.Token
                 ), toolContext.ChatId);
 
                 return new SendPhotoResult {

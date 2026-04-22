@@ -27,6 +27,7 @@ using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Storage;
 using TelegramSearchBot.View;
@@ -46,10 +47,18 @@ namespace TelegramSearchBot.Extension {
                 ConnectionMultiplexer.Connect(redisConnectionString));
         }
 
+        private static string BuildSqliteConnectionString(string databaseFileName) {
+            return $"Data Source={Path.Combine(Env.WorkDir, databaseFileName)};Cache=Shared;Mode=ReadWriteCreate;";
+        }
+
         public static IServiceCollection AddDatabase(this IServiceCollection services) {
-            return services.AddDbContext<DataDbContext>(options => {
-                options.UseSqlite($"Data Source={Path.Combine(Env.WorkDir, "Data.sqlite")};Cache=Shared;Mode=ReadWriteCreate;");
-            }, ServiceLifetime.Transient);
+            return services
+                .AddDbContext<DataDbContext>(options => {
+                    options.UseSqlite(BuildSqliteConnectionString("Data.sqlite"));
+                }, ServiceLifetime.Transient)
+                .AddDbContext<SearchCacheDbContext>(options => {
+                    options.UseSqlite(BuildSqliteConnectionString("SearchCache.sqlite"));
+                }, ServiceLifetime.Transient);
         }
 
         public static IServiceCollection AddHttpClients(this IServiceCollection services) {
@@ -63,6 +72,12 @@ namespace TelegramSearchBot.Extension {
                 .AddSingleton<SendMessage>()
                 .AddHostedService<TelegramCommandRegistryService>()
                 .AddHostedService<SendMessage>()
+                .AddSingleton<ChunkPollingService>()
+                .AddHostedService(sp => sp.GetRequiredService<ChunkPollingService>())
+                .AddSingleton<IAgentProcessLauncher, LlmAgentProcessLauncher>()
+                .AddSingleton<AgentRegistryService>()
+                .AddHostedService(sp => sp.GetRequiredService<AgentRegistryService>())
+                .AddHostedService<TelegramTaskConsumer>()
                 .AddSingleton<Func<string, Task>>(sp => sp.GetRequiredService<SendMessage>().Log)
                 .AddSingleton<LuceneManager>()
                 .AddSingleton<PaddleOCR>()

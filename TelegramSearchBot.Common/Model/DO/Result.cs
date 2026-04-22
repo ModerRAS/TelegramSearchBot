@@ -9,8 +9,8 @@ namespace TelegramSearchBot.Common.Model {
         [JsonProperty("confidence")]
         public double Confidence { get; set; }
         [JsonProperty("text")]
-        public string Text { get; set; }
+        public string Text { get; set; } = null!;
         [JsonProperty("text_region")]
-        public List<List<int>> TextRegion { get; set; }
+        public List<List<int>> TextRegion { get; set; } = null!;
     }
 }

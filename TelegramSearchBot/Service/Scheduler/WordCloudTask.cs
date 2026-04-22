@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using Telegram.Bot;
@@ -22,14 +23,14 @@ namespace TelegramSearchBot.Service.Scheduler {
 
         public string CronExpression => "0 5 * * *"; // 每天早上5点执行
 
-        private readonly DataDbContext _dbContext;
+        private readonly IServiceProvider _serviceProvider;
         private readonly ITelegramBotClient _botClient;
         private readonly SendMessage _sendMessage;
         private readonly ILogger<WordCloudTask> _logger;
         private Func<Task> _heartbeatCallback;
 
-        public WordCloudTask(DataDbContext dbContext, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<WordCloudTask> logger) {
-            _dbContext = dbContext;
+        public WordCloudTask(IServiceProvider serviceProvider, ITelegramBotClient botClient, SendMessage sendMessage, ILogger<WordCloudTask> logger) {
+            _serviceProvider = serviceProvider;
             _botClient = botClient;
             _sendMessage = sendMessage;
             _logger = logger;
@@ -42,9 +43,12 @@ namespace TelegramSearchBot.Service.Scheduler {
         public async Task ExecuteAsync() {
             _logger.LogInformation("词云报告任务开始执行");
 
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<DataDbContext>();
+
             // 检查今天是否已经成功执行过
             var todayUtc = DateTime.UtcNow.Date;
-            var lastSuccessfulExecution = await _dbContext.ScheduledTaskExecutions
+            var lastSuccessfulExecution = await dbContext.ScheduledTaskExecutions
                 .Where(e => e.TaskName == TaskName && e.Status == TaskExecutionStatus.Completed)
                 .OrderByDescending(e => e.CompletedTime)
                 .FirstOrDefaultAsync();
@@ -73,7 +77,7 @@ namespace TelegramSearchBot.Service.Scheduler {
 
             if (period.HasValue) {
                 _logger.LogInformation("符合条件, 开始生成 {Period} 词云报告", period.Value);
-                await SendWordCloudReportAsync(period.Value);
+                await SendWordCloudReportAsync(period.Value, dbContext);
             } else {
                 _logger.LogInformation("今天不符合任何报告生成条件, 跳过执行");
             }
@@ -108,10 +112,10 @@ namespace TelegramSearchBot.Service.Scheduler {
             }
         }
 
-        private async Task SendWordCloudReportAsync(TimePeriod period) {
+        private async Task SendWordCloudReportAsync(TimePeriod period, DataDbContext dbContext) {
             try {
-                var groupStats = await CountUserMessagesAsync(period);
-                var messagesByGroup = await GetGroupMessagesWithExtensionsAsync(period);
+                var groupStats = await CountUserMessagesAsync(dbContext, period);
+                var messagesByGroup = await GetGroupMessagesWithExtensionsAsync(dbContext, period);
 
                 foreach (var group in messagesByGroup) {
                     // 更新心跳
@@ -124,16 +128,28 @@ namespace TelegramSearchBot.Service.Scheduler {
                         continue;
                     }
 
-                    var topUsers = stats.UserCounts
+                    var topUserContributors = stats.UserCounts
                         .Where(kv => kv.Key != 0) // 排除系统用户
                         .OrderByDescending(kv => kv.Value)
                         .Take(3)
+                        .ToList();
+
+                    var topUserIds = topUserContributors
+                        .Select(kv => kv.Key)
+                        .ToList();
+
+                    var userNames = await dbContext.UserData
+                        .Where(u => topUserIds.Contains(u.Id))
+                        .ToDictionaryAsync(
+                            u => u.Id,
+                            u => string.IsNullOrWhiteSpace($"{u.FirstName} {u.LastName}".Trim())
+                                ? $"用户{u.Id}"
+                                : $"{u.FirstName} {u.LastName}".Trim());
+
+                    var topUsers = topUserContributors
                         .Select(kv => {
-                            var user = _dbContext.UserData.FirstOrDefault(u => u.Id == kv.Key);
-                            var name = user != null ?
-                                $"{user.FirstName} {user.LastName}".Trim() :
-                                $"用户{kv.Key}";
-                            return (Name: name, Count: kv.Value);
+                            var name = userNames.GetValueOrDefault(kv.Key, $"用户{kv.Key}");
+                            return ( Name: name, Count: kv.Value );
                         })
                         .ToList();
 
@@ -226,7 +242,7 @@ namespace TelegramSearchBot.Service.Scheduler {
         /// - UserCounts: 用户ID到发言数量的字典
         /// - TotalCount: 总发言数量
         /// </returns>
-        public async Task<Dictionary<long, (Dictionary<long, int> UserCounts, int TotalCount)>> CountUserMessagesAsync(TimePeriod period) {
+        public async Task<Dictionary<long, (Dictionary<long, int> UserCounts, int TotalCount)>> CountUserMessagesAsync(DataDbContext dbContext, TimePeriod period) {
             var startDate = period switch {
                 TimePeriod.Daily => DateTime.UtcNow.AddDays(-1),
                 TimePeriod.Weekly => DateTime.UtcNow.AddDays(-7),
@@ -236,7 +252,7 @@ namespace TelegramSearchBot.Service.Scheduler {
                 _ => DateTime.UtcNow.AddDays(-1)
             };
 
-            var messages = await _dbContext.Messages
+            var messages = await dbContext.Messages
                 .Where(m => m.DateTime >= startDate && m.GroupId < 0) // 只统计群聊
                 .ToListAsync();
 
@@ -262,7 +278,7 @@ namespace TelegramSearchBot.Service.Scheduler {
         /// 列表包含消息内容和所有扩展值（不包含扩展名）
         /// 没有消息的群组会被自动过滤掉
         /// </returns>
-        public async Task<Dictionary<long, List<string>>> GetGroupMessagesWithExtensionsAsync(TimePeriod period) {
+        public async Task<Dictionary<long, List<string>>> GetGroupMessagesWithExtensionsAsync(DataDbContext dbContext, TimePeriod period) {
             var result = new Dictionary<long, List<string>>();
             var startDate = period switch {
                 TimePeriod.Daily => DateTime.UtcNow.AddDays(-1),
@@ -273,28 +289,36 @@ namespace TelegramSearchBot.Service.Scheduler {
                 _ => DateTime.UtcNow.AddDays(-1)
             };
 
-            var groups = await _dbContext.GroupData
+            var groups = await dbContext.GroupData
                 .Where(g => g.Id < 0) // 只处理群组(GroupId < 0)，过滤私聊
                 .ToListAsync();
 
             foreach (var group in groups) {
-                var groupMessages = await _dbContext.Messages
+                var groupMessages = await dbContext.Messages
                     .Where(m => m.GroupId == group.Id && m.DateTime >= startDate)
                     .Include(m => m.MessageExtensions)
                     .ToListAsync();
 
                 var groupResults = new List<string>();
                 foreach (var message in groupMessages) {
-                    // 添加消息内容
                     if (!string.IsNullOrEmpty(message.Content)) {
-                        groupResults.Add(message.Content);
+                        var filteredContent = WordCloudTextFilter.FilterText(message.Content);
+                        if (!string.IsNullOrWhiteSpace(filteredContent)) {
+                            groupResults.Add(filteredContent);
+                        }
                     }
 
-                    // 添加所有扩展值
                     if (message.MessageExtensions != null) {
-                        groupResults.AddRange(message.MessageExtensions
-                            .Select(e => e.Value)
-                            .Where(v => !string.IsNullOrEmpty(v)));
+                        foreach (var ext in message.MessageExtensions) {
+                            if (!WordCloudTextFilter.ShouldIncludeExtension(ext.Name)) {
+                                continue;
+                            }
+
+                            var filteredValue = WordCloudTextFilter.FilterText(ext.Value);
+                            if (!string.IsNullOrWhiteSpace(filteredValue)) {
+                                groupResults.Add(filteredValue);
+                            }
+                        }
                     }
                 }
 
