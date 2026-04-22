@@ -15,15 +15,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Search\TelegramSearchBot.Search.csproj" />
+    <ProjectReference Include="..\TelegramSearchBot.Tokenizer\TelegramSearchBot.Tokenizer.csproj" />
   </ItemGroup>
 
 </Project>
