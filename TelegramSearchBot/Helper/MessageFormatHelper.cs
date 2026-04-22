@@ -44,14 +44,14 @@ namespace TelegramSearchBot.Helper {
                                 string langClass = node.GetAttributeValue("class", "");
                                 if (!string.IsNullOrEmpty(langClass) && langClass.StartsWith("language-")) builder.Append($"<code class=\"{HttpUtility.HtmlEncode(langClass)}\">");
                                 else builder.Append("<code>");
-                                builder.Append(HttpUtility.HtmlEncode(node.InnerText));
+                                builder.Append(EncodeTelegramHtmlText(node.InnerText));
                                 builder.Append("</code>");
-                            } else { builder.Append("<code>"); builder.Append(HttpUtility.HtmlEncode(node.InnerText)); builder.Append("</code>"); }
+                            } else { builder.Append("<code>"); builder.Append(EncodeTelegramHtmlText(node.InnerText)); builder.Append("</code>"); }
                             break;
                         case "pre":
                             builder.Append("<pre>");
                             if (node.ChildNodes.Count == 1 && node.FirstChild.Name.ToLowerInvariant() == "code") ProcessHtmlNode(node.FirstChild, builder);
-                            else builder.Append(HttpUtility.HtmlEncode(node.InnerText));
+                            else builder.Append(EncodeTelegramHtmlText(node.InnerText));
                             builder.Append("</pre>");
                             break;
                         case "table": builder.Append(FormatHtmlTableAsPreformattedText(node)); break;
@@ -102,6 +102,10 @@ namespace TelegramSearchBot.Helper {
             return classValue
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Any(x => string.Equals(x, cssClass, StringComparison.Ordinal));
+        }
+
+        private static string EncodeTelegramHtmlText(string text) {
+            return HttpUtility.HtmlEncode(HttpUtility.HtmlDecode(text ?? string.Empty));
         }
 
         private static void ProcessList(HtmlNode listNode, StringBuilder builder, int startNumber) {
