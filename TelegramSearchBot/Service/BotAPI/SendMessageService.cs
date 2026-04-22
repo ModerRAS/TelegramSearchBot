@@ -40,9 +40,12 @@ namespace TelegramSearchBot.Service.BotAPI {
 
 
         #region Fallback and Formatting Helpers
-        public async Task TrySendMessageWithFallback(long chatId, int messageId, string originalMarkdownText, ParseMode preferredParseMode, bool isGroup, int replyToMessageId, string initialContentForNewMessage, bool isEdit) {
+        public async Task TrySendMessageWithFallback(long chatId, int messageId, string originalMarkdownText, ParseMode preferredParseMode, bool isGroup, int replyToMessageId, string initialContentForNewMessage, bool isEdit, bool disableLinkPreview = false, string? plainTextFallbackOverride = null) {
             string textToSend = originalMarkdownText;
             ParseMode currentParseMode = preferredParseMode;
+            var linkPreviewOptions = disableLinkPreview
+                ? new LinkPreviewOptions { IsDisabled = true }
+                : null;
 
             if (preferredParseMode == ParseMode.Html) {
                 textToSend = MessageFormatHelper.ConvertMarkdownToTelegramHtml(originalMarkdownText);
@@ -53,7 +56,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                     Message editedMessage = null;
                     await Send.AddTask(async () => {
                         editedMessage = await botClient.EditMessageText(
-                            chatId: chatId, messageId: messageId, parseMode: currentParseMode, text: textToSend);
+                            chatId: chatId, messageId: messageId, parseMode: currentParseMode, text: textToSend, linkPreviewOptions: linkPreviewOptions);
                     }, isGroup);
 
                     if (editedMessage != null && editedMessage.MessageId > 0) { logger.LogInformation($"Edited message {editedMessage.MessageId} successfully with {currentParseMode}."); } else { logger.LogWarning($"Editing message {messageId} with {currentParseMode} failed silently. Edit will be skipped."); }
@@ -62,38 +65,42 @@ namespace TelegramSearchBot.Service.BotAPI {
                     await Send.AddTask(async () => {
                         sentMsg = await botClient.SendMessage(
                             chatId: chatId, text: textToSend, parseMode: currentParseMode,
-                            replyParameters: new ReplyParameters() { MessageId = replyToMessageId });
+                            replyParameters: new ReplyParameters() { MessageId = replyToMessageId },
+                            linkPreviewOptions: linkPreviewOptions);
                     }, isGroup);
 
                     if (sentMsg != null && sentMsg.MessageId > 0) { logger.LogInformation($"Sent new message {sentMsg.MessageId} successfully with {currentParseMode}."); } else {
                         logger.LogWarning($"Sending new message to {chatId} with {currentParseMode} failed silently. Attempting fallback.");
-                        await AttemptFallbackSend(chatId, messageId, originalMarkdownText, isGroup, replyToMessageId, false, $"{currentParseMode} send failed silently");
+                        await AttemptFallbackSend(chatId, messageId, originalMarkdownText, isGroup, replyToMessageId, false, $"{currentParseMode} send failed silently", disableLinkPreview, plainTextFallbackOverride);
                     }
                 }
             } catch (ApiRequestException apiEx) when (apiEx.Message.Contains("can't parse entities") || apiEx.Message.Contains("unclosed tag") || apiEx.ErrorCode == 400) {
                 if (isEdit) { logger.LogWarning(apiEx, $"Failed to edit message {messageId} with {currentParseMode} due to API error. Edit will be skipped."); } else {
                     logger.LogWarning(apiEx, $"Failed to send new message to {chatId} with {currentParseMode} due to API error. Attempting fallback.");
-                    await AttemptFallbackSend(chatId, messageId, originalMarkdownText, isGroup, replyToMessageId, false, apiEx.Message);
+                    await AttemptFallbackSend(chatId, messageId, originalMarkdownText, isGroup, replyToMessageId, false, apiEx.Message, disableLinkPreview, plainTextFallbackOverride);
                 }
             } catch (Exception ex) {
                 if (isEdit) { logger.LogError(ex, $"An unexpected error occurred while editing message {messageId}. Edit will be skipped."); } else {
                     logger.LogError(ex, $"An unexpected error occurred while sending new message to {chatId}. Attempting fallback.");
-                    await AttemptFallbackSend(chatId, messageId, originalMarkdownText, isGroup, replyToMessageId, false, $"Unexpected error: {ex.Message}");
+                    await AttemptFallbackSend(chatId, messageId, originalMarkdownText, isGroup, replyToMessageId, false, $"Unexpected error: {ex.Message}", disableLinkPreview, plainTextFallbackOverride);
                 }
             }
         }
 
-        public async Task AttemptFallbackSend(long chatId, int messageId, string originalMarkdownText, bool isGroup, int replyToMessageId, bool wasEditAttempt, string initialFailureReason) {
-            var plainText = MessageFormatHelper.ConvertToPlainText(originalMarkdownText);
+        public async Task AttemptFallbackSend(long chatId, int messageId, string originalMarkdownText, bool isGroup, int replyToMessageId, bool wasEditAttempt, string initialFailureReason, bool disableLinkPreview = false, string? plainTextFallbackOverride = null) {
+            var plainText = plainTextFallbackOverride ?? MessageFormatHelper.ConvertToPlainText(originalMarkdownText);
+            var linkPreviewOptions = disableLinkPreview
+                ? new LinkPreviewOptions { IsDisabled = true }
+                : null;
             try {
                 if (wasEditAttempt) {
                     await Send.AddTask(async () => {
-                        var fallbackEditedMessage = await botClient.EditMessageText(chatId: chatId, messageId: messageId, text: plainText);
+                        var fallbackEditedMessage = await botClient.EditMessageText(chatId: chatId, messageId: messageId, text: plainText, linkPreviewOptions: linkPreviewOptions);
                         logger.LogInformation($"Successfully resent message {fallbackEditedMessage.MessageId} as plain text after Markdown failure ({initialFailureReason}).");
                     }, isGroup);
                 } else {
                     await Send.AddTask(async () => {
-                        var fallbackSentMsg = await botClient.SendMessage(chatId: chatId, text: plainText, replyParameters: new ReplyParameters() { MessageId = replyToMessageId });
+                        var fallbackSentMsg = await botClient.SendMessage(chatId: chatId, text: plainText, replyParameters: new ReplyParameters() { MessageId = replyToMessageId }, linkPreviewOptions: linkPreviewOptions);
                         logger.LogInformation($"Successfully sent new message {fallbackSentMsg.MessageId} as plain text after Markdown failure ({initialFailureReason}).");
                     }, isGroup);
                 }
@@ -101,7 +108,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                 logger.LogError(ex, $"Failed to send message to {chatId} even as plain text. Initial failure: {initialFailureReason}.");
                 if (!wasEditAttempt) {
                     await Send.AddTask(async () => {
-                        await botClient.SendMessage(chatId: chatId, text: "An error occurred while formatting the message.", replyParameters: new ReplyParameters() { MessageId = replyToMessageId });
+                        await botClient.SendMessage(chatId: chatId, text: "An error occurred while formatting the message.", replyParameters: new ReplyParameters() { MessageId = replyToMessageId }, linkPreviewOptions: linkPreviewOptions);
                     }, isGroup);
                 }
             }
