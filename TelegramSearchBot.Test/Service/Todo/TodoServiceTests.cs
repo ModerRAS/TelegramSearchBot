@@ -101,6 +101,51 @@ namespace TelegramSearchBot.Test.Service.Todo {
             Assert.All(result, todo => Assert.Null(todo.ReminderSentAtUtc));
         }
 
+        [Fact]
+        public async Task UpdateTodoAsync_UpdatesFieldsAndResetsReminderState() {
+            var created = await _todoService.CreateTodoAsync(
+                chatId: -100123,
+                userId: 42,
+                sourceMessageId: 10,
+                title: "初始标题",
+                listName: "工作",
+                description: "初始描述",
+                priority: "high",
+                dueAt: "2026-04-25T20:00:00+08:00",
+                remindAt: DateTimeOffset.UtcNow.AddMinutes(-5).ToString("O"));
+
+            await _todoService.MarkReminderSentAsync(created.TodoId!.Value, 999, DateTime.UtcNow.AddMinutes(-1));
+
+            var updated = await _todoService.UpdateTodoAsync(
+                chatId: -100123,
+                todoId: created.TodoId.Value,
+                updatedBy: 1000,
+                title: "修正后的标题",
+                listName: "生活",
+                description: "修正后的描述",
+                priority: "",
+                dueAt: "2026-04-26T21:30:00+08:00",
+                remindAt: DateTimeOffset.UtcNow.AddMinutes(30).ToString("O"));
+
+            Assert.True(updated.Success);
+            Assert.NotNull(updated.Todo);
+            Assert.Equal("修正后的标题", updated.Todo!.Title);
+            Assert.Equal("生活", updated.Todo.ListName);
+            Assert.Equal("修正后的描述", updated.Todo.Description);
+            Assert.Equal(string.Empty, updated.Todo.Priority);
+            Assert.Equal("Todo updated and reminder schedule refreshed.", updated.Note);
+
+            var savedTodo = await _dbContext.TodoItems.Include(item => item.TodoList).SingleAsync();
+            Assert.Equal("修正后的标题", savedTodo.Title);
+            Assert.Equal("生活", savedTodo.TodoList.Name);
+            Assert.Equal("修正后的描述", savedTodo.Description);
+            Assert.Equal(string.Empty, savedTodo.Priority);
+            Assert.NotNull(savedTodo.DueAtUtc);
+            Assert.NotNull(savedTodo.RemindAtUtc);
+            Assert.Null(savedTodo.ReminderSentAtUtc);
+            Assert.Null(savedTodo.ReminderMessageId);
+        }
+
         public void Dispose() {
             _dbContext.Dispose();
         }

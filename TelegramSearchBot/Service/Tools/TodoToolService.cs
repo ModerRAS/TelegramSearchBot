@@ -57,6 +57,33 @@ namespace TelegramSearchBot.Service.Tools {
             return _todoService.QueryTodosAsync(toolContext.ChatId, listName, status, page, pageSize);
         }
 
+        [BuiltInTool("Updates an existing pending todo item in the current chat. Only provided fields are changed. Pass an empty string, clear, none, or null to clear description, priority, dueAt, or remindAt. Changing remindAt automatically reschedules reminder delivery.", Name = "update_todo_item")]
+        public Task<TodoItemResult> UpdateTodoItem(
+            [BuiltInParameter("The numeric todoId to update.", IsRequired = true)] long todoId,
+            ToolContext toolContext,
+            [BuiltInParameter("Optional replacement title. Omit to keep the current title.", IsRequired = false)] string title = null,
+            [BuiltInParameter("Optional replacement todo list name. Omit to keep the current list.", IsRequired = false)] string listName = null,
+            [BuiltInParameter("Optional replacement description. Pass empty string to clear it.", IsRequired = false)] string description = null,
+            [BuiltInParameter("Optional replacement priority. Pass empty string to clear it.", IsRequired = false)] string priority = null,
+            [BuiltInParameter("Optional replacement due timestamp. Pass empty string to clear it. Prefer ISO 8601 with timezone.", IsRequired = false)] string dueAt = null,
+            [BuiltInParameter("Optional replacement reminder timestamp. Pass empty string to clear it. Prefer ISO 8601 with timezone.", IsRequired = false)] string remindAt = null) {
+            var validationError = ValidateUpdateToolContext(toolContext, todoId);
+            if (validationError != null) {
+                return Task.FromResult(validationError);
+            }
+
+            return _todoService.UpdateTodoAsync(
+                toolContext.ChatId,
+                todoId,
+                toolContext.UserId,
+                title,
+                listName,
+                description,
+                priority,
+                dueAt,
+                remindAt);
+        }
+
         [BuiltInTool("Marks a todo item as completed in the current chat. If the todoId is unknown, query todos first.", Name = "complete_todo_item")]
         public Task<TodoCompletionResult> CompleteTodoItem(
             [BuiltInParameter("The numeric todoId to complete.", IsRequired = true)] long todoId,
@@ -90,6 +117,28 @@ namespace TelegramSearchBot.Service.Tools {
                     CurrentPage = page,
                     PageSize = pageSize,
                     Note = "ToolContext.ChatId is required."
+                };
+            }
+
+            return null;
+        }
+
+        private static TodoItemResult ValidateUpdateToolContext(ToolContext toolContext, long todoId) {
+            if (toolContext == null || toolContext.ChatId == 0) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = toolContext?.ChatId ?? 0,
+                    TodoId = todoId,
+                    Error = "ToolContext.ChatId is required."
+                };
+            }
+
+            if (todoId <= 0) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = toolContext.ChatId,
+                    TodoId = todoId,
+                    Error = "todoId must be greater than zero."
                 };
             }
 

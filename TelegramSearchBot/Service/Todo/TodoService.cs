@@ -220,6 +220,202 @@ namespace TelegramSearchBot.Service.Todo {
             };
         }
 
+        public async Task<TodoItemResult> UpdateTodoAsync(
+            long chatId,
+            long todoId,
+            long updatedBy,
+            string title = null,
+            string listName = null,
+            string description = null,
+            string priority = null,
+            string dueAt = null,
+            string remindAt = null) {
+            if (chatId == 0) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = chatId,
+                    TodoId = todoId,
+                    Error = "ChatId is required to update a todo."
+                };
+            }
+
+            if (todoId <= 0) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = chatId,
+                    TodoId = todoId,
+                    Error = "todoId must be greater than zero."
+                };
+            }
+
+            var todo = await _dbContext.TodoItems
+                .Include(item => item.TodoList)
+                .FirstOrDefaultAsync(item => item.ChatId == chatId && item.Id == todoId);
+
+            if (todo == null) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = chatId,
+                    TodoId = todoId,
+                    Error = "Todo not found in the current chat."
+                };
+            }
+
+            if (todo.Status == TodoItemStatus.Completed) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = chatId,
+                    TodoId = todoId,
+                    Error = "Completed todos cannot be edited."
+                };
+            }
+
+            var changed = false;
+            var reminderChanged = false;
+
+            if (title != null) {
+                if (string.IsNullOrWhiteSpace(title)) {
+                    return new TodoItemResult {
+                        Success = false,
+                        ChatId = chatId,
+                        TodoId = todoId,
+                        Error = "Title cannot be empty when updating a todo."
+                    };
+                }
+
+                var normalizedTitle = title.Trim();
+                if (normalizedTitle.Length > 200) {
+                    return new TodoItemResult {
+                        Success = false,
+                        ChatId = chatId,
+                        TodoId = todoId,
+                        Error = "Title must be 200 characters or fewer."
+                    };
+                }
+
+                if (!string.Equals(todo.Title, normalizedTitle, StringComparison.Ordinal)) {
+                    todo.Title = normalizedTitle;
+                    changed = true;
+                }
+            }
+
+            if (listName != null) {
+                var normalizedListName = NormalizeListName(listName);
+                if (normalizedListName.Length > 100) {
+                    return new TodoItemResult {
+                        Success = false,
+                        ChatId = chatId,
+                        TodoId = todoId,
+                        Error = "List name must be 100 characters or fewer."
+                    };
+                }
+
+                if (!string.Equals(todo.TodoList.Name, normalizedListName, StringComparison.Ordinal)) {
+                    var todoList = await GetOrCreateTodoListAsync(chatId, normalizedListName, updatedBy);
+                    todo.TodoListId = todoList.Id;
+                    todo.TodoList = todoList;
+                    changed = true;
+                }
+            }
+
+            if (description != null) {
+                var normalizedDescription = description.Trim();
+                if (normalizedDescription.Length > 2000) {
+                    return new TodoItemResult {
+                        Success = false,
+                        ChatId = chatId,
+                        TodoId = todoId,
+                        Error = "Description must be 2000 characters or fewer."
+                    };
+                }
+
+                if (!string.Equals(todo.Description ?? string.Empty, normalizedDescription, StringComparison.Ordinal)) {
+                    todo.Description = normalizedDescription;
+                    changed = true;
+                }
+            }
+
+            if (priority != null) {
+                var normalizedPriority = NormalizePriority(priority);
+                if (normalizedPriority.Length > 20) {
+                    return new TodoItemResult {
+                        Success = false,
+                        ChatId = chatId,
+                        TodoId = todoId,
+                        Error = "Priority must be 20 characters or fewer."
+                    };
+                }
+
+                if (!string.Equals(todo.Priority ?? string.Empty, normalizedPriority, StringComparison.Ordinal)) {
+                    todo.Priority = normalizedPriority;
+                    changed = true;
+                }
+            }
+
+            if (!TryResolveDateTimeUpdate(dueAt, todo.DueAtUtc, out var dueChanged, out var resolvedDueAtUtc, out var dueAtError)) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = chatId,
+                    TodoId = todoId,
+                    Error = dueAtError
+                };
+            }
+
+            if (!TryResolveDateTimeUpdate(remindAt, todo.RemindAtUtc, out var remindChanged, out var resolvedRemindAtUtc, out var remindAtError)) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = chatId,
+                    TodoId = todoId,
+                    Error = remindAtError
+                };
+            }
+
+            if (resolvedRemindAtUtc.HasValue && resolvedDueAtUtc.HasValue && resolvedRemindAtUtc > resolvedDueAtUtc) {
+                return new TodoItemResult {
+                    Success = false,
+                    ChatId = chatId,
+                    TodoId = todoId,
+                    Error = "Reminder time cannot be later than the deadline."
+                };
+            }
+
+            if (dueChanged) {
+                todo.DueAtUtc = resolvedDueAtUtc;
+                changed = true;
+            }
+
+            if (remindChanged) {
+                todo.RemindAtUtc = resolvedRemindAtUtc;
+                todo.ReminderSentAtUtc = null;
+                todo.ReminderMessageId = null;
+                changed = true;
+                reminderChanged = true;
+            }
+
+            if (!changed) {
+                return new TodoItemResult {
+                    Success = true,
+                    ChatId = chatId,
+                    TodoId = todo.Id,
+                    Todo = MapTodo(todo),
+                    Note = "No todo fields changed."
+                };
+            }
+
+            todo.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
+
+            return new TodoItemResult {
+                Success = true,
+                ChatId = chatId,
+                TodoId = todo.Id,
+                Todo = MapTodo(todo),
+                Note = reminderChanged
+                    ? "Todo updated and reminder schedule refreshed."
+                    : "Todo updated."
+            };
+        }
+
         public async Task<TodoCompletionResult> CompleteTodoAsync(long chatId, long todoId, long completedBy) {
             if (chatId == 0) {
                 return new TodoCompletionResult {
@@ -413,6 +609,39 @@ namespace TelegramSearchBot.Service.Todo {
             }
 
             utcDateTime = parsed.UtcDateTime;
+            return true;
+        }
+
+        private static bool TryResolveDateTimeUpdate(
+            string input,
+            DateTime? currentValue,
+            out bool changed,
+            out DateTime? resolvedValue,
+            out string error) {
+            changed = false;
+            resolvedValue = currentValue;
+            error = string.Empty;
+
+            if (input == null) {
+                return true;
+            }
+
+            var normalizedInput = input.Trim();
+            if (normalizedInput.Length == 0 ||
+                normalizedInput.Equals("clear", StringComparison.OrdinalIgnoreCase) ||
+                normalizedInput.Equals("none", StringComparison.OrdinalIgnoreCase) ||
+                normalizedInput.Equals("null", StringComparison.OrdinalIgnoreCase)) {
+                changed = currentValue.HasValue;
+                resolvedValue = null;
+                return true;
+            }
+
+            if (!TryParseDateTime(normalizedInput, out var parsedValue, out error)) {
+                return false;
+            }
+
+            changed = currentValue != parsedValue;
+            resolvedValue = parsedValue;
             return true;
         }
 
