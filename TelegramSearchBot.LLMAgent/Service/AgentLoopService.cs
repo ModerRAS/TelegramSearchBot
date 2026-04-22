@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http;
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -7,20 +10,24 @@ using TelegramSearchBot.Model.AI;
 
 namespace TelegramSearchBot.LLMAgent.Service {
     public sealed class AgentLoopService {
+        private const int MaxTransientOverloadRetries = 3;
         private readonly IServiceProvider _serviceProvider;
         private readonly GarnetClient _garnetClient;
         private readonly GarnetRpcClient _rpcClient;
         private readonly ILogger<AgentLoopService> _logger;
+        private readonly Func<int, TimeSpan> _transientRetryDelayFactory;
 
         public AgentLoopService(
             IServiceProvider serviceProvider,
             GarnetClient garnetClient,
             GarnetRpcClient rpcClient,
-            ILogger<AgentLoopService> logger) {
+            ILogger<AgentLoopService> logger,
+            Func<int, TimeSpan>? transientRetryDelayFactory = null) {
             _serviceProvider = serviceProvider;
             _garnetClient = garnetClient;
             _rpcClient = rpcClient;
             _logger = logger;
+            _transientRetryDelayFactory = transientRetryDelayFactory ?? GetDefaultTransientRetryDelay;
         }
 
         public async Task RunAsync(long chatId, int port, CancellationToken cancellationToken) {
@@ -126,70 +133,111 @@ namespace TelegramSearchBot.LLMAgent.Service {
             long workerChatId,
             string recoveredContent,
             CancellationToken cancellationToken) {
-            using var scope = _serviceProvider.CreateScope();
-            var executor = scope.ServiceProvider.GetRequiredService<IAgentTaskExecutor>();
-            var executionContext = new LlmExecutionContext();
             var sequence = 0;
-            var suppressUntilRecoveryCatchup = !string.IsNullOrWhiteSpace(recoveredContent);
+            var currentRecoveredContent = recoveredContent;
+            var latestSnapshot = recoveredContent;
+            var retryAttempt = 0;
 
-            try {
-                await foreach (var snapshot in executor.CallAsync(task, executionContext, cancellationToken).WithCancellation(cancellationToken)) {
-                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Running, null, new Dictionary<string, string> {
-                        ["lastContent"] = snapshot,
-                        ["lastSequence"] = sequence.ToString()
-                    });
+            while (true) {
+                using var scope = _serviceProvider.CreateScope();
+                var executor = scope.ServiceProvider.GetRequiredService<IAgentTaskExecutor>();
+                var executionContext = new LlmExecutionContext();
+                var suppressUntilRecoveryCatchup = !string.IsNullOrWhiteSpace(currentRecoveredContent);
 
-                    if (!ShouldPublishSnapshot(snapshot, recoveredContent, ref suppressUntilRecoveryCatchup)) {
-                        continue;
+                try {
+                    await foreach (var snapshot in executor.CallAsync(task, executionContext, cancellationToken).WithCancellation(cancellationToken)) {
+                        latestSnapshot = snapshot;
+                        await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Running, null, new Dictionary<string, string> {
+                            ["lastContent"] = snapshot,
+                            ["lastSequence"] = sequence.ToString()
+                        });
+
+                        if (!ShouldPublishSnapshot(snapshot, currentRecoveredContent, ref suppressUntilRecoveryCatchup)) {
+                            continue;
+                        }
+
+                        await _garnetClient.PublishSnapshotAsync(new AgentStreamChunk {
+                            TaskId = task.TaskId,
+                            Type = AgentChunkType.Snapshot,
+                            Sequence = sequence++,
+                            Content = snapshot
+                        });
                     }
 
-                    await _garnetClient.PublishSnapshotAsync(new AgentStreamChunk {
-                        TaskId = task.TaskId,
-                        Type = AgentChunkType.Snapshot,
-                        Sequence = sequence++,
-                        Content = snapshot
-                    });
-                }
+                    if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
+                        await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
+                            TaskId = task.TaskId,
+                            Type = AgentChunkType.IterationLimitReached,
+                            Sequence = sequence++,
+                            Content = executionContext.SnapshotData.LastAccumulatedContent ?? string.Empty,
+                            ContinuationSnapshot = executionContext.SnapshotData
+                        });
+                        await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Completed, null, new Dictionary<string, string> {
+                            ["payload"] = payload,
+                            ["workerChatId"] = workerChatId.ToString(),
+                            ["lastContent"] = executionContext.SnapshotData.LastAccumulatedContent ?? string.Empty,
+                            ["completedAtUtc"] = DateTime.UtcNow.ToString("O"),
+                            ["transientRetryCount"] = retryAttempt.ToString()
+                        });
+                    } else {
+                        await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
+                            TaskId = task.TaskId,
+                            Type = AgentChunkType.Done,
+                            Sequence = sequence,
+                        });
+                        await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Completed, null, new Dictionary<string, string> {
+                            ["payload"] = payload,
+                            ["workerChatId"] = workerChatId.ToString(),
+                            ["completedAtUtc"] = DateTime.UtcNow.ToString("O"),
+                            ["transientRetryCount"] = retryAttempt.ToString()
+                        });
+                    }
 
-                if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
-                    await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
-                        TaskId = task.TaskId,
-                        Type = AgentChunkType.IterationLimitReached,
-                        Sequence = sequence++,
-                        Content = executionContext.SnapshotData.LastAccumulatedContent ?? string.Empty,
-                        ContinuationSnapshot = executionContext.SnapshotData
-                    });
-                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Completed, null, new Dictionary<string, string> {
+                    return;
+                } catch (Exception ex) when (ShouldRetryTransientOverload(ex, retryAttempt, cancellationToken)) {
+                    retryAttempt++;
+                    var delay = _transientRetryDelayFactory(retryAttempt);
+                    currentRecoveredContent = latestSnapshot;
+
+                    _logger.LogWarning(
+                        ex,
+                        "Agent task {TaskId} hit transient LLM overload. Retrying in {DelaySeconds}s (attempt {RetryAttempt}/{MaxRetries})",
+                        task.TaskId,
+                        delay.TotalSeconds,
+                        retryAttempt,
+                        MaxTransientOverloadRetries);
+
+                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Running, null, new Dictionary<string, string> {
                         ["payload"] = payload,
                         ["workerChatId"] = workerChatId.ToString(),
-                        ["lastContent"] = executionContext.SnapshotData.LastAccumulatedContent ?? string.Empty,
-                        ["completedAtUtc"] = DateTime.UtcNow.ToString("O")
+                        ["lastContent"] = latestSnapshot,
+                        ["lastSequence"] = sequence.ToString(),
+                        ["transientRetryCount"] = retryAttempt.ToString(),
+                        ["lastRetryAtUtc"] = DateTime.UtcNow.ToString("O"),
+                        ["lastRetryReason"] = ex.Message
                     });
-                } else {
+
+                    if (delay > TimeSpan.Zero) {
+                        await Task.Delay(delay, cancellationToken);
+                    }
+                } catch (Exception ex) {
+                    _logger.LogError(ex, "Agent task {TaskId} failed", task.TaskId);
                     await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
                         TaskId = task.TaskId,
-                        Type = AgentChunkType.Done,
+                        Type = AgentChunkType.Error,
                         Sequence = sequence,
+                        ErrorMessage = ex.Message
                     });
-                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Completed, null, new Dictionary<string, string> {
+                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Failed, ex.Message, new Dictionary<string, string> {
                         ["payload"] = payload,
                         ["workerChatId"] = workerChatId.ToString(),
-                        ["completedAtUtc"] = DateTime.UtcNow.ToString("O")
+                        ["failedAtUtc"] = DateTime.UtcNow.ToString("O"),
+                        ["lastContent"] = latestSnapshot,
+                        ["lastSequence"] = sequence.ToString(),
+                        ["transientRetryCount"] = retryAttempt.ToString()
                     });
+                    return;
                 }
-            } catch (Exception ex) {
-                _logger.LogError(ex, "Agent task {TaskId} failed", task.TaskId);
-                await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
-                    TaskId = task.TaskId,
-                    Type = AgentChunkType.Error,
-                    Sequence = sequence,
-                    ErrorMessage = ex.Message
-                });
-                await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Failed, ex.Message, new Dictionary<string, string> {
-                    ["payload"] = payload,
-                    ["workerChatId"] = workerChatId.ToString(),
-                    ["failedAtUtc"] = DateTime.UtcNow.ToString("O")
-                });
             }
         }
 
@@ -239,6 +287,74 @@ namespace TelegramSearchBot.LLMAgent.Service {
 
             suppressUntilRecoveryCatchup = false;
             return true;
+        }
+
+        private static TimeSpan GetDefaultTransientRetryDelay(int retryAttempt) {
+            var seconds = Math.Min(16, ( int ) Math.Pow(2, retryAttempt));
+            return TimeSpan.FromSeconds(seconds);
+        }
+
+        private static bool ShouldRetryTransientOverload(Exception ex, int retryAttempt, CancellationToken cancellationToken) {
+            if (cancellationToken.IsCancellationRequested || ex is OperationCanceledException) {
+                return false;
+            }
+
+            return retryAttempt < MaxTransientOverloadRetries && IsTransientOverloadException(ex);
+        }
+
+        private static bool IsTransientOverloadException(Exception ex) {
+            foreach (var current in EnumerateExceptions(ex)) {
+                var statusCode = TryGetStatusCode(current);
+                if (statusCode is 429 or 529) {
+                    return true;
+                }
+
+                var message = current.Message ?? string.Empty;
+                if (message.Contains("HTTP 529", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("overloaded_error", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("当前服务集群负载较高", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("当前时段请求拥挤", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("请稍后重试", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("(2064)", StringComparison.OrdinalIgnoreCase)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<Exception> EnumerateExceptions(Exception ex) {
+            for (var current = ex; current != null; current = current.InnerException) {
+                yield return current;
+            }
+        }
+
+        private static int? TryGetStatusCode(Exception ex) {
+            if (ex is HttpRequestException httpRequestException && httpRequestException.StatusCode.HasValue) {
+                return ( int ) httpRequestException.StatusCode.Value;
+            }
+
+            foreach (var propertyName in new[] { "StatusCode", "Status" }) {
+                var property = ex.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+                if (property == null || property.GetIndexParameters().Length > 0) {
+                    continue;
+                }
+
+                var value = property.GetValue(ex);
+                if (value is int intValue) {
+                    return intValue;
+                }
+
+                if (value is long longValue && longValue is >= int.MinValue and <= int.MaxValue) {
+                    return ( int ) longValue;
+                }
+
+                if (value is HttpStatusCode httpStatusCode) {
+                    return ( int ) httpStatusCode;
+                }
+            }
+
+            return null;
         }
     }
 }
