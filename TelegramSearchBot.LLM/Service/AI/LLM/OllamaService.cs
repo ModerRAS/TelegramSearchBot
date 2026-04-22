@@ -171,6 +171,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
                         }
 
+                        currentLlmResponseBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
+                        yield return currentLlmResponseBuilder.ToString();
+
                         string toolResultString;
                         bool isError = false;
                         try {

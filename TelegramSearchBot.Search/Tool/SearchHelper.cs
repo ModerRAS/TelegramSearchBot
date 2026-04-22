@@ -1,28 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using TelegramSearchBot.Search.Exception;
 using TelegramSearchBot.Tokenizer.Abstractions;
+using TelegramSearchBot.Tokenizer.Implementations;
 
 namespace TelegramSearchBot.Search.Tool {
     public static class SearchHelper {
-        private static ITokenizer? _tokenizer;
-
-        /// <summary>
-        /// 设置用于分词的 tokenizer 实例。
-        /// 如果未设置，则使用默认的 SmartChineseTokenizer。
-        /// </summary>
-        public static void SetTokenizer(ITokenizer tokenizer) {
-            _tokenizer = tokenizer;
-        }
-
-        private static ITokenizer GetTokenizer() {
-            if (_tokenizer == null) {
-                _tokenizer = new TelegramSearchBot.Tokenizer.Implementations.SmartChineseTokenizer();
-            }
-            return _tokenizer;
-        }
+        private static readonly Lazy<ITokenizer> DefaultTokenizer = new(() =>
+            new TokenizerFactory().Create(TokenizerType.SmartChinese));
 
         /// <summary>
         /// 在给定的 <paramref name="text"/> 中，根据用户输入的单条查询 <paramref name="query"/>（主要为中文）
@@ -47,22 +33,26 @@ namespace TelegramSearchBot.Search.Tool {
         /// 当分词或内部处理发生异常（例如 Analyzer 抛出异常）时抛出，inner exception 包含底层错误信息。
         /// </exception>
         public static string FindBestSnippet(string text, string query, int totalLength) {
+            return FindBestSnippet(text, query, totalLength, null);
+        }
+
+        public static string FindBestSnippet(string text, string query, int totalLength, ITokenizer? tokenizer) {
             if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(query) || totalLength <= 0) {
                 throw new InvalidSearchInputException("Text/query must be non-empty and totalLength > 0.");
             }
 
             try {
-                var tokenizer = GetTokenizer();
+                var activeTokenizer = tokenizer ?? DefaultTokenizer.Value;
 
                 // 分词 query -> tokens
-                var queryTokens = tokenizer.Tokenize(query).ToList();
+                var queryTokens = activeTokenizer.SafeTokenize(query).ToList();
                 if (queryTokens.Count == 0) {
                     // 无有效 query token：按需求未匹配返回空字符串
                     return string.Empty;
                 }
 
                 // 分词 text -> tokens 及其原文范围
-                var textTokens = tokenizer.TokenizeWithOffsets(text);
+                var textTokens = activeTokenizer.TokenizeWithOffsets(text);
                 if (textTokens.Count == 0) {
                     return string.Empty;
                 }
@@ -149,7 +139,7 @@ namespace TelegramSearchBot.Search.Tool {
 
         private static (int start, int end, string term)? FindExactMatch(
             IReadOnlyList<TokenWithOffset> textTokens,
-            List<string> queryTokens) {
+            IReadOnlyList<string> queryTokens) {
             var qset = new HashSet<string>(queryTokens.Select(t => t.ToLowerInvariant()));
             foreach (var t in textTokens) {
                 var tt = t.Term.ToLowerInvariant();
@@ -162,7 +152,7 @@ namespace TelegramSearchBot.Search.Tool {
 
         private static (int start, int end, string term)? FindLongestCommonSubstrMatch(
                 IReadOnlyList<TokenWithOffset> textTokens,
-                List<string> queryTokens) {
+                IReadOnlyList<string> queryTokens) {
             int bestScore = 0;
             (int start, int end, string term)? best = null;
             foreach (var t in textTokens) {

@@ -38,7 +38,9 @@ namespace TelegramSearchBot.Search.Tool {
             foreach (Match match in PhraseRegex.Matches(query)) {
                 try {
                     var phraseText = match.Groups[1].Value;
-                    var terms = _tokenizer.SafeTokenize(phraseText).ToList();
+                    var terms = _tokenizer.TokenizeWithOffsets(phraseText)
+                        .Select(static token => token.Term)
+                        .ToList();
                     if (terms.Count == 0) {
                         continue;
                     }

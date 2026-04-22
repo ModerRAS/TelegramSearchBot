@@ -10,7 +10,7 @@ namespace TelegramSearchBot.Common.Model.DTO {
     [Obsolete]
     public class OCRTaskPost : ICompareRPC {
         public Guid Id { get; set; }
-        public PaddleOCRPost PaddleOCRPost { get; set; }
+        public PaddleOCRPost PaddleOCRPost { get; set; } = null!;
         public bool IsVaild { get; set; }
 
         public string GetUniqueId() {

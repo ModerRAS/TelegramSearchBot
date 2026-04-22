@@ -12,13 +12,13 @@ using Lucene.Net.Util;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Search.Model;
 using TelegramSearchBot.Search.Service;
-using TelegramSearchBot.Tokenizer;
 using TelegramSearchBot.Tokenizer.Abstractions;
 using TelegramSearchBot.Tokenizer.Implementations;
 
 namespace TelegramSearchBot.Search.Tool {
     public class LuceneManager {
         private readonly Func<string, Task> _log;
+        private readonly ITokenizerFactory _tokenizerFactory;
         private readonly ITokenizer _tokenizer;
         private readonly ExtFieldQueryOptimizer _extOptimizer;
         private readonly PhraseQueryProcessor _phraseProcessor;
@@ -26,9 +26,13 @@ namespace TelegramSearchBot.Search.Tool {
         private readonly SimpleSearchService _simpleSearchService;
         private readonly SyntaxSearchService _syntaxSearchService;
 
-        public LuceneManager(Func<string, Task> log) {
+        public LuceneManager(Func<string, Task> log) : this(log, null, TokenizerType.SmartChinese) {
+        }
+
+        public LuceneManager(Func<string, Task> log, ITokenizerFactory? tokenizerFactory = null, TokenizerType tokenizerType = TokenizerType.SmartChinese) {
             _log = log ?? throw new ArgumentNullException(nameof(log));
-            _tokenizer = new SmartChineseTokenizer(LogFireAndForget);
+            _tokenizerFactory = tokenizerFactory ?? new TokenizerFactory(LogFireAndForget);
+            _tokenizer = _tokenizerFactory.Create(tokenizerType);
             _extOptimizer = new ExtFieldQueryOptimizer(LogFireAndForget);
             _phraseProcessor = new PhraseQueryProcessor(_tokenizer, _extOptimizer, LogFireAndForget);
             _fieldParser = new FieldSpecificationParser(LogFireAndForget);

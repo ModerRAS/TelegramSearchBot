@@ -239,6 +239,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return await GetOpenRouterModelsWithCapabilities(channel);
             }
 
+            // 检查是否为LMStudio（通过capabilities字段检测）
+            if (channel.Provider == LLMProvider.LMStudio) {
+                return await GetLMStudioModelsWithCapabilities(channel);
+            }
+
 
             using var httpClient = _httpClientFactory.CreateClient();
 
@@ -557,6 +562,131 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
+        // --- LMStudio Capability Detection ---
+
+        /// <summary>
+        /// 获取LMStudio模型及其能力信息
+        /// LMStudio在/v1/models返回的模型对象中包含capabilities数组
+        /// </summary>
+        private async Task<IEnumerable<ModelWithCapabilities>> GetLMStudioModelsWithCapabilities(LLMChannel channel) {
+            try {
+                var httpClient = _httpClientFactory.CreateClient();
+                if (!string.IsNullOrEmpty(channel.ApiKey)) {
+                    httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {channel.ApiKey}");
+                }
+
+                var gatewayBase = channel.Gateway.TrimEnd('/');
+                var modelsUrl = gatewayBase.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
+                    ? $"{gatewayBase}/models"
+                    : $"{gatewayBase}/v1/models";
+
+                var response = await httpClient.GetAsync(modelsUrl);
+                if (response.IsSuccessStatusCode) {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var modelsData = JsonConvert.DeserializeObject<dynamic>(content);
+
+                    var results = new List<ModelWithCapabilities>();
+                    if (modelsData?.data != null) {
+                        foreach (var modelData in modelsData.data) {
+                            var modelWithCaps = ParseLMStudioModelCapabilities(modelData);
+                            if (modelWithCaps != null) {
+                                results.Add(modelWithCaps);
+                            }
+                        }
+                    }
+
+                    _logger.LogInformation("获取到 {Count} 个LMStudio模型及其能力信息", results.Count);
+                    return results;
+                } else {
+                    _logger.LogWarning("获取LMStudio模型失败: {StatusCode}", response.StatusCode);
+                    // 回退到通用方式
+                    var genericModels = await GetGenericOpenAICompatibleModels(channel);
+                    return genericModels.Select(m => InferOpenAIModelCapabilities(m));
+                }
+            } catch (Exception ex) {
+                _logger.LogError(ex, "获取LMStudio模型能力时出错");
+                return new List<ModelWithCapabilities>();
+            }
+        }
+
+        /// <summary>
+        /// 解析LMStudio模型能力信息
+        /// LMStudio模型包含capabilities数组，如["tool_use", "vision", "chat", "text-completion"]
+        /// </summary>
+        private ModelWithCapabilities ParseLMStudioModelCapabilities(dynamic modelData) {
+            try {
+                string modelId = modelData.id?.ToString();
+                if (string.IsNullOrEmpty(modelId)) {
+                    return null;
+                }
+
+                var model = new ModelWithCapabilities { ModelName = modelId };
+
+                // 基本能力
+                model.SetCapability("streaming", true);
+                model.SetCapability("chat", true);
+
+                // 解析LMStudio的capabilities数组
+                if (modelData.capabilities != null) {
+                    foreach (var capability in modelData.capabilities) {
+                        string capStr = capability.ToString().ToLower();
+                        switch (capStr) {
+                            case "tool_use":
+                                model.SetCapability("function_calling", true);
+                                model.SetCapability("tool_calls", true);
+                                break;
+                            case "vision":
+                                model.SetCapability("vision", true);
+                                model.SetCapability("multimodal", true);
+                                model.SetCapability("image_content", true);
+                                break;
+                            case "embeddings":
+                                model.SetCapability("embedding", true);
+                                model.SetCapability("text_embedding", true);
+                                break;
+                            case "chat":
+                                model.SetCapability("chat", true);
+                                break;
+                            case "text-completion":
+                                model.SetCapability("text_generation", true);
+                                break;
+                        }
+                    }
+                }
+
+                // 解析LMStudio扩展字段
+                if (modelData.type != null) {
+                    string modelType = modelData.type.ToString().ToLower();
+                    if (modelType == "vlm") {
+                        model.SetCapability("vision", true);
+                        model.SetCapability("multimodal", true);
+                    } else if (modelType == "embeddings") {
+                        model.SetCapability("embedding", true);
+                    }
+                }
+
+                if (modelData.max_context_length != null) {
+                    model.SetCapability("input_token_limit", modelData.max_context_length.ToString());
+                }
+
+                if (modelData.arch != null) {
+                    model.SetCapability("model_family", modelData.arch.ToString());
+                }
+
+                if (modelData.quantization != null) {
+                    model.SetCapability("quantization", modelData.quantization.ToString());
+                }
+
+                model.SetCapability("provider", "LMStudio");
+
+                return model;
+            } catch (Exception ex) {
+                string modelDataStr = modelData?.ToString() ?? "null";
+                _logger.LogError(ex, "解析LMStudio模型能力时出错: {ModelData}", modelDataStr);
+                return null;
+            }
+        }
+
         // --- Helper Methods (Defined locally again) ---
 
         public bool IsSameSender(Model.Data.Message message1, Model.Data.Message message2) {
@@ -567,17 +697,38 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private void AddMessageToHistory(List<ChatMessage> ChatHistory, long fromUserId, string content) {
-            if (string.IsNullOrWhiteSpace(content)) return;
-            content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
+            AddMessageToHistory(ChatHistory, fromUserId, content, null);
+        }
+
+        private void AddMessageToHistory(List<ChatMessage> ChatHistory, long fromUserId, string content, List<byte[]> images) {
+            if (string.IsNullOrWhiteSpace(content) && ( images == null || images.Count == 0 )) return;
+            if (!string.IsNullOrWhiteSpace(content)) {
+                content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
+            }
 
             if (fromUserId == Env.BotId) {
-                ChatHistory.Add(new AssistantChatMessage(content.Trim()));
+                ChatHistory.Add(new AssistantChatMessage(content?.Trim() ?? ""));
             } else {
-                ChatHistory.Add(new UserChatMessage(content.Trim()));
+                if (images != null && images.Count > 0) {
+                    var parts = new List<ChatMessageContentPart>();
+                    if (!string.IsNullOrWhiteSpace(content)) {
+                        parts.Add(ChatMessageContentPart.CreateTextPart(content.Trim()));
+                    }
+                    foreach (var imageBytes in images) {
+                        parts.Add(ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(imageBytes), "image/png"));
+                    }
+                    ChatHistory.Add(new UserChatMessage(parts));
+                } else {
+                    ChatHistory.Add(new UserChatMessage(content.Trim()));
+                }
             }
         }
 
         public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, Model.Data.Message InputToken) {
+            return await GetChatHistory(ChatId, ChatHistory, InputToken, false);
+        }
+
+        public async Task<List<ChatMessage>> GetChatHistory(long ChatId, List<ChatMessage> ChatHistory, Model.Data.Message InputToken, bool supportsVision) {
             var Messages = await _dbContext.Messages.AsNoTracking()
                             .Where(m => m.GroupId == ChatId && m.DateTime > DateTime.UtcNow.AddHours(-1))
                             .OrderBy(m => m.DateTime)
@@ -598,6 +749,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var str = new StringBuilder();
             Model.Data.Message previous = null;
             var userCache = new Dictionary<long, UserData>();
+            var pendingImages = new List<byte[]>();
 
             foreach (var message in Messages) {
                 if (previous == null && !ChatHistory.Any(ch => ch is UserChatMessage || ch is AssistantChatMessage) && message.FromUserId.Equals(Env.BotId)) {
@@ -606,8 +758,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 if (previous != null && !IsSameSender(previous, message)) {
-                    AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
+                    AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
                     str.Clear();
+                    pendingImages.Clear();
                 }
 
                 str.Append($"[{message.DateTime.ToString("yyyy-MM-dd HH:mm:ss zzz")}]");
@@ -637,12 +790,44 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     str.Append("]\n");
                 }
 
+                // 如果模型支持视觉，尝试加载消息关联的图片
+                if (supportsVision && message.FromUserId != Env.BotId) {
+                    var imageBytes = TryLoadMessagePhoto(message.GroupId, message.MessageId);
+                    if (imageBytes != null) {
+                        pendingImages.Add(imageBytes);
+                    }
+                }
+
                 previous = message;
             }
             if (previous != null && str.Length > 0) {
-                AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString());
+                AddMessageToHistory(ChatHistory, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
             }
             return ChatHistory;
+        }
+
+        /// <summary>
+        /// 尝试加载消息关联的图片文件，转换为PNG格式的字节数组
+        /// </summary>
+        private byte[] TryLoadMessagePhoto(long chatId, long messageId) {
+            try {
+                var dirPath = Path.Combine(Env.WorkDir, "Photos", $"{chatId}");
+                if (!Directory.Exists(dirPath)) return null;
+
+                var files = Directory.GetFiles(dirPath, $"{messageId}.*");
+                if (files.Length == 0) return null;
+
+                var filePath = files[0];
+                using var fileStream = File.OpenRead(filePath);
+                var bitmap = SKBitmap.Decode(fileStream);
+                if (bitmap == null) return null;
+
+                var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 90);
+                return encoded?.ToArray();
+            } catch (Exception ex) {
+                _logger.LogDebug(ex, "无法加载消息图片: ChatId={ChatId}, MessageId={MessageId}", chatId, messageId);
+                return null;
+            }
         }
 
         // ConvertToolResultToString is now in McpToolHelper
@@ -727,6 +912,27 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
+        /// 检查模型是否支持视觉能力
+        /// </summary>
+        private async Task<bool> CheckVisionSupport(string modelName, int channelId) {
+            try {
+                var channelWithModel = await _dbContext.ChannelsWithModel
+                    .Include(c => c.Capabilities)
+                    .FirstOrDefaultAsync(c => c.ModelName == modelName && c.LLMChannelId == channelId && !c.IsDeleted);
+
+                if (channelWithModel?.Capabilities != null) {
+                    return channelWithModel.Capabilities.Any(c =>
+                        c.CapabilityName == "vision" && c.CapabilityValue == "true");
+                }
+
+                return false;
+            } catch (Exception ex) {
+                _logger.LogDebug(ex, "检查模型视觉能力时出错: {ModelName}", modelName);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Execute LLM with native OpenAI tool calling API.
         /// </summary>
         private async IAsyncEnumerable<string> ExecWithNativeToolCallingAsync(
@@ -738,7 +944,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             // --- History and Prompt Setup (simplified - no XML tool instructions) ---
             string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(BotName, ChatId);
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
-            providerHistory = await GetChatHistory(ChatId, providerHistory, message);
+            bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
+            providerHistory = await GetChatHistory(ChatId, providerHistory, message, supportsVision);
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
@@ -820,6 +1027,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         }
                         providerHistory.Add(assistantMessage);
 
+                        var toolIndicators = new StringBuilder();
+                        foreach (var toolCall in chatToolCalls) {
+                            var argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
+                            var argsDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(argsJson)
+                                ?? new Dictionary<string, string>();
+                            toolIndicators.Append(McpToolHelper.FormatToolCallDisplay(toolCall.FunctionName, argsDict));
+                        }
+                        currentMessageContentBuilder.Append(toolIndicators.ToString());
+                        yield return currentMessageContentBuilder.ToString();
+
                         // Execute each tool call
                         foreach (var toolCall in chatToolCalls) {
                             string toolName = toolCall.FunctionName;
@@ -886,7 +1103,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             // --- History and Prompt Setup ---
             string systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId);
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
-            providerHistory = await GetChatHistory(ChatId, providerHistory, message);
+            bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
+            providerHistory = await GetChatHistory(ChatId, providerHistory, message, supportsVision);
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
@@ -936,6 +1154,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         if (parsedToolCalls.Count > 1) {
                             _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
                         }
+
+                        currentMessageContentBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
+                        yield return currentMessageContentBuilder.ToString();
 
                         string toolResultString;
                         bool isError = false;
@@ -1053,6 +1274,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         Dictionary<string, string> toolArguments = firstToolCall.arguments;
 
                         _logger.LogInformation("{ServiceName}: LLM requested tool (resume): {ToolName}", ServiceName, parsedToolName);
+
+                        var toolIndicator = McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments);
+                        newContentBuilder.Append(toolIndicator);
+                        fullContentBuilder.Append(toolIndicator);
+                        yield return newContentBuilder.ToString();
 
                         string toolResultString;
                         bool isError = false;

@@ -30,7 +30,7 @@ public class ITokenizerTests {
     }
 
     [Fact]
-    public void SafeTokenize_ReturnsNonEmptyList_EvenOnError() {
+    public void SafeTokenize_ReturnsNonEmptyList_ForValidText() {
         // Arrange
         var tokenizer = new MockTokenizer();
 

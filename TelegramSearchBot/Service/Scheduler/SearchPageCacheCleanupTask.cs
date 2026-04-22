@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model;
@@ -13,12 +14,12 @@ namespace TelegramSearchBot.Service.Scheduler {
 
         public string CronExpression => "0 4 1 * *"; // 每月1日凌晨4点执行，避开业务高峰
 
-        private readonly DataDbContext _dbContext;
+        private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<SearchPageCacheCleanupTask> _logger;
         private Func<Task> _heartbeatCallback;
 
-        public SearchPageCacheCleanupTask(DataDbContext dbContext, ILogger<SearchPageCacheCleanupTask> logger) {
-            _dbContext = dbContext;
+        public SearchPageCacheCleanupTask(IServiceProvider serviceProvider, ILogger<SearchPageCacheCleanupTask> logger) {
+            _serviceProvider = serviceProvider;
             _logger = logger;
         }
 
@@ -30,10 +31,12 @@ namespace TelegramSearchBot.Service.Scheduler {
             _logger.LogInformation("搜索缓存清理任务开始执行");
 
             try {
+                using var scope = _serviceProvider.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
                 var cutoffUtc = DateTime.UtcNow.AddMonths(-1);
                 _logger.LogInformation("开始清理 {CutoffUtc} 之前的 SearchPageCache 记录", cutoffUtc);
 
-                var outdatedQuery = _dbContext.SearchPageCaches
+                var outdatedQuery = dbContext.SearchPageCaches
                     .Where(cache => cache.CreatedTime < cutoffUtc);
 
                 // 预热心跳，防止长时间删除导致任务被误杀
@@ -54,8 +57,10 @@ namespace TelegramSearchBot.Service.Scheduler {
                     await _heartbeatCallback();
                 }
 
-                _logger.LogInformation("开始执行 SQLite VACUUM 以回收空间");
-                await _dbContext.Database.ExecuteSqlRawAsync("VACUUM;");
+                if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal)) {
+                    _logger.LogInformation("执行 SQLite PRAGMA optimize 进行轻量优化，跳过 VACUUM 以避免长时间数据库锁");
+                    await dbContext.Database.ExecuteSqlRawAsync("PRAGMA optimize;");
+                }
 
                 if (_heartbeatCallback != null) {
                     await _heartbeatCallback();

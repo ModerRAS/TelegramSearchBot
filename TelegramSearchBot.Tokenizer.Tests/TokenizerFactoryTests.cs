@@ -48,4 +48,12 @@ public class TokenizerFactoryTests {
         // Assert
         Assert.IsAssignableFrom<ITokenizer>(tokenizer);
     }
+
+    [Fact]
+    public void Create_SameType_ReturnsCachedInstance() {
+        var first = _factory.Create(TokenizerType.SmartChinese);
+        var second = _factory.Create(TokenizerType.SmartChinese);
+
+        Assert.Same(first, second);
+    }
 }

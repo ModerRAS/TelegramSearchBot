@@ -3,7 +3,7 @@
 ## 快速开始
 
 ### 环境要求
-- **.NET SDK**: 9.0 或更高版本
+- **.NET SDK**: 10.0 或更高版本
 - **操作系统**: Windows 10/11 (完整功能)、Linux (部分功能限制)、macOS (实验性)
 - **数据库**: SQLite (内置支持)
 
@@ -98,7 +98,7 @@ dotnet test --logger trx --results-directory TestResults
 dotnet tool install --global coverlet.console
 
 # 运行带覆盖率的测试
-coverlet TelegramSearchBot.Test/bin/Release/net9.0/TelegramSearchBot.Test.dll --target "dotnet" --targetargs "test --no-build"
+coverlet TelegramSearchBot.Test/bin/Release/net10.0/TelegramSearchBot.Test.dll --target "dotnet" --targetargs "test --no-build"
 ```
 
 ### 开发环境设置
@@ -161,7 +161,7 @@ $env:DATABASE_PATH="./data/bot.db"
 
 #### 常见构建问题
 
-**问题**: 找不到 .NET 9.0 SDK
+**问题**: 找不到 .NET 10.0 SDK
 ```bash
 # 检查已安装的 SDK
 dotnet --list-sdks
@@ -218,7 +218,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: '9.0.x'
+        dotnet-version: '10.0.x'
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
