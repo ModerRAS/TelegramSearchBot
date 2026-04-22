@@ -57,5 +57,21 @@ namespace TelegramSearchBot.Test.Helper {
             Assert.Contains("<code>search_messages</code>", html);
             Assert.Contains("最终回答：可以把中间过程折叠起来。", html);
         }
+
+        [Fact]
+        public void ConvertMarkdownToTelegramHtml_WithCodeBlock_DoesNotDoubleEscapeEntities() {
+            var markdown = """
+```text
+功能丰富度: PostgreSQL > MySQL & MariaDB
+```
+""";
+
+            var html = MessageFormatHelper.ConvertMarkdownToTelegramHtml(markdown);
+
+            Assert.Contains("&gt;", html);
+            Assert.Contains("&amp;", html);
+            Assert.DoesNotContain("&amp;gt;", html);
+            Assert.DoesNotContain("&amp;amp;", html);
+        }
     }
 }
