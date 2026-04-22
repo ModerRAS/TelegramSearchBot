@@ -4,16 +4,16 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
-using TelegramSearchBot.Search.Tokenizer;
+using TelegramSearchBot.Tokenizer.Abstractions;
 
 namespace TelegramSearchBot.Search.Tool {
     public class PhraseQueryProcessor {
         private static readonly Regex PhraseRegex = new Regex("\"([^\"]+)\"", RegexOptions.Compiled);
-        private readonly UnifiedTokenizer _tokenizer;
+        private readonly ITokenizer _tokenizer;
         private readonly ExtFieldQueryOptimizer _extOptimizer;
         private readonly Action<string>? _logAction;
 
-        public PhraseQueryProcessor(UnifiedTokenizer tokenizer, ExtFieldQueryOptimizer extOptimizer, Action<string>? logAction = null) {
+        public PhraseQueryProcessor(ITokenizer tokenizer, ExtFieldQueryOptimizer extOptimizer, Action<string>? logAction = null) {
             _tokenizer = tokenizer;
             _extOptimizer = extOptimizer;
             _logAction = logAction;
@@ -38,7 +38,9 @@ namespace TelegramSearchBot.Search.Tool {
             foreach (Match match in PhraseRegex.Matches(query)) {
                 try {
                     var phraseText = match.Groups[1].Value;
-                    var terms = _tokenizer.SafeTokenize(phraseText);
+                    var terms = _tokenizer.TokenizeWithOffsets(phraseText)
+                        .Select(static token => token.Term)
+                        .ToList();
                     if (terms.Count == 0) {
                         continue;
                     }

@@ -7,8 +7,8 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Util;
 using TelegramSearchBot.Search.Model;
-using TelegramSearchBot.Search.Tokenizer;
 using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Tokenizer.Abstractions;
 
 namespace TelegramSearchBot.Search.Service {
     public class SyntaxSearchService {
@@ -16,14 +16,14 @@ namespace TelegramSearchBot.Search.Service {
 
         private readonly PhraseQueryProcessor _phraseProcessor;
         private readonly FieldSpecificationParser _fieldParser;
-        private readonly UnifiedTokenizer _tokenizer;
+        private readonly ITokenizer _tokenizer;
         private readonly ExtFieldQueryOptimizer _extOptimizer;
         private readonly Func<string, Task>? _log;
 
         public SyntaxSearchService(
             PhraseQueryProcessor phraseProcessor,
             FieldSpecificationParser fieldParser,
-            UnifiedTokenizer tokenizer,
+            ITokenizer tokenizer,
             ExtFieldQueryOptimizer extOptimizer,
             Func<string, Task>? log) {
             _phraseProcessor = phraseProcessor;
@@ -34,7 +34,7 @@ namespace TelegramSearchBot.Search.Service {
         }
 
         private List<string> GetKeyWords(string query) {
-            return _tokenizer.SafeTokenize(query);
+            return _tokenizer.SafeTokenize(query).ToList();
         }
 
         private (BooleanQuery Query, string[] Terms) ParseQuery(string query, IndexReader reader, long groupId) {
