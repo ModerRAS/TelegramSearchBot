@@ -180,6 +180,84 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             }
         }
 
+        [Fact]
+        public async Task ProcessTaskAsync_TransientOverload_RetriesAndCompletes() {
+            var harness = new InMemoryRedisTestHarness();
+            var attempts = 0;
+            var executor = CreateExecutor((_, _, _) => ExecuteWithTransientOverloadAsync(
+                () => ++attempts < 3,
+                "HTTP 529 (overloaded_error: )\n\n当前服务集群负载较高，请稍后重试，感谢您的耐心等待。 (2064)",
+                "final-answer"));
+            var loop = CreateAgentLoop(harness, executor, _ => TimeSpan.Zero);
+            var task = CreateExecutionTask();
+
+            await loop.ProcessTaskAsync(task, "payload", task.ChatId, string.Empty, CancellationToken.None);
+
+            var terminalJson = harness.GetString(LlmAgentRedisKeys.AgentTerminal(task.TaskId));
+            Assert.NotNull(terminalJson);
+            var terminal = Newtonsoft.Json.JsonConvert.DeserializeObject<AgentStreamChunk>(terminalJson!);
+            Assert.NotNull(terminal);
+            Assert.Equal(AgentChunkType.Done, terminal!.Type);
+            Assert.Equal(3, attempts);
+
+            var state = harness.GetHash(LlmAgentRedisKeys.AgentTaskState(task.TaskId));
+            Assert.Equal(AgentTaskStatus.Completed.ToString(), state["status"]);
+            Assert.Equal("2", state["transientRetryCount"]);
+        }
+
+        [Fact]
+        public async Task ProcessTaskAsync_TransientOverloadBeyondLimit_FailsAfterRetries() {
+            var harness = new InMemoryRedisTestHarness();
+            var attempts = 0;
+            var executor = CreateExecutor((_, _, _) => ExecuteWithTransientOverloadAsync(
+                () => {
+                    attempts++;
+                    return true;
+                },
+                "HTTP 529 (overloaded_error: )\n\n当前时段请求拥挤，极速版套餐可使用highspeed模型，享受更稳定的响应体验。 (2064)",
+                "unreachable"));
+            var loop = CreateAgentLoop(harness, executor, _ => TimeSpan.Zero);
+            var task = CreateExecutionTask();
+
+            await loop.ProcessTaskAsync(task, "payload", task.ChatId, string.Empty, CancellationToken.None);
+
+            var terminalJson = harness.GetString(LlmAgentRedisKeys.AgentTerminal(task.TaskId));
+            Assert.NotNull(terminalJson);
+            var terminal = Newtonsoft.Json.JsonConvert.DeserializeObject<AgentStreamChunk>(terminalJson!);
+            Assert.NotNull(terminal);
+            Assert.Equal(AgentChunkType.Error, terminal!.Type);
+            Assert.Equal(4, attempts);
+
+            var state = harness.GetHash(LlmAgentRedisKeys.AgentTaskState(task.TaskId));
+            Assert.Equal(AgentTaskStatus.Failed.ToString(), state["status"]);
+            Assert.Equal("3", state["transientRetryCount"]);
+        }
+
+        [Fact]
+        public async Task ProcessTaskAsync_NonTransientFailure_DoesNotRetry() {
+            var harness = new InMemoryRedisTestHarness();
+            var attempts = 0;
+            var executor = CreateExecutor((_, _, _) => FailOnceAsync(() => {
+                attempts++;
+                return new InvalidOperationException("model_not_found");
+            }));
+            var loop = CreateAgentLoop(harness, executor, _ => TimeSpan.Zero);
+            var task = CreateExecutionTask();
+
+            await loop.ProcessTaskAsync(task, "payload", task.ChatId, string.Empty, CancellationToken.None);
+
+            var terminalJson = harness.GetString(LlmAgentRedisKeys.AgentTerminal(task.TaskId));
+            Assert.NotNull(terminalJson);
+            var terminal = Newtonsoft.Json.JsonConvert.DeserializeObject<AgentStreamChunk>(terminalJson!);
+            Assert.NotNull(terminal);
+            Assert.Equal(AgentChunkType.Error, terminal!.Type);
+            Assert.Equal(1, attempts);
+
+            var state = harness.GetHash(LlmAgentRedisKeys.AgentTaskState(task.TaskId));
+            Assert.Equal(AgentTaskStatus.Failed.ToString(), state["status"]);
+            Assert.Equal("0", state["transientRetryCount"]);
+        }
+
         private static DataDbContext CreateDbContext() {
             var options = new DbContextOptionsBuilder<DataDbContext>()
                 .UseInMemoryDatabase($"AgentIntegrationTests_{Guid.NewGuid():N}")
@@ -235,7 +313,10 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 Mock.Of<ILogger<AgentRegistryService>>());
         }
 
-        private static AgentLoopService CreateAgentLoop(InMemoryRedisTestHarness harness, IAgentTaskExecutor executor) {
+        private static AgentLoopService CreateAgentLoop(
+            InMemoryRedisTestHarness harness,
+            IAgentTaskExecutor executor,
+            Func<int, TimeSpan>? retryDelayFactory = null) {
             var services = new ServiceCollection();
             services.AddScoped<IAgentTaskExecutor>(_ => executor);
             var provider = services.BuildServiceProvider();
@@ -243,7 +324,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 provider,
                 new GarnetClient(harness.Connection.Object),
                 new GarnetRpcClient(harness.Connection.Object),
-                Mock.Of<ILogger<AgentLoopService>>());
+                Mock.Of<ILogger<AgentLoopService>>(),
+                retryDelayFactory);
         }
 
         private static Telegram.Bot.Types.Message CreateTelegramMessage(long chatId, int messageId, long userId, string text) {
@@ -276,11 +358,50 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             return new FakeAgentTaskExecutor(handler);
         }
 
+        private static AgentExecutionTask CreateExecutionTask() {
+            return new AgentExecutionTask {
+                TaskId = Guid.NewGuid().ToString("N"),
+                ChatId = -9001,
+                UserId = 1,
+                MessageId = 42,
+                BotUserId = 999,
+                BotName = "bot",
+                InputMessage = "hello",
+                ModelName = "test-model",
+                Channel = new AgentChannelConfig {
+                    ChannelId = 1,
+                    Name = "test",
+                    Gateway = "https://example.invalid",
+                    ApiKey = "key",
+                    Provider = LLMProvider.OpenAI,
+                    ModelName = "test-model"
+                }
+            };
+        }
+
         private static async IAsyncEnumerable<string> YieldSnapshotsAsync(params string[] snapshots) {
             foreach (var snapshot in snapshots) {
                 yield return snapshot;
                 await Task.Yield();
             }
+        }
+
+        private static async IAsyncEnumerable<string> ExecuteWithTransientOverloadAsync(
+            Func<bool> shouldFail,
+            string errorMessage,
+            string successSnapshot) {
+            await Task.Yield();
+            if (shouldFail()) {
+                throw new Exception(errorMessage);
+            }
+
+            yield return successSnapshot;
+        }
+
+        private static async IAsyncEnumerable<string> FailOnceAsync(Func<Exception> exceptionFactory) {
+            await Task.Yield();
+            throw exceptionFactory();
+            yield break;
         }
     }
 }
