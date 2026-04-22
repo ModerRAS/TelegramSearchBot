@@ -92,6 +92,15 @@ pwsh TelegramSearchBot.Test/RunVectorTests.ps1
 dotnet publish -r win-x64 --self-contained
 ```
 
+## DEFAULT PR WORKFLOW
+- Unless the user explicitly asks to reuse an existing branch or continue an existing PR branch, sync the latest `origin/master` first and create a fresh branch from updated `master`.
+- Investigate and implement only the requested scope, then run the existing validation commands relevant to the touched area.
+- Push the branch and create or update the pull request as the default end-to-end flow.
+- Always inspect PR CI status. If a check fails, read the failing job logs, fix the reported issue, and push follow-up commits.
+- Always inspect the PR conversation, review comments, and related discussion. If feedback requires code changes, make those changes and update the PR instead of only replying in text.
+- If work is blocked by missing permissions, an external outage, or ambiguous requirements, state the blocker clearly.
+- After the workflow is complete, use the `ask_user` tool to ask what to do next.
+
 ## Development Notes
 - **Platform**: Windows primary, Linux partial (OCR/ASR limited)
 - **Config**: `%LOCALAPPDATA%/TelegramSearchBot/Config.json` - DO NOT use appsettings.json
