@@ -35,6 +35,15 @@
 - 向量相关快速回归：`pwsh TelegramSearchBot.Test/RunVectorTests.ps1` 会筛选 `Category=Vector`。
 - `dotnet watch run --project TelegramSearchBot` 可本地监听重载，但注意并行子进程仍会启动。
 
+## 默认 PR 工作流
+- 默认按完整仓库工作流处理：先同步最新 `origin/master`，再从更新后的 `master` 新建分支；只有用户明确要求复用现有分支或继续当前 PR 时才例外。
+- 实现需求时保持改动聚焦，并运行与改动范围相关的现有验证命令。
+- 完成后默认推送分支并创建或更新 PR。
+- 必须检查 PR 的 CI 状态；如果有失败，读取失败 job 日志，修复问题后继续推送更新。
+- 必须检查 PR 对话、review comments 和相关讨论；如果反馈要求代码改动，应直接修改并更新 PR，而不只是文字回复。
+- 如果因权限不足、外部服务异常或需求不明确而受阻，需要明确说明阻塞原因。
+- 该工作流完成后，使用 `ask_user` 工具询问用户下一步要做什么。
+
 ## 开发提示
 - 所有持久化配置改动需更新 `Docs/README_VectorDatabaseInit.md` 或相关指南，保持用户文档同步。
 - 在管线中共享对象使用 `PipelineContext.PipelineCache`，不要通过静态变量跨控制器传递引用。
