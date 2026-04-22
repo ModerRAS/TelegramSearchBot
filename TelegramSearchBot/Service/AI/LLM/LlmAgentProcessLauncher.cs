@@ -31,7 +31,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return null;
             }
 
-            return (long)Env.AgentProcessMemoryLimitMb * 1024L * 1024L;
+            return ( long ) Env.AgentProcessMemoryLimitMb * 1024L * 1024L;
         }
     }
 }

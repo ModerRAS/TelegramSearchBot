@@ -73,13 +73,13 @@ namespace TelegramSearchBot.AppBootstrap {
                 }
 
                 var info = new JOBOBJECT_BASIC_LIMIT_INFORMATION {
-                    LimitFlags = (uint)limitFlags
+                    LimitFlags = ( uint ) limitFlags
                 };
 
                 var extendedInfo = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
                     BasicLimitInformation = info,
                     ProcessMemoryLimit = processMemoryLimitBytes.HasValue && processMemoryLimitBytes.Value > 0
-                        ? (UIntPtr)processMemoryLimitBytes.Value
+                        ? ( UIntPtr ) processMemoryLimitBytes.Value
                         : UIntPtr.Zero
                 };
 
@@ -87,7 +87,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 var extendedInfoPtr = Marshal.AllocHGlobal(length);
                 try {
                     Marshal.StructureToPtr(extendedInfo, extendedInfoPtr, false);
-                    if (!SetInformationJobObject(handle, JobObjectInfoType.ExtendedLimitInformation, extendedInfoPtr, (uint)length)) {
+                    if (!SetInformationJobObject(handle, JobObjectInfoType.ExtendedLimitInformation, extendedInfoPtr, ( uint ) length)) {
                         throw new InvalidOperationException("Unable to set information", new Win32Exception());
                     }
                 } finally {

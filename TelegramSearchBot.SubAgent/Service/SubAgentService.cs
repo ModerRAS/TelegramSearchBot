@@ -25,7 +25,7 @@ namespace TelegramSearchBot.SubAgent.Service {
                     continue;
                 }
 
-                var items = (RedisResult[])result!;
+                var items = ( RedisResult[] ) result!;
                 if (items.Length != 2) {
                     continue;
                 }

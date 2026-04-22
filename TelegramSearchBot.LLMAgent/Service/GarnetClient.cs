@@ -20,12 +20,12 @@ namespace TelegramSearchBot.LLMAgent.Service {
         }
 
         public async Task<string?> BRPopAsync(string key, TimeSpan timeout) {
-            var result = await _redis.GetDatabase().ExecuteAsync("BRPOP", key, (int)Math.Ceiling(timeout.TotalSeconds));
+            var result = await _redis.GetDatabase().ExecuteAsync("BRPOP", key, ( int ) Math.Ceiling(timeout.TotalSeconds));
             if (result.IsNull) {
                 return null;
             }
 
-            var parts = (RedisResult[])result!;
+            var parts = ( RedisResult[] ) result!;
             if (parts.Length == 2) {
                 return parts[1].ToString();
             }

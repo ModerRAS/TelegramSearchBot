@@ -199,7 +199,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 if (agentTaskHandle != null) {
                     var terminalChunk = await agentTaskHandle.Completion;
                     if (terminalChunk.Type == AgentChunkType.Error) {
-                        await _sendMessageService.SendMessage($"AI Agent 执行失败：{terminalChunk.ErrorMessage}", snapshot.ChatId, (int)snapshot.OriginalMessageId);
+                        await _sendMessageService.SendMessage($"AI Agent 执行失败：{terminalChunk.ErrorMessage}", snapshot.ChatId, ( int ) snapshot.OriginalMessageId);
                     } else if (terminalChunk.Type == AgentChunkType.IterationLimitReached && terminalChunk.ContinuationSnapshot != null) {
                         var newSnapshotId = await _continuationService.SaveSnapshotAsync(terminalChunk.ContinuationSnapshot);
 
@@ -214,7 +214,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                             snapshot.ChatId,
                             $"⚠️ AI 再次达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？",
                             replyMarkup: keyboard,
-                            replyParameters: new ReplyParameters { MessageId = (int)snapshot.OriginalMessageId }
+                            replyParameters: new ReplyParameters { MessageId = ( int ) snapshot.OriginalMessageId }
                         );
                     }
 

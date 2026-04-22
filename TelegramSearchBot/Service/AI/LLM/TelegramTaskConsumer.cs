@@ -49,7 +49,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         continue;
                     }
 
-                    var parts = (RedisResult[])result!;
+                    var parts = ( RedisResult[] ) result!;
                     if (parts.Length != 2) {
                         continue;
                     }

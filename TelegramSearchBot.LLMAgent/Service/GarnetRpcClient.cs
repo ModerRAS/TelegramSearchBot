@@ -14,7 +14,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
         private IDatabase Db => _redis.GetDatabase();
 
         public Task HashSetAsync(string key, string field, string value) => Db.HashSetAsync(key, field, value);
-        public async Task<string?> HashGetAsync(string key, string field) => (await Db.HashGetAsync(key, field)).ToString();
+        public async Task<string?> HashGetAsync(string key, string field) => ( await Db.HashGetAsync(key, field) ).ToString();
         public async Task<Dictionary<string, string>> HashGetAllAsync(string key) {
             var entries = await Db.HashGetAllAsync(key);
             return entries.ToDictionary(x => x.Name.ToString(), x => x.Value.ToString(), StringComparer.OrdinalIgnoreCase);
@@ -32,14 +32,14 @@ namespace TelegramSearchBot.LLMAgent.Service {
         public Task<bool> KeyExpireAsync(string key, TimeSpan expiry) => Db.KeyExpireAsync(key, expiry);
         public async Task<bool> StringSetAsync(string key, string value, TimeSpan? expiry = null) {
             if (expiry.HasValue) {
-                await Db.ExecuteAsync("SETEX", key, Math.Max(1, (int)Math.Ceiling(expiry.Value.TotalSeconds)), value);
+                await Db.ExecuteAsync("SETEX", key, Math.Max(1, ( int ) Math.Ceiling(expiry.Value.TotalSeconds)), value);
                 return true;
             }
 
             await Db.ExecuteAsync("SET", key, value);
             return true;
         }
-        public async Task<string?> StringGetAsync(string key) => (await Db.StringGetAsync(key)).ToString();
+        public async Task<string?> StringGetAsync(string key) => ( await Db.StringGetAsync(key) ).ToString();
 
         public Task SaveTaskStateAsync(string taskId, AgentTaskStatus status, string? error = null, IReadOnlyDictionary<string, string>? extraFields = null) {
             var key = LlmAgentRedisKeys.AgentTaskState(taskId);

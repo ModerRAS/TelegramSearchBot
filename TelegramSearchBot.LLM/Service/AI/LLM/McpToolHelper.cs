@@ -1032,7 +1032,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         Name = param.Name ?? "",
                         Type = GetSimplifiedTypeName(param.ParameterType),
                         Description = builtInParamAttr?.Description ?? mcpParamAttr?.Description ?? $"Parameter '{param.Name}'",
-                        Required = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? (!param.IsOptional && !param.HasDefaultValue)
+                        Required = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !param.IsOptional && !param.HasDefaultValue )
                     });
                 }
 

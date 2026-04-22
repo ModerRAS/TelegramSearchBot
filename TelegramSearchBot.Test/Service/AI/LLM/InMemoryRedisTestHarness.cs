@@ -39,13 +39,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                             return Array.Empty<RedisValue>();
                         }
 
-                        var normalizedStart = (int)Math.Max(0, start);
-                        var normalizedStop = stop < 0 ? list.Count - 1 : (int)Math.Min(stop, list.Count - 1);
+                        var normalizedStart = ( int ) Math.Max(0, start);
+                        var normalizedStop = stop < 0 ? list.Count - 1 : ( int ) Math.Min(stop, list.Count - 1);
                         if (normalizedStart > normalizedStop || normalizedStart >= list.Count) {
                             return Array.Empty<RedisValue>();
                         }
 
-                        return list.Skip(normalizedStart).Take(normalizedStop - normalizedStart + 1).Select(x => (RedisValue)x).ToArray();
+                        return list.Skip(normalizedStart).Take(normalizedStop - normalizedStart + 1).Select(x => ( RedisValue ) x).ToArray();
                     }
                 });
 
@@ -113,7 +113,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 });
 
             Database.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-                .ReturnsAsync((RedisKey key, CommandFlags _) => _strings.TryGetValue(key.ToString(), out var value) ? (RedisValue)value : RedisValue.Null);
+                .ReturnsAsync((RedisKey key, CommandFlags _) => _strings.TryGetValue(key.ToString(), out var value) ? ( RedisValue ) value : RedisValue.Null);
 
             Database.Setup(d => d.KeyDeleteAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync((RedisKey key, CommandFlags flags) => {

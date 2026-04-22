@@ -188,7 +188,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         private static void SeedChannelAndGroup(DataDbContext dbContext, long groupId, string modelName) {
-            var channelId = (int)Math.Abs(groupId % int.MaxValue);
+            var channelId = ( int ) Math.Abs(groupId % int.MaxValue);
             var channel = new LLMChannel {
                 Id = channelId,
                 Name = $"channel-{groupId}",
