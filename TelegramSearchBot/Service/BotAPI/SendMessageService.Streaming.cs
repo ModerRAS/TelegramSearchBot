@@ -166,7 +166,7 @@ namespace TelegramSearchBot.Service.BotAPI {
                 }
             } catch (OperationCanceledException) { logger.LogInformation("SendFullMessageStream: Stream consumption cancelled."); } catch (Exception ex) { logger.LogError(ex, "SendFullMessageStream: Error during stream consumption."); }
 
-            if (latestMarkdownSnapshot != null && (latestMarkdownSnapshot != markdownActuallySynced || !lastSyncComplete)) {
+            if (latestMarkdownSnapshot != null && ( latestMarkdownSnapshot != markdownActuallySynced || !lastSyncComplete )) {
                 logger.LogInformation("SendFullMessageStream: Performing final synchronization for the absolute latest content.");
                 chunksForDb = MessageFormatHelper.SplitMarkdownIntoChunks(latestMarkdownSnapshot, 1900);
                 if (!chunksForDb.Any() && !string.IsNullOrEmpty(latestMarkdownSnapshot)) chunksForDb.Add(string.Empty);

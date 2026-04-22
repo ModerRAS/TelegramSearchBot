@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
+using StackExchange.Redis;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Model;
@@ -16,7 +17,6 @@ using TelegramSearchBot.Model.Mcp;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Mcp;
 using TelegramSearchBot.Service.Tools;
-using StackExchange.Redis;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Service.Tools {

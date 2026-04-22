@@ -149,7 +149,7 @@ namespace TelegramSearchBot.Service.Scheduler {
                     var topUsers = topUserContributors
                         .Select(kv => {
                             var name = userNames.GetValueOrDefault(kv.Key, $"用户{kv.Key}");
-                            return ( Name: name, Count: kv.Value );
+                            return (Name: name, Count: kv.Value);
                         })
                         .ToList();
 
