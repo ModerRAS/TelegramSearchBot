@@ -59,5 +59,14 @@ namespace TelegramSearchBot.Test.Common {
 
             Assert.Equal(Env.DefaultUpdateBaseUrl, result);
         }
+
+        [Fact]
+        public void ResolveUpdateBaseUrl_FallsBackToDefaultWhenUrlIsNotHttpsOrLoopback() {
+            var result = Env.ResolveUpdateBaseUrl(new Config {
+                UpdateBaseUrl = "http://example.com/update"
+            });
+
+            Assert.Equal(Env.DefaultUpdateBaseUrl, result);
+        }
     }
 }

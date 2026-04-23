@@ -139,7 +139,19 @@ namespace TelegramSearchBot.Common {
 
         public static string ResolveUpdateBaseUrl(Config config) {
             ArgumentNullException.ThrowIfNull(config);
-            return NormalizeBaseUrl(config.UpdateBaseUrl, DefaultUpdateBaseUrl);
+            if (string.IsNullOrWhiteSpace(config.UpdateBaseUrl)) {
+                return DefaultUpdateBaseUrl;
+            }
+
+            if (!Uri.TryCreate(config.UpdateBaseUrl.Trim(), UriKind.Absolute, out var uri)) {
+                return DefaultUpdateBaseUrl;
+            }
+
+            if (!uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) && !uri.IsLoopback) {
+                return DefaultUpdateBaseUrl;
+            }
+
+            return NormalizeBaseUrl(uri.ToString(), DefaultUpdateBaseUrl);
         }
     }
     public class Config {

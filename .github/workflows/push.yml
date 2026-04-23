@@ -111,9 +111,9 @@ jobs:
       run: dotnet restore --force --no-cache /p:BuildWithNetFrameworkHostedCompiler=true
     - name: Build
       run: |
-          dotnet build --no-restore
+          dotnet build --no-restore -c Release
     - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test --no-build -c Release --verbosity normal
     - name: Compute release versions
       id: versioning
       shell: pwsh
@@ -158,6 +158,10 @@ jobs:
             --target-version $env:BUILD_VERSION `
             --min-source-version $env:LEGACY_BRIDGE_VERSION
           Copy-Item .\moder-update\src\updater\target\release\moder_update_updater.exe .\artifacts\update-feed\moder_update_updater.exe -Force
+          $catalogPath = '.\artifacts\update-feed\catalog.json'
+          $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
+          $catalog | Add-Member -NotePropertyName UpdaterChecksum -NotePropertyValue ((Get-FileHash .\artifacts\update-feed\moder_update_updater.exe -Algorithm SHA512).Hash.ToLower()) -Force
+          $catalog | ConvertTo-Json -Depth 10 | Set-Content $catalogPath -Encoding utf8
     - name: Check legacy bridge presence
       id: bridge-check
       shell: pwsh
@@ -207,6 +211,6 @@ jobs:
           b2 sync .\artifacts\legacy-bridge b2://$env:B2_BUCKET/TelegramSearchBot --quiet
         }
         b2 sync .\artifacts\update-feed\packages b2://$env:B2_BUCKET/TelegramSearchBot/packages --quiet
-        b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\catalog.json TelegramSearchBot/catalog.json
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\moder_update_updater.exe TelegramSearchBot/moder_update_updater.exe
+        b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\catalog.json TelegramSearchBot/catalog.json
         b2 clear-account

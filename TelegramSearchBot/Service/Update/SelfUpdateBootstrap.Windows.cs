@@ -177,8 +177,10 @@ public static partial class SelfUpdateBootstrap
         using var response = await httpClient.GetAsync($"{Env.UpdateBaseUrl.TrimEnd('/')}/catalog.json", cancellationToken);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await JsonSerializer.DeserializeAsync<UpdateCatalog>(stream, JsonOptions, cancellationToken)
+        var catalog = await JsonSerializer.DeserializeAsync<UpdateCatalog>(stream, JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("Failed to deserialize update catalog.");
+        UpdateCatalogCache.UpdaterChecksum = catalog.UpdaterChecksum;
+        return catalog;
     }
 
     private static bool CanApplyEntry(Version currentVersion, UpdateCatalogEntry entry)
@@ -199,8 +201,12 @@ public static partial class SelfUpdateBootstrap
     {
         Directory.CreateDirectory(Path.GetDirectoryName(UpdaterCachePath)!);
         await using var updaterStream = await DownloadStreamAsync(httpClient, UpdaterFileName, cancellationToken);
+        await using var updaterBuffer = new MemoryStream();
+        await updaterStream.CopyToAsync(updaterBuffer, cancellationToken);
+        VerifyUpdaterChecksum(updaterBuffer);
+        updaterBuffer.Position = 0;
         await using var fileStream = File.Create(UpdaterCachePath);
-        await updaterStream.CopyToAsync(fileStream, cancellationToken);
+        await updaterBuffer.CopyToAsync(fileStream, cancellationToken);
         return UpdaterCachePath;
     }
 
@@ -218,6 +224,9 @@ public static partial class SelfUpdateBootstrap
     private static void ExtractPackageToDirectory(Stream packageStream, string targetDirectory)
     {
         Directory.CreateDirectory(targetDirectory);
+        var targetDirectoryPath = Path.GetFullPath(targetDirectory);
+        var directoryPrefix = targetDirectoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
 
         if (!ValidatePackageMagic(packageStream)) {
             throw new InvalidDataException("Invalid Moder.Update package magic header.");
@@ -232,8 +241,13 @@ public static partial class SelfUpdateBootstrap
                 continue;
             }
 
+            if (Path.IsPathRooted(normalizedPath)) {
+                throw new InvalidDataException($"Package entry '{entry.Name}' is rooted and cannot be extracted.");
+            }
+
             if (entry.EntryType == TarEntryType.RegularFile || entry.EntryType == TarEntryType.V7RegularFile) {
-                var targetPath = Path.Combine(targetDirectory, normalizedPath);
+                var targetPath = Path.GetFullPath(Path.Combine(targetDirectoryPath, normalizedPath));
+                EnsurePathWithinDirectory(targetPath, directoryPrefix, entry.Name);
                 var directory = Path.GetDirectoryName(targetPath);
                 if (directory is not null) {
                     Directory.CreateDirectory(directory);
@@ -244,7 +258,9 @@ public static partial class SelfUpdateBootstrap
                     entry.DataStream.CopyTo(fileStream);
                 }
             } else if (entry.EntryType == TarEntryType.Directory) {
-                Directory.CreateDirectory(Path.Combine(targetDirectory, normalizedPath));
+                var directoryPath = Path.GetFullPath(Path.Combine(targetDirectoryPath, normalizedPath));
+                EnsurePathWithinDirectory(directoryPath, directoryPrefix, entry.Name);
+                Directory.CreateDirectory(directoryPath);
             }
         }
     }
@@ -343,6 +359,23 @@ public static partial class SelfUpdateBootstrap
         packageStream.Position = 0;
     }
 
+    private static void VerifyUpdaterChecksum(Stream updaterStream)
+    {
+        updaterStream.Position = 0;
+        using var sha512 = SHA512.Create();
+        var actualChecksum = Convert.ToHexString(sha512.ComputeHash(updaterStream)).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(UpdateCatalogCache.UpdaterChecksum)) {
+            throw new InvalidDataException("更新目录未提供 updater 校验值，已拒绝执行外部更新器。");
+        }
+
+        if (!actualChecksum.Equals(UpdateCatalogCache.UpdaterChecksum, StringComparison.OrdinalIgnoreCase)) {
+            throw new InvalidDataException(
+                $"updater 校验失败，期望 {UpdateCatalogCache.UpdaterChecksum}，实际 {actualChecksum}。");
+        }
+
+        updaterStream.Position = 0;
+    }
+
     private static void ResetDirectory(string path)
     {
         if (Directory.Exists(path)) {
@@ -375,6 +408,13 @@ public static partial class SelfUpdateBootstrap
 
     private static string SanitizeVersion(string version) => version.Replace('.', '_');
 
+    private static void EnsurePathWithinDirectory(string targetPath, string directoryPrefix, string entryName)
+    {
+        if (!targetPath.StartsWith(directoryPrefix, StringComparison.OrdinalIgnoreCase)) {
+            throw new InvalidDataException($"Package entry '{entryName}' would escape the staging directory.");
+        }
+    }
+
     private sealed class UpdaterLaunchArgs
     {
         public required string UpdaterPath { get; init; }
@@ -390,6 +430,7 @@ public static partial class SelfUpdateBootstrap
         public required List<UpdateCatalogEntry> Entries { get; init; }
         public DateTime LastUpdated { get; init; }
         public string? MinRequiredVersion { get; init; }
+        public string? UpdaterChecksum { get; init; }
     }
 
     private sealed class UpdateCatalogEntry
@@ -441,6 +482,11 @@ public static partial class SelfUpdateBootstrap
         UpdateAvailable,
         UpdateUnavailable,
         NoPathFound
+    }
+
+    private static class UpdateCatalogCache
+    {
+        public static string? UpdaterChecksum { get; set; }
     }
 }
 #endif
