@@ -180,7 +180,7 @@ jobs:
           Compress-Archive -Path .\artifacts\standalone\* -DestinationPath $packagePath -CompressionLevel Optimal
           $hashPath = "$packagePath.sha512"
           $hash = (Get-FileHash $packagePath -Algorithm SHA512).Hash.ToLower()
-          Set-Content -Path $hashPath -Value $hash -Encoding ascii
+          Set-Content -Path $hashPath -Value "$hash  $packageName" -Encoding ascii
     - name: Check legacy bridge presence
       id: bridge-check
       shell: pwsh
@@ -224,7 +224,7 @@ jobs:
         B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
         B2_APPKEY: ${{ secrets.B2_APPKEY }}
       run: |
-        function Test-B2UriHasVersions {
+        function Get-B2Versions {
           param(
             [Parameter(Mandatory = $true)]
             [string]$B2Uri,
@@ -237,55 +237,97 @@ jobs:
           }
           $arguments += $B2Uri
 
-          $output = & b2 @arguments
-          if ([string]::IsNullOrWhiteSpace($output)) {
-            return $false
+          $output = & b2 @arguments 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            return @()
           }
 
-          $items = $output | ConvertFrom-Json
-          return @($items).Count -gt 0
+          $raw = ($output | Out-String).Trim()
+          if ([string]::IsNullOrWhiteSpace($raw)) {
+            return @()
+          }
+
+          return @($raw | ConvertFrom-Json)
         }
 
-        function Remove-B2FileVersions {
+        function Remove-B2VersionById {
           param(
             [Parameter(Mandatory = $true)]
-            [string]$RelativePath
+            [string]$FileId
+          )
+
+          & b2 rm --no-progress "b2id://$FileId" | Out-Null
+        }
+
+        function Prune-B2FileVersions {
+          param(
+            [Parameter(Mandatory = $true)]
+            [string]$RelativePath,
+            [int]$KeepLatest = 1
           )
 
           $uri = "b2://$env:B2_BUCKET/$RelativePath"
-          if (Test-B2UriHasVersions -B2Uri $uri) {
-            & b2 rm --versions --no-progress --fail-fast $uri
+          $items = @(Get-B2Versions -B2Uri $uri)
+          if ($items.Count -le $KeepLatest) {
+            return
+          }
+
+          $staleItems = $items | Sort-Object uploadTimestamp -Descending | Select-Object -Skip $KeepLatest
+          foreach ($item in $staleItems) {
+            Remove-B2VersionById -FileId $item.fileId
           }
         }
 
-        function Remove-B2DirectoryVersions {
+        function Prune-B2PackageVersions {
           param(
             [Parameter(Mandatory = $true)]
-            [string]$RelativePath
+            [string[]]$KeepRelativePaths
           )
 
-          $uri = "b2://$env:B2_BUCKET/$RelativePath"
-          if (Test-B2UriHasVersions -B2Uri $uri -Recursive) {
-            & b2 rm --recursive --versions --no-progress --fail-fast $uri
+          $items = @(Get-B2Versions -B2Uri "b2://$env:B2_BUCKET/TelegramSearchBot/packages/" -Recursive)
+          if ($items.Count -eq 0) {
+            return
+          }
+
+          $keepSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          foreach ($relativePath in $KeepRelativePaths) {
+            $normalizedPath = $relativePath.Replace('\', '/')
+            [void]$keepSet.Add("TelegramSearchBot/packages/$normalizedPath")
+          }
+
+          foreach ($group in ($items | Group-Object fileName)) {
+            $sortedItems = $group.Group | Sort-Object uploadTimestamp -Descending
+            if ($keepSet.Contains($group.Name)) {
+              $sortedItems = $sortedItems | Select-Object -Skip 1
+            }
+
+            foreach ($item in $sortedItems) {
+              Remove-B2VersionById -FileId $item.fileId
+            }
           }
         }
 
         pip install --quiet --cache-dir C:\pip-cache b2
         b2 account authorize $env:B2_APPKEY_ID $env:B2_APPKEY --quiet
-        Remove-B2DirectoryVersions 'TelegramSearchBot/packages/'
-        Remove-B2FileVersions 'TelegramSearchBot/moder_update_updater.exe'
-        Remove-B2FileVersions 'TelegramSearchBot/catalog.json'
+
         if ("${{ steps.bridge-check.outputs.publish-bridge }}" -eq "true") {
           $bridgeRoot = (Resolve-Path .\artifacts\legacy-bridge).Path
+          b2 sync .\artifacts\legacy-bridge b2://$env:B2_BUCKET/TelegramSearchBot --quiet
           Get-ChildItem $bridgeRoot -File -Recurse | ForEach-Object {
             $relativePath = [System.IO.Path]::GetRelativePath($bridgeRoot, $_.FullName).Replace('\', '/')
-            Remove-B2FileVersions "TelegramSearchBot/$relativePath"
+            Prune-B2FileVersions -RelativePath "TelegramSearchBot/$relativePath"
           }
-          b2 sync .\artifacts\legacy-bridge b2://$env:B2_BUCKET/TelegramSearchBot --quiet
         }
+
         b2 sync .\artifacts\update-feed\packages b2://$env:B2_BUCKET/TelegramSearchBot/packages --quiet
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\moder_update_updater.exe TelegramSearchBot/moder_update_updater.exe
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\catalog.json TelegramSearchBot/catalog.json
+        $packageFiles = Get-ChildItem .\artifacts\update-feed\packages -File -Recurse | ForEach-Object {
+          [System.IO.Path]::GetRelativePath((Resolve-Path .\artifacts\update-feed\packages).Path, $_.FullName)
+        }
+        Prune-B2PackageVersions -KeepRelativePaths $packageFiles
+        Prune-B2FileVersions -RelativePath 'TelegramSearchBot/moder_update_updater.exe'
+        Prune-B2FileVersions -RelativePath 'TelegramSearchBot/catalog.json'
         b2 clear-account
     - name: Publish full package to GitHub Release
       uses: softprops/action-gh-release@v2
