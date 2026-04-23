@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
@@ -48,10 +49,12 @@ namespace TelegramSearchBot.Controller.Manage {
 
             var (status, message) = await EditOCRConfService.ExecuteAsync(Command, e.Message.Chat.Id);
             if (status) {
+                var replyMarkup = await EditOCRConfService.GetReplyMarkupAsync(e.Message.Chat.Id);
                 await EditOCRConfView
                     .WithChatId(e.Message.Chat.Id)
                     .WithReplyTo(e.Message.MessageId)
                     .WithMessage(message)
+                    .WithReplyMarkup(replyMarkup)
                     .Render();
             }
         }

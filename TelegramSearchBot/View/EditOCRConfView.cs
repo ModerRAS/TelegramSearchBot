@@ -1,18 +1,24 @@
 using System.Threading.Tasks;
 using Telegram.Bot;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Interface;
+using TelegramSearchBot.Manager;
 using TelegramSearchBot.Service.BotAPI;
 
 namespace TelegramSearchBot.View {
     public class EditOCRConfView : IView {
-        private readonly ISendMessageService _sendMessageService;
+        private readonly ITelegramBotClient _botClient;
+        private readonly SendMessage _sendMessage;
 
         private long _chatId;
         private int _replyToMessageId;
-        private string _messageText;
+        private string _messageText = string.Empty;
+        private ReplyMarkup? _replyMarkup;
 
-        public EditOCRConfView(ISendMessageService sendMessageService) {
-            _sendMessageService = sendMessageService;
+        public EditOCRConfView(ITelegramBotClient botClient, SendMessage sendMessage) {
+            _botClient = botClient;
+            _sendMessage = sendMessage;
         }
 
         public EditOCRConfView WithChatId(long chatId) {
@@ -30,11 +36,17 @@ namespace TelegramSearchBot.View {
             return this;
         }
 
+        public EditOCRConfView WithReplyMarkup(ReplyMarkup? replyMarkup) {
+            _replyMarkup = replyMarkup;
+            return this;
+        }
+
         public async Task Render() {
-            await _sendMessageService.SplitAndSendTextMessage(
-                _messageText,
-                new Telegram.Bot.Types.Chat { Id = _chatId },
-                _replyToMessageId);
+            await _sendMessage.AddTask(async () => await _botClient.SendMessage(
+                chatId: _chatId,
+                text: _messageText,
+                replyParameters: new ReplyParameters { MessageId = _replyToMessageId },
+                replyMarkup: _replyMarkup), _chatId < 0);
         }
     }
 }
