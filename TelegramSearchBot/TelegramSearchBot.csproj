@@ -41,7 +41,7 @@
     <PackageReference Include="Microsoft.Garnet" Version="1.0.99" />
     <PackageReference Include="NCrontab" Version="3.4.0" />
     <PackageReference Include="Nito.AsyncEx" Version="5.1.2" />
-    <PackageReference Include="OllamaSharp" Version="5.4.18" />
+    <PackageReference Include="OllamaSharp" Version="5.4.25" />
     <PackageReference Include="OpenAI" Version="2.10.0" />
     <PackageReference Include="PuppeteerSharp" Version="21.1.1" />
     <PackageReference Include="RateLimiter" Version="2.2.0" />
