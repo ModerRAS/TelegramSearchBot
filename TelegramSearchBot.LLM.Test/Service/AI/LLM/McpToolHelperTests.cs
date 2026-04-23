@@ -182,6 +182,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
     }
 
     // --- Test Class ---
+    [Collection(McpToolHelperTestCollection.Name)]
     public class McpToolHelperTests {
 #pragma warning disable CS8618 // 单元测试中字段会在初始化方法中赋值
         // 移除构造函数中的静态字段和 Mock 成员，改为在测试方法内部声明和设置
@@ -722,21 +723,22 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 })
             };
 
-            McpToolHelper.RegisterExternalTools(
-                externalTools,
-                async (server, tool, args) => { await Task.CompletedTask; return "mock result"; });
+            try {
+                McpToolHelper.RegisterExternalTools(
+                    externalTools,
+                    async (server, tool, args) => { await Task.CompletedTask; return "mock result"; });
 
-            var tools = McpToolHelper.GetNativeToolDefinitions();
+                var tools = McpToolHelper.GetNativeToolDefinitions();
 
-            var externalTool = tools.FirstOrDefault(t => t.FunctionName == "mcp_test-server_testTool");
-            Assert.NotNull(externalTool);
-            Assert.Contains("test-server", externalTool.FunctionDescription);
-            Assert.Contains("A test external tool", externalTool.FunctionDescription);
-
-            // Clean up
-            McpToolHelper.RegisterExternalTools(
-                new List<(string, McpToolHelper.ExternalToolInfo)>(),
-                null);
+                var externalTool = tools.FirstOrDefault(t => t.FunctionName == "mcp_test-server_testTool");
+                Assert.NotNull(externalTool);
+                Assert.Contains("test-server", externalTool.FunctionDescription);
+                Assert.Contains("A test external tool", externalTool.FunctionDescription);
+            } finally {
+                McpToolHelper.RegisterExternalTools(
+                    new List<(string, McpToolHelper.ExternalToolInfo)>(),
+                    null);
+            }
         }
 
         [Fact]

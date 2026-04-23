@@ -18,6 +18,6 @@ namespace TelegramSearchBot.Model.AI {
         /// When IterationLimitReached is true, contains the serialized provider history
         /// and other state needed to resume the conversation.
         /// </summary>
-        public LlmContinuationSnapshot SnapshotData { get; set; }
+        public LlmContinuationSnapshot SnapshotData { get; set; } = null!;
     }
 }

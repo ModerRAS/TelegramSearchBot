@@ -1,6 +1,7 @@
 using System;
 using TelegramSearchBot.Search.Exception;
 using TelegramSearchBot.Search.Tool;
+using TelegramSearchBot.Tokenizer.Abstractions;
 
 namespace TelegramSearchBot.Search.Test {
     public class SearchHelperTests {
@@ -42,6 +43,31 @@ namespace TelegramSearchBot.Search.Test {
             Assert.Throws<InvalidSearchInputException>(() => SearchHelper.FindBestSnippet("北京今天天气不错", null!, 10));
             Assert.Throws<InvalidSearchInputException>(() => SearchHelper.FindBestSnippet("北京今天天气不错", " ", 10));
             Assert.Throws<InvalidSearchInputException>(() => SearchHelper.FindBestSnippet("北京今天天气不错", "北京", 0));
+        }
+
+        [Fact]
+        public void FindBestSnippet_UsesProvidedTokenizer() {
+            var tokenizer = new StubTokenizer();
+
+            var snippet = SearchHelper.FindBestSnippet("abcXYZdef", "unused", 3, tokenizer);
+
+            Assert.Equal("XYZ", snippet);
+        }
+
+        private sealed class StubTokenizer : ITokenizer {
+            public TokenizerMetadata Metadata { get; } = new("Stub", "Test", false);
+
+            public IReadOnlyList<string> Tokenize(string text) {
+                return new[] { "XYZ" };
+            }
+
+            public IReadOnlyList<string> SafeTokenize(string text) {
+                return new[] { "XYZ" };
+            }
+
+            public IReadOnlyList<TokenWithOffset> TokenizeWithOffsets(string text) {
+                return new[] { new TokenWithOffset(3, 6, "XYZ") };
+            }
         }
     }
 }

@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Serilog;
 using StackExchange.Redis;
 using Telegram.Bot;
@@ -27,6 +28,7 @@ using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Mcp;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
@@ -40,20 +42,74 @@ namespace TelegramSearchBot.AppBootstrap {
         private static IServiceProvider service;
 
         /// <summary>
-        /// 等待 Garnet 服务端口就绪，最多等待 10 秒
+        /// 等待 TCP 服务端口就绪
         /// </summary>
-        private static async Task WaitForGarnetReady(int port, int maxRetries = 20, int delayMs = 500) {
+        private static async Task WaitForTcpServiceReady(string host, int port, string serviceName, Process? process = null, int maxRetries = 20, int delayMs = 500) {
             for (int i = 0; i < maxRetries; i++) {
+                if (process is { HasExited: true }) {
+                    Log.Warning("{ServiceName} 进程在端口就绪前退出，退出码 {ExitCode}", serviceName, process.ExitCode);
+                    return;
+                }
+
                 try {
                     using var tcp = new System.Net.Sockets.TcpClient();
-                    await tcp.ConnectAsync("127.0.0.1", port);
-                    Log.Information("Garnet 服务已就绪 (端口 {Port})，耗时约 {ElapsedMs}ms", port, i * delayMs);
+                    await tcp.ConnectAsync(host, port);
+                    Log.Information("{ServiceName} 服务已就绪 ({Host}:{Port})，耗时约 {ElapsedMs}ms", serviceName, host, port, i * delayMs);
                     return;
                 } catch {
                     await Task.Delay(delayMs);
                 }
             }
-            Log.Warning("等待 Garnet 服务就绪超时 (端口 {Port})，将继续启动（Redis 连接会自动重试）", port);
+            Log.Warning("等待 {ServiceName} 服务就绪超时 ({Host}:{Port})，将继续启动", serviceName, host, port);
+        }
+
+        private static bool TryGetLoopbackLocalBotApiUri(out Uri? uri) {
+            if (!Env.IsLocalAPI || !Uri.TryCreate(Env.BaseUrl, UriKind.Absolute, out uri)) {
+                uri = null;
+                return false;
+            }
+
+            return uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static async Task StartEmbeddedLocalBotApiAsync() {
+            string botApiExePath = Path.Combine(AppContext.BaseDirectory, "telegram-bot-api.exe");
+            if (!File.Exists(botApiExePath)) {
+                Log.Warning("未找到 telegram-bot-api 可执行文件 {Path}，跳过内置本地 Bot API 启动", botApiExePath);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(Env.TelegramBotApiId) || string.IsNullOrWhiteSpace(Env.TelegramBotApiHash)) {
+                Log.Warning("EnableLocalBotAPI 为 true，但 TelegramBotApiId 或 TelegramBotApiHash 未配置，跳过内置本地 Bot API 启动");
+                return;
+            }
+
+            var botApiDataDir = Path.Combine(Env.WorkDir, "telegram-bot-api");
+            Directory.CreateDirectory(botApiDataDir);
+
+            var botApiProcess = Fork(botApiExePath, [
+                "--local",
+                $"--api-id={Env.TelegramBotApiId}",
+                $"--api-hash={Env.TelegramBotApiHash}",
+                $"--dir={botApiDataDir}",
+                $"--http-port={Env.LocalBotApiPort}"
+            ]);
+
+            Log.Information("内置 telegram-bot-api 已启动，等待端口 {Port} 就绪...", Env.LocalBotApiPort);
+            await WaitForTcpServiceReady("127.0.0.1", Env.LocalBotApiPort, "telegram-bot-api", botApiProcess, maxRetries: 40);
+        }
+
+        private static async Task WaitForExternalLocalBotApiIfNeededAsync() {
+            if (!TryGetLoopbackLocalBotApiUri(out var localBotApiUri) || localBotApiUri == null || Env.EnableLocalBotAPI) {
+                return;
+            }
+
+            var port = localBotApiUri.IsDefaultPort
+                ? ( localBotApiUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 443 : 80 )
+                : localBotApiUri.Port;
+
+            Log.Information("使用外部本地 Bot API: {BaseUrl}", Env.BaseUrl);
+            await WaitForTcpServiceReady(localBotApiUri.Host, port, "external telegram-bot-api", maxRetries: 40);
         }
 
         /// <summary>
@@ -89,10 +145,16 @@ namespace TelegramSearchBot.AppBootstrap {
 #if DEBUG
             Env.SchedulerPort = 6379;
 #endif
-            Fork(["Scheduler", $"{Env.SchedulerPort}"]);
+            var schedulerProcess = Fork(["Scheduler", $"{Env.SchedulerPort}"]);
 
             // 等待 Garnet 服务就绪，避免竞态条件导致 Redis 连接失败
-            await WaitForGarnetReady(Env.SchedulerPort);
+            await WaitForTcpServiceReady("127.0.0.1", Env.SchedulerPort, "Garnet", schedulerProcess);
+
+            if (Env.EnableLocalBotAPI) {
+                await StartEmbeddedLocalBotApiAsync();
+            } else {
+                await WaitForExternalLocalBotApiIfNeededAsync();
+            }
 
             // 如果启用了本地 telegram-bot-api，则在此启动它
             if (Env.EnableLocalBotAPI) {
@@ -166,11 +228,22 @@ namespace TelegramSearchBot.AppBootstrap {
                 Log.Warning(ex, "Failed to initialize external MCP servers. Continuing without them.");
             }
 
+            // Export tool definitions to Redis so agent processes can discover available tools
+            try {
+                var redis = service.GetRequiredService<IConnectionMultiplexer>();
+                await McpToolHelper.RefreshAgentToolDefsInRedisAsync(redis);
+                Log.Information("Exported tool definitions to Redis for agent discovery.");
+            } catch (Exception ex) {
+                Log.Warning(ex, "Failed to export tool definitions to Redis. Agent processes may have limited tools.");
+            }
+
             // SQLite 数据库初始化
             using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
                 var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
+                var searchCacheContext = serviceScope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
                 //context.Database.EnsureCreated();
                 context.Database.Migrate();
+                await searchCacheContext.Database.MigrateAsync();
             }
 
             // 启动Host，SchedulerService作为HostedService会自动启动

@@ -19,7 +19,9 @@ namespace TelegramSearchBot.Interface {
             bool isGroup,
             int replyToMessageId,
             string initialContentForNewMessage,
-            bool isEdit);
+            bool isEdit,
+            bool disableLinkPreview = false,
+            string? plainTextFallbackOverride = null);
 
         Task AttemptFallbackSend(
             long chatId,
@@ -28,7 +30,9 @@ namespace TelegramSearchBot.Interface {
             bool isGroup,
             int replyToMessageId,
             bool wasEditAttempt,
-            string initialFailureReason);
+            string initialFailureReason,
+            bool disableLinkPreview = false,
+            string? plainTextFallbackOverride = null);
         #endregion
 
         #region Standard Send Methods

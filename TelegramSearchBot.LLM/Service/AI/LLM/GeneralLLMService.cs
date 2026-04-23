@@ -21,6 +21,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly OpenAIService _openAIService;
         private readonly OllamaService _ollamaService;
         private readonly GeminiService _geminiService;
+        private readonly AnthropicService _anthropicService;
         private readonly ILogger<GeneralLLMService> _logger;
         private readonly ILLMFactory _LLMFactory;
 
@@ -42,6 +43,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             OllamaService ollamaService,
             OpenAIService openAIService,
             GeminiService geminiService,
+            AnthropicService anthropicService,
             ILLMFactory _LLMFactory
             ) {
             this.connectionMultiplexer = connectionMultiplexer;
@@ -52,6 +54,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _openAIService = openAIService;
             _ollamaService = ollamaService;
             _geminiService = geminiService;
+            _anthropicService = anthropicService;
             this._LLMFactory = _LLMFactory;
         }
         public async Task<List<LLMChannel>> GetChannelsAsync(string modelName) {

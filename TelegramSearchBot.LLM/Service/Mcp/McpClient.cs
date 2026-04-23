@@ -208,9 +208,14 @@ namespace TelegramSearchBot.Service.Mcp {
                 await _stdin.WriteLineAsync(json);
                 await _stdin.FlushAsync();
 
-                // Read response with timeout
+                // Read response with configurable timeout
+                var timeoutSeconds = _config.TimeoutSeconds;
+                if (timeoutSeconds <= 0) {
+                    _logger.LogWarning("[MCP:{ServerName}] Invalid TimeoutSeconds ({Timeout}), falling back to 30s.", ServerName, _config.TimeoutSeconds);
+                    timeoutSeconds = 30;
+                }
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                cts.CancelAfter(TimeSpan.FromSeconds(30));
+                cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
                 while (!cts.Token.IsCancellationRequested) {
                     var responseLine = await ReadLineAsync(cts.Token);
