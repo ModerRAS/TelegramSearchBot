@@ -30,6 +30,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public const string MaxImageRetryCountKey = "LLM:MaxImageRetryCount";
         public const string AltPhotoModelName = "LLM:AltPhotoModelName";
         public const string EmbeddingModelName = "LLM:EmbeddingModelName";
+        public const string DefaultAltPhotoPrompt = "请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用'图中显示'或'这是一张图片'这类通用表达。";
+        public const string DefaultVisionOcrPrompt = "请使用视觉能力识别并提取这张图片里可见的文字内容，优先输出原文，并按从上到下、从左到右的自然阅读顺序整理。尽量保留换行和段落，不要改写、总结或解释；只有在完全没有可识别文字时，才用一句中文简要描述图片主要内容。不要添加“图中显示”或“这是一张图片”这类套话。";
         public const int DefaultMaxRetryCount = 100;
         public const int DefaultMaxImageRetryCount = 1000;
 
@@ -222,7 +224,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogWarning($"所有{modelName}关联的渠道当前都已满载，重试{maxRetries}次后放弃");
 
         }
-        public async Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default) {
+        public Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default) {
+            return AnalyzeImageAsync(PhotoPath, ChatId, DefaultAltPhotoPrompt, cancellationToken);
+        }
+
+        public async Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string prompt, CancellationToken cancellationToken = default) {
+            prompt = string.IsNullOrWhiteSpace(prompt) ? DefaultAltPhotoPrompt : prompt;
+
             // 1. 获取模型名称
             var modelName = "gemma3:27b";
             var config = await _dbContext.AppConfigurationItems
@@ -232,7 +240,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             await using var enumerator = ExecOperationAsync<string>((service, channel, cancel) => {
-                return AnalyzeImageAsync(PhotoPath, ChatId, modelName, service, channel, cancel);
+                return AnalyzeImageAsync(PhotoPath, ChatId, modelName, service, channel, prompt, cancel);
             }, modelName, cancellationToken).GetAsyncEnumerator();
 
             if (await enumerator.MoveNextAsync()) {
@@ -243,7 +251,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return $"Error:未能获取 {modelName} 模型的图片分析结果";
         }
         public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
-            yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel);
+            await foreach (var result in AnalyzeImageAsync(PhotoPath, ChatId, modelName, service, channel, DefaultAltPhotoPrompt, cancellationToken)) {
+                yield return result;
+            }
+        }
+
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, string prompt, CancellationToken cancellationToken = default) {
+            prompt = string.IsNullOrWhiteSpace(prompt) ? DefaultAltPhotoPrompt : prompt;
+            yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel, prompt);
             yield break;
         }
 

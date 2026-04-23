@@ -6,6 +6,7 @@ using SkiaSharp;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Interface.AI.OCR;
+using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.Service.AI.OCR {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
@@ -35,7 +36,7 @@ namespace TelegramSearchBot.Service.AI.OCR {
                     }
 
                     _logger.LogInformation("正在使用LLM进行OCR识别...");
-                    var result = await _generalLLMService.AnalyzeImageAsync(tempPath, 0);
+                    var result = await _generalLLMService.AnalyzeImageAsync(tempPath, 0, GeneralLLMService.DefaultVisionOcrPrompt);
 
                     if (string.IsNullOrWhiteSpace(result)) {
                         _logger.LogWarning("LLM OCR返回空结果");

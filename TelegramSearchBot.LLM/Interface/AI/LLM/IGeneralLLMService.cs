@@ -21,7 +21,9 @@ namespace TelegramSearchBot.Interface.AI.LLM {
         IAsyncEnumerable<string> ResumeFromSnapshotAsync(LlmContinuationSnapshot snapshot, LlmExecutionContext executionContext, CancellationToken cancellationToken = default);
 
         Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, CancellationToken cancellationToken = default);
+        Task<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string prompt, CancellationToken cancellationToken = default);
         IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default);
+        IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, string prompt, CancellationToken cancellationToken = default);
         Task<float[]> GenerateEmbeddingsAsync(Message message, long ChatId);
         Task<float[]> GenerateEmbeddingsAsync(string message, CancellationToken cancellationToken = default);
         IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default);

@@ -42,7 +42,7 @@ namespace TelegramSearchBot.Interface.AI.LLM {
         /// </summary>
         public Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel);
 
-        public Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel);
+        public Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt = null);
         public virtual async Task<bool> IsHealthyAsync(LLMChannel channel) => ( await GetAllModels(channel) ).Any();
     }
 }
