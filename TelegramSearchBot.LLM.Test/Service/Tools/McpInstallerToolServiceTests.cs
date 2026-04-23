@@ -23,6 +23,7 @@ namespace TelegramSearchBot.Test.Service.Tools {
     /// <summary>
     /// Integration tests for McpInstallerToolService verifying the full add/list/remove/restart flow.
     /// </summary>
+    [Collection(McpToolHelperTestCollection.Name)]
     public class McpInstallerToolServiceTests : IDisposable {
         private readonly ServiceProvider _serviceProvider;
         private readonly McpServerManager _mcpServerManager;
@@ -61,6 +62,9 @@ namespace TelegramSearchBot.Test.Service.Tools {
         }
 
         public void Dispose() {
+            McpToolHelper.RegisterExternalTools(
+                new List<(string, McpToolHelper.ExternalToolInfo)>(),
+                null);
             _mcpServerManager.Dispose();
             _serviceProvider.Dispose();
         }
