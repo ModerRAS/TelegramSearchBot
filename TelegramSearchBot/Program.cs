@@ -6,6 +6,7 @@ using Serilog.Events;
 using Serilog.Sinks.OpenTelemetry;
 using TelegramSearchBot.AppBootstrap;
 using TelegramSearchBot.Common;
+using TelegramSearchBot.Service.AppUpdate;
 
 namespace TelegramSearchBot {
     class Program {
@@ -30,6 +31,9 @@ namespace TelegramSearchBot {
             .CreateLogger();
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
             if (args.Length == 0) {
+                if (await SelfUpdateBootstrap.TryApplyUpdateAsync(args)) {
+                    return;
+                }
                 await GeneralBootstrap.Startup(args); // Call async Startup
             } else if (args.Length >= 1) {
                 // 调用封装好的反射分发方法

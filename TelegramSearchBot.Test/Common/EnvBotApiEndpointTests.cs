@@ -41,5 +41,32 @@ namespace TelegramSearchBot.Test.Common {
             Assert.Equal("https://api.telegram.org", result.BaseUrl);
             Assert.False(result.IsLocalApi);
         }
+
+        [Fact]
+        public void ResolveUpdateBaseUrl_TrimsTrailingSlash() {
+            var result = Env.ResolveUpdateBaseUrl(new Config {
+                UpdateBaseUrl = "https://clickonce.miaostay.com/TelegramSearchBot/"
+            });
+
+            Assert.Equal("https://clickonce.miaostay.com/TelegramSearchBot", result);
+        }
+
+        [Fact]
+        public void ResolveUpdateBaseUrl_FallsBackToDefaultWhenBlank() {
+            var result = Env.ResolveUpdateBaseUrl(new Config {
+                UpdateBaseUrl = "   "
+            });
+
+            Assert.Equal(Env.DefaultUpdateBaseUrl, result);
+        }
+
+        [Fact]
+        public void ResolveUpdateBaseUrl_FallsBackToDefaultWhenUrlIsNotHttpsOrLoopback() {
+            var result = Env.ResolveUpdateBaseUrl(new Config {
+                UpdateBaseUrl = "http://example.com/update"
+            });
+
+            Assert.Equal(Env.DefaultUpdateBaseUrl, result);
+        }
     }
 }

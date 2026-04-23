@@ -38,6 +38,7 @@ namespace TelegramSearchBot.Controller.Help {
 ### 2. 全局管理员指令
 - **群组管理**: `设置管理群`/`取消管理群`
 - **Bilibili配置**: `/setbilicookie`, `/getbilicookie`
+- **应用更新**: `检查更新`, `更新`
 
 ## 三、自动功能
 1. **与LLM对话**: @机器人用户名

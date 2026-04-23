@@ -44,6 +44,8 @@ namespace TelegramSearchBot.Common {
             OLTPName = config.OLTPName;
             BraveApiKey = config.BraveApiKey;
             EnableAccounting = config.EnableAccounting;
+            EnableAutoUpdate = config.EnableAutoUpdate;
+            UpdateBaseUrl = ResolveUpdateBaseUrl(config);
             MaxToolCycles = config.MaxToolCycles;
             EnableLLMAgentProcess = config.EnableLLMAgentProcess;
             AgentHeartbeatIntervalSeconds = config.AgentHeartbeatIntervalSeconds;
@@ -91,6 +93,7 @@ namespace TelegramSearchBot.Common {
         }
 
         public static readonly string BaseUrl = null!;
+        public const string DefaultUpdateBaseUrl = "https://clickonce.miaostay.com/TelegramSearchBot";
 #pragma warning disable CS8604 // 引用类型参数可能为 null。
         public static readonly bool IsLocalAPI;
 #pragma warning restore CS8604 // 引用类型参数可能为 null。
@@ -98,12 +101,14 @@ namespace TelegramSearchBot.Common {
         public static readonly long AdminId;
         public static readonly bool EnableAutoOCR;
         public static readonly bool EnableAutoASR;
+        public static readonly bool EnableAutoUpdate;
         public static readonly bool EnableLocalBotAPI;
         public static readonly string TelegramBotApiId = null!;
         public static readonly string TelegramBotApiHash = null!;
         public static readonly int LocalBotApiPort;
         public static readonly string ExternalLocalBotApiBaseUrl = string.Empty;
         public static readonly string WorkDir = null!;
+        public static readonly string UpdateBaseUrl = null!;
         public static readonly int TaskDelayTimeout;
         public static readonly bool SameServer;
         public static long BotId { get; set; }
@@ -131,6 +136,23 @@ namespace TelegramSearchBot.Common {
         public static int AgentProcessMemoryLimitMb { get; set; } = 256;
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
+
+        public static string ResolveUpdateBaseUrl(Config config) {
+            ArgumentNullException.ThrowIfNull(config);
+            if (string.IsNullOrWhiteSpace(config.UpdateBaseUrl)) {
+                return DefaultUpdateBaseUrl;
+            }
+
+            if (!Uri.TryCreate(config.UpdateBaseUrl.Trim(), UriKind.Absolute, out var uri)) {
+                return DefaultUpdateBaseUrl;
+            }
+
+            if (!uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) && !uri.IsLoopback) {
+                return DefaultUpdateBaseUrl;
+            }
+
+            return NormalizeBaseUrl(uri.ToString(), DefaultUpdateBaseUrl);
+        }
     }
     public class Config {
         public string BaseUrl { get; set; } = "https://api.telegram.org";
@@ -138,6 +160,8 @@ namespace TelegramSearchBot.Common {
         public long AdminId { get; set; }
         public bool EnableAutoOCR { get; set; } = false;
         public bool EnableAutoASR { get; set; } = false;
+        public bool EnableAutoUpdate { get; set; } = true;
+        public string UpdateBaseUrl { get; set; } = Env.DefaultUpdateBaseUrl;
         //public string WorkDir { get; set; } = "/data/TelegramSearchBot";
         public bool IsLocalAPI { get; set; } = false;
         public bool EnableLocalBotAPI { get; set; } = false;

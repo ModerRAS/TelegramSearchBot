@@ -6,6 +6,9 @@
     <PublishReadyToRun>true</PublishReadyToRun>
     <Nullable>warnings</Nullable>
     <StartupObject>TelegramSearchBot.Program</StartupObject>
+    <Version Condition="'$(BUILD_VERSION)' != ''">$(BUILD_VERSION)</Version>
+    <Version Condition="'$(BUILD_VERSION)' == ''">0.0.0</Version>
+    <InformationalVersion>$(Version)</InformationalVersion>
   </PropertyGroup>
   
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
@@ -89,6 +92,7 @@
     <PackageReference Include="FaissNet" Version="1.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="ScottPlot" Version="5.1.57" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.5" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
