@@ -62,6 +62,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
     
     steps:
     - name: Generate PR report
@@ -176,9 +181,13 @@ jobs:
           ];
 
           fs.writeFileSync('pr-report.md', `${reportLines.join('\n')}\n`, 'utf8');
+
+    - name: Publish report summary
+      if: always()
+      run: cat pr-report.md >> "$GITHUB_STEP_SUMMARY"
     
     - name: Find existing comment
-      if: always()
+      if: always() && github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
       uses: actions/github-script@v7
       id: find-comment
       with:
@@ -197,7 +206,7 @@ jobs:
           return botComment?.id;
     
     - name: Create or update comment
-      if: always()
+      if: always() && github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
       uses: actions/github-script@v7
       with:
         script: |
