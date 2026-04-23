@@ -39,6 +39,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Tokenizer
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.Tokenizer.Tests", "TelegramSearchBot.Tokenizer.Tests\TelegramSearchBot.Tokenizer.Tests.csproj", "{5FF9A80A-C87C-4E61-9986-831C9ACDEFDA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramSearchBot.UpdateBuilder", "TelegramSearchBot.UpdateBuilder\TelegramSearchBot.UpdateBuilder.csproj", "{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -193,6 +195,18 @@ Global
 		{5FF9A80A-C87C-4E61-9986-831C9ACDEFDA}.Release|x64.Build.0 = Release|Any CPU
 		{5FF9A80A-C87C-4E61-9986-831C9ACDEFDA}.Release|x86.ActiveCfg = Release|Any CPU
 		{5FF9A80A-C87C-4E61-9986-831C9ACDEFDA}.Release|x86.Build.0 = Release|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Debug|x64.Build.0 = Debug|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Debug|x86.Build.0 = Debug|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Release|x64.ActiveCfg = Release|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Release|x64.Build.0 = Release|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Release|x86.ActiveCfg = Release|Any CPU
+		{9DDA7740-77C6-4FE1-AA5E-7EF34C84776C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

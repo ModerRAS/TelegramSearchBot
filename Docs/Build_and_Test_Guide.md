@@ -32,6 +32,13 @@ dotnet publish TelegramSearchBot/TelegramSearchBot.csproj -c Release -r win-x64 
 
 # 发布 Windows 单文件版本
 dotnet publish TelegramSearchBot/TelegramSearchBot.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+
+# 生成 Moder.Update 兼容更新源
+dotnet run --project TelegramSearchBot.UpdateBuilder/TelegramSearchBot.UpdateBuilder.csproj -c Release -- \
+  --source-dir ./publish \
+  --output-dir ./update-feed \
+  --target-version 2026.04.23.2 \
+  --min-source-version 2026.04.23.1
 ```
 
 **Linux 平台**
@@ -226,6 +233,10 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal
 ```
+
+仓库内实际的 `push.yml` 现在维护两条发布线：
+- 保留根目录中的最终 ClickOnce bridge，供旧安装版本过渡到新更新链路。
+- 每次主分支发布都会生成 `catalog.json`、`packages/` 和 `moder_update_updater.exe`，供 `%LOCALAPPDATA%\TelegramSearchBot\app` 中的独立安装目录继续使用 Moder.Update 协议升级。
 
 ### 监控与日志
 

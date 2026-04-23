@@ -32,7 +32,7 @@
 ## 安装与配置
 
 ### 快速开始
-1. 下载[最新版本](https://clickonce.miaostay.com/TelegramSearchBot/Publish.html)
+1. 下载[最新版本](https://clickonce.miaostay.com/TelegramSearchBot/Publish.html)（首次安装仍使用 ClickOnce，后续版本会迁移到 `%LOCALAPPDATA%\TelegramSearchBot\app` 并由内置更新器继续升级）
 2. 首次运行会自动生成配置目录
 3. 编辑`AppData/Local/TelegramSearchBot/Config.json`:
 
@@ -43,6 +43,8 @@
   "AdminId": 123456789,
   "EnableAutoOCR": false,
   "EnableAutoASR": false,
+  "EnableAutoUpdate": true,
+  "UpdateBaseUrl": "https://clickonce.miaostay.com/TelegramSearchBot",
   "IsLocalAPI": false,
   "EnableLocalBotAPI": false,
   "ExternalLocalBotApiBaseUrl": "",
@@ -88,6 +90,11 @@
   - `LocalBotApiPort`: 本地Bot API服务端口(默认8081)
   - **说明**: `EnableLocalBotAPI=true` 时会启动内置 `telegram-bot-api.exe`；若使用外部 local API，请保持 `EnableLocalBotAPI=false` 并填写 `ExternalLocalBotApiBaseUrl`
   - **优势**: 使用本地 Bot API（内置或外部）后可发送最大2GB文件（vs 云端50MB限制）
+
+- **自动更新**:
+  - `EnableAutoUpdate`: 是否启用内置自更新流程(默认true)
+  - `UpdateBaseUrl`: 更新目录根地址，默认使用 `https://clickonce.miaostay.com/TelegramSearchBot`
+  - **说明**: 首次安装仍通过 `Publish.html` 分发桥接版；之后程序会从 `catalog.json`、`packages/` 和 `moder_update_updater.exe` 拉取更新并升级独立安装目录
 
 - **AI相关**:
   - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")
