@@ -33,30 +33,27 @@ namespace TelegramSearchBot.Test.Helper {
 
             var result = MessageFormatHelper.CollapseLlmIntermediateIterations(input);
 
-            Assert.Contains(":::tg-expandable-blockquote", result);
-            Assert.Contains("第一轮分析", result);
+            Assert.Contains("已折叠前面的中间过程和 1 次工具调用", result);
             Assert.Contains("🔧 `search_messages` [query: telegram collapse]", result);
+            Assert.DoesNotContain("第一轮分析", result);
             Assert.EndsWith("最终回答：可以把中间过程折叠起来。", result);
         }
 
         [Fact]
-        public void ConvertMarkdownToTelegramHtml_WithCollapsedIterations_EmitsSpoiler() {
+        public void ConvertMarkdownToTelegramHtml_WithCollapsedIterations_EmitsCompactSummary() {
             var markdown = """
-:::tg-expandable-blockquote
-第一轮分析
-
-🔧 `search_messages` [query: telegram collapse]
-:::
+💭 已折叠前面的中间过程和 1 次工具调用（最近一次：🔧 `search_messages` [query: telegram collapse]）。
 
 最终回答：可以把中间过程折叠起来。
 """;
 
             var html = MessageFormatHelper.ConvertMarkdownToTelegramHtml(markdown);
 
-            Assert.Contains("<tg-spoiler>", html);
+            Assert.Contains("已折叠前面的中间过程和 1 次工具调用", html);
             Assert.Contains("<code>search_messages</code>", html);
             Assert.Contains("最终回答：可以把中间过程折叠起来。", html);
             Assert.DoesNotContain("<blockquote", html);
+            Assert.DoesNotContain("<tg-spoiler>", html);
         }
 
         [Fact]

@@ -61,18 +61,14 @@ namespace TelegramSearchBot.Helper {
                         case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": builder.Append("<b>"); ProcessChildren(node, builder); builder.Append("</b>\n"); break;
                         case "ul": case "ol": ProcessList(node, builder, tagName == "ol" ? 1 : 0); builder.Append("\n"); break;
                         case "blockquote":
-                            if (node.Attributes["expandable"] != null) {
-                                AppendSpoilerBlock(node, builder);
-                            } else {
-                                AppendQuotedBlock(node, builder);
-                            }
+                            AppendQuotedBlock(node, builder);
                             break;
                         case "span":
                         case "div":
                         case "font":
                         case "img":
                             if (tagName == "div" && HasCssClass(node, ExpandableBlockquoteContainerClass)) {
-                                AppendSpoilerBlock(node, builder);
+                                AppendQuotedBlock(node, builder);
                                 break;
                             }
                             if (tagName == "img") {
@@ -102,12 +98,6 @@ namespace TelegramSearchBot.Helper {
             return classValue
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Any(x => string.Equals(x, cssClass, StringComparison.Ordinal));
-        }
-
-        private static void AppendSpoilerBlock(HtmlNode node, StringBuilder builder) {
-            builder.Append("<tg-spoiler>");
-            ProcessChildren(node, builder);
-            builder.Append("</tg-spoiler>");
         }
 
         private static void AppendQuotedBlock(HtmlNode node, StringBuilder builder) {
@@ -293,13 +283,11 @@ namespace TelegramSearchBot.Helper {
                 return markdown;
             }
 
-            return $"""
-:::{ExpandableBlockquoteContainerClass}
-{collapsedPrefix}
-:::
+            var lastToolCall = lastMatch.Value.Trim();
+            var toolCallCountText = matches.Count == 1 ? "1 次工具调用" : $"{matches.Count} 次工具调用";
+            var collapsedSummary = $"💭 已折叠前面的中间过程和 {toolCallCountText}（最近一次：{lastToolCall}）。";
 
-{visibleSuffix}
-""";
+            return $"{collapsedSummary}\n\n{visibleSuffix}";
         }
 
         public static string EscapeMarkdownV2(string text) {
