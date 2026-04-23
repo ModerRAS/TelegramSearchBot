@@ -40,7 +40,7 @@ namespace TelegramSearchBot.Test.Helper {
         }
 
         [Fact]
-        public void ConvertMarkdownToTelegramHtml_WithCollapsedIterations_EmitsExpandableBlockquote() {
+        public void ConvertMarkdownToTelegramHtml_WithCollapsedIterations_EmitsSpoiler() {
             var markdown = """
 :::tg-expandable-blockquote
 第一轮分析
@@ -53,9 +53,25 @@ namespace TelegramSearchBot.Test.Helper {
 
             var html = MessageFormatHelper.ConvertMarkdownToTelegramHtml(markdown);
 
-            Assert.Contains("<blockquote expandable>", html);
+            Assert.Contains("<tg-spoiler>", html);
             Assert.Contains("<code>search_messages</code>", html);
             Assert.Contains("最终回答：可以把中间过程折叠起来。", html);
+            Assert.DoesNotContain("<blockquote", html);
+        }
+
+        [Fact]
+        public void ConvertMarkdownToTelegramHtml_WithBlockquote_DoesNotEmitUnsupportedBlockquoteTag() {
+            var markdown = """
+> 第一行引用
+>
+> 第二行引用
+""";
+
+            var html = MessageFormatHelper.ConvertMarkdownToTelegramHtml(markdown);
+
+            Assert.Contains("&gt; 第一行引用", html);
+            Assert.Contains("&gt; 第二行引用", html);
+            Assert.DoesNotContain("<blockquote", html);
         }
 
         [Fact]

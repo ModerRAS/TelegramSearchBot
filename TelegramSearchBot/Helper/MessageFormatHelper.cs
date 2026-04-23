@@ -61,18 +61,18 @@ namespace TelegramSearchBot.Helper {
                         case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": builder.Append("<b>"); ProcessChildren(node, builder); builder.Append("</b>\n"); break;
                         case "ul": case "ol": ProcessList(node, builder, tagName == "ol" ? 1 : 0); builder.Append("\n"); break;
                         case "blockquote":
-                            builder.Append(node.Attributes["expandable"] != null ? "<blockquote expandable>" : "<blockquote>");
-                            ProcessChildren(node, builder);
-                            builder.Append("</blockquote>");
+                            if (node.Attributes["expandable"] != null) {
+                                AppendSpoilerBlock(node, builder);
+                            } else {
+                                AppendQuotedBlock(node, builder);
+                            }
                             break;
                         case "span":
                         case "div":
                         case "font":
                         case "img":
                             if (tagName == "div" && HasCssClass(node, ExpandableBlockquoteContainerClass)) {
-                                builder.Append("<blockquote expandable>");
-                                ProcessChildren(node, builder);
-                                builder.Append("</blockquote>");
+                                AppendSpoilerBlock(node, builder);
                                 break;
                             }
                             if (tagName == "img") {
@@ -102,6 +102,37 @@ namespace TelegramSearchBot.Helper {
             return classValue
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Any(x => string.Equals(x, cssClass, StringComparison.Ordinal));
+        }
+
+        private static void AppendSpoilerBlock(HtmlNode node, StringBuilder builder) {
+            builder.Append("<tg-spoiler>");
+            ProcessChildren(node, builder);
+            builder.Append("</tg-spoiler>");
+        }
+
+        private static void AppendQuotedBlock(HtmlNode node, StringBuilder builder) {
+            var quotedContent = new StringBuilder();
+            ProcessChildren(node, quotedContent);
+
+            var normalized = quotedContent
+                .ToString()
+                .Trim('\r', '\n');
+
+            if (string.IsNullOrWhiteSpace(normalized)) {
+                return;
+            }
+
+            var lines = normalized.Replace("\r\n", "\n").Split('\n');
+            foreach (var line in lines) {
+                if (string.IsNullOrWhiteSpace(line)) {
+                    builder.Append('\n');
+                    continue;
+                }
+
+                builder.Append("&gt; ");
+                builder.Append(line.TrimEnd());
+                builder.Append('\n');
+            }
         }
 
         private static string EncodeTelegramHtmlText(string text) {
