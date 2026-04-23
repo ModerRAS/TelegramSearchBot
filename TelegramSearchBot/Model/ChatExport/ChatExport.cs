@@ -131,6 +131,8 @@ namespace TelegramSearchBot.Model.ChatExport {
     }
 
     public class TextItemListConverter : JsonConverter {
+        public override bool CanWrite => false;
+
         public override bool CanConvert(Type objectType) {
             return objectType == typeof(List<TextItem>);
         }
@@ -169,9 +171,7 @@ namespace TelegramSearchBot.Model.ChatExport {
             return items;
         }
 
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer) {
-            serializer.Serialize(writer, value);
-        }
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer) { }
 
         private static TextItem DeserializeTextItem(JToken token, JsonSerializer serializer) {
             if (token.Type == JTokenType.String) {

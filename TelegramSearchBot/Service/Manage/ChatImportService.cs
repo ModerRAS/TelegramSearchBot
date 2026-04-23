@@ -224,6 +224,10 @@ namespace TelegramSearchBot.Service.Manage {
         }
 
         private static string FormatEntity(TextEntity entity) {
+            if (string.IsNullOrEmpty(entity.Text)) {
+                return string.Empty;
+            }
+
             return entity.Type switch {
                 "plain" => entity.Text,
                 "bold" => $"**{entity.Text}**",
