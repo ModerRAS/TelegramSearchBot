@@ -237,6 +237,7 @@ jobs:
 仓库内实际的 `push.yml` 现在维护两条发布线：
 - 保留根目录中的最终 ClickOnce bridge，供旧安装版本过渡到新更新链路。
 - 每次主分支发布都会生成 `catalog.json`、`packages/` 和 `moder_update_updater.exe`，供 `%LOCALAPPDATA%\TelegramSearchBot\app` 中的独立安装目录继续使用 Moder.Update 协议升级。
+- 同一条发布流水线还会清理 Backblaze B2 上将被覆盖文件的旧版本，并把 `TelegramSearchBot-win-x64-full-<version>.zip` 全量包上传到 GitHub Releases，便于手动分发和回滚。
 
 ### 监控与日志
 
