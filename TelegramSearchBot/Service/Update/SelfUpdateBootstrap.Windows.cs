@@ -39,54 +39,50 @@ public static partial class SelfUpdateBootstrap
                 return true;
             }
 
-            var currentVersion = ResolveCurrentVersion();
-            using var httpClient = HttpClientHelper.CreateProxyHttpClient();
-            var result = await CheckForUpdatesAsync(httpClient, currentVersion, CancellationToken.None);
-
-            if (result.Status == UpdateCheckStatus.UpToDate) {
-                return false;
+            var result = await StartUpdateOnWindowsAsync();
+            if (result.State == ManagedUpdateState.UpdateScheduled) {
+                Log.Information("检测到新版本 {TargetVersion}，已启动外部更新进程。", result.TargetVersion);
+                return true;
             }
 
-            if (result.Status != UpdateCheckStatus.UpdateAvailable || result.UpdateEntry is null) {
-                Log.Warning("自动更新不可用: {Message}", result.Message ?? $"status={result.Status}");
-                return false;
+            if (result.State == ManagedUpdateState.NoPathFound || result.State == ManagedUpdateState.UpdateUnavailable) {
+                Log.Warning("自动更新不可用: {Message}", result.Message ?? $"state={result.State}");
             }
 
-            var updateEntry = result.UpdateEntry;
-            var updateRoot = Path.Combine(
-                Env.WorkDir,
-                "updates",
-                $"{SanitizeVersion(currentVersion)}-to-{SanitizeVersion(updateEntry.TargetVersion)}");
-            var stagingDir = Path.Combine(updateRoot, "staging");
-            var backupDir = Path.Combine(updateRoot, "backup");
-
-            ResetDirectory(stagingDir);
-            ResetDirectory(backupDir);
-
-            await using var packageStream = await DownloadStreamAsync(httpClient, updateEntry.PackagePath, CancellationToken.None);
-            await using var packageBuffer = new MemoryStream();
-            await packageStream.CopyToAsync(packageBuffer);
-            packageBuffer.Position = 0;
-
-            VerifyPackageChecksum(packageBuffer, updateEntry);
-            packageBuffer.Position = 0;
-            ExtractPackageToDirectory(packageBuffer, stagingDir);
-
-            var updaterPath = await DownloadUpdaterAsync(httpClient, CancellationToken.None);
-            SpawnUpdater(new UpdaterLaunchArgs {
-                UpdaterPath = updaterPath,
-                TargetPid = Environment.ProcessId,
-                TargetPath = ManagedExecutablePath,
-                StagingDir = stagingDir,
-                BackupDir = backupDir
-            });
-
-            Log.Information("检测到新版本 {TargetVersion}，已启动外部更新进程。", updateEntry.TargetVersion);
-            return true;
+            return false;
         } catch (Exception ex) {
             Log.Warning(ex, "自动更新检查失败，将继续启动当前程序。");
             return false;
         }
+    }
+
+    private static partial async Task<ManagedUpdateResult> GetUpdateStatusOnWindowsAsync()
+    {
+        var currentVersion = ResolveCurrentVersion();
+        using var httpClient = HttpClientHelper.CreateProxyHttpClient();
+        var result = await CheckForUpdatesAsync(httpClient, currentVersion, CancellationToken.None);
+        return ToManagedUpdateResult(result, currentVersion);
+    }
+
+    private static partial async Task<ManagedUpdateResult> StartUpdateOnWindowsAsync()
+    {
+        var currentVersion = ResolveCurrentVersion();
+        using var httpClient = HttpClientHelper.CreateProxyHttpClient();
+        var result = await CheckForUpdatesAsync(httpClient, currentVersion, CancellationToken.None);
+        if (result.Status != UpdateCheckStatus.UpdateAvailable || result.UpdateEntry is null) {
+            return ToManagedUpdateResult(result, currentVersion);
+        }
+
+        await PrepareUpdateAsync(httpClient, currentVersion, result.UpdateEntry, CancellationToken.None);
+        return new ManagedUpdateResult {
+            State = ManagedUpdateState.UpdateScheduled,
+            CurrentVersion = currentVersion,
+            LatestVersion = result.LatestVersion,
+            TargetVersion = result.UpdateEntry.TargetVersion,
+            ManagedInstallExists = File.Exists(ManagedExecutablePath),
+            RunningManagedInstall = PathsEqual(Environment.ProcessPath, ManagedExecutablePath),
+            Message = $"已计划更新到 {result.UpdateEntry.TargetVersion}。"
+        };
     }
 
     private static async Task<UpdateCheckResult> CheckForUpdatesAsync(HttpClient httpClient, string currentVersion, CancellationToken cancellationToken)
@@ -121,6 +117,59 @@ public static partial class SelfUpdateBootstrap
         return updateEntry is null
             ? UpdateCheckResult.NoPathFound($"No update path found from {currentVersion} to {catalog.LatestVersion}.")
             : UpdateCheckResult.UpdateAvailable(catalog.LatestVersion, updateEntry);
+    }
+
+    private static ManagedUpdateResult ToManagedUpdateResult(UpdateCheckResult result, string currentVersion)
+    {
+        return new ManagedUpdateResult {
+            State = result.Status switch {
+                UpdateCheckStatus.UpToDate => ManagedUpdateState.UpToDate,
+                UpdateCheckStatus.UpdateAvailable => ManagedUpdateState.UpdateAvailable,
+                UpdateCheckStatus.UpdateUnavailable => ManagedUpdateState.UpdateUnavailable,
+                _ => ManagedUpdateState.NoPathFound
+            },
+            CurrentVersion = currentVersion,
+            LatestVersion = result.LatestVersion,
+            TargetVersion = result.UpdateEntry?.TargetVersion,
+            Message = result.Message,
+            ManagedInstallExists = File.Exists(ManagedExecutablePath),
+            RunningManagedInstall = PathsEqual(Environment.ProcessPath, ManagedExecutablePath)
+        };
+    }
+
+    private static async Task PrepareUpdateAsync(
+        HttpClient httpClient,
+        string currentVersion,
+        UpdateCatalogEntry updateEntry,
+        CancellationToken cancellationToken)
+    {
+        var updateRoot = Path.Combine(
+            Env.WorkDir,
+            "updates",
+            $"{SanitizeVersion(currentVersion)}-to-{SanitizeVersion(updateEntry.TargetVersion)}");
+        var stagingDir = Path.Combine(updateRoot, "staging");
+        var backupDir = Path.Combine(updateRoot, "backup");
+
+        ResetDirectory(stagingDir);
+        ResetDirectory(backupDir);
+
+        await using var packageStream = await DownloadStreamAsync(httpClient, updateEntry.PackagePath, cancellationToken);
+        await using var packageBuffer = new MemoryStream();
+        await packageStream.CopyToAsync(packageBuffer, cancellationToken);
+        packageBuffer.Position = 0;
+
+        VerifyPackageChecksum(packageBuffer, updateEntry);
+        packageBuffer.Position = 0;
+        ExtractPackageToDirectory(packageBuffer, stagingDir);
+
+        var updaterPath = await DownloadUpdaterAsync(httpClient, cancellationToken);
+        SpawnUpdater(new UpdaterLaunchArgs {
+            UpdaterPath = updaterPath,
+            TargetPid = Environment.ProcessId,
+            TargetPath = ManagedExecutablePath,
+            StagingDir = stagingDir,
+            BackupDir = backupDir
+        });
     }
 
     private static async Task<UpdateCatalog> FetchCatalogAsync(HttpClient httpClient, CancellationToken cancellationToken)
@@ -244,7 +293,7 @@ public static partial class SelfUpdateBootstrap
             "--target-pid", args.TargetPid.ToString(),
             "--target-path", Quote(args.TargetPath),
             "--staging-dir", Quote(args.StagingDir),
-            "--wait-timeout", "30",
+            "--wait-timeout", "60",
             "--backup-dir", Quote(args.BackupDir)
         };
 

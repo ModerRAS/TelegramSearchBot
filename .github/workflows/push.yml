@@ -13,7 +13,7 @@ jobs:
   BuildClickOnce:
     runs-on: windows-latest
     env:
-      LEGACY_BRIDGE_VERSION: '2026.04.23.1'
+      LEGACY_BRIDGE_VERSION: '2026.04.23.553'
       LEGACY_BRIDGE_MARKER: 'legacy-clickonce-bridge-version.txt'
       MODER_UPDATE_COMMIT: 'd547c9905d0cb706aa163e418ab5ef424a14dc9c'
 

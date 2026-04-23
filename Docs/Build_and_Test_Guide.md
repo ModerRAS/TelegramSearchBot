@@ -38,7 +38,7 @@ dotnet run --project TelegramSearchBot.UpdateBuilder/TelegramSearchBot.UpdateBui
   --source-dir ./publish \
   --output-dir ./update-feed \
   --target-version 2026.04.23.2 \
-  --min-source-version 2026.04.23.1
+  --min-source-version 2026.04.23.553
 ```
 
 **Linux 平台**
