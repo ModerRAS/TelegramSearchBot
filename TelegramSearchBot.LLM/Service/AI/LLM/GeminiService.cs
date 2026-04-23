@@ -458,10 +458,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel) {
+        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt = null) {
             if (string.IsNullOrWhiteSpace(modelName)) {
                 modelName = "gpt-4-vision-preview";
             }
+
+            prompt = string.IsNullOrWhiteSpace(prompt) ? GeneralLLMService.DefaultAltPhotoPrompt : prompt;
 
             if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway) || string.IsNullOrWhiteSpace(channel.ApiKey)) {
                 _logger.LogError("{ServiceName}: Channel, Gateway or ApiKey is not configured.", ServiceName);
@@ -471,8 +473,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
             try {
-                var prompt = $"请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用'图中显示'或'这是一张图片'这类通用表达。";
-
                 var chat = model.StartChat();
 
 

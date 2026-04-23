@@ -9,9 +9,10 @@ using TelegramSearchBot.Service.Abstract;
 
 namespace TelegramSearchBot.Service.AI.OCR {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
-    public class PaddleOCRService : SubProcessService, IPaddleOCRService {
+    public class PaddleOCRService : SubProcessService, IPaddleOCRService, IOCRService {
         public new string ServiceName => "PaddleOCRService";
 
+        public OCREngine Engine => OCREngine.PaddleOCR;
 
         public PaddleOCRService(IConnectionMultiplexer connectionMultiplexer) : base(connectionMultiplexer) {
             ForkName = "OCR";

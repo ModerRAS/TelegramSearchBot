@@ -214,5 +214,37 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             var result = await _service.AnalyzeImageAsync("/tmp/test.jpg", 123, CancellationToken.None);
             Assert.StartsWith("Error:", result);
         }
+
+        [Fact]
+        public async Task AnalyzeImageAsync_WithCustomPrompt_ForwardsPromptToProvider() {
+            var providerMock = new Mock<ILLMService>();
+            var channel = new LLMChannel {
+                Name = "vision-channel",
+                Gateway = "https://example.com",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
+            };
+
+            providerMock
+                .Setup(s => s.AnalyzeImageAsync("image.jpg", "vision-model", channel, GeneralLLMService.DefaultVisionOcrPrompt))
+                .ReturnsAsync("recognized text");
+
+            var results = new List<string>();
+            await foreach (var result in _service.AnalyzeImageAsync(
+                "image.jpg",
+                123,
+                "vision-model",
+                providerMock.Object,
+                channel,
+                GeneralLLMService.DefaultVisionOcrPrompt,
+                CancellationToken.None)) {
+                results.Add(result);
+            }
+
+            Assert.Single(results);
+            Assert.Equal("recognized text", results[0]);
+        }
     }
 }

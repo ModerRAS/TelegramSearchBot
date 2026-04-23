@@ -971,10 +971,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         #region Image Analysis
 
-        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel) {
+        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt = null) {
             if (string.IsNullOrWhiteSpace(modelName)) {
                 modelName = "claude-sonnet-4-20250514";
             }
+
+            prompt = string.IsNullOrWhiteSpace(prompt) ? GeneralLLMService.DefaultAltPhotoPrompt : prompt;
 
             if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey)) {
                 _logger.LogError("{ServiceName}: Channel or ApiKey is not configured.", ServiceName);
@@ -989,8 +991,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 var imgData = bitmap.Encode(SKEncodedImageFormat.Png, 99);
                 var imgArray = imgData.ToArray();
                 var base64Image = Convert.ToBase64String(imgArray);
-
-                var prompt = "请根据这张图片生成一句准确、详尽的中文alt文本，说明画面中重要的元素、场景和含义，避免使用'图中显示'或'这是一张图片'这类通用表达。";
 
                 var imageSource = new Base64ImageSource {
                     Data = base64Image,

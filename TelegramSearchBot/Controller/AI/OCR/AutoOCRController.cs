@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Telegram.Bot;
@@ -18,13 +19,17 @@ using TelegramSearchBot.Interface.AI.OCR;
 using TelegramSearchBot.Interface.Controller;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Service.AI.OCR;
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Service.Common;
+using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Storage;
 
 namespace TelegramSearchBot.Controller.AI.OCR {
     public class AutoOCRController : IOnUpdate {
-        private readonly IPaddleOCRService paddleOCRService;
+        private readonly IEnumerable<IOCRService> _ocrServices;
+        private readonly IAppConfigurationService _configService;
         private readonly MessageService messageService;
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
@@ -33,14 +38,16 @@ namespace TelegramSearchBot.Controller.AI.OCR {
         private readonly MessageExtensionService MessageExtensionService;
         public AutoOCRController(
             ITelegramBotClient botClient,
-            IPaddleOCRService paddleOCRService,
+            IEnumerable<IOCRService> ocrServices,
+            IAppConfigurationService configService,
             SendMessage Send,
             MessageService messageService,
             ILogger<AutoOCRController> logger,
             ISendMessageService sendMessageService,
             MessageExtensionService messageExtensionService
             ) {
-            this.paddleOCRService = paddleOCRService;
+            this._ocrServices = ocrServices;
+            this._configService = configService;
             this.messageService = messageService;
             this.botClient = botClient;
             this.Send = Send;
@@ -63,7 +70,13 @@ namespace TelegramSearchBot.Controller.AI.OCR {
             try {
                 var PhotoStream = await IProcessPhoto.GetPhoto(e);
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
-                OcrStr = await paddleOCRService.ExecuteAsync(new MemoryStream(PhotoStream));
+
+                var engine = await GetOCREngineAsync();
+                var ocrService = _ocrServices.FirstOrDefault(s => s.Engine == engine)
+                    ?? _ocrServices.First(s => s.Engine == OCREngine.PaddleOCR);
+
+                logger.LogInformation($"使用OCR引擎: {engine}");
+                OcrStr = await ocrService.ExecuteAsync(new MemoryStream(PhotoStream));
                 if (!string.IsNullOrWhiteSpace(OcrStr)) {
                     logger.LogInformation(OcrStr);
                     await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
@@ -80,7 +93,6 @@ namespace TelegramSearchBot.Controller.AI.OCR {
                 ( e.Message.ReplyToMessage != null && e.Message.Text != null && e.Message.Text.Equals("打印") )) {
                 string ocrResult = OcrStr;
 
-                // 如果是回复消息触发打印
                 if (e.Message.ReplyToMessage != null) {
                     var originalMessageId = await MessageExtensionService.GetMessageIdByMessageIdAndGroupId(
                         e.Message.ReplyToMessage.MessageId,
@@ -99,6 +111,14 @@ namespace TelegramSearchBot.Controller.AI.OCR {
                     await SendMessageService.SendMessage(ocrResult, e.Message.Chat.Id, e.Message.MessageId);
                 }
             }
+        }
+
+        private async Task<OCREngine> GetOCREngineAsync() {
+            var engineStr = await _configService.GetConfigurationValueAsync(EditOCRConfService.OCREngineKey);
+            if (!string.IsNullOrEmpty(engineStr) && Enum.TryParse<OCREngine>(engineStr, out var engine)) {
+                return engine;
+            }
+            return OCREngine.PaddleOCR;
         }
     }
 }
