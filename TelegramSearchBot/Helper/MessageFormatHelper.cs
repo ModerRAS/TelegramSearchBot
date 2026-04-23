@@ -9,6 +9,11 @@ using Markdig;
 
 namespace TelegramSearchBot.Helper {
     public static class MessageFormatHelper {
+        private const string ExpandableBlockquoteContainerClass = "tg-expandable-blockquote";
+        private static readonly Regex ToolCallDisplayRegex = new(
+            @"(?:\r?\n){2}🔧 `[^`\r\n]+`(?: \[[^\r\n]*\])?(?:\r?\n){2}",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
         public static string ConvertMarkdownToTelegramHtml(string markdownText) {
             if (string.IsNullOrEmpty(markdownText)) return string.Empty;
             var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().UsePipeTables().Build();
@@ -39,14 +44,14 @@ namespace TelegramSearchBot.Helper {
                                 string langClass = node.GetAttributeValue("class", "");
                                 if (!string.IsNullOrEmpty(langClass) && langClass.StartsWith("language-")) builder.Append($"<code class=\"{HttpUtility.HtmlEncode(langClass)}\">");
                                 else builder.Append("<code>");
-                                builder.Append(HttpUtility.HtmlEncode(node.InnerText));
+                                builder.Append(EncodeTelegramHtmlText(node.InnerText));
                                 builder.Append("</code>");
-                            } else { builder.Append("<code>"); builder.Append(HttpUtility.HtmlEncode(node.InnerText)); builder.Append("</code>"); }
+                            } else { builder.Append("<code>"); builder.Append(EncodeTelegramHtmlText(node.InnerText)); builder.Append("</code>"); }
                             break;
                         case "pre":
                             builder.Append("<pre>");
                             if (node.ChildNodes.Count == 1 && node.FirstChild.Name.ToLowerInvariant() == "code") ProcessHtmlNode(node.FirstChild, builder);
-                            else builder.Append(HttpUtility.HtmlEncode(node.InnerText));
+                            else builder.Append(EncodeTelegramHtmlText(node.InnerText));
                             builder.Append("</pre>");
                             break;
                         case "table": builder.Append(FormatHtmlTableAsPreformattedText(node)); break;
@@ -56,14 +61,20 @@ namespace TelegramSearchBot.Helper {
                         case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": builder.Append("<b>"); ProcessChildren(node, builder); builder.Append("</b>\n"); break;
                         case "ul": case "ol": ProcessList(node, builder, tagName == "ol" ? 1 : 0); builder.Append("\n"); break;
                         case "blockquote":
-                            var blockquoteContent = new StringBuilder(); ProcessChildren(node, blockquoteContent);
-                            var lines = blockquoteContent.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                            foreach (var line in lines) builder.Append($"> {line}\n");
+                            builder.Append(node.Attributes["expandable"] != null ? "<blockquote expandable>" : "<blockquote>");
+                            ProcessChildren(node, builder);
+                            builder.Append("</blockquote>");
                             break;
                         case "span":
                         case "div":
                         case "font":
                         case "img":
+                            if (tagName == "div" && HasCssClass(node, ExpandableBlockquoteContainerClass)) {
+                                builder.Append("<blockquote expandable>");
+                                ProcessChildren(node, builder);
+                                builder.Append("</blockquote>");
+                                break;
+                            }
                             if (tagName == "img") {
                                 string alt = node.GetAttributeValue("alt", null); string src = node.GetAttributeValue("src", null);
                                 if (!string.IsNullOrEmpty(alt)) builder.Append($"[Image: {HttpUtility.HtmlEncode(alt)}] ");
@@ -80,6 +91,21 @@ namespace TelegramSearchBot.Helper {
 
         private static void ProcessChildren(HtmlNode parentNode, StringBuilder builder) {
             foreach (var childNode in parentNode.ChildNodes) ProcessHtmlNode(childNode, builder);
+        }
+
+        private static bool HasCssClass(HtmlNode node, string cssClass) {
+            var classValue = node.GetAttributeValue("class", string.Empty);
+            if (string.IsNullOrWhiteSpace(classValue)) {
+                return false;
+            }
+
+            return classValue
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Any(x => string.Equals(x, cssClass, StringComparison.Ordinal));
+        }
+
+        private static string EncodeTelegramHtmlText(string text) {
+            return HttpUtility.HtmlEncode(HttpUtility.HtmlDecode(text ?? string.Empty));
         }
 
         private static void ProcessList(HtmlNode listNode, StringBuilder builder, int startNumber) {
@@ -212,6 +238,37 @@ namespace TelegramSearchBot.Helper {
                 chunks.Add(chunk); currentPosition += lengthToTake;
             }
             return chunks;
+        }
+
+        public static string CollapseLlmIntermediateIterations(string markdown) {
+            if (string.IsNullOrWhiteSpace(markdown)) {
+                return markdown ?? string.Empty;
+            }
+
+            var matches = ToolCallDisplayRegex.Matches(markdown);
+            if (matches.Count == 0) {
+                return markdown;
+            }
+
+            var lastMatch = matches[^1];
+            var suffixStart = lastMatch.Index + lastMatch.Length;
+            if (suffixStart >= markdown.Length) {
+                return markdown;
+            }
+
+            var collapsedPrefix = markdown[..suffixStart].TrimEnd();
+            var visibleSuffix = markdown[suffixStart..].TrimStart('\r', '\n');
+            if (string.IsNullOrWhiteSpace(collapsedPrefix) || string.IsNullOrWhiteSpace(visibleSuffix)) {
+                return markdown;
+            }
+
+            return $"""
+:::{ExpandableBlockquoteContainerClass}
+{collapsedPrefix}
+:::
+
+{visibleSuffix}
+""";
         }
 
         public static string EscapeMarkdownV2(string text) {

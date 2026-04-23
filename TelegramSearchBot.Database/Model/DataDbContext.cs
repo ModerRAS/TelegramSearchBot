@@ -67,6 +67,12 @@ namespace TelegramSearchBot.Model {
                 .HasForeignKey(ar => ar.AccountBookId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<TodoItem>()
+                .HasOne(ti => ti.TodoList)
+                .WithMany(tl => tl.Items)
+                .HasForeignKey(ti => ti.TodoListId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // You can add other configurations here if needed
         }
         public virtual DbSet<Message> Messages { get; set; }
@@ -91,5 +97,7 @@ namespace TelegramSearchBot.Model {
         public virtual DbSet<AccountRecord> AccountRecords { get; set; } = null!;
         public virtual DbSet<GroupAccountSettings> GroupAccountSettings { get; set; } = null!;
         public virtual DbSet<ScheduledTaskExecution> ScheduledTaskExecutions { get; set; } = null!;
+        public virtual DbSet<TodoList> TodoLists { get; set; } = null!;
+        public virtual DbSet<TodoItem> TodoItems { get; set; } = null!;
     }
 }

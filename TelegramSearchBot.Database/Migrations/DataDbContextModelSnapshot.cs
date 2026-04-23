@@ -580,6 +580,106 @@ namespace TelegramSearchBot.Migrations
                     b.ToTable("TelegramFileCacheEntries");
                 });
 
+            modelBuilder.Entity("TelegramSearchBot.Model.Data.TodoItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("CompletedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DueAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Priority")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RemindAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ReminderMessageId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ReminderSentAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("SourceMessageId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("TodoListId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TodoListId", "Status");
+
+                    b.HasIndex("ChatId", "Status", "RemindAtUtc", "ReminderSentAtUtc");
+
+                    b.ToTable("TodoItems");
+                });
+
+            modelBuilder.Entity("TelegramSearchBot.Model.Data.TodoList", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TodoLists");
+                });
+
             modelBuilder.Entity("TelegramSearchBot.Model.Data.UserData", b =>
                 {
                     b.Property<long>("Id")
@@ -729,6 +829,17 @@ namespace TelegramSearchBot.Migrations
                     b.Navigation("ChannelWithModel");
                 });
 
+            modelBuilder.Entity("TelegramSearchBot.Model.Data.TodoItem", b =>
+                {
+                    b.HasOne("TelegramSearchBot.Model.Data.TodoList", "TodoList")
+                        .WithMany("Items")
+                        .HasForeignKey("TodoListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TodoList");
+                });
+
             modelBuilder.Entity("TelegramSearchBot.Model.Data.AccountBook", b =>
                 {
                     b.Navigation("Records");
@@ -752,6 +863,11 @@ namespace TelegramSearchBot.Migrations
             modelBuilder.Entity("TelegramSearchBot.Model.Data.Message", b =>
                 {
                     b.Navigation("MessageExtensions");
+                });
+
+            modelBuilder.Entity("TelegramSearchBot.Model.Data.TodoList", b =>
+                {
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

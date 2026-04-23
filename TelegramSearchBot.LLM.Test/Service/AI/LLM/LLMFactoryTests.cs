@@ -38,6 +38,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             var openAILogger = new Mock<ILogger<OpenAIService>>();
             var ollamaLogger = new Mock<ILogger<OllamaService>>();
             var geminiLogger = new Mock<ILogger<GeminiService>>();
+            var anthropicLogger = new Mock<ILogger<AnthropicService>>();
             var messageExtensionServiceMock = new Mock<IMessageExtensionService>();
             var httpClientFactoryMock = new Mock<IHttpClientFactory>();
             var serviceProviderMock = new Mock<IServiceProvider>();
@@ -48,6 +49,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 _dbContext, ollamaLogger.Object, serviceProviderMock.Object, httpClientFactoryMock.Object);
             _geminiServiceMock = new Mock<GeminiService>(
                 _dbContext, geminiLogger.Object, httpClientFactoryMock.Object);
+            var anthropicServiceMock = new Mock<AnthropicService>(
+                _dbContext, anthropicLogger.Object, messageExtensionServiceMock.Object, httpClientFactoryMock.Object);
 
             _factory = new LLMFactory(
                 _redisMock.Object,
@@ -55,7 +58,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 _loggerMock.Object,
                 _ollamaServiceMock.Object,
                 _openAIServiceMock.Object,
-                _geminiServiceMock.Object);
+                _geminiServiceMock.Object,
+                anthropicServiceMock.Object);
         }
 
         [Fact]

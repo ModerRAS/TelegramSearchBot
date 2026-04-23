@@ -20,6 +20,7 @@ using TelegramSearchBot.Model; // Added for MessageOption
 using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
 using TelegramSearchBot.Service.AI.QR; // Added for AutoQRService
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Storage; // Added for MessageService
 
 namespace TelegramSearchBot.Controller.AI.QR {
@@ -29,6 +30,7 @@ namespace TelegramSearchBot.Controller.AI.QR {
         private readonly ILogger<AutoQRController> _logger;
         private readonly IMediator _mediator;
         private readonly ISendMessageService _sendMessageService;
+        private readonly UrlDisplayService _urlDisplayService;
         private readonly MessageExtensionService MessageExtensionService;
 
         public List<Type> Dependencies => new List<Type>() { typeof(DownloadPhotoController), typeof(MessageController) };
@@ -39,6 +41,7 @@ namespace TelegramSearchBot.Controller.AI.QR {
             MessageService messageService,
             IMediator mediator,
             ISendMessageService sendMessageService,
+            UrlDisplayService urlDisplayService,
             MessageExtensionService messageExtensionService
             ) {
             _autoQRService = autoQRService;
@@ -46,6 +49,7 @@ namespace TelegramSearchBot.Controller.AI.QR {
             _logger = logger;
             _mediator = mediator;
             _sendMessageService = sendMessageService;
+            _urlDisplayService = urlDisplayService;
             MessageExtensionService = messageExtensionService;
         }
 
@@ -71,10 +75,24 @@ namespace TelegramSearchBot.Controller.AI.QR {
                 // Add QR result to processing results
                 p.ProcessingResults.Add($"[QR识别结果] {qrStr}");
 
-                // 1. Original logic: Send the raw QR string back to the user.
-                await _sendMessageService.SendMessage(qrStr, e.Message.Chat.Id, e.Message.MessageId);
-                _logger.LogInformation("Sent raw QR content for {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
-
+                // 1. Send compact clickable text for URL-only QR results to avoid flooding the chat.
+                if (_urlDisplayService.TryFormatUrlOnlyMessage(qrStr, out var formattedQrMessage)) {
+                    await _sendMessageService.TrySendMessageWithFallback(
+                        e.Message.Chat.Id,
+                        0,
+                        formattedQrMessage,
+                        ParseMode.Html,
+                        e.Message.Chat.Id < 0,
+                        e.Message.MessageId,
+                        qrStr,
+                        false,
+                        disableLinkPreview: true,
+                        plainTextFallbackOverride: qrStr);
+                    _logger.LogInformation("Sent formatted QR URL for {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
+                } else {
+                    await _sendMessageService.SendMessage(qrStr, e.Message.Chat.Id, e.Message.MessageId);
+                    _logger.LogInformation("Sent raw QR content for {ChatId}/{MessageId}", e.Message.Chat.Id, e.Message.MessageId);
+                }
 
                 // 2. Storing the raw QR content as a message.
                 await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "QR_Result", qrStr);

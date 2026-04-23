@@ -6,11 +6,11 @@ using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Extension;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
+using TelegramSearchBot.Service.Search;
 
 namespace TelegramSearchBot.Service.BotAPI {
 
@@ -18,14 +18,14 @@ namespace TelegramSearchBot.Service.BotAPI {
     public class SendService : IService {
         private readonly ITelegramBotClient botClient;
         private readonly SendMessage Send;
-        private readonly DataDbContext _dbContext;
+        private readonly SearchOptionStorageService _searchOptionStorageService;
 
         public string ServiceName => "SendService";
 
-        public SendService(ITelegramBotClient botClient, SendMessage Send, DataDbContext dbContext) {
+        public SendService(ITelegramBotClient botClient, SendMessage Send, SearchOptionStorageService searchOptionStorageService) {
             this.Send = Send ?? throw new ArgumentNullException(nameof(Send));
             this.botClient = botClient ?? throw new ArgumentNullException(nameof(botClient));
-            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+            _searchOptionStorageService = searchOptionStorageService ?? throw new ArgumentNullException(nameof(searchOptionStorageService));
         }
         public static List<string> ConvertToList(IEnumerable<Message> messages) {
             var list = new List<string>();
@@ -65,16 +65,7 @@ namespace TelegramSearchBot.Service.BotAPI {
 
             searchOption.Skip += searchOption.Take;
             if (searchOption.Messages != null && searchOption.Messages.Count - searchOption.Take >= 0) {
-                var uuid_nxt = Guid.NewGuid().ToString();
-                var nextPageCache = new SearchPageCache() {
-                    UUID = uuid_nxt,
-                };
-                nextPageCache.SetSearchOption(searchOption);
-
-                if (_dbContext.SearchPageCaches != null) {
-                    _dbContext.SearchPageCaches.Add(nextPageCache);
-                    await _dbContext.SaveChangesAsync();
-                }
+                var uuid_nxt = await _searchOptionStorageService.SetSearchOptionAsync(searchOption);
 
                 keyboardList.Add(InlineKeyboardButton.WithCallbackData(
                     "下一页",
@@ -82,19 +73,8 @@ namespace TelegramSearchBot.Service.BotAPI {
                     ));
             }
 
-            var uuid = Guid.NewGuid().ToString();
-            searchOption.ToDeleteNow = true;
-            var deleteCache = new SearchPageCache() {
-                UUID = uuid,
-            };
-            deleteCache.SetSearchOption(searchOption);
-
-            if (_dbContext.SearchPageCaches != null) {
-                _dbContext.SearchPageCaches.Add(deleteCache);
-                await _dbContext.SaveChangesAsync();
-            }
-
-            searchOption.ToDeleteNow = false; //按理说不需要的
+            var deleteCache = _searchOptionStorageService.GetToDeleteNowSearchOption(searchOption);
+            var uuid = await _searchOptionStorageService.SetSearchOptionAsync(deleteCache);
             keyboardList.Add(InlineKeyboardButton.WithCallbackData(
                         "删除历史",
                         uuid

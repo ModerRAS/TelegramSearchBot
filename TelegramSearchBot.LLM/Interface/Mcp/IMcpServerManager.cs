@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -48,5 +49,11 @@ namespace TelegramSearchBot.Interface.Mcp {
         /// Shutdown all running MCP servers.
         /// </summary>
         Task ShutdownAllAsync();
+
+        /// <summary>
+        /// Update an existing MCP server configuration with a patch action.
+        /// The server will be reconnected if it was running.
+        /// </summary>
+        Task UpdateServerConfigAsync(string serverName, Action<McpServerConfig> patchAction);
     }
 }

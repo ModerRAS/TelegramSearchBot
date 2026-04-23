@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace TelegramSearchBot.Model.ChatExport {
     public class ChatExport {
@@ -20,6 +21,10 @@ namespace TelegramSearchBot.Model.ChatExport {
         public string From { get; set; }
         [JsonProperty("from_id")]
         public string From_Id { get; set; }
+        [JsonProperty("actor_id")]
+        public string ActorId { get; set; }
+        public string Title { get; set; }
+        [JsonConverter(typeof(TextItemListConverter))]
         public List<TextItem> Text { get; set; }
         public List<TextEntity> Text_Entities { get; set; }
         public string Edited { get; set; }
@@ -123,5 +128,63 @@ namespace TelegramSearchBot.Model.ChatExport {
         [JsonProperty("document_id")]
         public string DocumentId { get; set; }
         public int Count { get; set; }
+    }
+
+    public class TextItemListConverter : JsonConverter {
+        public override bool CanConvert(Type objectType) {
+            return objectType == typeof(List<TextItem>);
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer) {
+            if (reader.TokenType == JsonToken.Null) {
+                return new List<TextItem>();
+            }
+
+            var token = JToken.Load(reader);
+
+            if (token.Type == JTokenType.String) {
+                return new List<TextItem> {
+                    new() {
+                        Type = "plain",
+                        Text = token.Value<string>() ?? string.Empty
+                    }
+                };
+            }
+
+            if (token.Type == JTokenType.Object) {
+                return new List<TextItem> {
+                    DeserializeTextItem(token, serializer)
+                };
+            }
+
+            if (token.Type != JTokenType.Array) {
+                return new List<TextItem>();
+            }
+
+            var items = new List<TextItem>();
+            foreach (var itemToken in token.Children()) {
+                items.Add(DeserializeTextItem(itemToken, serializer));
+            }
+
+            return items;
+        }
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer) {
+            serializer.Serialize(writer, value);
+        }
+
+        private static TextItem DeserializeTextItem(JToken token, JsonSerializer serializer) {
+            if (token.Type == JTokenType.String) {
+                return new TextItem {
+                    Type = "plain",
+                    Text = token.Value<string>() ?? string.Empty
+                };
+            }
+
+            return token.ToObject<TextItem>(serializer) ?? new TextItem {
+                Type = "plain",
+                Text = token.ToString(Formatting.None)
+            };
+        }
     }
 }

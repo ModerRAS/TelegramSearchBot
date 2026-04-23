@@ -240,6 +240,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 LLMProvider.OpenAI => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
                 LLMProvider.Ollama => _serviceProvider.GetService(typeof(OllamaService)) as ILLMService,
                 LLMProvider.Gemini => _serviceProvider.GetService(typeof(GeminiService)) as ILLMService,
+                LLMProvider.MiniMax => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
+                LLMProvider.LMStudio => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
+                LLMProvider.Anthropic => _serviceProvider.GetService(typeof(AnthropicService)) as ILLMService,
                 _ => null
             };
         }
