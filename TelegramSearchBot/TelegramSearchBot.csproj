@@ -91,7 +91,7 @@
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.7" />
     <PackageReference Include="FaissNet" Version="1.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="ScottPlot" Version="5.1.57" />
+    <PackageReference Include="ScottPlot" Version="5.1.58" />
     <PackageReference Include="ZstdSharp.Port" Version="0.8.5" />
   </ItemGroup>
   <ItemGroup>
