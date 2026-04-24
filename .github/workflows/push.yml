@@ -1,5 +1,4 @@
-# This workflow will build a .NET project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
+# This workflow builds release artifacts in parallel and performs the final upload once.
 
 name: Push To ClickOnce
 
@@ -11,35 +10,78 @@ on:
 permissions:
   contents: write
 
-jobs:
+env:
+  LEGACY_BRIDGE_VERSION: '2026.04.23.553'
+  LEGACY_BRIDGE_MARKER: 'legacy-clickonce-bridge-version.txt'
+  MODER_UPDATE_COMMIT: 'd547c9905d0cb706aa163e418ab5ef424a14dc9c'
 
-  BuildClickOnce:
+jobs:
+  prepare:
     runs-on: windows-latest
-    env:
-      LEGACY_BRIDGE_VERSION: '2026.04.23.553'
-      LEGACY_BRIDGE_MARKER: 'legacy-clickonce-bridge-version.txt'
-      MODER_UPDATE_COMMIT: 'd547c9905d0cb706aa163e418ab5ef424a14dc9c'
+    outputs:
+      build-version: ${{ steps.versioning.outputs.build-version }}
+      release-tag: ${{ steps.versioning.outputs.release-tag }}
+      publish-bridge: ${{ steps.bridge-check.outputs.publish-bridge }}
 
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v4
       with:
         python-version: '3.9'
+    - name: Compute release versions
+      id: versioning
+      shell: pwsh
+      env:
+        BUILD_NUMBER: ${{ github.run_number }}
+      run: |
+        $buildVersion = Get-Date -Format "yyyy.MM.dd.$env:BUILD_NUMBER"
+        $releaseTag = "v$buildVersion"
+        "build-version=$buildVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "release-tag=$releaseTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+    - name: Check legacy bridge presence
+      id: bridge-check
+      shell: pwsh
+      env:
+        B2_BUCKET: ${{ secrets.B2_BUCKET }}
+        B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
+        B2_APPKEY: ${{ secrets.B2_APPKEY }}
+      run: |
+        pip install --quiet --cache-dir C:\pip-cache b2
+        b2 account authorize $env:B2_APPKEY_ID $env:B2_APPKEY --quiet
+        $markerPath = "TelegramSearchBot/$env:LEGACY_BRIDGE_MARKER"
+        $existingMarker = b2 ls --recursive "b2://$env:B2_BUCKET/$markerPath"
+        if ([string]::IsNullOrWhiteSpace($existingMarker)) {
+          "publish-bridge=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        } else {
+          "publish-bridge=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        }
+        b2 clear-account
+
+  validate:
+    needs: prepare
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.0.x
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.1
     - name: Clear NuGet cache
       run: dotnet nuget locals all --clear
+    - name: Restore dependencies
+      run: dotnet restore --force --no-cache /p:BuildWithNetFrameworkHostedCompiler=true
+    - name: Build
+      run: dotnet build --no-restore -c Release
+    - name: Test
+      run: dotnet test --no-build -c Release --verbosity normal
 
-    # =========================================================================
-    # TELEGRAM-BOT-API BUILD STEPS (REFACTORED WITH PROPER CACHING)
-    # =========================================================================
+  build-telegram-bot-api:
+    needs: prepare
+    runs-on: windows-latest
 
+    steps:
+    - uses: actions/checkout@v4
     - name: Get telegram-bot-api commit hash
       id: tg-commit
       shell: pwsh
@@ -47,7 +89,6 @@ jobs:
         $hash = git ls-remote https://github.com/tdlib/telegram-bot-api.git HEAD | ForEach-Object { $_.Split("`t")[0] }
         Write-Output "TG_COMMIT_HASH=$hash" | Tee-Object -FilePath $env:GITHUB_OUTPUT -Append
         Write-Output "tg-commit-hash=$hash"
-
     - name: Cache vcpkg
       id: cache-vcpkg
       uses: actions/cache@v4
@@ -62,7 +103,6 @@ jobs:
       run: |
         git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
         C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-
     - name: Cache telegram-bot-api build
       id: cache-tg-bot-api
       uses: actions/cache@v4
@@ -73,13 +113,10 @@ jobs:
         key: tg-bot-api-win-x64-${{ steps.tg-commit.outputs.tg-commit-hash }}
         restore-keys: |
           tg-bot-api-win-x64-
-
     - name: Install gperf
       if: steps.cache-tg-bot-api.outputs.cache-hit != 'true'
       shell: pwsh
-      run: |
-        choco install gperf -y
-
+      run: choco install gperf -y
     - name: Build telegram-bot-api from source
       if: steps.cache-tg-bot-api.outputs.cache-hit != 'true'
       shell: pwsh
@@ -100,123 +137,212 @@ jobs:
         Pop-Location
         New-Item -ItemType Directory -Force telegram-bot-api-bin | Out-Null
         Copy-Item "telegram-bot-api\build\Release\telegram-bot-api.exe" "telegram-bot-api-bin\telegram-bot-api.exe"
+    - name: Upload telegram-bot-api artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: telegram-bot-api-bin
+        path: telegram-bot-api-bin\telegram-bot-api.exe
+        if-no-files-found: error
 
-    - name: Copy telegram-bot-api binary to project
-      shell: pwsh
-      run: |
-        Copy-Item "telegram-bot-api-bin\telegram-bot-api.exe" "TelegramSearchBot\telegram-bot-api.exe"
+  build-moder-update-updater:
+    needs: prepare
+    runs-on: windows-latest
 
-    # =========================================================================
-    # END TELEGRAM-BOT-API BUILD STEPS
-    # =========================================================================
-
-    - name: Restore dependencies
-      run: dotnet restore --force --no-cache /p:BuildWithNetFrameworkHostedCompiler=true
-    - name: Build
-      run: |
-          dotnet build --no-restore -c Release
-    - name: Test
-      run: dotnet test --no-build -c Release --verbosity normal
-    - name: Compute release versions
-      id: versioning
-      shell: pwsh
-      env:
-        BUILD_NUMBER: ${{github.run_number}}
-      run: |
-          $buildVersion = Get-Date -Format "yyyy.MM.dd.$env:BUILD_NUMBER"
-          $releaseTag = "v$buildVersion"
-          "BUILD_VERSION=$buildVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "build-version=$buildVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "release-tag=$releaseTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
     - name: Build Moder.Update updater
       shell: pwsh
       run: |
-          if (Test-Path moder-update) {
-            Remove-Item moder-update -Recurse -Force
-          }
-          git clone https://github.com/ModerRAS/Moder.Update.git moder-update
-          git -C moder-update checkout $env:MODER_UPDATE_COMMIT
-          cargo build --manifest-path moder-update/src/updater/Cargo.toml --release
+        if (Test-Path moder-update) {
+          Remove-Item moder-update -Recurse -Force
+        }
+        git clone https://github.com/ModerRAS/Moder.Update.git moder-update
+        git -C moder-update checkout $env:MODER_UPDATE_COMMIT
+        cargo build --manifest-path moder-update/src/updater/Cargo.toml --release
+    - name: Upload Moder.Update updater artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: moder-update-updater
+        path: moder-update\src\updater\target\release\moder_update_updater.exe
+        if-no-files-found: error
+
+  build-standalone-assets:
+    needs:
+    - prepare
+    - build-telegram-bot-api
+    - build-moder-update-updater
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - name: Download telegram-bot-api artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: telegram-bot-api-bin
+        path: telegram-bot-api-bin
+    - name: Download Moder.Update updater artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: moder-update-updater
+        path: moder-update-bin
+    - name: Copy external build artifacts
+      shell: pwsh
+      run: |
+        Copy-Item "telegram-bot-api-bin\telegram-bot-api.exe" "TelegramSearchBot\telegram-bot-api.exe" -Force
+    - name: Clear NuGet cache
+      run: dotnet nuget locals all --clear
+    - name: Restore dependencies
+      run: dotnet restore --force --no-cache /p:BuildWithNetFrameworkHostedCompiler=true
+    - name: Build
+      run: dotnet build --no-restore -c Release
     - name: Publish standalone app
       shell: pwsh
+      env:
+        BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
       run: |
-          if (Test-Path artifacts) {
-            Remove-Item artifacts -Recurse -Force
-          }
-          dotnet publish .\TelegramSearchBot\TelegramSearchBot.csproj `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            --no-restore `
-            /p:Version=$env:BUILD_VERSION `
-            /p:PublishSingleFile=false `
-            -o .\artifacts\standalone
+        if (Test-Path artifacts) {
+          Remove-Item artifacts -Recurse -Force
+        }
+        dotnet publish .\TelegramSearchBot\TelegramSearchBot.csproj `
+          -c Release `
+          -r win-x64 `
+          --self-contained true `
+          --no-restore `
+          /p:Version=$env:BUILD_VERSION `
+          /p:PublishSingleFile=false `
+          -o .\artifacts\standalone
     - name: Build Moder.Update feed
       shell: pwsh
+      env:
+        BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
       run: |
-          dotnet run --project .\TelegramSearchBot.UpdateBuilder\TelegramSearchBot.UpdateBuilder.csproj `
-            -c Release `
-            --no-build `
-            -- `
-            --source-dir .\artifacts\standalone `
-            --output-dir .\artifacts\update-feed `
-            --target-version $env:BUILD_VERSION `
-            --min-source-version $env:LEGACY_BRIDGE_VERSION
-          Copy-Item .\moder-update\src\updater\target\release\moder_update_updater.exe .\artifacts\update-feed\moder_update_updater.exe -Force
-          $catalogPath = '.\artifacts\update-feed\catalog.json'
-          $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
-          $catalog | Add-Member -NotePropertyName UpdaterChecksum -NotePropertyValue ((Get-FileHash .\artifacts\update-feed\moder_update_updater.exe -Algorithm SHA512).Hash.ToLower()) -Force
-          $catalog | ConvertTo-Json -Depth 10 | Set-Content $catalogPath -Encoding utf8
+        dotnet run --project .\TelegramSearchBot.UpdateBuilder\TelegramSearchBot.UpdateBuilder.csproj `
+          -c Release `
+          --no-build `
+          -- `
+          --source-dir .\artifacts\standalone `
+          --output-dir .\artifacts\update-feed `
+          --target-version $env:BUILD_VERSION `
+          --min-source-version $env:LEGACY_BRIDGE_VERSION
+        Copy-Item .\moder-update-bin\moder_update_updater.exe .\artifacts\update-feed\moder_update_updater.exe -Force
+        $catalogPath = '.\artifacts\update-feed\catalog.json'
+        $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
+        $catalog | Add-Member -NotePropertyName UpdaterChecksum -NotePropertyValue ((Get-FileHash .\artifacts\update-feed\moder_update_updater.exe -Algorithm SHA512).Hash.ToLower()) -Force
+        $catalog | ConvertTo-Json -Depth 10 | Set-Content $catalogPath -Encoding utf8
     - name: Package full release asset
       shell: pwsh
-      run: |
-          $releaseDir = '.\artifacts\release'
-          if (Test-Path $releaseDir) {
-            Remove-Item $releaseDir -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $releaseDir | Out-Null
-          $packageName = "TelegramSearchBot-win-x64-full-$env:BUILD_VERSION.zip"
-          $packagePath = Join-Path $releaseDir $packageName
-          Compress-Archive -Path .\artifacts\standalone\* -DestinationPath $packagePath -CompressionLevel Optimal
-          $hashPath = "$packagePath.sha512"
-          $hash = (Get-FileHash $packagePath -Algorithm SHA512).Hash.ToLower()
-          Set-Content -Path $hashPath -Value "$hash  $packageName" -Encoding ascii
-    - name: Check legacy bridge presence
-      id: bridge-check
-      shell: pwsh
       env:
-        B2_BUCKET: ${{ secrets.B2_BUCKET }}
-        B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
-        B2_APPKEY: ${{ secrets.B2_APPKEY }}
+        BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
       run: |
-        pip install --quiet --cache-dir C:\pip-cache b2
-        b2 account authorize $env:B2_APPKEY_ID $env:B2_APPKEY --quiet
-        $markerPath = "TelegramSearchBot/$env:LEGACY_BRIDGE_MARKER"
-        $existingMarker = b2 ls --recursive "b2://$env:B2_BUCKET/$markerPath"
-        if ([string]::IsNullOrWhiteSpace($existingMarker)) {
-          "publish-bridge=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-        } else {
-          "publish-bridge=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        $releaseDir = '.\artifacts\release'
+        if (Test-Path $releaseDir) {
+          Remove-Item $releaseDir -Recurse -Force
         }
-        b2 clear-account
-    - name: Publish legacy ClickOnce bridge
-      if: steps.bridge-check.outputs.publish-bridge == 'true'
+        New-Item -ItemType Directory -Path $releaseDir | Out-Null
+        $packageName = "TelegramSearchBot-win-x64-full-$env:BUILD_VERSION.zip"
+        $packagePath = Join-Path $releaseDir $packageName
+        Compress-Archive -Path .\artifacts\standalone\* -DestinationPath $packagePath -CompressionLevel Optimal
+        $hashPath = "$packagePath.sha512"
+        $hash = (Get-FileHash $packagePath -Algorithm SHA512).Hash.ToLower()
+        Set-Content -Path $hashPath -Value "$hash  $packageName" -Encoding ascii
+    - name: Upload update feed artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: update-feed
+        path: artifacts\update-feed
+        if-no-files-found: error
+    - name: Upload full release artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: full-release
+        path: artifacts\release
+        if-no-files-found: error
+
+  build-legacy-bridge:
+    needs:
+    - prepare
+    - build-telegram-bot-api
+    if: needs.prepare.outputs.publish-bridge == 'true'
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1.1
+    - name: Download telegram-bot-api artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: telegram-bot-api-bin
+        path: telegram-bot-api-bin
+    - name: Copy telegram-bot-api binary to project
       shell: pwsh
       run: |
-          $content = 'TelegramSearchBot/Properties/PublishProfiles/ClickOnceProfile.pubxml'
-          $xmldata = [xml](Get-Content $content)
-          $node = $xmldata.Project.PropertyGroup
-          $node.ApplicationVersion = $env:LEGACY_BRIDGE_VERSION
-          $node.MinimumRequiredVersion = $env:LEGACY_BRIDGE_VERSION
-          $xmldata.Save($content)
-          msbuild TelegramSearchBot /restore /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile /p:RuntimeIdentifier=win-x64 /p:SelfContained=true /p:Version=$env:LEGACY_BRIDGE_VERSION
-          $bridgeDir = '.\artifacts\legacy-bridge'
-          if (Test-Path $bridgeDir) {
-            Remove-Item $bridgeDir -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $bridgeDir | Out-Null
-          Copy-Item .\TelegramSearchBot\bin\TelegramSearchBot\* $bridgeDir -Recurse -Force
-          Set-Content -Path (Join-Path $bridgeDir $env:LEGACY_BRIDGE_MARKER) -Value $env:LEGACY_BRIDGE_VERSION -Encoding utf8
+        Copy-Item "telegram-bot-api-bin\telegram-bot-api.exe" "TelegramSearchBot\telegram-bot-api.exe" -Force
+    - name: Clear NuGet cache
+      run: dotnet nuget locals all --clear
+    - name: Publish legacy ClickOnce bridge
+      shell: pwsh
+      run: |
+        $content = 'TelegramSearchBot/Properties/PublishProfiles/ClickOnceProfile.pubxml'
+        $xmldata = [xml](Get-Content $content)
+        $node = $xmldata.Project.PropertyGroup
+        $node.ApplicationVersion = $env:LEGACY_BRIDGE_VERSION
+        $node.MinimumRequiredVersion = $env:LEGACY_BRIDGE_VERSION
+        $xmldata.Save($content)
+        msbuild TelegramSearchBot /restore /t:DoPublish /p:Configuration=Release /p:PublishProfile=ClickOnceProfile /p:RuntimeIdentifier=win-x64 /p:SelfContained=true /p:Version=$env:LEGACY_BRIDGE_VERSION
+        $bridgeDir = '.\artifacts\legacy-bridge'
+        if (Test-Path $bridgeDir) {
+          Remove-Item $bridgeDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $bridgeDir | Out-Null
+        Copy-Item .\TelegramSearchBot\bin\TelegramSearchBot\* $bridgeDir -Recurse -Force
+        Set-Content -Path (Join-Path $bridgeDir $env:LEGACY_BRIDGE_MARKER) -Value $env:LEGACY_BRIDGE_VERSION -Encoding utf8
+    - name: Upload legacy bridge artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: legacy-bridge
+        path: artifacts\legacy-bridge
+        if-no-files-found: error
+
+  publish-release:
+    needs:
+    - prepare
+    - validate
+    - build-standalone-assets
+    - build-legacy-bridge
+    if: ${{ always() && needs.prepare.result == 'success' && needs.validate.result == 'success' && needs.build-standalone-assets.result == 'success' && (needs.build-legacy-bridge.result == 'success' || needs.build-legacy-bridge.result == 'skipped') }}
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - name: Download update feed artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: update-feed
+        path: artifacts\update-feed
+    - name: Download full release artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: full-release
+        path: artifacts\release
+    - name: Download legacy bridge artifact
+      if: needs.prepare.outputs.publish-bridge == 'true'
+      uses: actions/download-artifact@v4
+      with:
+        name: legacy-bridge
+        path: artifacts\legacy-bridge
     - name: Upload release artifacts
       shell: pwsh
       env:
@@ -310,7 +436,7 @@ jobs:
         pip install --quiet --cache-dir C:\pip-cache b2
         b2 account authorize $env:B2_APPKEY_ID $env:B2_APPKEY --quiet
 
-        if ("${{ steps.bridge-check.outputs.publish-bridge }}" -eq "true") {
+        if ("${{ needs.prepare.outputs.publish-bridge }}" -eq "true") {
           $bridgeRoot = (Resolve-Path .\artifacts\legacy-bridge).Path
           b2 sync .\artifacts\legacy-bridge b2://$env:B2_BUCKET/TelegramSearchBot --quiet
           Get-ChildItem $bridgeRoot -File -Recurse | ForEach-Object {
@@ -322,8 +448,10 @@ jobs:
         b2 sync .\artifacts\update-feed\packages b2://$env:B2_BUCKET/TelegramSearchBot/packages --quiet
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\moder_update_updater.exe TelegramSearchBot/moder_update_updater.exe
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\catalog.json TelegramSearchBot/catalog.json
-        $packageFiles = Get-ChildItem .\artifacts\update-feed\packages -File -Recurse | ForEach-Object {
-          [System.IO.Path]::GetRelativePath((Resolve-Path .\artifacts\update-feed\packages).Path, $_.FullName)
+
+        $packageRoot = (Resolve-Path .\artifacts\update-feed\packages).Path
+        $packageFiles = Get-ChildItem $packageRoot -File -Recurse | ForEach-Object {
+          [System.IO.Path]::GetRelativePath($packageRoot, $_.FullName)
         }
         Prune-B2PackageVersions -KeepRelativePaths $packageFiles
         Prune-B2FileVersions -RelativePath 'TelegramSearchBot/moder_update_updater.exe'
@@ -332,9 +460,9 @@ jobs:
     - name: Publish full package to GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.versioning.outputs.release-tag }}
+        tag_name: ${{ needs.prepare.outputs.release-tag }}
         target_commitish: ${{ github.sha }}
-        name: Release ${{ steps.versioning.outputs.build-version }}
+        name: Release ${{ needs.prepare.outputs.build-version }}
         generate_release_notes: true
         fail_on_unmatched_files: true
         overwrite_files: true
