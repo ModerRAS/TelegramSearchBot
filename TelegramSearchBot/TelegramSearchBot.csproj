@@ -92,7 +92,7 @@
     <PackageReference Include="FaissNet" Version="1.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="ScottPlot" Version="5.1.57" />
-    <PackageReference Include="ZstdSharp.Port" Version="0.8.5" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.7" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TelegramSearchBot.Common\TelegramSearchBot.Common.csproj" />
