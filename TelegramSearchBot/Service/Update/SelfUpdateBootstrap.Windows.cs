@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using TelegramSearchBot.Common;
+using TelegramSearchBot.Common.Model.Update;
 using TelegramSearchBot.Helper;
 using ZstdSharp;
 
@@ -69,19 +70,20 @@ public static partial class SelfUpdateBootstrap
         var currentVersion = ResolveCurrentVersion();
         using var httpClient = HttpClientHelper.CreateProxyHttpClient();
         var result = await CheckForUpdatesAsync(httpClient, currentVersion, CancellationToken.None);
-        if (result.Status != UpdateCheckStatus.UpdateAvailable || result.UpdateEntry is null) {
+        if (result.Status != UpdateCheckStatus.UpdateAvailable || result.UpdatePath is not { Count: > 0 }) {
             return ToManagedUpdateResult(result, currentVersion);
         }
 
-        await PrepareUpdateAsync(httpClient, currentVersion, result.UpdateEntry, CancellationToken.None);
+        await PrepareUpdateChainAsync(httpClient, currentVersion, result.UpdatePath, CancellationToken.None);
+        var finalTarget = result.UpdatePath[^1].TargetVersion;
         return new ManagedUpdateResult {
             State = ManagedUpdateState.UpdateScheduled,
             CurrentVersion = currentVersion,
             LatestVersion = result.LatestVersion,
-            TargetVersion = result.UpdateEntry.TargetVersion,
+            TargetVersion = finalTarget,
             ManagedInstallExists = File.Exists(ManagedExecutablePath),
             RunningManagedInstall = PathsEqual(Environment.ProcessPath, ManagedExecutablePath),
-            Message = $"已计划更新到 {result.UpdateEntry.TargetVersion}。"
+            Message = $"已计划更新到 {finalTarget}（共 {result.UpdatePath.Count} 步）。"
         };
     }
 
@@ -109,14 +111,64 @@ public static partial class SelfUpdateBootstrap
                 $"Version {currentVersion} is below the minimum required version {catalog.MinRequiredVersion}. Reinstallation required.");
         }
 
-        var updateEntry = catalog.Entries
-            .Where(entry => CanApplyEntry(current, entry))
-            .OrderByDescending(entry => Version.Parse(entry.TargetVersion))
-            .FirstOrDefault();
+        var updatePath = PlanUpdatePath(catalog.Entries, current, latest);
+        if (updatePath is not { Count: > 0 }) {
+            return UpdateCheckResult.NoPathFound($"No update path found from {currentVersion} to {catalog.LatestVersion}.");
+        }
 
-        return updateEntry is null
-            ? UpdateCheckResult.NoPathFound($"No update path found from {currentVersion} to {catalog.LatestVersion}.")
-            : UpdateCheckResult.UpdateAvailable(catalog.LatestVersion, updateEntry);
+        return UpdateCheckResult.UpdateAvailable(catalog.LatestVersion, updatePath);
+    }
+
+    private static List<UpdateCatalogEntry> PlanUpdatePath(
+        List<UpdateCatalogEntry> entries,
+        Version currentVersion,
+        Version targetVersion)
+    {
+        var remaining = new HashSet<UpdateCatalogEntry>(entries);
+        var path = new List<UpdateCatalogEntry>();
+        var versionCursor = currentVersion;
+
+        while (versionCursor < targetVersion) {
+            var candidates = remaining
+                .Where(e => CanApplyEntry(versionCursor, e))
+                .ToList();
+
+            if (candidates.Count == 0) {
+                return [];
+            }
+
+            UpdateCatalogEntry bestPick;
+            var directToTarget = candidates.FirstOrDefault(e =>
+                Version.TryParse(e.TargetVersion, out var tv) && tv >= targetVersion);
+
+            if (directToTarget is not null) {
+                bestPick = directToTarget;
+            } else {
+                var cumulative = candidates
+                    .Where(e => e.IsCumulative)
+                    .OrderByDescending(e => Version.TryParse(e.TargetVersion, out var v) ? v : new Version(0, 0))
+                    .FirstOrDefault();
+
+                bestPick = cumulative ?? candidates
+                    .OrderByDescending(e => Version.TryParse(e.TargetVersion, out var v) ? v : new Version(0, 0))
+                    .First();
+            }
+
+            path.Add(bestPick);
+            remaining.Remove(bestPick);
+
+            if (!Version.TryParse(bestPick.TargetVersion, out var newCursor)) {
+                return [];
+            }
+
+            if (newCursor <= versionCursor) {
+                return [];
+            }
+
+            versionCursor = newCursor;
+        }
+
+        return path;
     }
 
     private static ManagedUpdateResult ToManagedUpdateResult(UpdateCheckResult result, string currentVersion)
@@ -130,37 +182,45 @@ public static partial class SelfUpdateBootstrap
             },
             CurrentVersion = currentVersion,
             LatestVersion = result.LatestVersion,
-            TargetVersion = result.UpdateEntry?.TargetVersion,
+            TargetVersion = result.UpdatePath is { Count: > 0 } ? result.UpdatePath[^1].TargetVersion : null,
             Message = result.Message,
             ManagedInstallExists = File.Exists(ManagedExecutablePath),
             RunningManagedInstall = PathsEqual(Environment.ProcessPath, ManagedExecutablePath)
         };
     }
 
-    private static async Task PrepareUpdateAsync(
+    private static async Task PrepareUpdateChainAsync(
         HttpClient httpClient,
         string currentVersion,
-        UpdateCatalogEntry updateEntry,
+        List<UpdateCatalogEntry> updatePath,
         CancellationToken cancellationToken)
     {
+        var finalTarget = updatePath[^1].TargetVersion;
         var updateRoot = Path.Combine(
             Env.WorkDir,
             "updates",
-            $"{SanitizeVersion(currentVersion)}-to-{SanitizeVersion(updateEntry.TargetVersion)}");
+            $"{SanitizeVersion(currentVersion)}-to-{SanitizeVersion(finalTarget)}");
         var stagingDir = Path.Combine(updateRoot, "staging");
         var backupDir = Path.Combine(updateRoot, "backup");
 
         ResetDirectory(stagingDir);
         ResetDirectory(backupDir);
 
-        await using var packageStream = await DownloadStreamAsync(httpClient, updateEntry.PackagePath, cancellationToken);
-        await using var packageBuffer = new MemoryStream();
-        await packageStream.CopyToAsync(packageBuffer, cancellationToken);
-        packageBuffer.Position = 0;
+        foreach (var entry in updatePath)
+        {
+            Log.Information("下载更新包: {PackagePath} (from {MinVersion})",
+                entry.PackagePath, entry.MinSourceVersion);
 
-        VerifyPackageChecksum(packageBuffer, updateEntry);
-        packageBuffer.Position = 0;
-        ExtractPackageToDirectory(packageBuffer, stagingDir);
+            await using var packageStream = await DownloadStreamAsync(
+                httpClient, entry.PackagePath, cancellationToken);
+            await using var packageBuffer = new MemoryStream();
+            await packageStream.CopyToAsync(packageBuffer, cancellationToken);
+            packageBuffer.Position = 0;
+
+            VerifyPackageChecksum(packageBuffer, entry);
+            packageBuffer.Position = 0;
+            ExtractPackageToDirectory(packageBuffer, stagingDir);
+        }
 
         var updaterPath = await DownloadUpdaterAsync(httpClient, cancellationToken);
         SpawnUpdater(new UpdaterLaunchArgs {
@@ -424,33 +484,11 @@ public static partial class SelfUpdateBootstrap
         public required string BackupDir { get; init; }
     }
 
-    private sealed class UpdateCatalog
-    {
-        public required string LatestVersion { get; init; }
-        public required List<UpdateCatalogEntry> Entries { get; init; }
-        public DateTime LastUpdated { get; init; }
-        public string? MinRequiredVersion { get; init; }
-        public string? UpdaterChecksum { get; init; }
-    }
-
-    private sealed class UpdateCatalogEntry
-    {
-        public required string PackagePath { get; init; }
-        public required string TargetVersion { get; init; }
-        public required string MinSourceVersion { get; init; }
-        public string? MaxSourceVersion { get; init; }
-        public bool IsCumulative { get; init; }
-        public required string PackageChecksum { get; init; }
-        public long CompressedSize { get; init; }
-        public long UncompressedSize { get; init; }
-        public int FileCount { get; init; }
-    }
-
     private sealed class UpdateCheckResult
     {
         public required UpdateCheckStatus Status { get; init; }
         public string? LatestVersion { get; init; }
-        public UpdateCatalogEntry? UpdateEntry { get; init; }
+        public List<UpdateCatalogEntry>? UpdatePath { get; init; }
         public string? Message { get; init; }
 
         public static UpdateCheckResult UpToDate(string latestVersion) => new() {
@@ -458,10 +496,10 @@ public static partial class SelfUpdateBootstrap
             LatestVersion = latestVersion
         };
 
-        public static UpdateCheckResult UpdateAvailable(string latestVersion, UpdateCatalogEntry updateEntry) => new() {
+        public static UpdateCheckResult UpdateAvailable(string latestVersion, List<UpdateCatalogEntry> updatePath) => new() {
             Status = UpdateCheckStatus.UpdateAvailable,
             LatestVersion = latestVersion,
-            UpdateEntry = updateEntry
+            UpdatePath = updatePath
         };
 
         public static UpdateCheckResult UpdateUnavailable(string latestVersion, string message) => new() {

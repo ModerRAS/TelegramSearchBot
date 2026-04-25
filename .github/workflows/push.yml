@@ -228,19 +228,77 @@ jobs:
           /p:Version=$env:BUILD_VERSION `
           /p:PublishSingleFile=false `
           -o .\artifacts\standalone
+    - name: Fetch existing update catalog from B2
+      shell: pwsh
+      env:
+        B2_BUCKET: ${{ secrets.B2_BUCKET }}
+        B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
+        B2_APPKEY: ${{ secrets.B2_APPKEY }}
+      run: |
+        if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+          Write-Host "Python not available, skipping catalog fetch."
+          exit 0
+        }
+        pip install --quiet --cache-dir C:\pip-cache "b2==$env:B2_CLI_VERSION"
+        b2 account authorize $env:B2_APPKEY_ID $env:B2_APPKEY --quiet
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "B2 auth failed, will create fresh catalog."
+          exit 0
+        }
+        try {
+          b2 download-file-by-name $env:B2_BUCKET TelegramSearchBot/catalog.json .\artifacts\existing-catalog.json --quiet
+          Write-Host "Downloaded existing catalog.json for merge."
+        } catch {
+          Write-Host "No existing catalog found on B2, will create fresh catalog."
+        }
+        b2 account clear
+    - name: Fetch previous release standalone for step package comparison
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        $prevRelease = gh release list --repo ${{ github.repository }} --limit 1 --exclude-drafts --json tagName,name | ConvertFrom-Json
+        if ($prevRelease.Count -gt 0) {
+          $prevTag = $prevRelease[0].tagName
+          $prevVersion = $prevTag -replace '^v', ''
+          Write-Host "Previous release: $prevTag (version: $prevVersion)"
+          $prevArchive = ".\artifacts\prev-standalone.zip"
+          gh release download $prevTag --repo ${{ github.repository }} --pattern "TelegramSearchBot-win-x64-full-*.zip" --dir artifacts\prev-release
+          $zipFile = Get-ChildItem artifacts\prev-release -Filter "TelegramSearchBot-win-x64-full-*.zip" | Select-Object -First 1
+          if ($zipFile) {
+            Expand-Archive -Path $zipFile.FullName -DestinationPath .\artifacts\prev-standalone -Force
+            Write-Host "PREV_VERSION=$prevVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "PREV_STANDALONE_DIR=artifacts\prev-standalone" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "Extracted previous standalone from $($zipFile.Name)."
+          } else {
+            Write-Host "No previous full zip found; step package will not be generated."
+          }
+        } else {
+          Write-Host "No previous release found; this is the first release."
+        }
     - name: Build Moder.Update feed
       shell: pwsh
       env:
         BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
       run: |
+        $builderArgs = @(
+          '--source-dir', '.\artifacts\standalone',
+          '--output-dir', '.\artifacts\update-feed',
+          '--target-version', $env:BUILD_VERSION,
+          '--min-source-version', $env:LEGACY_BRIDGE_VERSION
+        )
+        if (Test-Path '.\artifacts\existing-catalog.json') {
+          $builderArgs += @('--existing-catalog', '.\artifacts\existing-catalog.json')
+          Write-Host "Passing existing catalog for merge."
+        }
+        if ($env:PREV_VERSION -and (Test-Path $env:PREV_STANDALONE_DIR)) {
+          $builderArgs += @('--prev-source-dir', $env:PREV_STANDALONE_DIR, '--prev-version', $env:PREV_VERSION)
+          Write-Host "Passing previous version $env:PREV_VERSION for step package generation."
+        }
         dotnet run --project .\TelegramSearchBot.UpdateBuilder\TelegramSearchBot.UpdateBuilder.csproj `
           -c Release `
           --no-build `
-          -- `
-          --source-dir .\artifacts\standalone `
-          --output-dir .\artifacts\update-feed `
-          --target-version $env:BUILD_VERSION `
-          --min-source-version $env:LEGACY_BRIDGE_VERSION
+          -- @builderArgs
         Copy-Item .\moder-update-bin\moder_update_updater.exe .\artifacts\update-feed\moder_update_updater.exe -Force
         $catalogPath = '.\artifacts\update-feed\catalog.json'
         $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
@@ -415,29 +473,35 @@ jobs:
           }
         }
 
-        function Prune-B2PackageVersions {
+        function Prune-B2PackagesByCatalog {
           param(
             [Parameter(Mandatory = $true)]
-            [string[]]$KeepRelativePaths
+            [string]$CatalogPath
           )
 
-          $items = @(Get-B2Versions -B2Uri "b2://$env:B2_BUCKET/TelegramSearchBot/packages/" -Recursive)
-          if ($items.Count -eq 0) {
+          if (!(Test-Path $CatalogPath)) {
+            Write-Host "Catalog not found, skipping reachability prune."
             return
           }
 
-          $keepSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-          foreach ($relativePath in $KeepRelativePaths) {
-            $normalizedPath = $relativePath.Replace('\', '/')
-            [void]$keepSet.Add("TelegramSearchBot/packages/$normalizedPath")
+          $catalog = Get-Content $CatalogPath -Raw | ConvertFrom-Json
+          $reachablePaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          foreach ($entry in $catalog.Entries) {
+            if ($entry.PackagePath) {
+              $normalized = $entry.PackagePath -replace '^packages/', ''
+              [void]$reachablePaths.Add("TelegramSearchBot/packages/$normalized")
+            }
           }
+          Write-Host "Catalog has $($catalog.Entries.Count) entries, $($reachablePaths.Count) reachable package paths."
+
+          $items = @(Get-B2Versions -B2Uri "b2://$env:B2_BUCKET/TelegramSearchBot/packages/" -Recursive)
+          if ($items.Count -eq 0) { return }
 
           foreach ($group in ($items | Group-Object fileName)) {
             $sortedItems = $group.Group | Sort-Object uploadTimestamp -Descending
-            if ($keepSet.Contains($group.Name)) {
+            if ($reachablePaths.Contains($group.Name)) {
               $sortedItems = $sortedItems | Select-Object -Skip 1
             }
-
             foreach ($item in $sortedItems) {
               Remove-B2VersionById -FileId $item.fileId
             }
@@ -463,11 +527,7 @@ jobs:
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\moder_update_updater.exe TelegramSearchBot/moder_update_updater.exe
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\catalog.json TelegramSearchBot/catalog.json
 
-        $packageRoot = (Resolve-Path .\artifacts\update-feed\packages).Path
-        $packageFiles = Get-ChildItem $packageRoot -File -Recurse | ForEach-Object {
-          [System.IO.Path]::GetRelativePath($packageRoot, $_.FullName)
-        }
-        Prune-B2PackageVersions -KeepRelativePaths $packageFiles
+        Prune-B2PackagesByCatalog -CatalogPath '.\artifacts\update-feed\catalog.json'
         Prune-B2FileVersions -RelativePath 'TelegramSearchBot/moder_update_updater.exe'
         Prune-B2FileVersions -RelativePath 'TelegramSearchBot/catalog.json'
         b2 account clear
