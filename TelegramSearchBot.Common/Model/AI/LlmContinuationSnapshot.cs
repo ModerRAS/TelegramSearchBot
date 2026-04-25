@@ -16,6 +16,12 @@ namespace TelegramSearchBot.Model.AI {
         /// The text content of the message
         /// </summary>
         public string Content { get; set; } = null!;
+
+        /// <summary>
+        /// The reasoning content for thinking mode models (e.g., Kimi-thinking-preview, QwQ).
+        /// This field must be passed back to the API in subsequent requests to avoid HTTP 400 errors.
+        /// </summary>
+        public string? ReasoningContent { get; set; }
     }
 
     /// <summary>

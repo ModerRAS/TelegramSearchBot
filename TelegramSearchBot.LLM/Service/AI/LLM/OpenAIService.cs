@@ -967,6 +967,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
                     var contentBuilder = new StringBuilder();
+                    var reasoningContentBuilder = new StringBuilder();
                     var toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
                     ChatFinishReason? finishReason = null;
 
@@ -983,6 +984,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                     yield return currentMessageContentBuilder.ToString();
                                 }
                             }
+                        }
+
+                        // Accumulate reasoning content for thinking mode models (e.g., Kimi-thinking-preview)
+                        var reasoningUpdate = GetStreamingReasoningContent(update);
+                        if (!string.IsNullOrEmpty(reasoningUpdate)) {
+                            reasoningContentBuilder.Append(reasoningUpdate);
                         }
 
                         // Accumulate tool call updates
@@ -1006,6 +1013,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     }
 
                     string responseText = contentBuilder.ToString().Trim();
+                    string reasoningContent = reasoningContentBuilder.ToString().Trim();
 
                     // Check if this is a tool call response
                     if (finishReason == ChatFinishReason.ToolCalls && toolCallAccumulators.Any()) {
@@ -1024,6 +1032,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         var assistantMessage = new AssistantChatMessage(chatToolCalls);
                         if (!string.IsNullOrWhiteSpace(responseText)) {
                             assistantMessage = new AssistantChatMessage(chatToolCalls) { Content = { ChatMessageContentPart.CreateTextPart(responseText) } };
+                        }
+                        // Set reasoning content for thinking mode models
+                        if (!string.IsNullOrEmpty(reasoningContent)) {
+                            SetAssistantReasoningContent(assistantMessage, reasoningContent);
                         }
                         providerHistory.Add(assistantMessage);
 
@@ -1066,7 +1078,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     } else {
                         // Not a tool call - regular text response
                         if (!string.IsNullOrWhiteSpace(responseText)) {
-                            providerHistory.Add(new AssistantChatMessage(responseText));
+                            var assistantMsg = new AssistantChatMessage(responseText);
+                            if (!string.IsNullOrEmpty(reasoningContent)) {
+                                SetAssistantReasoningContent(assistantMsg, reasoningContent);
+                            }
+                            providerHistory.Add(assistantMsg);
                         }
                         yield break;
                     }
@@ -1328,6 +1344,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             foreach (var msg in history) {
                 string role;
                 string content = "";
+                string? reasoningContent = null;
 
                 if (msg is SystemChatMessage systemMsg) {
                     role = "system";
@@ -1335,6 +1352,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 } else if (msg is AssistantChatMessage assistantMsg) {
                     role = "assistant";
                     content = string.Join("", assistantMsg.Content?.Select(p => p.Text) ?? Enumerable.Empty<string>());
+                    // Try to get reasoning content from the assistant message
+                    // OpenAI SDK stores reasoning content in a separate property
+                    reasoningContent = GetAssistantReasoningContent(assistantMsg);
                 } else if (msg is UserChatMessage userMsg) {
                     role = "user";
                     content = string.Join("", userMsg.Content?.Select(p => p.Text) ?? Enumerable.Empty<string>());
@@ -1343,9 +1363,59 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     content = msg.ToString();
                 }
 
-                result.Add(new SerializedChatMessage { Role = role, Content = content });
+                result.Add(new SerializedChatMessage { Role = role, Content = content, ReasoningContent = reasoningContent });
             }
             return result;
+        }
+
+        /// <summary>
+        /// Extract reasoning_content from AssistantChatMessage if available.
+        /// For thinking mode models, the reasoning process is returned separately.
+        /// </summary>
+        private static string? GetAssistantReasoningContent(AssistantChatMessage assistantMsg) {
+            // Try to access reasoning content - OpenAI Chat SDK may store it in various ways
+            // The reasoning_content is typically available via reflection or specific properties
+            try {
+                // Check for Reasoning property via reflection
+                var reasoningProp = assistantMsg.GetType().GetProperty("Reasoning");
+                if (reasoningProp != null) {
+                    var value = reasoningProp.GetValue(assistantMsg);
+                    if (value is string reasoning && !string.IsNullOrEmpty(reasoning)) {
+                        return reasoning;
+                    }
+                }
+            } catch {
+                // Reflection failed, return null
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Extract reasoning_content from streaming update for thinking mode models.
+        /// Uses reflection to access SDK internals.
+        /// </summary>
+        private static string? GetStreamingReasoningContent(StreamingChatCompletionUpdate update) {
+            try {
+                // Try ReasoningContentUpdate property (OpenAI SDK for thinking models)
+                var reasoningProp = update.GetType().GetProperty("ReasoningContentUpdate");
+                if (reasoningProp != null) {
+                    var value = reasoningProp.GetValue(update);
+                    if (value is string reasoning && !string.IsNullOrEmpty(reasoning)) {
+                        return reasoning;
+                    }
+                }
+                // Fallback: try Reasoning property
+                var fallbackProp = update.GetType().GetProperty("Reasoning");
+                if (fallbackProp != null) {
+                    var value = fallbackProp.GetValue(update);
+                    if (value is string fallback && !string.IsNullOrEmpty(fallback)) {
+                        return fallback;
+                    }
+                }
+            } catch {
+                // Reflection failed
+            }
+            return null;
         }
 
         /// <summary>
@@ -1361,7 +1431,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         result.Add(new SystemChatMessage(msg.Content ?? ""));
                         break;
                     case "assistant":
-                        result.Add(new AssistantChatMessage(msg.Content ?? ""));
+                        var assistantMsg = new AssistantChatMessage(msg.Content ?? "");
+                        // Set reasoning content if available (for thinking mode models)
+                        if (!string.IsNullOrEmpty(msg.ReasoningContent)) {
+                            SetAssistantReasoningContent(assistantMsg, msg.ReasoningContent);
+                        }
+                        result.Add(assistantMsg);
                         break;
                     case "user":
                     default:
@@ -1370,6 +1445,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
             }
             return result;
+        }
+
+        /// <summary>
+        /// Set reasoning_content on AssistantChatMessage for thinking mode models.
+        /// Uses reflection since OpenAI SDK doesn't have a public setter.
+        /// </summary>
+        private static void SetAssistantReasoningContent(AssistantChatMessage msg, string reasoningContent) {
+            try {
+                var prop = msg.GetType().GetProperty("Reasoning");
+                if (prop != null && prop.CanWrite) {
+                    prop.SetValue(msg, reasoningContent);
+                }
+            } catch {
+                // Reflection failed, ignore
+            }
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {
