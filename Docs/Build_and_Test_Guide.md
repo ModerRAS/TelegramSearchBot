@@ -41,6 +41,28 @@ dotnet run --project TelegramSearchBot.UpdateBuilder/TelegramSearchBot.UpdateBui
   --min-source-version 2026.04.23.553
 ```
 
+### Moder.Update 更新系统
+
+项目已整合 Moder.Update (https://github.com/ModerRAS/Moder.Update) 作为子模块，位于 `external/moder-update/`。
+
+#### 构建 Rust Updater
+```bash
+cargo build --manifest-path external/moder-update/src/updater/Cargo.toml --release
+```
+输出: `external/moder-update/src/updater/target/release/moder_update_updater.exe`
+
+#### Moder.Update 项目
+- `external/moder-update/src/Moder.Update/` - 核心 C# 库
+- `external/moder-update/src/updater/` - Rust updater 进程
+- `external/moder-update/tests/Moder.Update.Tests/` - 单元测试
+
+#### 与 TelegramSearchBot.UpdateBuilder 的关系
+- `SelfUpdateBootstrap.Windows.cs` 负责下载/解压/spawn updater
+- Rust `moder_update_updater.exe` 负责文件替换和进程重启
+- `TelegramSearchBot.UpdateBuilder` 负责生成 .zst 更新包
+
+> 注意：后期如有 Moder.Update 的重大更新，可手动将 `external/moder-update/` 目录中的改动同步回 Moder.Update 原仓库。
+
 **Linux 平台**
 ```bash
 # 发布 Linux 版本
