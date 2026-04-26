@@ -242,7 +242,7 @@ static (byte[] PackageBytes, string Checksum) BuildPackageFile(
         })
         .ToList();
 
-    var tempManifest = new UpdateManifest
+    var manifest = new UpdateManifest
     {
         TargetVersion = toVersion,
         MinSourceVersion = fromVersion,
@@ -255,24 +255,9 @@ static (byte[] PackageBytes, string Checksum) BuildPackageFile(
         CreatedAt = DateTime.UtcNow
     };
 
-    var tempBytes = CreatePackage(tempManifest, files);
-    var finalChecksum = ComputeSha512(tempBytes);
-
-    var finalManifest = new UpdateManifest
-    {
-        TargetVersion = toVersion,
-        MinSourceVersion = fromVersion,
-        MaxSourceVersion = isCumulative ? null : fromVersion,
-        IsAnchor = isAnchor,
-        IsCumulative = isCumulative,
-        ChainDepth = chainDepth,
-        Files = manifestFiles,
-        Checksum = finalChecksum,
-        CreatedAt = DateTime.UtcNow
-    };
-
-    var finalBytes = CreatePackage(finalManifest, files);
-    return (finalBytes, finalChecksum);
+    var packageBytes = CreatePackage(manifest, files);
+    var packageChecksum = ComputeSha512(packageBytes);
+    return (packageBytes, packageChecksum);
 }
 
 static byte[] CreatePackage(UpdateManifest manifest, IReadOnlyList<UpdateFileContent> files)
