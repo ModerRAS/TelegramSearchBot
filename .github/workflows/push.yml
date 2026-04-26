@@ -300,6 +300,7 @@ jobs:
           --no-build `
           -- @builderArgs
         Copy-Item .\moder-update-bin\moder_update_updater.exe .\artifacts\update-feed\moder_update_updater.exe -Force
+        Copy-Item .\moder-update-bin\moder_update_updater.exe .\artifacts\standalone\moder_update_updater.exe -Force
         $catalogPath = '.\artifacts\update-feed\catalog.json'
         $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
         $catalog | Add-Member -NotePropertyName UpdaterChecksum -NotePropertyValue ((Get-FileHash .\artifacts\update-feed\moder_update_updater.exe -Algorithm SHA512).Hash.ToLower()) -Force

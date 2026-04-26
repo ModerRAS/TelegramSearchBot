@@ -111,8 +111,8 @@ namespace TelegramSearchBot.Test.Service.Todo {
                 listName: "工作",
                 description: "初始描述",
                 priority: "high",
-                dueAt: "2026-04-25T20:00:00+08:00",
-                remindAt: DateTimeOffset.UtcNow.AddMinutes(-5).ToString("O"));
+                dueAt: DateTimeOffset.UtcNow.AddDays(1).ToString("O"),
+                remindAt: DateTimeOffset.UtcNow.AddHours(1).ToString("O"));
 
             await _todoService.MarkReminderSentAsync(created.TodoId!.Value, 999, DateTime.UtcNow.AddMinutes(-1));
 
