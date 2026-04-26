@@ -356,3 +356,10 @@ example/
 .VsCodeCounter/
 
 .sisyphus
+
+# Moder.Update Rust build artifacts
+external/moder-update/**/target/
+
+# Moder.Update C# build artifacts
+external/moder-update/**/bin/
+external/moder-update/**/obj/

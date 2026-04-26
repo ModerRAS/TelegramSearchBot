@@ -18,7 +18,6 @@ env:
   B2_CLI_VERSION: '4.6.0'
   LEGACY_BRIDGE_VERSION: '2026.04.23.553'
   LEGACY_BRIDGE_MARKER: 'legacy-clickonce-bridge-version.txt'
-  MODER_UPDATE_COMMIT: 'd547c9905d0cb706aa163e418ab5ef424a14dc9c'
 
 jobs:
   prepare:
@@ -166,17 +165,16 @@ jobs:
     - name: Build Moder.Update updater
       shell: pwsh
       run: |
-        if (Test-Path moder-update) {
-          Remove-Item moder-update -Recurse -Force
+        cargo build --manifest-path external/moder-update/src/updater/Cargo.toml --release
+        if (-not (Test-Path moder-update-bin)) {
+          New-Item -ItemType Directory -Path moder-update-bin | Out-Null
         }
-        git clone https://github.com/ModerRAS/Moder.Update.git moder-update
-        git -C moder-update checkout $env:MODER_UPDATE_COMMIT
-        cargo build --manifest-path moder-update/src/updater/Cargo.toml --release
+        Copy-Item "external/moder-update/src/updater/target/release/moder_update_updater.exe" "moder-update-bin/moder_update_updater.exe"
     - name: Upload Moder.Update updater artifact
       uses: actions/upload-artifact@v4
       with:
         name: moder-update-updater
-        path: moder-update\src\updater\target\release\moder_update_updater.exe
+        path: moder-update-bin/moder_update_updater.exe
         if-no-files-found: error
 
   build-standalone-assets:
