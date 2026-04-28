@@ -32,8 +32,9 @@ jobs:
     - name: Build (Linux)
       if: matrix.os == 'ubuntu-latest'
       # Exclude Moder.Update projects on Linux (net10.0-windows not supported)
+      # Build each project individually since dotnet build doesn't accept multiple project args
       run: |
-        dotnet build --no-restore --configuration Release \
+        for proj in \
           TelegramSearchBot/TelegramSearchBot.csproj \
           TelegramSearchBot.Common/TelegramSearchBot.Common.csproj \
           TelegramSearchBot.Database/TelegramSearchBot.Database.csproj \
@@ -46,7 +47,10 @@ jobs:
           TelegramSearchBot.Test/TelegramSearchBot.Test.csproj \
           TelegramSearchBot.Tokenizer/TelegramSearchBot.Tokenizer.csproj \
           TelegramSearchBot.Tokenizer.Tests/TelegramSearchBot.Tokenizer.Tests.csproj \
-          TelegramSearchBot.UpdateBuilder/TelegramSearchBot.UpdateBuilder.csproj
+          TelegramSearchBot.UpdateBuilder/TelegramSearchBot.UpdateBuilder.csproj; do
+          echo "Building $proj..."
+          dotnet build --no-restore --configuration Release "$proj" || exit $?
+        done
     
     - name: Check code formatting
       if: matrix.os == 'windows-latest' && false  # Temporarily disabled due to CI environment差异
