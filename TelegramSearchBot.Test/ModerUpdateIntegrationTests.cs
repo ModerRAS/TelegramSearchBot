@@ -32,8 +32,7 @@ namespace TelegramSearchBot.Test {
 
         [Fact]
         public void Build_WithModerUpdateProjects_Succeeds() {
-            // RED phase: This test will FAIL until Moder.Update projects are integrated
-            // Run dotnet build and verify it succeeds
+            // Verifies the solution builds successfully in Release configuration
 
             var solutionPath = Path.Combine(SolutionRoot, "TelegramSearchBot.sln");
             Assert.True(File.Exists(solutionPath), "Solution file should exist");
@@ -80,8 +79,7 @@ namespace TelegramSearchBot.Test {
 
         [Fact]
         public void RustUpdater_BuildsFromLocalPath() {
-            // RED phase: This test will FAIL until Moder.Update Rust updater is integrated
-            // Build the Rust updater and verify binary exists
+            // Verifies the Rust updater builds successfully from local path
 
             // Try multiple possible paths for the Rust updater
             var possiblePaths = new[] {
@@ -139,8 +137,7 @@ namespace TelegramSearchBot.Test {
 
         [Fact]
         public void ModerUpdate_Projects_HaveCorrectReferences() {
-            // RED phase: This test will FAIL until Moder.Update projects exist
-            // Verify Moder.Update project exists and has correct references
+            // Verifies Moder.Update projects exist and have correct references
 
             // Verify the Moder.Update project file exists at correct path
             var moderUpdateProjectPaths = new[] {
@@ -185,8 +182,7 @@ namespace TelegramSearchBot.Test {
 
         [Fact]
         public void ModerUpdate_Namespaces_DoNotConflict() {
-            // RED phase: This test will FAIL until Moder.Update source files exist
-            // Verify namespace isolation between Moder.Update and TelegramSearchBot
+            // Verifies namespace isolation between Moder.Update and TelegramSearchBot
 
             // Find Moder.Update source files
             var moderUpdatePaths = new[] {
