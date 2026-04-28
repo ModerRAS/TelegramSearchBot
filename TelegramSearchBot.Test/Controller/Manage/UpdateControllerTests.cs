@@ -1,8 +1,10 @@
 #if WINDOWS
 using System.Reflection;
+using System.Threading;
 using Microsoft.Extensions.Hosting;
 using Moq;
 using Telegram.Bot;
+using Telegram.Bot.Requests.Abstractions;
 using Telegram.Bot.Types;
 using TelegramSearchBot.Controller.Manage;
 using TelegramSearchBot.Model;
@@ -32,6 +34,7 @@ namespace TelegramSearchBot.Test.Controller.Manage;
 public class UpdateControllerTests
 {
     private readonly Mock<ITelegramBotClient> _mockBotClient;
+    private readonly Mock<AdminService> _mockAdminService;
     private readonly Mock<IHostApplicationLifetime> _mockAppLifetime;
     private readonly UpdateController _controller;
 
@@ -41,19 +44,30 @@ public class UpdateControllerTests
         _mockAppLifetime = new Mock<IHostApplicationLifetime>();
 
         // AdminService constructor requires several dependencies.
-        // We mock all constructor parameters to enable object creation.
-        // IsNormalAdmin is non-virtual — the mock proxy will throw
-        // at runtime when called; this is expected RED behavior.
-        var mockAdminService = new Mock<AdminService>(
+        // IsNormalAdmin is now virtual — mock returns true for admin permission.
+        _mockAdminService = new Mock<AdminService>(
             Mock.Of<Microsoft.Extensions.Logging.ILogger<AdminService>>(),
-            null!, // DataDbContext — null is acceptable for RED phase
+            null!, // DataDbContext — not needed when IsNormalAdmin is mocked
             Mock.Of<IAppConfigurationService>(),
             Mock.Of<StackExchange.Redis.IConnectionMultiplexer>(),
             Mock.Of<ISchedulerService>());
 
+        _mockAdminService
+            .Setup(x => x.IsNormalAdmin(It.IsAny<long>()))
+            .ReturnsAsync(true);
+
+        // SendMessage in Telegram.Bot v22 is an extension method that calls
+        // ITelegramBotClient.SendRequest<T>() internally. Mock the underlying
+        // interface method to avoid real HTTP calls to Telegram API.
+        _mockBotClient
+            .Setup(x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.Abstractions.IRequest<Message>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Message { Id = 1, Chat = new Chat { Id = -1001234567890 } });
+
         _controller = new UpdateController(
             _mockBotClient.Object,
-            mockAdminService.Object,
+            _mockAdminService.Object,
             _mockAppLifetime.Object);
     }
 

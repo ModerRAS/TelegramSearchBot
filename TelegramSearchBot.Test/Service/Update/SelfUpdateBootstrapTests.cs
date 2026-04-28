@@ -335,7 +335,7 @@ public class SelfUpdateBootstrapTests
             "UpdateCheckResult", BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Nested type 'UpdateCheckResult' not found.");
         var method = resultType.GetMethod(
-            factoryMethod, BindingFlags.NonPublic | BindingFlags.Static)
+            factoryMethod, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException($"Factory method '{factoryMethod}' not found.");
         return method.Invoke(null, args)!;
     }
