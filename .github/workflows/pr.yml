@@ -27,7 +27,26 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore --force --no-cache
     - name: Build
+      if: matrix.os == 'windows-latest'
       run: dotnet build --no-restore --configuration Release
+    - name: Build (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      # Exclude Moder.Update projects on Linux (net10.0-windows not supported)
+      run: |
+        dotnet build --no-restore --configuration Release \
+          TelegramSearchBot/TelegramSearchBot.csproj \
+          TelegramSearchBot.Common/TelegramSearchBot.Common.csproj \
+          TelegramSearchBot.Database/TelegramSearchBot.Database.csproj \
+          TelegramSearchBot.LLM/TelegramSearchBot.LLM.csproj \
+          TelegramSearchBot.LLM.Test/TelegramSearchBot.LLM.Test.csproj \
+          TelegramSearchBot.LLMAgent/TelegramSearchBot.LLMAgent.csproj \
+          TelegramSearchBot.Search/TelegramSearchBot.Search.csproj \
+          TelegramSearchBot.Search.Test/TelegramSearchBot.Search.Test.csproj \
+          TelegramSearchBot.SubAgent/TelegramSearchBot.SubAgent.csproj \
+          TelegramSearchBot.Test/TelegramSearchBot.Test.csproj \
+          TelegramSearchBot.Tokenizer/TelegramSearchBot.Tokenizer.csproj \
+          TelegramSearchBot.Tokenizer.Tests/TelegramSearchBot.Tokenizer.Tests.csproj \
+          TelegramSearchBot.UpdateBuilder/TelegramSearchBot.UpdateBuilder.csproj
     
     - name: Check code formatting
       if: matrix.os == 'windows-latest' && false  # Temporarily disabled due to CI environment差异
@@ -38,7 +57,11 @@ jobs:
       run: dotnet list package --vulnerable --include-transitive
     
     - name: Test
+      if: matrix.os == 'windows-latest'
       run: dotnet test --no-build --verbosity normal --configuration Release --collect:"XPlat Code Coverage" --logger "trx;LogFileName=test-results.trx"
+    - name: Test (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: dotnet test --no-build --verbosity normal --configuration Release --collect:"XPlat Code Coverage" --logger "trx;LogFileName=test-results.trx" --filter "FullyQualifiedName!~Moder.Update.Tests"
     
     - name: Upload coverage to Codecov
       if: matrix.os == 'windows-latest'
