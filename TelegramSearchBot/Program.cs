@@ -10,7 +10,18 @@ using TelegramSearchBot.Service.AppUpdate;
 
 namespace TelegramSearchBot {
     class Program {
+        internal static Serilog.ILogger EfCoreLogger { get; private set; } = null!;
+
         static async Task Main(string[] args) {
+            // Separate logger for EF Core - writes only to logs/efcore-.txt
+            EfCoreLogger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .WriteTo.File(
+                    $"{Env.WorkDir}/logs/efcore-.txt",
+                    rollingInterval: RollingInterval.Day,
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] [EF] {Message:lj}{NewLine}{Exception}")
+                .CreateLogger();
+
             Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information() // 设置最低日志级别
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Debug) // SQL 语句只在 Debug 级别输出
