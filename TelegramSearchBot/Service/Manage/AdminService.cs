@@ -41,7 +41,7 @@ namespace TelegramSearchBot.Service.Manage {
             return Id == Env.AdminId;
         }
 
-        public async Task<bool> IsNormalAdmin(long Id) {
+        public virtual async Task<bool> IsNormalAdmin(long Id) {
             return await ( from u in DataContext.UsersWithGroup
                            where u.UserId == Id &&
                                  ( from g in DataContext.GroupSettings

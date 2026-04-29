@@ -24,6 +24,9 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="TelegramSearchBot.Test" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Coravel" Version="6.0.2" />
     <PackageReference Include="Cronos" Version="0.12.0" />
     <PackageReference Include="Google_GenerativeAI" Version="3.6.6" />
