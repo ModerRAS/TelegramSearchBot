@@ -1033,10 +1033,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         if (!string.IsNullOrWhiteSpace(responseText)) {
                             assistantMessage = new AssistantChatMessage(chatToolCalls) { Content = { ChatMessageContentPart.CreateTextPart(responseText) } };
                         }
-                        // Set reasoning content for thinking mode models
-                        if (!string.IsNullOrEmpty(reasoningContent)) {
-                            SetAssistantReasoningContent(assistantMessage, reasoningContent);
-                        }
+                        // Set reasoning content for thinking mode models (always call, even for empty)
+                        SetAssistantReasoningContent(assistantMessage, reasoningContent ?? "");
                         providerHistory.Add(assistantMessage);
 
                         var toolIndicators = new StringBuilder();
@@ -1079,9 +1077,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         // Not a tool call - regular text response
                         if (!string.IsNullOrWhiteSpace(responseText)) {
                             var assistantMsg = new AssistantChatMessage(responseText);
-                            if (!string.IsNullOrEmpty(reasoningContent)) {
-                                SetAssistantReasoningContent(assistantMsg, reasoningContent);
-                            }
+                            // Set reasoning content (always call, even for empty)
+                            SetAssistantReasoningContent(assistantMsg, reasoningContent ?? "");
                             providerHistory.Add(assistantMsg);
                         }
                         yield break;
@@ -1392,9 +1389,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         /// <summary>
         /// Extract reasoning_content from streaming update for thinking mode models.
-        /// Uses reflection to access SDK internals.
+        /// Uses Patch API first (OpenAI SDK), falls back to reflection for internal properties.
         /// </summary>
         private static string? GetStreamingReasoningContent(StreamingChatCompletionUpdate update) {
+            // Primary: use Patch API to read reasoning_content from raw JSON response
+#pragma warning disable SCME0001 // Patch is for evaluation, may be changed in future
+            if (update.Patch.TryGetValue("$.choices[0].delta.reasoning_content"u8, out string? reasoningFromPatch)) {
+                if (reasoningFromPatch != null) {
+                    return reasoningFromPatch;
+                }
+            }
+#pragma warning restore SCME0001
+
+            // Fallback: reflection for SDK internal properties
             try {
                 // Try ReasoningContentUpdate property (OpenAI SDK for thinking models)
                 var reasoningProp = update.GetType().GetProperty("ReasoningContentUpdate");
@@ -1432,10 +1439,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         break;
                     case "assistant":
                         var assistantMsg = new AssistantChatMessage(msg.Content ?? "");
-                        // Set reasoning content if available (for thinking mode models)
-                        if (!string.IsNullOrEmpty(msg.ReasoningContent)) {
-                            SetAssistantReasoningContent(assistantMsg, msg.ReasoningContent);
-                        }
+                        // Set reasoning content (always call, even for null)
+                        SetAssistantReasoningContent(assistantMsg, msg.ReasoningContent ?? "");
                         result.Add(assistantMsg);
                         break;
                     case "user":
@@ -1449,9 +1454,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         /// <summary>
         /// Set reasoning_content on AssistantChatMessage for thinking mode models.
-        /// Uses reflection since OpenAI SDK doesn't have a public setter.
+        /// Uses Patch.Set (OpenAI SDK v2.10.0+) with reflection fallback.
         /// </summary>
         private static void SetAssistantReasoningContent(AssistantChatMessage msg, string reasoningContent) {
+            // Try Patch.Set first (writes directly to JSON output)
+#pragma warning disable SCME0001 // Patch API is experimental but functional
+            try {
+                msg.Patch.Set("$.reasoning_content"u8, reasoningContent ?? "");
+            } catch {
+                // Patch.Set not available or failed, fall through to reflection
+            }
+#pragma warning restore SCME0001
+            // Reflection fallback for older SDK versions
             try {
                 var prop = msg.GetType().GetProperty("Reasoning");
                 if (prop != null && prop.CanWrite) {
