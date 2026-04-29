@@ -53,17 +53,15 @@ namespace TelegramSearchBot.Service.BotAPI {
 
             try {
                 if (isEdit) {
-                    Message editedMessage = null;
-                    await Send.AddTask(async () => {
-                        editedMessage = await botClient.EditMessageText(
+                    var editedMessage = await Send.AddTaskWithResult<Message>(async () => {
+                        return await botClient.EditMessageText(
                             chatId: chatId, messageId: messageId, parseMode: currentParseMode, text: textToSend, linkPreviewOptions: linkPreviewOptions);
                     }, isGroup);
 
                     if (editedMessage != null && editedMessage.MessageId > 0) { logger.LogInformation($"Edited message {editedMessage.MessageId} successfully with {currentParseMode}."); } else { logger.LogWarning($"Editing message {messageId} with {currentParseMode} failed silently. Edit will be skipped."); }
                 } else {
-                    Message sentMsg = null;
-                    await Send.AddTask(async () => {
-                        sentMsg = await botClient.SendMessage(
+                    var sentMsg = await Send.AddTaskWithResult<Message>(async () => {
+                        return await botClient.SendMessage(
                             chatId: chatId, text: textToSend, parseMode: currentParseMode,
                             replyParameters: new ReplyParameters() { MessageId = replyToMessageId },
                             linkPreviewOptions: linkPreviewOptions);
