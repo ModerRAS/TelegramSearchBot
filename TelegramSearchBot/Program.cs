@@ -10,11 +10,9 @@ using TelegramSearchBot.Service.AppUpdate;
 
 namespace TelegramSearchBot {
     class Program {
-        internal static Serilog.ILogger EfCoreLogger { get; private set; } = null!;
-
         static async Task Main(string[] args) {
             // Separate logger for EF Core - writes only to logs/efcore-.txt
-            EfCoreLogger = new LoggerConfiguration()
+            LoggerHolders.EfCoreLogger = new LoggerConfiguration()
                 .MinimumLevel.Information()
                 .WriteTo.File(
                     $"{Env.WorkDir}/logs/efcore-.txt",

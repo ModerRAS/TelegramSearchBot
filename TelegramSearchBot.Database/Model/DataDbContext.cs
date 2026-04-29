@@ -13,7 +13,7 @@ namespace TelegramSearchBot.Model {
         public DataDbContext(DbContextOptions<DataDbContext> options) : base(options) { }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {
             // 日志配置
-            optionsBuilder.LogTo(Log.Logger.Information, LogLevel.Information);
+            optionsBuilder.LogTo(TelegramSearchBot.Common.LoggerHolders.EfCoreLogger.Information, LogLevel.Information);
 
             // 数据库配置应该由外部通过DbContextOptions提供
             // 不要在这里配置默认数据库
