@@ -1017,59 +1017,70 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                     // Check if this is a tool call response
                     if (finishReason == ChatFinishReason.ToolCalls && toolCallAccumulators.Any()) {
-                        // Build the assistant message with tool calls
-                        var chatToolCalls = new List<ChatToolCall>();
-                        foreach (var (index, acc) in toolCallAccumulators) {
-                            if (acc.Id == null) {
-                                _logger.LogWarning("{ServiceName}: Tool call at index {Index} has no ID, generating fallback.", ServiceName, index);
+                        List<ChatToolCall> chatToolCalls = null;
+                        try {
+                            // Build the assistant message with tool calls
+                            chatToolCalls = new List<ChatToolCall>();
+                            foreach (var (index, acc) in toolCallAccumulators) {
+                                if (acc.Id == null) {
+                                    _logger.LogWarning("{ServiceName}: Tool call at index {Index} has no ID, generating fallback.", ServiceName, index);
+                                }
+                                chatToolCalls.Add(ChatToolCall.CreateFunctionToolCall(
+                                    acc.Id ?? $"call_{Guid.NewGuid():N}",
+                                    acc.Name ?? "unknown",
+                                    BinaryData.FromString(acc.Arguments.Length > 0 ? acc.Arguments.ToString() : "{}")));
                             }
-                            chatToolCalls.Add(ChatToolCall.CreateFunctionToolCall(
-                                acc.Id ?? $"call_{Guid.NewGuid():N}",
-                                acc.Name ?? "unknown",
-                                BinaryData.FromString(acc.Arguments.ToString())));
-                        }
 
-                        var assistantMessage = new AssistantChatMessage(chatToolCalls);
-                        if (!string.IsNullOrWhiteSpace(responseText)) {
-                            assistantMessage = new AssistantChatMessage(chatToolCalls) { Content = { ChatMessageContentPart.CreateTextPart(responseText) } };
-                        }
-                        // Set reasoning content for thinking mode models (always call, even for empty)
-                        SetAssistantReasoningContent(assistantMessage, reasoningContent ?? "");
-                        providerHistory.Add(assistantMessage);
+                            var assistantMessage = new AssistantChatMessage(chatToolCalls);
+                            if (!string.IsNullOrWhiteSpace(responseText)) {
+                                assistantMessage = new AssistantChatMessage(chatToolCalls) { Content = { ChatMessageContentPart.CreateTextPart(responseText) } };
+                            }
+                            // Set reasoning content for thinking mode models (always call, even for empty)
+                            SetAssistantReasoningContent(assistantMessage, reasoningContent ?? "");
+                            providerHistory.Add(assistantMessage);
 
-                        var toolIndicators = new StringBuilder();
-                        foreach (var toolCall in chatToolCalls) {
-                            var argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
-                            var argsDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(argsJson)
-                                ?? new Dictionary<string, string>();
-                            toolIndicators.Append(McpToolHelper.FormatToolCallDisplay(toolCall.FunctionName, argsDict));
-                        }
-                        currentMessageContentBuilder.Append(toolIndicators.ToString());
-                        yield return currentMessageContentBuilder.ToString();
-
-                        // Execute each tool call
-                        foreach (var toolCall in chatToolCalls) {
-                            string toolName = toolCall.FunctionName;
-                            _logger.LogInformation("{ServiceName}: Native tool call: {ToolName} with arguments: {Arguments}", ServiceName, toolName, toolCall.FunctionArguments?.ToString());
-
-                            string toolResultString;
-                            try {
-                                // Parse arguments from JSON
+                            var toolIndicators = new StringBuilder();
+                            foreach (var toolCall in chatToolCalls) {
                                 var argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
                                 var argsDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(argsJson)
                                     ?? new Dictionary<string, string>();
-
-                                var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-                                object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(toolName, argsDict, toolContext);
-                                toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
-                                _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result length: {Length}", ServiceName, toolName, toolResultString.Length);
-                            } catch (Exception ex) {
-                                _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, toolName);
-                                toolResultString = $"Error executing tool {toolName}: {ex.Message}";
+                                toolIndicators.Append(McpToolHelper.FormatToolCallDisplay(toolCall.FunctionName, argsDict));
                             }
+                            currentMessageContentBuilder.Append(toolIndicators.ToString());
+                        } catch (Exception ex) {
+                            _logger.LogError(ex, "{ServiceName}: Error building tool calls, returning error to LLM for self-correction", ServiceName);
+                            var errorMsg = $"Error processing tool call: {ex.Message}. Please check your tool call parameters and try again.";
+                            providerHistory.Add(new UserChatMessage(errorMsg));
+                            continue;
+                        }
 
-                            // Add tool result to history using the proper ToolChatMessage
-                            providerHistory.Add(new ToolChatMessage(toolCall.Id, toolResultString));
+                        yield return currentMessageContentBuilder.ToString();
+
+                        // Execute each tool call (has its own inner try-catch for per-tool errors)
+                        if (chatToolCalls != null) {
+                            foreach (var toolCall in chatToolCalls) {
+                                string toolName = toolCall.FunctionName;
+                                _logger.LogInformation("{ServiceName}: Native tool call: {ToolName} with arguments: {Arguments}", ServiceName, toolName, toolCall.FunctionArguments?.ToString());
+
+                                string toolResultString;
+                                try {
+                                    // Parse arguments from JSON
+                                    var argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
+                                    var argsDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(argsJson)
+                                        ?? new Dictionary<string, string>();
+
+                                    var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
+                                    object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(toolName, argsDict, toolContext);
+                                    toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
+                                    _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result length: {Length}", ServiceName, toolName, toolResultString.Length);
+                                } catch (Exception ex) {
+                                    _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, toolName);
+                                    toolResultString = $"Error executing tool {toolName}: {ex.Message}";
+                                }
+
+                                // Add tool result to history using the proper ToolChatMessage
+                                providerHistory.Add(new ToolChatMessage(toolCall.Id, toolResultString));
+                            }
                         }
 
                         // Continue loop for next LLM call
