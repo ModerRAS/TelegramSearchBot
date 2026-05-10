@@ -44,6 +44,35 @@ namespace TelegramSearchBot.Service.AI.LLM {
             public StringBuilder Arguments { get; } = new StringBuilder();
         }
 
+        internal static string NormalizeToolCallId(string toolCallId) {
+            return string.IsNullOrWhiteSpace(toolCallId)
+                ? $"call_{Guid.NewGuid():N}"
+                : toolCallId.Trim();
+        }
+
+        internal static string NormalizeToolCallName(string toolCallName) {
+            return string.IsNullOrWhiteSpace(toolCallName)
+                ? "unknown"
+                : toolCallName.Trim();
+        }
+
+        internal static string NormalizeToolCallArguments(string argumentsJson) {
+            return string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson;
+        }
+
+        internal static Dictionary<string, string> DeserializeToolArgumentsForDisplay(string argumentsJson) {
+            try {
+                var normalized = NormalizeToolCallArguments(argumentsJson);
+                var values = JsonConvert.DeserializeObject<Dictionary<string, object>>(normalized);
+                return values?.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value?.ToString() ?? string.Empty)
+                    ?? new Dictionary<string, string>();
+            } catch {
+                return new Dictionary<string, string>();
+            }
+        }
+
         private readonly ILogger<OpenAIService> _logger;
         public static string _botName;
         public string BotName {
@@ -1022,13 +1051,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             // Build the assistant message with tool calls
                             chatToolCalls = new List<ChatToolCall>();
                             foreach (var (index, acc) in toolCallAccumulators) {
-                                if (acc.Id == null) {
+                                if (string.IsNullOrWhiteSpace(acc.Id)) {
                                     _logger.LogWarning("{ServiceName}: Tool call at index {Index} has no ID, generating fallback.", ServiceName, index);
                                 }
+                                var toolCallId = NormalizeToolCallId(acc.Id);
+                                var toolName = NormalizeToolCallName(acc.Name);
+                                var argumentsJson = NormalizeToolCallArguments(acc.Arguments.ToString());
                                 chatToolCalls.Add(ChatToolCall.CreateFunctionToolCall(
-                                    acc.Id ?? $"call_{Guid.NewGuid():N}",
-                                    acc.Name ?? "unknown",
-                                    BinaryData.FromString(acc.Arguments.Length > 0 ? acc.Arguments.ToString() : "{}")));
+                                    toolCallId,
+                                    toolName,
+                                    BinaryData.FromString(argumentsJson)));
                             }
 
                             var assistantMessage = new AssistantChatMessage(chatToolCalls);
@@ -1041,15 +1073,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                             var toolIndicators = new StringBuilder();
                             foreach (var toolCall in chatToolCalls) {
-                                var argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
-                                var argsDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(argsJson)
-                                    ?? new Dictionary<string, string>();
+                                var argsDict = DeserializeToolArgumentsForDisplay(toolCall.FunctionArguments?.ToString());
                                 toolIndicators.Append(McpToolHelper.FormatToolCallDisplay(toolCall.FunctionName, argsDict));
                             }
                             currentMessageContentBuilder.Append(toolIndicators.ToString());
                         } catch (Exception ex) {
                             _logger.LogError(ex, "{ServiceName}: Error building tool calls, returning error to LLM for self-correction", ServiceName);
-                            var errorMsg = $"Error processing tool call: {ex.Message}. Please check your tool call parameters and try again.";
+                            const string errorMsg = "Tool call failed before execution due to malformed tool metadata. Please verify the tool name and parameters, then try again.";
                             providerHistory.Add(new UserChatMessage(errorMsg));
                             continue;
                         }
@@ -1065,9 +1095,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                 string toolResultString;
                                 try {
                                     // Parse arguments from JSON
-                                    var argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
-                                    var argsDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(argsJson)
-                                        ?? new Dictionary<string, string>();
+                                    var argsDict = DeserializeToolArgumentsForDisplay(toolCall.FunctionArguments?.ToString());
 
                                     var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
                                     object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(toolName, argsDict, toolContext);
