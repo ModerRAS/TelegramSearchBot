@@ -4,6 +4,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Xml.Linq;
 using Xunit;
 
 namespace TelegramSearchBot.Test {
@@ -133,6 +134,31 @@ namespace TelegramSearchBot.Test {
             } else {
                 Assert.Fail("Failed to start cargo build process - is cargo installed?");
             }
+        }
+
+        [Fact]
+        public void RustUpdater_WindowsManifest_DisablesInstallerElevationHeuristic() {
+            var updaterRoot = Path.Combine(SolutionRoot, "external", "moder-update", "src", "updater");
+            var buildScriptPath = Path.Combine(updaterRoot, "build.rs");
+            var manifestPath = Path.Combine(updaterRoot, "updater.exe.manifest");
+
+            Assert.True(File.Exists(buildScriptPath), "Rust updater should have a build script to embed its manifest.");
+            Assert.True(File.Exists(manifestPath), "Rust updater should ship an explicit Windows app manifest.");
+
+            var manifest = XDocument.Load(manifestPath);
+            XNamespace asmV3 = "urn:schemas-microsoft-com:asm.v3";
+            var requestedExecutionLevel = manifest
+                .Descendants(asmV3 + "requestedExecutionLevel")
+                .SingleOrDefault();
+
+            Assert.NotNull(requestedExecutionLevel);
+            Assert.Equal("asInvoker", requestedExecutionLevel.Attribute("level")?.Value);
+            Assert.Equal("false", requestedExecutionLevel.Attribute("uiAccess")?.Value);
+
+            var buildScript = File.ReadAllText(buildScriptPath);
+            Assert.Contains("/MANIFEST:EMBED", buildScript);
+            Assert.Contains("/MANIFESTINPUT:", buildScript);
+            Assert.Contains("updater.exe.manifest", buildScript);
         }
 
         [Fact]
