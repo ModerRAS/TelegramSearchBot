@@ -80,9 +80,15 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.13.0.20260330" />
-    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260302" />
-    <PackageReference Include="OpenCvSharp4.Windows" Version="4.13.0.20260302" />
+    <!--
+      Keep OpenCvSharp pinned for PaddleOCR. Newer OpenCvSharp builds can make Sdcb.PaddleOCR
+      return garbage/mirrored OCR text on Windows; see PaddleSharp issues #177/#178 before
+      upgrading this pair. Do not use OpenCvSharp4.Windows here because it forces runtime.win
+      to the same package version and breaks the known-good 4.11.0.20250507/4.10.0.20240616 mix.
+    -->
+    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
+    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20240616" />
     <PackageReference Include="Sdcb.PaddleInference" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR" Version="3.0.1" />
     <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="3.0.1" />
