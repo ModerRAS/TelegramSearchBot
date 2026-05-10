@@ -151,6 +151,10 @@ namespace TelegramSearchBot.Test.Service.Vector {
                 SearchType = SearchType.Vector
             };
 
+            // Warm up FAISS/index loading so the measured loop tracks steady-state search performance.
+            var warmupResult = await _faissVectorService.Search(searchOption);
+            Assert.NotNull(warmupResult);
+
             // Act - 执行多次搜索
             for (int i = 0; i < searchCount; i++) {
                 var stopwatch = Stopwatch.StartNew();
