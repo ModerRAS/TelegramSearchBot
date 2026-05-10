@@ -298,7 +298,7 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "ANCHOR_STANDALONE_DIR=artifacts\anchor-standalone" -Encoding utf8
           Write-Host "Extracted cumulative update anchor from $($zipFile.Name)."
         } else {
-          Write-Host "No anchor full zip found; cumulative delta package will not be generated."
+          throw "No anchor full zip found; refusing to publish a full-only update feed."
         }
     - name: Fetch previous cumulative update package
       shell: pwsh
@@ -435,6 +435,25 @@ jobs:
         $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
         $catalog | Add-Member -NotePropertyName UpdaterChecksum -NotePropertyValue ((Get-FileHash .\artifacts\update-feed\moder_update_updater.exe -Algorithm SHA512).Hash.ToLower()) -Force
         $catalog | ConvertTo-Json -Depth 10 | Set-Content $catalogPath -Encoding utf8
+        $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
+        $entryTable = $catalog.Entries |
+          Sort-Object TargetVersion, PackagePath |
+          Select-Object TargetVersion, MinSourceVersion, MaxSourceVersion, IsCumulative, FileCount, CompressedSize, PackagePath |
+          Format-Table -AutoSize |
+          Out-String
+        Write-Host "Update feed catalog entries:"
+        Write-Host $entryTable
+        if ($env:ANCHOR_VERSION) {
+          $latestCumulativeEntries = @($catalog.Entries | Where-Object {
+            $_.TargetVersion -eq $env:BUILD_VERSION `
+              -and $_.MinSourceVersion -eq $env:ANCHOR_VERSION `
+              -and $_.IsCumulative `
+              -and $_.PackagePath -like '*-cumulative.zst'
+          })
+          if ($latestCumulativeEntries.Count -eq 0) {
+            throw "Cumulative update package missing for $env:ANCHOR_VERSION to $env:BUILD_VERSION."
+          }
+        }
     - name: Package full release asset
       shell: pwsh
       env:

@@ -358,6 +358,9 @@ namespace TelegramSearchBot.Test {
             Assert.Contains("Downloaded cumulative source package from CDN", pushYmlContent);
             Assert.Contains("historical source packages are not needed", pushYmlContent);
             Assert.Contains("Passing cumulative update anchor", pushYmlContent);
+            Assert.Contains("Update feed catalog entries", pushYmlContent);
+            Assert.Contains("Cumulative update package missing", pushYmlContent);
+            Assert.Contains("refusing to publish a full-only update feed", pushYmlContent);
             Assert.DoesNotContain("Fetch existing update catalog from B2", pushYmlContent);
             Assert.DoesNotContain("b2 download-file-by-name", pushYmlContent);
             Assert.DoesNotContain("Write-Host \"PREV_VERSION=$prevVersion\" | Out-File", pushYmlContent);
