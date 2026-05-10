@@ -124,50 +124,118 @@ public static partial class SelfUpdateBootstrap
         Version currentVersion,
         Version targetVersion)
     {
-        var remaining = new HashSet<UpdateCatalogEntry>(entries);
-        var path = new List<UpdateCatalogEntry>();
-        var versionCursor = currentVersion;
+        var candidates = entries
+            .Select(TryCreateUpdateCandidate)
+            .Where(candidate => candidate is not null
+                && candidate.TargetVersion <= targetVersion
+                && candidate.TargetVersion > currentVersion)
+            .Cast<UpdateCandidate>()
+            .ToList();
+        var bestPlans = new Dictionary<Version, UpdatePlanNode> {
+            [currentVersion] = new() {
+                Cost = 0,
+                PackageCount = 0
+            }
+        };
+        var queue = new PriorityQueue<Version, UpdatePlanPriority>();
+        queue.Enqueue(currentVersion, new UpdatePlanPriority(0, 0));
 
-        while (versionCursor < targetVersion) {
-            var candidates = remaining
-                .Where(e => CanApplyEntry(versionCursor, e))
-                .ToList();
-
-            if (candidates.Count == 0) {
-                return [];
+        while (queue.TryDequeue(out var versionCursor, out var priority)) {
+            if (!bestPlans.TryGetValue(versionCursor, out var currentPlan)
+                || currentPlan.Cost != priority.Cost
+                || currentPlan.PackageCount != priority.PackageCount) {
+                continue;
             }
 
-            UpdateCatalogEntry bestPick;
-            var directToTarget = candidates.FirstOrDefault(e =>
-                Version.TryParse(e.TargetVersion, out var tv) && tv >= targetVersion);
-
-            if (directToTarget is not null) {
-                bestPick = directToTarget;
-            } else {
-                var cumulative = candidates
-                    .Where(e => e.IsCumulative)
-                    .OrderByDescending(e => Version.TryParse(e.TargetVersion, out var v) ? v : new Version(0, 0))
-                    .FirstOrDefault();
-
-                bestPick = cumulative ?? candidates
-                    .OrderByDescending(e => Version.TryParse(e.TargetVersion, out var v) ? v : new Version(0, 0))
-                    .First();
+            if (versionCursor == targetVersion) {
+                break;
             }
 
-            path.Add(bestPick);
-            remaining.Remove(bestPick);
+            foreach (var candidate in candidates.Where(candidate => candidate.AppliesTo(versionCursor))) {
+                var packageCost = GetPackageDownloadCost(candidate.Entry);
+                if (currentPlan.Cost > long.MaxValue - packageCost) {
+                    continue;
+                }
 
-            if (!Version.TryParse(bestPick.TargetVersion, out var newCursor)) {
-                return [];
+                var nextCost = currentPlan.Cost + packageCost;
+                var nextPackageCount = currentPlan.PackageCount + 1;
+                if (bestPlans.TryGetValue(candidate.TargetVersion, out var existingPlan)
+                    && !IsBetterPlan(nextCost, nextPackageCount, existingPlan)) {
+                    continue;
+                }
+
+                bestPlans[candidate.TargetVersion] = new UpdatePlanNode {
+                    PreviousVersion = versionCursor,
+                    Entry = candidate.Entry,
+                    Cost = nextCost,
+                    PackageCount = nextPackageCount
+                };
+                queue.Enqueue(candidate.TargetVersion, new UpdatePlanPriority(nextCost, nextPackageCount));
             }
-
-            if (newCursor <= versionCursor) {
-                return [];
-            }
-
-            versionCursor = newCursor;
         }
 
+        if (!bestPlans.ContainsKey(targetVersion)) {
+            return [];
+        }
+
+        return BuildUpdatePath(bestPlans, currentVersion, targetVersion);
+    }
+
+    private static UpdateCandidate? TryCreateUpdateCandidate(UpdateCatalogEntry entry)
+    {
+        if (!Version.TryParse(entry.MinSourceVersion, out var minVersion)
+            || !Version.TryParse(entry.TargetVersion, out var targetVersion)) {
+            return null;
+        }
+
+        Version? maxVersion = null;
+        if (!string.IsNullOrWhiteSpace(entry.MaxSourceVersion)
+            && !Version.TryParse(entry.MaxSourceVersion, out maxVersion)) {
+            return null;
+        }
+
+        return new UpdateCandidate(entry, minVersion, maxVersion, targetVersion);
+    }
+
+    private static long GetPackageDownloadCost(UpdateCatalogEntry entry)
+    {
+        if (entry.CompressedSize > 0) {
+            return entry.CompressedSize;
+        }
+
+        if (entry.UncompressedSize > 0) {
+            return entry.UncompressedSize;
+        }
+
+        return entry.IsCumulative ? 2L : 1L;
+    }
+
+    private static bool IsBetterPlan(long cost, int packageCount, UpdatePlanNode existingPlan)
+    {
+        return cost < existingPlan.Cost
+            || cost == existingPlan.Cost && packageCount < existingPlan.PackageCount;
+    }
+
+    private static List<UpdateCatalogEntry> BuildUpdatePath(
+        Dictionary<Version, UpdatePlanNode> bestPlans,
+        Version currentVersion,
+        Version targetVersion)
+    {
+        var path = new List<UpdateCatalogEntry>();
+        var versionCursor = targetVersion;
+
+        while (versionCursor != currentVersion) {
+            if (!bestPlans.TryGetValue(versionCursor, out var node)
+                || node.PreviousVersion is null
+                || node.Entry is null) {
+                return [];
+            }
+
+            path.Add(node.Entry);
+            versionCursor = node.PreviousVersion;
+        }
+
+        path.Reverse();
         return path;
     }
 
@@ -482,6 +550,42 @@ public static partial class SelfUpdateBootstrap
         public required string TargetPath { get; init; }
         public required string StagingDir { get; init; }
         public required string BackupDir { get; init; }
+    }
+
+    private sealed record UpdateCandidate(
+        UpdateCatalogEntry Entry,
+        Version MinVersion,
+        Version? MaxVersion,
+        Version TargetVersion)
+    {
+        public bool AppliesTo(Version currentVersion)
+        {
+            return currentVersion >= MinVersion
+                && (MaxVersion is null || currentVersion <= MaxVersion)
+                && currentVersion < TargetVersion;
+        }
+    }
+
+    private sealed class UpdatePlanNode
+    {
+        public Version? PreviousVersion { get; init; }
+        public UpdateCatalogEntry? Entry { get; init; }
+        public long Cost { get; init; }
+        public int PackageCount { get; init; }
+    }
+
+    private readonly record struct UpdatePlanPriority(long Cost, int PackageCount)
+        : IComparable<UpdatePlanPriority>
+    {
+        public int CompareTo(UpdatePlanPriority other)
+        {
+            var costComparison = Cost.CompareTo(other.Cost);
+            if (costComparison != 0) {
+                return costComparison;
+            }
+
+            return PackageCount.CompareTo(other.PackageCount);
+        }
     }
 
     private sealed class UpdateCheckResult

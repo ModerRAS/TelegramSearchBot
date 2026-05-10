@@ -57,9 +57,10 @@ if (!string.IsNullOrWhiteSpace(arguments.ExistingCatalog) && File.Exists(argumen
 
 catalogEntries.RemoveAll(e => string.Equals(e.TargetVersion, currentVersion, StringComparison.OrdinalIgnoreCase));
 
+List<UpdateFileContent>? prevFiles = null;
 if (!string.IsNullOrWhiteSpace(arguments.PrevSourceDir) && Directory.Exists(arguments.PrevSourceDir))
 {
-    var prevFiles = LoadFiles(arguments.PrevSourceDir);
+    prevFiles = LoadFiles(arguments.PrevSourceDir);
     var prevVersion = arguments.PrevVersion!;
 
     var changedFiles = ComputeChangedFiles(prevFiles, currentFiles);
@@ -106,8 +107,30 @@ if (!string.IsNullOrWhiteSpace(arguments.AnchorVersion) && !string.IsNullOrWhite
     var anchorDir = Path.GetFullPath(arguments.AnchorSourceDir);
     if (Directory.Exists(anchorDir))
     {
+        var cumulativeFileSets = new List<IEnumerable<UpdateFileContent>>();
+        if (!string.IsNullOrWhiteSpace(arguments.BaseCumulativePackage)
+            && File.Exists(arguments.BaseCumulativePackage))
+        {
+            var baseCumulativeFiles = LoadPackageFiles(arguments.BaseCumulativePackage);
+            cumulativeFileSets.Add(baseCumulativeFiles);
+            Console.WriteLine(
+                $"Loaded base cumulative package: {arguments.BaseCumulativePackage} ({baseCumulativeFiles.Count} files)");
+        }
+
+        foreach (var sourceManifest in LoadCumulativeSourceManifests(arguments.CumulativeSourcePackageDir))
+        {
+            cumulativeFileSets.Add(ComputeChangedFilesFromManifest(sourceManifest, currentFiles));
+        }
+
         var anchorFiles = LoadFiles(anchorDir);
-        var changedFromAnchor = ComputeChangedFiles(anchorFiles, currentFiles);
+        cumulativeFileSets.Add(ComputeChangedFiles(anchorFiles, currentFiles));
+
+        if (prevFiles is not null)
+        {
+            cumulativeFileSets.Add(ComputeChangedFiles(prevFiles, currentFiles));
+        }
+
+        var changedFromAnchor = MergeChangedFiles(cumulativeFileSets.ToArray());
         if (changedFromAnchor.Count > 0)
         {
             var cumulativePath =
@@ -136,6 +159,10 @@ if (!string.IsNullOrWhiteSpace(arguments.AnchorVersion) && !string.IsNullOrWhite
 
             Console.WriteLine(
                 $"Cumulative package written: {cumulativePath} ({changedFromAnchor.Count} files from anchor {arguments.AnchorVersion}, {cumBytes.LongLength} bytes compressed)");
+        }
+        else
+        {
+            Console.WriteLine("No changed files detected from anchor; skipping cumulative package generation.");
         }
     }
     else
@@ -215,8 +242,9 @@ static List<UpdateCatalogEntry> PruneCatalogEntries(
 
     var rest = entries.Where(e =>
             !string.Equals(e.TargetVersion, latestVersion, StringComparison.OrdinalIgnoreCase))
-        .OrderByDescending(e => e.IsCumulative)
-        .ThenByDescending(e => Version.TryParse(e.TargetVersion, out var v) ? v : new Version(0, 0))
+        .OrderByDescending(e => Version.TryParse(e.TargetVersion, out var v) ? v : new Version(0, 0))
+        .ThenBy(e => e.IsCumulative)
+        .ThenBy(e => e.ChainDepth)
         .ToList();
 
     var result = latest;
@@ -307,6 +335,103 @@ static List<UpdateFileContent> LoadFiles(string sourceDirectory)
         .ToList();
 }
 
+static List<UpdateFileContent> LoadPackageFiles(string packagePath)
+{
+    using var packageStream = File.OpenRead(packagePath);
+    if (!ValidatePackageMagic(packageStream))
+    {
+        throw new InvalidDataException($"Invalid Moder.Update package magic header: {packagePath}");
+    }
+
+    var files = new List<UpdateFileContent>();
+    using var decompressed = new DecompressionStream(packageStream, leaveOpen: false);
+    using var tarReader = new TarReader(decompressed, leaveOpen: true);
+    while (tarReader.GetNextEntry() is { } entry)
+    {
+        if (string.Equals(entry.Name, "manifest.json", StringComparison.OrdinalIgnoreCase))
+        {
+            continue;
+        }
+
+        if (entry.EntryType != TarEntryType.RegularFile
+            && entry.EntryType != TarEntryType.V7RegularFile
+            || entry.DataStream is null)
+        {
+            continue;
+        }
+
+        using var fileContent = new MemoryStream();
+        entry.DataStream.CopyTo(fileContent);
+        files.Add(new UpdateFileContent(entry.Name.Replace('/', Path.DirectorySeparatorChar), fileContent.ToArray()));
+    }
+
+    return files
+        .OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+}
+
+static bool ValidatePackageMagic(Stream packageStream)
+{
+    Span<byte> buffer = stackalloc byte[4];
+    var bytesRead = packageStream.Read(buffer);
+    return bytesRead == 4
+        && buffer[0] == 0x4D
+        && buffer[1] == 0x55
+        && buffer[2] == 0x50
+        && buffer[3] == 0x00;
+}
+
+static List<List<UpdateFileFingerprint>> LoadCumulativeSourceManifests(string? packageDirectory)
+{
+    if (string.IsNullOrWhiteSpace(packageDirectory) || !Directory.Exists(packageDirectory))
+    {
+        return [];
+    }
+
+    var manifests = new List<List<UpdateFileFingerprint>>();
+    foreach (var packagePath in Directory.GetFiles(packageDirectory, "*.zst", SearchOption.TopDirectoryOnly))
+    {
+        var files = LoadPackageManifestFiles(packagePath);
+        manifests.Add(files);
+        Console.WriteLine($"Loaded cumulative source package manifest: {packagePath} ({files.Count} files)");
+    }
+
+    return manifests;
+}
+
+static List<UpdateFileFingerprint> LoadPackageManifestFiles(string packagePath)
+{
+    using var packageStream = File.OpenRead(packagePath);
+    if (!ValidatePackageMagic(packageStream))
+    {
+        throw new InvalidDataException($"Invalid Moder.Update package magic header: {packagePath}");
+    }
+
+    using var decompressed = new DecompressionStream(packageStream, leaveOpen: false);
+    using var tarReader = new TarReader(decompressed, leaveOpen: true);
+    while (tarReader.GetNextEntry() is { } entry)
+    {
+        if (!string.Equals(entry.Name, "manifest.json", StringComparison.OrdinalIgnoreCase))
+        {
+            continue;
+        }
+
+        if (entry.DataStream is null)
+        {
+            throw new InvalidDataException($"Package manifest has no data stream: {packagePath}");
+        }
+
+        var manifest = JsonSerializer.Deserialize<UpdateManifest>(entry.DataStream, JsonOptions)
+            ?? throw new InvalidDataException($"Failed to parse package manifest: {packagePath}");
+        return manifest.Files
+            .Select(file => new UpdateFileFingerprint(file.RelativePath, file.NewChecksum))
+            .OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    throw new InvalidDataException($"Package manifest not found: {packagePath}");
+}
+
 static List<UpdateFileContent> ComputeChangedFiles(
     List<UpdateFileContent> prevFiles,
     List<UpdateFileContent> currentFiles)
@@ -328,6 +453,46 @@ static List<UpdateFileContent> ComputeChangedFiles(
     }
 
     return changed;
+}
+
+static List<UpdateFileContent> ComputeChangedFilesFromManifest(
+    List<UpdateFileFingerprint> sourceFiles,
+    List<UpdateFileContent> currentFiles)
+{
+    var sourceMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var file in sourceFiles)
+    {
+        sourceMap[file.RelativePath] = file.Checksum;
+    }
+
+    var changed = new List<UpdateFileContent>();
+    foreach (var file in currentFiles)
+    {
+        var currentHash = ComputeSha512(file.Content);
+        if (!sourceMap.TryGetValue(file.RelativePath, out var sourceHash)
+            || !sourceHash.Equals(currentHash, StringComparison.OrdinalIgnoreCase))
+        {
+            changed.Add(file);
+        }
+    }
+
+    return changed;
+}
+
+static List<UpdateFileContent> MergeChangedFiles(params IEnumerable<UpdateFileContent>[] fileSets)
+{
+    var merged = new Dictionary<string, UpdateFileContent>(StringComparer.OrdinalIgnoreCase);
+    foreach (var fileSet in fileSets)
+    {
+        foreach (var file in fileSet)
+        {
+            merged[file.RelativePath] = file;
+        }
+    }
+
+    return merged.Values
+        .OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
+        .ToList();
 }
 
 static string ComputeSha512(byte[] data)
@@ -363,6 +528,8 @@ internal sealed class BuilderArguments
     public string? ExistingCatalog { get; private init; }
     public string? AnchorVersion { get; private init; }
     public string? AnchorSourceDir { get; private init; }
+    public string? BaseCumulativePackage { get; private init; }
+    public string? CumulativeSourcePackageDir { get; private init; }
 
     public bool IsValid =>
         !string.IsNullOrWhiteSpace(SourceDirectory)
@@ -393,6 +560,8 @@ internal sealed class BuilderArguments
         values.TryGetValue("--existing-catalog", out var existingCatalog);
         values.TryGetValue("--anchor-version", out var anchorVersion);
         values.TryGetValue("--anchor-source-dir", out var anchorSourceDir);
+        values.TryGetValue("--base-cumulative-package", out var baseCumulativePackage);
+        values.TryGetValue("--cumulative-source-package-dir", out var cumulativeSourcePackageDir);
 
         return new BuilderArguments
         {
@@ -405,7 +574,9 @@ internal sealed class BuilderArguments
             PrevVersion = prevVersion,
             ExistingCatalog = existingCatalog,
             AnchorVersion = anchorVersion,
-            AnchorSourceDir = anchorSourceDir
+            AnchorSourceDir = anchorSourceDir,
+            BaseCumulativePackage = baseCumulativePackage,
+            CumulativeSourcePackageDir = cumulativeSourcePackageDir
         };
     }
 
@@ -413,11 +584,13 @@ internal sealed class BuilderArguments
     {
         Console.WriteLine("Usage:");
         Console.WriteLine(
-            "  TelegramSearchBot.UpdateBuilder --source-dir <dir> --output-dir <dir> --target-version <version> --min-source-version <version> [--prev-source-dir <dir> --prev-version <version>] [--existing-catalog <path>] [--anchor-version <version> --anchor-source-dir <dir>]");
+            "  TelegramSearchBot.UpdateBuilder --source-dir <dir> --output-dir <dir> --target-version <version> --min-source-version <version> [--prev-source-dir <dir> --prev-version <version>] [--existing-catalog <path>] [--anchor-version <version> --anchor-source-dir <dir>] [--base-cumulative-package <path>] [--cumulative-source-package-dir <dir>]");
     }
 }
 
 internal sealed record UpdateFileContent(string RelativePath, byte[] Content);
+
+internal sealed record UpdateFileFingerprint(string RelativePath, string Checksum);
 
 internal static partial class Program
 {

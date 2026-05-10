@@ -331,6 +331,39 @@ namespace TelegramSearchBot.Test {
                 "CI workflow should define 'moder-update-updater' artifact");
         }
 
+        [Fact]
+        public void CI_UpdateFeed_GeneratesCumulativeDeltaFromAnchor() {
+            var pushYmlPath = Path.Combine(SolutionRoot, ".github", "workflows", "push.yml");
+            Assert.True(File.Exists(pushYmlPath), "push.yml workflow file should exist");
+
+            var pushYmlContent = File.ReadAllText(pushYmlPath);
+
+            Assert.Contains("CUMULATIVE_UPDATE_ANCHOR_VERSION", pushYmlContent);
+            Assert.Contains("2026.05.05.570", pushYmlContent);
+            Assert.Contains("UPDATE_BASE_URL", pushYmlContent);
+            Assert.Contains("Fetch existing update catalog from CDN", pushYmlContent);
+            Assert.Contains("Fetch cumulative update anchor standalone", pushYmlContent);
+            Assert.Contains("Fetch previous cumulative update package", pushYmlContent);
+            Assert.Contains("Fetch cumulative source packages from CDN", pushYmlContent);
+            Assert.Contains("ANCHOR_VERSION=", pushYmlContent);
+            Assert.Contains("ANCHOR_STANDALONE_DIR=", pushYmlContent);
+            Assert.Contains("BASE_CUMULATIVE_PACKAGE=", pushYmlContent);
+            Assert.Contains("CUMULATIVE_SOURCE_PACKAGE_DIR=", pushYmlContent);
+            Assert.Contains("'--anchor-source-dir'", pushYmlContent);
+            Assert.Contains("'--anchor-version'", pushYmlContent);
+            Assert.Contains("'--base-cumulative-package'", pushYmlContent);
+            Assert.Contains("'--cumulative-source-package-dir'", pushYmlContent);
+            Assert.Contains("Downloaded existing catalog.json from CDN", pushYmlContent);
+            Assert.Contains("Downloaded base cumulative package from CDN", pushYmlContent);
+            Assert.Contains("Downloaded cumulative source package from CDN", pushYmlContent);
+            Assert.Contains("historical source packages are not needed", pushYmlContent);
+            Assert.Contains("Passing cumulative update anchor", pushYmlContent);
+            Assert.DoesNotContain("Fetch existing update catalog from B2", pushYmlContent);
+            Assert.DoesNotContain("b2 download-file-by-name", pushYmlContent);
+            Assert.DoesNotContain("Write-Host \"PREV_VERSION=$prevVersion\" | Out-File", pushYmlContent);
+            Assert.DoesNotContain("Write-Host \"PREV_STANDALONE_DIR=artifacts\\prev-standalone\" | Out-File", pushYmlContent);
+        }
+
         private static IEnumerable<string> GetCsFilesRecursively(string root) {
             var files = new List<string>();
             try {

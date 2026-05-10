@@ -18,6 +18,8 @@ env:
   B2_CLI_VERSION: '4.6.0'
   LEGACY_BRIDGE_VERSION: '2026.04.23.553'
   LEGACY_BRIDGE_MARKER: 'legacy-clickonce-bridge-version.txt'
+  CUMULATIVE_UPDATE_ANCHOR_VERSION: '2026.05.05.570'
+  UPDATE_BASE_URL: 'https://clickonce.miaostay.com/TelegramSearchBot'
 
 jobs:
   prepare:
@@ -226,30 +228,16 @@ jobs:
           /p:Version=$env:BUILD_VERSION `
           /p:PublishSingleFile=false `
           -o .\artifacts\standalone
-    - name: Fetch existing update catalog from B2
+    - name: Fetch existing update catalog from CDN
       shell: pwsh
-      env:
-        B2_BUCKET: ${{ secrets.B2_BUCKET }}
-        B2_APPKEY_ID: ${{ secrets.B2_APPKEY_ID }}
-        B2_APPKEY: ${{ secrets.B2_APPKEY }}
       run: |
-        if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-          Write-Host "Python not available, skipping catalog fetch."
-          exit 0
-        }
-        pip install --quiet --cache-dir C:\pip-cache "b2==$env:B2_CLI_VERSION"
-        b2 account authorize $env:B2_APPKEY_ID $env:B2_APPKEY --quiet
-        if ($LASTEXITCODE -ne 0) {
-          Write-Host "B2 auth failed, will create fresh catalog."
-          exit 0
-        }
+        $catalogUri = "$($env:UPDATE_BASE_URL.TrimEnd('/'))/catalog.json"
         try {
-          b2 download-file-by-name $env:B2_BUCKET TelegramSearchBot/catalog.json .\artifacts\existing-catalog.json --quiet
-          Write-Host "Downloaded existing catalog.json for merge."
+          Invoke-WebRequest -UseBasicParsing -Uri $catalogUri -OutFile .\artifacts\existing-catalog.json
+          Write-Host "Downloaded existing catalog.json from CDN for merge."
         } catch {
-          Write-Host "No existing catalog found on B2, will create fresh catalog."
+          Write-Host "No existing catalog found on CDN, will create fresh catalog."
         }
-        b2 account clear
     - name: Fetch previous release standalone for step package comparison
       shell: pwsh
       env:
@@ -259,20 +247,154 @@ jobs:
         if ($prevRelease.Count -gt 0) {
           $prevTag = $prevRelease[0].tagName
           $prevVersion = $prevTag -replace '^v', ''
+          if ($prevVersion -eq "${{ needs.prepare.outputs.build-version }}") {
+            Write-Host "Previous release is the current build version; skipping step package generation."
+            exit 0
+          }
           Write-Host "Previous release: $prevTag (version: $prevVersion)"
           $prevArchive = ".\artifacts\prev-standalone.zip"
           gh release download $prevTag --repo ${{ github.repository }} --pattern "TelegramSearchBot-win-x64-full-*.zip" --dir artifacts\prev-release
           $zipFile = Get-ChildItem artifacts\prev-release -Filter "TelegramSearchBot-win-x64-full-*.zip" | Select-Object -First 1
           if ($zipFile) {
             Expand-Archive -Path $zipFile.FullName -DestinationPath .\artifacts\prev-standalone -Force
-            Write-Host "PREV_VERSION=$prevVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            Write-Host "PREV_STANDALONE_DIR=artifacts\prev-standalone" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Add-Content -Path $env:GITHUB_ENV -Value "PREV_VERSION=$prevVersion" -Encoding utf8
+            Add-Content -Path $env:GITHUB_ENV -Value "PREV_STANDALONE_DIR=artifacts\prev-standalone" -Encoding utf8
             Write-Host "Extracted previous standalone from $($zipFile.Name)."
           } else {
             Write-Host "No previous full zip found; step package will not be generated."
           }
         } else {
           Write-Host "No previous release found; this is the first release."
+        }
+    - name: Fetch cumulative update anchor standalone
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
+      run: |
+        $anchorVersion = $env:CUMULATIVE_UPDATE_ANCHOR_VERSION
+        if ([string]::IsNullOrWhiteSpace($anchorVersion)) {
+          Write-Host "No cumulative update anchor configured; cumulative delta package will not be generated."
+          exit 0
+        }
+        if ($anchorVersion -eq $env:BUILD_VERSION) {
+          Write-Host "Current build is the cumulative update anchor; cumulative delta package will not be generated."
+          exit 0
+        }
+
+        $anchorTag = "v$anchorVersion"
+        Write-Host "Cumulative update anchor: $anchorTag"
+        New-Item -ItemType Directory -Path artifacts\anchor-release -Force | Out-Null
+        gh release download $anchorTag --repo ${{ github.repository }} --pattern "TelegramSearchBot-win-x64-full-*.zip" --dir artifacts\anchor-release
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "Failed to download cumulative update anchor $anchorTag; cumulative delta package will not be generated."
+          exit 0
+        }
+
+        $zipFile = Get-ChildItem artifacts\anchor-release -Filter "TelegramSearchBot-win-x64-full-*.zip" | Select-Object -First 1
+        if ($zipFile) {
+          Expand-Archive -Path $zipFile.FullName -DestinationPath .\artifacts\anchor-standalone -Force
+          Add-Content -Path $env:GITHUB_ENV -Value "ANCHOR_VERSION=$anchorVersion" -Encoding utf8
+          Add-Content -Path $env:GITHUB_ENV -Value "ANCHOR_STANDALONE_DIR=artifacts\anchor-standalone" -Encoding utf8
+          Write-Host "Extracted cumulative update anchor from $($zipFile.Name)."
+        } else {
+          Write-Host "No anchor full zip found; cumulative delta package will not be generated."
+        }
+    - name: Fetch previous cumulative update package
+      shell: pwsh
+      run: |
+        if (-not (Test-Path '.\artifacts\existing-catalog.json')) {
+          Write-Host "No existing catalog found; base cumulative package will not be used."
+          exit 0
+        }
+        if (-not $env:PREV_VERSION) {
+          Write-Host "No previous version found; base cumulative package will not be used."
+          exit 0
+        }
+
+        $catalog = Get-Content '.\artifacts\existing-catalog.json' -Raw | ConvertFrom-Json
+        $baseEntry = @($catalog.Entries | Where-Object {
+          $_.TargetVersion -eq $env:PREV_VERSION `
+            -and $_.MinSourceVersion -eq $env:CUMULATIVE_UPDATE_ANCHOR_VERSION `
+            -and $_.IsCumulative
+        } | Sort-Object CompressedSize | Select-Object -First 1)
+
+        if ($baseEntry.Count -eq 0 -or -not $baseEntry[0].PackagePath) {
+          Write-Host "No previous cumulative package found in existing catalog."
+          exit 0
+        }
+
+        New-Item -ItemType Directory -Path artifacts\base-cumulative -Force | Out-Null
+        $basePackagePath = 'artifacts\base-cumulative\base-cumulative.zst'
+        $uri = "$($env:UPDATE_BASE_URL.TrimEnd('/'))/$($baseEntry[0].PackagePath.TrimStart('/'))"
+        try {
+          Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $basePackagePath
+        } catch {
+          Write-Host "Failed to download base cumulative package from CDN; continuing without it."
+          exit 0
+        }
+        Add-Content -Path $env:GITHUB_ENV -Value "BASE_CUMULATIVE_PACKAGE=$basePackagePath" -Encoding utf8
+        Write-Host "Downloaded base cumulative package from CDN: $($baseEntry[0].PackagePath)"
+    - name: Fetch cumulative source packages from CDN
+      shell: pwsh
+      env:
+        BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
+      run: |
+        if ($env:BASE_CUMULATIVE_PACKAGE -and (Test-Path $env:BASE_CUMULATIVE_PACKAGE)) {
+          Write-Host "Base cumulative package is available; historical source packages are not needed."
+          exit 0
+        }
+        if (-not (Test-Path '.\artifacts\existing-catalog.json')) {
+          Write-Host "No existing catalog found; cumulative source packages will not be used."
+          exit 0
+        }
+
+        $anchor = [Version]$env:CUMULATIVE_UPDATE_ANCHOR_VERSION
+        $current = [Version]$env:BUILD_VERSION
+        $catalog = Get-Content '.\artifacts\existing-catalog.json' -Raw | ConvertFrom-Json
+        $entriesByVersion = @{}
+        foreach ($entry in $catalog.Entries) {
+          if (-not $entry.PackagePath -or $entry.PackagePath -notlike '*-full.zst') {
+            continue
+          }
+
+          try {
+            $target = [Version]$entry.TargetVersion
+          } catch {
+            continue
+          }
+
+          if ($target -lt $anchor -or $target -ge $current) {
+            continue
+          }
+
+          $key = $entry.TargetVersion
+          if (-not $entriesByVersion.ContainsKey($key) -or $entry.CompressedSize -lt $entriesByVersion[$key].CompressedSize) {
+            $entriesByVersion[$key] = $entry
+          }
+        }
+
+        if ($entriesByVersion.Count -eq 0) {
+          Write-Host "No cumulative source full packages found in existing catalog."
+          exit 0
+        }
+
+        $sourcePackageDir = 'artifacts\cumulative-source-packages'
+        New-Item -ItemType Directory -Path $sourcePackageDir -Force | Out-Null
+        foreach ($key in ($entriesByVersion.Keys | Sort-Object { [Version]$_ })) {
+          $entry = $entriesByVersion[$key]
+          $packagePath = Join-Path $sourcePackageDir ("source-$($key.Replace('.', '-')).zst")
+          $uri = "$($env:UPDATE_BASE_URL.TrimEnd('/'))/$($entry.PackagePath.TrimStart('/'))"
+          try {
+            Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $packagePath
+            Write-Host "Downloaded cumulative source package from CDN: $($entry.PackagePath)"
+          } catch {
+            Write-Host "Failed to download cumulative source package from CDN: $($entry.PackagePath)"
+          }
+        }
+
+        if ((Get-ChildItem $sourcePackageDir -Filter '*.zst' -File | Measure-Object).Count -gt 0) {
+          Add-Content -Path $env:GITHUB_ENV -Value "CUMULATIVE_SOURCE_PACKAGE_DIR=$sourcePackageDir" -Encoding utf8
         }
     - name: Build Moder.Update feed
       shell: pwsh
@@ -292,6 +414,16 @@ jobs:
         if ($env:PREV_VERSION -and (Test-Path $env:PREV_STANDALONE_DIR)) {
           $builderArgs += @('--prev-source-dir', $env:PREV_STANDALONE_DIR, '--prev-version', $env:PREV_VERSION)
           Write-Host "Passing previous version $env:PREV_VERSION for step package generation."
+        }
+        if ($env:ANCHOR_VERSION -and (Test-Path $env:ANCHOR_STANDALONE_DIR)) {
+          $builderArgs += @('--anchor-source-dir', $env:ANCHOR_STANDALONE_DIR, '--anchor-version', $env:ANCHOR_VERSION)
+          if ($env:BASE_CUMULATIVE_PACKAGE -and (Test-Path $env:BASE_CUMULATIVE_PACKAGE)) {
+            $builderArgs += @('--base-cumulative-package', $env:BASE_CUMULATIVE_PACKAGE)
+          }
+          if ($env:CUMULATIVE_SOURCE_PACKAGE_DIR -and (Test-Path $env:CUMULATIVE_SOURCE_PACKAGE_DIR)) {
+            $builderArgs += @('--cumulative-source-package-dir', $env:CUMULATIVE_SOURCE_PACKAGE_DIR)
+          }
+          Write-Host "Passing cumulative update anchor $env:ANCHOR_VERSION."
         }
         dotnet run --project .\TelegramSearchBot.UpdateBuilder\TelegramSearchBot.UpdateBuilder.csproj `
           -c Release `

@@ -311,7 +311,8 @@ public class SelfUpdateBootstrapTests
         string? maxSourceVersion = null,
         bool isCumulative = false,
         bool isAnchor = false,
-        int chainDepth = 0)
+        int chainDepth = 0,
+        long compressedSize = 1024)
     {
         return new UpdateCatalogEntry
         {
@@ -324,7 +325,7 @@ public class SelfUpdateBootstrapTests
             ChainDepth = chainDepth,
             PackageChecksum = "a1b2c3d4e5f6",
             FileCount = 10,
-            CompressedSize = 1024,
+            CompressedSize = compressedSize,
             UncompressedSize = 2048,
         };
     }
@@ -432,6 +433,62 @@ public class SelfUpdateBootstrapTests
         Assert.True(result[0].IsCumulative);
         Assert.Equal("1.8.0", result[0].TargetVersion);
         Assert.Equal("2.0.0", result[1].TargetVersion);
+    }
+
+    [Fact]
+    public void PlanUpdatePath_PrefersCumulativeDeltaOverFullFallback()
+    {
+        var entries = new List<UpdateCatalogEntry>
+        {
+            CreateEntry(
+                "2026.05.10.572",
+                "2026.04.23.553",
+                isCumulative: true,
+                isAnchor: true,
+                compressedSize: 568_000_000),
+            CreateEntry(
+                "2026.05.10.572",
+                "2026.04.25.561",
+                isCumulative: true,
+                isAnchor: true,
+                compressedSize: 12_000_000)
+        };
+        var current = new Version(2026, 05, 05, 570);
+        var target = new Version(2026, 05, 10, 572);
+
+        var result = InvokePrivateStatic<List<UpdateCatalogEntry>>(
+            "PlanUpdatePath", entries, current, target)!;
+
+        Assert.Single(result);
+        Assert.Equal("2026.04.25.561", result[0].MinSourceVersion);
+    }
+
+    [Fact]
+    public void PlanUpdatePath_UsesFullFallbackWhenCurrentIsBeforeCumulativeAnchor()
+    {
+        var entries = new List<UpdateCatalogEntry>
+        {
+            CreateEntry(
+                "2026.05.10.572",
+                "2026.04.23.553",
+                isCumulative: true,
+                isAnchor: true,
+                compressedSize: 568_000_000),
+            CreateEntry(
+                "2026.05.10.572",
+                "2026.04.25.561",
+                isCumulative: true,
+                isAnchor: true,
+                compressedSize: 12_000_000)
+        };
+        var current = new Version(2026, 04, 23, 553);
+        var target = new Version(2026, 05, 10, 572);
+
+        var result = InvokePrivateStatic<List<UpdateCatalogEntry>>(
+            "PlanUpdatePath", entries, current, target)!;
+
+        Assert.Single(result);
+        Assert.Equal("2026.04.23.553", result[0].MinSourceVersion);
     }
 
     // ── CanApplyEntry ──────────────────────────────────────────────
