@@ -68,7 +68,7 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2" />
     <PackageReference Include="StackExchange.Redis" Version="2.12.14" />
     <PackageReference Include="Stateless" Version="5.20.1" />
-    <PackageReference Include="System.Linq.Async" Version="7.0.0" />
+    <PackageReference Include="System.Linq.Async" Version="7.0.1" />
     <PackageReference Include="Telegram.Bot" Version="22.9.6.1" />
     <PackageReference Include="Teru.Code.WechatQrcode.Lite" Version="1.0.0.20230813" />
     <PackageReference Include="Whisper.net" Version="1.9.0" />
