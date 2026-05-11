@@ -686,17 +686,16 @@ jobs:
         BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
       run: |
         $buildDate = Get-Date -Format "yyyy-MM-dd"
-        $body = @"
-## Release $env:BUILD_VERSION
-
-**Build Date**: $buildDate
-
-**Full Release Package**: TelegramSearchBot-win-x64-full-$env:BUILD_VERSION.zip
-**Updater**: moder_update_updater.exe
-
-### Changes
-"@
-        Set-Content -Path "$env:RUNNER_TEMP\release-body.md" -Value $body -Encoding utf8
+        @(
+          "## Release $env:BUILD_VERSION",
+          '',
+          "**Build Date**: $buildDate",
+          '',
+          "**Full Release Package**: TelegramSearchBot-win-x64-full-$env:BUILD_VERSION.zip",
+          '**Updater**: moder_update_updater.exe',
+          '',
+          '### Changes'
+        ) | Set-Content -Path "$env:RUNNER_TEMP\release-body.md" -Encoding utf8
         Write-Host "Generated release body for version $env:BUILD_VERSION"
     - name: Publish full package to GitHub Release
       uses: softprops/action-gh-release@v2
