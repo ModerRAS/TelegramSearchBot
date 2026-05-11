@@ -24,6 +24,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly OllamaService _ollamaService;
         private readonly GeminiService _geminiService;
         private readonly AnthropicService _anthropicService;
+        private readonly OpenAIResponsesService _openAIResponsesService;
         private readonly ILogger<LLMFactory> _logger;
         private readonly Dictionary<LLMProvider, ILLMService> _services;
         public LLMFactory(
@@ -33,7 +34,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             OllamaService ollamaService,
             OpenAIService openAIService,
             GeminiService geminiService,
-            AnthropicService anthropicService
+            AnthropicService anthropicService,
+            OpenAIResponsesService openAIResponsesService
             ) {
             this.connectionMultiplexer = connectionMultiplexer;
             _dbContext = dbContext;
@@ -44,13 +46,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _ollamaService = ollamaService;
             _geminiService = geminiService;
             _anthropicService = anthropicService;
+            _openAIResponsesService = openAIResponsesService;
             _services = new() {
                 [LLMProvider.OpenAI] = _openAIService,
                 [LLMProvider.Ollama] = _ollamaService,
                 [LLMProvider.Gemini] = _geminiService,
                 [LLMProvider.MiniMax] = _openAIService,
                 [LLMProvider.LMStudio] = _openAIService,
-                [LLMProvider.Anthropic] = _anthropicService
+                [LLMProvider.Anthropic] = _anthropicService,
+                [LLMProvider.ResponsesAPI] = _openAIResponsesService
             };
         }
 

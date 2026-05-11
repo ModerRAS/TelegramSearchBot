@@ -6,6 +6,7 @@ namespace TelegramSearchBot.Model.AI {
         Gemini,
         MiniMax = 4,
         LMStudio = 5,
-        Anthropic = 6
+        Anthropic = 6,
+        ResponsesAPI = 7
     }
 }
