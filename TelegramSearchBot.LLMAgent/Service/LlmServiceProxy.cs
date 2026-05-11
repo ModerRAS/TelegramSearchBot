@@ -58,6 +58,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 LLMProvider.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
                 LLMProvider.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
                 LLMProvider.Anthropic => _serviceProvider.GetRequiredService<AnthropicService>(),
+                LLMProvider.ResponsesAPI => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
                 _ => _serviceProvider.GetRequiredService<OpenAIService>()
             };
         }
@@ -76,6 +77,9 @@ namespace TelegramSearchBot.LLMAgent.Service {
                     break;
                 case AnthropicService anthropic:
                     anthropic.BotName = botName;
+                    break;
+                case OpenAIResponsesService responses:
+                    responses.BotName = botName;
                     break;
             }
         }
