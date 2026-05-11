@@ -24,7 +24,8 @@ namespace TelegramSearchBot.Service.BotAPI {
                 var commands = new List<BotCommand>
                 {
                     new BotCommand { Command = "resolveurls", Description = "解析文本中的链接并存储原始链接与解析后链接的映射。" },
-                    // 可以根据需要添加更多命令
+                    new BotCommand { Command = "checkupdate", Description = "检查系统更新状态。" },
+                    new BotCommand { Command = "update", Description = "执行系统更新（如果存在新版本）。" },
                 };
 
                 _logger.LogInformation($"Registering {commands.Count} commands...");
