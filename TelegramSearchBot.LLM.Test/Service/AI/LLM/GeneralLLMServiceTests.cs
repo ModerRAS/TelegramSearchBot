@@ -74,10 +74,6 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 _redisMock.Object,
                 _dbContext,
                 _loggerMock.Object,
-                _ollamaServiceMock.Object,
-                _openAIServiceMock.Object,
-                _geminiServiceMock.Object,
-                anthropicServiceMock.Object,
                 _factoryMock.Object);
         }
 

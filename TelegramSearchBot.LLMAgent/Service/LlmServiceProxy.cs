@@ -25,7 +25,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
             await SeedTaskDataAsync(task, cancellationToken);
 
             var service = ResolveService(task.Channel.Provider);
-            ApplyBotIdentity(service, task.BotName, task.BotUserId);
+            ApplyBotIdentity(task.BotName, task.BotUserId);
             var channel = ToEntity(task.Channel);
 
             if (task.Kind == AgentTaskKind.Continuation && task.ContinuationSnapshot != null) {
@@ -63,24 +63,12 @@ namespace TelegramSearchBot.LLMAgent.Service {
             };
         }
 
-        private static void ApplyBotIdentity(ILLMService service, string botName, long botUserId) {
-            Env.BotId = botUserId;
-            switch (service) {
-                case OpenAIService openAi:
-                    openAi.BotName = botName;
-                    break;
-                case OllamaService ollama:
-                    ollama.BotName = botName;
-                    break;
-                case GeminiService gemini:
-                    gemini.BotName = botName;
-                    break;
-                case AnthropicService anthropic:
-                    anthropic.BotName = botName;
-                    break;
-                case OpenAIResponsesService responses:
-                    responses.BotName = botName;
-                    break;
+        private void ApplyBotIdentity(string botName, long botUserId) {
+            var identityProvider = _serviceProvider.GetService<IBotIdentityProvider>();
+            if (identityProvider != null) {
+                identityProvider.SetIdentity(botUserId, botName);
+            } else {
+                Env.BotId = botUserId;
             }
         }
 

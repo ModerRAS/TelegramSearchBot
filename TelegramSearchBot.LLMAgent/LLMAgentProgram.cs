@@ -102,6 +102,8 @@ namespace TelegramSearchBot.LLMAgent {
             }, contextLifetime: ServiceLifetime.Scoped, optionsLifetime: ServiceLifetime.Singleton);
             services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect($"localhost:{port},abortConnect=false,connectTimeout=5000,connectRetry=5"));
             services.AddScoped<IMessageExtensionService, Service.InMemoryMessageExtensionService>();
+            services.AddSingleton<IBotIdentityProvider, BotIdentityProvider>();
+            services.AddScoped<IGroupLlmSettingsService, GroupLlmSettingsService>();
             services.AddScoped<OpenAIService>();
             services.AddScoped<OpenAIResponsesService>();
             services.AddScoped<OllamaService>();

@@ -74,29 +74,55 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private readonly ILogger<OpenAIService> _logger;
-        public static string _botName;
-        public string BotName {
-            get {
-                return _botName;
-            }
-            set {
-                _botName = value;
-            }
-        }
         private readonly DataDbContext _dbContext;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IMessageExtensionService _messageExtensionService;
+        private readonly IBotIdentityProvider _botIdentityProvider;
+        private readonly IGroupLlmSettingsService _groupLlmSettingsService;
+        private string _fallbackBotName = string.Empty;
 
         public OpenAIService(
             DataDbContext context,
             ILogger<OpenAIService> logger,
             IMessageExtensionService messageExtensionService,
-            IHttpClientFactory httpClientFactory) {
+            IHttpClientFactory httpClientFactory)
+            : this(context, logger, messageExtensionService, httpClientFactory, null, null) {
+        }
+
+        public OpenAIService(
+            DataDbContext context,
+            ILogger<OpenAIService> logger,
+            IMessageExtensionService messageExtensionService,
+            IHttpClientFactory httpClientFactory,
+            IBotIdentityProvider botIdentityProvider,
+            IGroupLlmSettingsService groupLlmSettingsService) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
+            _botIdentityProvider = botIdentityProvider;
+            _groupLlmSettingsService = groupLlmSettingsService;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
+        }
+
+        public string BotName {
+            get => GetBotNameAsync().GetAwaiter().GetResult();
+            set {
+                if (_botIdentityProvider != null) {
+                    _botIdentityProvider.SetIdentity(Env.BotId, value);
+                } else {
+                    _fallbackBotName = value ?? string.Empty;
+                }
+            }
+        }
+
+        private async Task<string> GetBotNameAsync() {
+            if (_botIdentityProvider == null) {
+                return _fallbackBotName;
+            }
+
+            var identity = await _botIdentityProvider.GetIdentityAsync();
+            return identity.UserName ?? string.Empty;
         }
 
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
@@ -971,7 +997,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
 
             // --- History and Prompt Setup (simplified - no XML tool instructions) ---
-            string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(BotName, ChatId);
+            var botName = await GetBotNameAsync();
+            string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, ChatId);
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
             bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
             providerHistory = await GetChatHistory(ChatId, providerHistory, message, supportsVision);
@@ -1153,7 +1180,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
 
             // --- History and Prompt Setup ---
-            string systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId);
+            var botName = await GetBotNameAsync();
+            string systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
             bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
             providerHistory = await GetChatHistory(ChatId, providerHistory, message, supportsVision);
@@ -1584,6 +1612,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         public async Task<(string, string)> SetModel(string ModelName, long ChatId) {
+            if (_groupLlmSettingsService != null) {
+                var (previous, current) = await _groupLlmSettingsService.SetModelAsync(ChatId, ModelName);
+                return (previous, current);
+            }
+
             var GroupSetting = await _dbContext.GroupSettings
                                 .Where(s => s.GroupId == ChatId)
                                 .FirstOrDefaultAsync();
@@ -1597,6 +1630,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return (CurrentModelName ?? "Default", ModelName);
         }
         public async Task<string> GetModel(long ChatId) {
+            if (_groupLlmSettingsService != null) {
+                return await _groupLlmSettingsService.GetModelAsync(ChatId);
+            }
+
             var GroupSetting = await _dbContext.GroupSettings.AsNoTracking()
                                       .Where(s => s.GroupId == ChatId)
                                       .FirstOrDefaultAsync();
