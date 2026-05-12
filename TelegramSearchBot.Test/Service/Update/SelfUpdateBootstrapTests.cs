@@ -1,11 +1,20 @@
 #if WINDOWS
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
 using Xunit;
 using TelegramSearchBot.Service.AppUpdate;
 using TelegramSearchBot.Common.Model.Update;
+using ZstdSharp;
 
 namespace TelegramSearchBot.Test.Service.Update;
 
@@ -341,6 +350,105 @@ public class SelfUpdateBootstrapTests
         return method.Invoke(null, args)!;
     }
 
+    private static MemoryStream CreateTestPackage(Dictionary<string, string> files)
+    {
+        var manifest = new UpdateManifest
+        {
+            TargetVersion = "2.0.0",
+            MinSourceVersion = "1.0.0",
+            MaxSourceVersion = "1.0.0",
+            IsAnchor = false,
+            IsCumulative = false,
+            ChainDepth = 1,
+            Files = files.Keys
+                .Select(path => new UpdateFile
+                {
+                    RelativePath = path,
+                    NewChecksum = "test"
+                })
+                .ToList(),
+            Checksum = string.Empty,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        using var tarStream = new MemoryStream();
+        using (var tarWriter = new TarWriter(tarStream, leaveOpen: true))
+        {
+            WriteTarEntry(tarWriter, "manifest.json", JsonSerializer.SerializeToUtf8Bytes(manifest));
+            foreach (var file in files)
+            {
+                WriteTarEntry(tarWriter, file.Key, Encoding.UTF8.GetBytes(file.Value));
+            }
+        }
+
+        tarStream.Position = 0;
+        using var compressedStream = new MemoryStream();
+        using (var compressionStream = new CompressionStream(compressedStream, leaveOpen: true))
+        {
+            tarStream.CopyTo(compressionStream);
+        }
+
+        compressedStream.Position = 0;
+        var packageStream = new MemoryStream();
+        packageStream.Write([0x4D, 0x55, 0x50, 0x00]);
+        compressedStream.CopyTo(packageStream);
+        packageStream.Position = 0;
+        return packageStream;
+    }
+
+    private static void WriteTarEntry(TarWriter tarWriter, string relativePath, byte[] content)
+    {
+        var entry = new PaxTarEntry(TarEntryType.RegularFile, relativePath.Replace('\\', '/'))
+        {
+            DataStream = new MemoryStream(content)
+        };
+        tarWriter.WriteEntry(entry);
+    }
+
+    private sealed class RangeHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly byte[] _content;
+
+        public ConcurrentBag<(long Start, long End)> RangeRequests { get; } = new();
+
+        public RangeHttpMessageHandler(byte[] content)
+        {
+            _content = content;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var range = request.Headers.Range?.Ranges.SingleOrDefault();
+            if (range is null)
+            {
+                var fullResponse = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(_content)
+                };
+                fullResponse.Content.Headers.ContentLength = _content.LongLength;
+                return Task.FromResult(fullResponse);
+            }
+
+            var start = range.From ?? 0;
+            var end = range.To ?? _content.LongLength - 1;
+            RangeRequests.Add((start, end));
+
+            var length = checked((int)(end - start + 1));
+            var bytes = new byte[length];
+            Buffer.BlockCopy(_content, checked((int)start), bytes, 0, length);
+
+            var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
+            {
+                Content = new ByteArrayContent(bytes)
+            };
+            response.Content.Headers.ContentRange = new ContentRangeHeaderValue(start, end, _content.LongLength);
+            response.Content.Headers.ContentLength = bytes.LongLength;
+            return Task.FromResult(response);
+        }
+    }
+
     // ── PlanUpdatePath ─────────────────────────────────────────────
 
     [Fact]
@@ -560,6 +668,82 @@ public class SelfUpdateBootstrapTests
         using var stream = new MemoryStream(shortBytes);
         var result = InvokePrivateStatic<bool>("ValidatePackageMagic", stream);
         Assert.False(result);
+    }
+
+    // ── Package extraction ─────────────────────────────────────────
+
+    [Fact]
+    public void DecompressPackage_ReturnsBeforeConsumingWholePackage()
+    {
+        using var package = CreateTestPackage(new Dictionary<string, string>
+        {
+            ["nested/file.txt"] = "hello"
+        });
+        package.Position = 4;
+
+        using var decompressed = InvokePrivateStatic<Stream>("DecompressPackage", package)!;
+
+        Assert.True(package.Position < package.Length);
+    }
+
+    [Fact]
+    public void ExtractPackageToDirectory_ExtractsZstdTarPackage()
+    {
+        using var package = CreateTestPackage(new Dictionary<string, string>
+        {
+            ["nested/file.txt"] = "hello"
+        });
+        var targetDirectory = Path.Combine(Path.GetTempPath(), "SelfUpdateBootstrapTests", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            InvokePrivateStatic<object?>("ExtractPackageToDirectory", package, targetDirectory);
+
+            var extractedPath = Path.Combine(targetDirectory, "nested", "file.txt");
+            Assert.True(File.Exists(extractedPath));
+            Assert.Equal("hello", File.ReadAllText(extractedPath));
+        }
+        finally
+        {
+            if (Directory.Exists(targetDirectory))
+            {
+                Directory.Delete(targetDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task DownloadFileInPartsAsync_RequestsRangesAndMergesFile()
+    {
+        var payload = Encoding.UTF8.GetBytes("abcdefghijklmnopqrstuvwxyz");
+        var handler = new RangeHttpMessageHandler(payload);
+        using var httpClient = new HttpClient(handler);
+        var targetDirectory = Path.Combine(Path.GetTempPath(), "SelfUpdateBootstrapTests", Guid.NewGuid().ToString("N"));
+        var partialPath = Path.Combine(targetDirectory, "download.partial");
+        Directory.CreateDirectory(targetDirectory);
+
+        try
+        {
+            var task = InvokePrivateStatic<Task>(
+                "DownloadFileInPartsAsync",
+                httpClient,
+                "https://updates.test/package.zst",
+                partialPath,
+                (long)payload.Length,
+                CancellationToken.None)!;
+            await task;
+
+            Assert.Equal(payload, File.ReadAllBytes(partialPath));
+            Assert.True(handler.RangeRequests.Count >= 2);
+            Assert.DoesNotContain(Directory.GetFiles(targetDirectory), path => Path.GetFileName(path).Contains(".part0", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(targetDirectory))
+            {
+                Directory.Delete(targetDirectory, recursive: true);
+            }
+        }
     }
 
     // ── ToManagedUpdateResult ──────────────────────────────────────
