@@ -29,7 +29,6 @@ namespace TelegramSearchBot.LLMAgent {
             var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("LLMAgent");
             McpToolHelper.EnsureInitialized(
                 typeof(Service.AgentToolService).Assembly,
-                typeof(FileToolService).Assembly,
                 services, logger);
 
             // Import tool definitions from Redis and register as proxy tools
@@ -104,6 +103,7 @@ namespace TelegramSearchBot.LLMAgent {
             services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect($"localhost:{port},abortConnect=false,connectTimeout=5000,connectRetry=5"));
             services.AddScoped<IMessageExtensionService, Service.InMemoryMessageExtensionService>();
             services.AddScoped<OpenAIService>();
+            services.AddScoped<OpenAIResponsesService>();
             services.AddScoped<OllamaService>();
             services.AddScoped<GeminiService>();
             services.AddScoped<AnthropicService>();

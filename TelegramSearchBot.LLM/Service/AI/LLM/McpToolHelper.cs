@@ -710,7 +710,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // Check if this is a proxy tool (routed to remote process via IPC)
             if (ProxyToolRegistry.ContainsKey(toolName) && _proxyToolExecutor != null) {
-                var proxyResult = await _proxyToolExecutor(toolName, stringArguments);
+                var proxyArguments = new Dictionary<string, string>(stringArguments, StringComparer.OrdinalIgnoreCase);
+                if (toolContext != null) {
+                    proxyArguments["__chatId"] = toolContext.ChatId.ToString(CultureInfo.InvariantCulture);
+                    proxyArguments["__userId"] = toolContext.UserId.ToString(CultureInfo.InvariantCulture);
+                    proxyArguments["__messageId"] = toolContext.MessageId.ToString(CultureInfo.InvariantCulture);
+                }
+
+                var proxyResult = await _proxyToolExecutor(toolName, proxyArguments);
                 return proxyResult;
             }
 
