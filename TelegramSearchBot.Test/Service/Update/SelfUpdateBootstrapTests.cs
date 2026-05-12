@@ -408,12 +408,15 @@ public class SelfUpdateBootstrapTests
     private sealed class RangeHttpMessageHandler : HttpMessageHandler
     {
         private readonly byte[] _content;
+        private readonly bool _supportsRanges;
 
         public ConcurrentBag<(long Start, long End)> RangeRequests { get; } = new();
+        public int FullRequestCount { get; private set; }
 
-        public RangeHttpMessageHandler(byte[] content)
+        public RangeHttpMessageHandler(byte[] content, bool supportsRanges = true)
         {
             _content = content;
+            _supportsRanges = supportsRanges;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(
@@ -421,8 +424,9 @@ public class SelfUpdateBootstrapTests
             CancellationToken cancellationToken)
         {
             var range = request.Headers.Range?.Ranges.SingleOrDefault();
-            if (range is null)
+            if (range is null || !_supportsRanges)
             {
+                FullRequestCount++;
                 var fullResponse = new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(_content)
@@ -735,6 +739,40 @@ public class SelfUpdateBootstrapTests
 
             Assert.Equal(payload, File.ReadAllBytes(partialPath));
             Assert.True(handler.RangeRequests.Count >= 2);
+            Assert.DoesNotContain(Directory.GetFiles(targetDirectory), path => Path.GetFileName(path).Contains(".part0", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(targetDirectory))
+            {
+                Directory.Delete(targetDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task DownloadFileFromUriAsync_FallsBackToSingleStreamWhenRangesUnsupported()
+    {
+        var payload = Encoding.UTF8.GetBytes("abcdefghijklmnopqrstuvwxyz");
+        var handler = new RangeHttpMessageHandler(payload, supportsRanges: false);
+        using var httpClient = new HttpClient(handler);
+        var targetDirectory = Path.Combine(Path.GetTempPath(), "SelfUpdateBootstrapTests", Guid.NewGuid().ToString("N"));
+        var targetPath = Path.Combine(targetDirectory, "download.bin");
+        Directory.CreateDirectory(targetDirectory);
+
+        try
+        {
+            var task = InvokePrivateStatic<Task>(
+                "DownloadFileFromUriAsync",
+                httpClient,
+                "https://updates.test/package.zst",
+                targetPath,
+                CancellationToken.None)!;
+            await task;
+
+            Assert.Equal(payload, File.ReadAllBytes(targetPath));
+            Assert.Empty(handler.RangeRequests);
+            Assert.Equal(2, handler.FullRequestCount);
             Assert.DoesNotContain(Directory.GetFiles(targetDirectory), path => Path.GetFileName(path).Contains(".part0", StringComparison.Ordinal));
         }
         finally

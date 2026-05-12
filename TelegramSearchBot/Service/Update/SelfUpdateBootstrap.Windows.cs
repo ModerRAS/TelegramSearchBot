@@ -412,8 +412,11 @@ public static partial class SelfUpdateBootstrap
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
+            var contentRange = response.Content.Headers.ContentRange;
             if (response.StatusCode == HttpStatusCode.PartialContent
-                && response.Content.Headers.ContentRange?.Length is { } rangeLength) {
+                && contentRange?.From == 0
+                && contentRange.To == 0
+                && contentRange.Length is { } rangeLength) {
                 return new DownloadProbe(true, rangeLength);
             }
 
@@ -512,6 +515,12 @@ public static partial class SelfUpdateBootstrap
         if (response.StatusCode != HttpStatusCode.PartialContent) {
             throw new InvalidDataException(
                 $"服务器未返回分片内容，状态码: {(int)response.StatusCode} {response.StatusCode}。");
+        }
+
+        var contentRange = response.Content.Headers.ContentRange;
+        if (contentRange?.From != range.Start || contentRange.To != range.End) {
+            throw new InvalidDataException(
+                $"分片范围不匹配，期望 {range.Start}-{range.End}，实际 {contentRange?.From}-{contentRange?.To}。");
         }
 
         if (response.Content.Headers.ContentLength is { } contentLength
