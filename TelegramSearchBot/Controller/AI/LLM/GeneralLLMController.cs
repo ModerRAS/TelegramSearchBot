@@ -100,7 +100,13 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             }
 
             if (Message.StartsWith("设置模型 ") && fromUserId != 0 && await adminService.IsNormalAdmin(fromUserId)) {
-                var (previous, current) = await _groupLlmSettingsService.SetModelAsync(telegramMessage.Chat.Id, Message.Substring(5));
+                var requestedModelName = Message.Substring(5).Trim();
+                if (string.IsNullOrWhiteSpace(requestedModelName)) {
+                    await SendMessageService.SendMessage("模型名称不能为空", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    return;
+                }
+
+                var (previous, current) = await _groupLlmSettingsService.SetModelAsync(telegramMessage.Chat.Id, requestedModelName);
                 logger.LogInformation($"群{telegramMessage.Chat.Id}模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{telegramMessage.MessageId}");
                 await SendMessageService.SendMessage($"模型设置成功，原模型：{previous}，现模型：{current}", telegramMessage.Chat.Id, telegramMessage.MessageId);
                 return;
@@ -114,6 +120,11 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
             if (isMentionToBot || isReplyToBot) {
                 var modelName = await _groupLlmSettingsService.GetModelAsync(telegramMessage.Chat.Id);
+                if (string.IsNullOrWhiteSpace(modelName)) {
+                    logger.LogWarning("请指定模型名称");
+                    return;
+                }
+
                 var initialContentPlaceholder = $"{modelName}初始化中。。。";
 
                 // Prepare the input message for GeneralLLMService

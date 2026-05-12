@@ -68,6 +68,10 @@ namespace TelegramSearchBot.LLMAgent.Service {
             if (identityProvider != null) {
                 identityProvider.SetIdentity(botUserId, botName);
             } else {
+                _logger.LogDebug(
+                    "IBotIdentityProvider is not registered; falling back to Env.BotId for bot {BotName} ({BotUserId}).",
+                    botName,
+                    botUserId);
                 Env.BotId = botUserId;
             }
         }

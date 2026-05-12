@@ -32,7 +32,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IBotIdentityProvider _botIdentityProvider;
         private string _fallbackBotName = string.Empty;
         public string BotName {
-            get => GetBotNameAsync().GetAwaiter().GetResult();
+            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             set {
                 if (_botIdentityProvider != null) {
                     _botIdentityProvider.SetIdentity(Env.BotId, value);
