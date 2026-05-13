@@ -1036,6 +1036,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             foreach (var tool in nativeTools) {
                 completionOptions.Tools.Add(tool);
             }
+            var includeEmptyReasoningContent = ShouldIncludeEmptyReasoningContent(channel, modelName);
 
             try {
                 int maxToolCycles = Env.MaxToolCycles;
@@ -1116,8 +1117,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             if (!string.IsNullOrWhiteSpace(responseText)) {
                                 assistantMessage = new AssistantChatMessage(chatToolCalls) { Content = { ChatMessageContentPart.CreateTextPart(responseText) } };
                             }
-                            // Set reasoning content for thinking mode models (always call, even for empty)
-                            SetAssistantReasoningContent(assistantMessage, reasoningContent ?? "");
+                            SetAssistantReasoningContent(assistantMessage, reasoningContent, includeEmptyReasoningContent);
                             providerHistory.Add(assistantMessage);
 
                             var toolIndicators = new StringBuilder();
@@ -1185,8 +1185,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         // Not a tool call - regular text response
                         if (!string.IsNullOrWhiteSpace(responseText)) {
                             var assistantMsg = new AssistantChatMessage(responseText);
-                            // Set reasoning content (always call, even for empty)
-                            SetAssistantReasoningContent(assistantMsg, reasoningContent ?? "");
+                            SetAssistantReasoningContent(assistantMsg, reasoningContent, includeEmptyReasoningContent);
                             providerHistory.Add(assistantMsg);
                         }
                         yield break;
@@ -1353,7 +1352,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 ServiceName, snapshot.SnapshotId, snapshot.ChatId, snapshot.ProviderHistory?.Count ?? 0);
 
             // Restore provider history from snapshot
-            List<ChatMessage> providerHistory = DeserializeProviderHistory(snapshot.ProviderHistory);
+            var includeEmptyReasoningContent = ShouldIncludeEmptyReasoningContent(channel, modelName);
+            List<ChatMessage> providerHistory = DeserializeProviderHistory(snapshot.ProviderHistory, includeEmptyReasoningContent);
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
@@ -1503,6 +1503,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         return reasoning;
                     }
                 }
+
+                #pragma warning disable SCME0001 // Patch is for evaluation, may be changed in future
+                var patchProp = assistantMsg.GetType().GetProperty("Patch");
+                if (patchProp?.GetValue(assistantMsg) is JsonPatch patch &&
+                    patch.TryGetValue("$.reasoning_content"u8, out string? reasoningFromPatch)) {
+                    return reasoningFromPatch;
+                }
+                #pragma warning restore SCME0001
             } catch {
                 // Reflection failed, return null
             }
@@ -1550,7 +1558,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// <summary>
         /// Deserialize portable format back to OpenAI ChatMessage list.
         /// </summary>
-        public static List<ChatMessage> DeserializeProviderHistory(List<SerializedChatMessage> serialized) {
+        public static List<ChatMessage> DeserializeProviderHistory(List<SerializedChatMessage> serialized, bool includeEmptyReasoningContent = false) {
             var result = new List<ChatMessage>();
             if (serialized == null) return result;
 
@@ -1561,8 +1569,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         break;
                     case "assistant":
                         var assistantMsg = new AssistantChatMessage(msg.Content ?? "");
-                        // Set reasoning content (always call, even for null)
-                        SetAssistantReasoningContent(assistantMsg, msg.ReasoningContent ?? "");
+                        SetAssistantReasoningContent(assistantMsg, msg.ReasoningContent, includeEmptyReasoningContent);
                         result.Add(assistantMsg);
                         break;
                     case "user":
@@ -1578,11 +1585,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// Set reasoning_content on AssistantChatMessage for thinking mode models.
         /// Uses Patch.Set (OpenAI SDK v2.10.0+) with reflection fallback.
         /// </summary>
-        private static void SetAssistantReasoningContent(AssistantChatMessage msg, string reasoningContent) {
+        internal static bool ShouldIncludeEmptyReasoningContent(LLMChannel channel, string modelName) {
+            var gateway = channel?.Gateway ?? string.Empty;
+            var model = modelName ?? string.Empty;
+            return gateway.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ||
+                   model.Contains("deepseek", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void SetAssistantReasoningContent(AssistantChatMessage msg, string reasoningContent, bool includeEmptyReasoningContent = false) {
+            if (reasoningContent is null || (reasoningContent.Length == 0 && !includeEmptyReasoningContent)) {
+                return;
+            }
+
             // Try Patch.Set first (writes directly to JSON output)
 #pragma warning disable SCME0001 // Patch API is experimental but functional
             try {
-                msg.Patch.Set("$.reasoning_content"u8, reasoningContent ?? "");
+                var encodedReasoningContent = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(reasoningContent);
+                msg.Patch.Set("$.reasoning_content"u8, encodedReasoningContent.AsSpan());
             } catch {
                 // Patch.Set not available or failed, fall through to reflection
             }
