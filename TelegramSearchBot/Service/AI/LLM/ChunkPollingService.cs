@@ -73,9 +73,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 } catch (OperationCanceledException) {
                     break;
                 } catch (RedisException ex) {
-                    _logger.LogWarning(ex, "Redis error in ChunkPollingService poll loop, retrying after delay");
+                    _logger.LogWarning(
+                        ex,
+                        "Redis error in ChunkPollingService poll loop, retrying after delay. TrackedTaskCount={TrackedTaskCount}, PollIntervalMs={PollIntervalMs}",
+                        _trackedTasks.Count,
+                        Env.AgentChunkPollingIntervalMilliseconds);
                 } catch (Exception ex) {
-                    _logger.LogError(ex, "Unexpected error in ChunkPollingService poll loop");
+                    _logger.LogError(
+                        ex,
+                        "Unexpected error in ChunkPollingService poll loop. TrackedTaskCount={TrackedTaskCount}, PollIntervalMs={PollIntervalMs}",
+                        _trackedTasks.Count,
+                        Env.AgentChunkPollingIntervalMilliseconds);
                 }
 
                 try {

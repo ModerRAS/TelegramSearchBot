@@ -73,6 +73,7 @@
   "OLTPAuth": "",
   "OLTPAuthUrl": "",
   "OLTPName": "",
+  "LogLevel": "Verbose",
   "BraveApiKey": "",
   "EnableAccounting": false
 }
@@ -120,6 +121,7 @@
   - `OLTPAuth`: OLTP日志推送认证密钥
   - `OLTPAuthUrl`: OLTP日志推送URL
   - `OLTPName`: OLTP日志推送名称
+  - `LogLevel`: Serilog 最小日志级别，支持 `Verbose`/`Debug`/`Information`/`Warning`/`Error`/`Fatal`，默认 `Verbose`
 
 完整配置参考: [Env.cs](TelegramSearchBot.Common/Env.cs)
 

@@ -1191,6 +1191,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var result = new List<ResponseItem>();
             if (serialized == null) return result;
 
+            var lastResolvedCallId = string.Empty;
             foreach (var msg in serialized) {
                 string content = msg.Content ?? "";
 
@@ -1201,7 +1202,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         ? content.Substring(FuncCallMarker.Length)
                         : content;
                     var parts = payload.Split(new[] { "||" }, 3, StringSplitOptions.None);
-                    string callId = OpenAIService.NormalizeToolCallId(parts.Length > 0 ? parts[0] : "");
+                    string rawCallId = parts.Length > 0 ? parts[0] : "";
+                    string callId = OpenAIService.NormalizeToolCallId(rawCallId);
+                    lastResolvedCallId = callId;
                     string name = OpenAIService.NormalizeToolCallName(parts.Length > 1 ? parts[1] : "unknown");
                     string argsJson = OpenAIService.NormalizeToolCallArguments(parts.Length > 2 ? parts[2] : "{}");
                     result.Add(ResponseItem.CreateFunctionCallItem(
@@ -1214,7 +1217,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         ? content.Substring(FuncOutputMarker.Length)
                         : content;
                     var parts = payload.Split(new[] { "||" }, 2, StringSplitOptions.None);
-                    string callId = OpenAIService.NormalizeToolCallId(parts.Length > 0 ? parts[0] : "");
+                    string rawCallId = parts.Length > 0 ? parts[0] : "";
+                    string callId = string.IsNullOrWhiteSpace(rawCallId) && !string.IsNullOrWhiteSpace(lastResolvedCallId)
+                        ? lastResolvedCallId
+                        : OpenAIService.NormalizeToolCallId(rawCallId);
+                    lastResolvedCallId = callId;
                     string output = parts.Length > 1 ? parts[1] : "";
                     result.Add(ResponseItem.CreateFunctionCallOutputItem(callId, output));
                 } else {

@@ -723,8 +723,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             // Clean CDATA markers if present and trim values
             var cleanedArguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kvp in originalArguments) {
-                var value = kvp.Value;
-                value = Regex.Replace(value ?? string.Empty, @"<!\[CDATA\[(.*?)\]\]>", "$1").Trim();
+                var value = (kvp.Value ?? string.Empty).Trim();
+                if (value.Contains("<![CDATA[", StringComparison.Ordinal)) {
+                    value = Regex.Replace(value, @"<!\[CDATA\[(.*?)\]\]>", "$1").Trim();
+                }
                 cleanedArguments[kvp.Key] = value;
             }
             stringArguments = cleanedArguments;

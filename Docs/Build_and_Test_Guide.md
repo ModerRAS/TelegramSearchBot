@@ -267,11 +267,8 @@ jobs:
 
 #### 本地调试日志
 ```bash
-# 启用详细日志
-dotnet run --project TelegramSearchBot --verbosity detailed
-
-# 使用 Serilog 配置
-export SERILOG__MINIMUMLEVEL__DEFAULT=Debug
+# Config.json 中默认 LogLevel=Verbose；需要降低噪声时可改为 Information/Warning
+dotnet run --project TelegramSearchBot
 ```
 
 #### 性能分析

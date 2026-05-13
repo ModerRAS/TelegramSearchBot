@@ -8,6 +8,7 @@ using System.Net;
 using System.Net.Http; // Added for IHttpClientFactory
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,27 @@ namespace TelegramSearchBot.Service.AI.LLM {
             } catch {
                 return new Dictionary<string, string>();
             }
+        }
+
+        private static string SanitizeAndTruncateArguments(string arguments, int maxChars = 2048) {
+            if (string.IsNullOrWhiteSpace(arguments)) {
+                return string.Empty;
+            }
+
+            var sanitized = arguments;
+            var sensitiveKeys = new[] { "api_key", "apikey", "apiKey", "token", "password", "secret", "authorization" };
+            foreach (var key in sensitiveKeys) {
+                sanitized = Regex.Replace(
+                    sanitized,
+                    $"(\"{Regex.Escape(key)}\"\\s*:\\s*\")[^\"]*(\")",
+                    "$1***$2",
+                    RegexOptions.IgnoreCase);
+            }
+
+            sanitized = sanitized.Replace("\r", "\\r").Replace("\n", "\\n");
+            return sanitized.Length <= maxChars
+                ? sanitized
+                : sanitized.Substring(0, maxChars) + $"...<truncated {sanitized.Length - maxChars} chars>";
         }
 
         private readonly ILogger<OpenAIService> _logger;
@@ -1116,7 +1138,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                     kvp => new {
                                         kvp.Value.Id,
                                         kvp.Value.Name,
-                                        Arguments = kvp.Value.Arguments.ToString()
+                                        ArgumentsPreview = SanitizeAndTruncateArguments(kvp.Value.Arguments.ToString())
                                     })),
                                 ex.GetLogSummary());
                             const string errorMsg = "Tool call failed before execution due to malformed tool metadata. Please verify the tool name and parameters, then try again.";
