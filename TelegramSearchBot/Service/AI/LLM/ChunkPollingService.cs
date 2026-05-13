@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using StackExchange.Redis;
 using TelegramSearchBot.Common;
@@ -34,10 +35,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
     public sealed class ChunkPollingService : BackgroundService {
         private readonly IConnectionMultiplexer _redis;
+        private readonly ILogger<ChunkPollingService> _logger;
         private readonly ConcurrentDictionary<string, TrackedTask> _trackedTasks = new(StringComparer.OrdinalIgnoreCase);
 
-        public ChunkPollingService(IConnectionMultiplexer redis) {
+        public ChunkPollingService(IConnectionMultiplexer redis, ILogger<ChunkPollingService>? logger = null) {
             _redis = redis;
+            _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ChunkPollingService>.Instance;
         }
 
         public AgentTaskStreamHandle TrackTask(string taskId) {
@@ -47,7 +50,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         public async Task RunPollCycleAsync(CancellationToken cancellationToken = default) {
             foreach (var entry in _trackedTasks.ToArray()) {
-                await PollTaskAsync(entry.Key, entry.Value, cancellationToken);
+                try {
+                    await PollTaskAsync(entry.Key, entry.Value, cancellationToken);
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (RedisException ex) {
+                    _logger.LogWarning(ex, "ChunkPollingService: redis error while polling task {TaskId}", entry.Key);
+                } catch (Exception ex) {
+                    _logger.LogError(ex, "ChunkPollingService: failed to poll task {TaskId}", entry.Key);
+                }
             }
         }
 
@@ -61,8 +72,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     await RunPollCycleAsync(stoppingToken);
                 } catch (OperationCanceledException) {
                     break;
-                } catch (RedisException) {
-                    // Transient Redis failure – wait before retrying
+                } catch (RedisException ex) {
+                    _logger.LogWarning(
+                        ex,
+                        "Redis error in ChunkPollingService poll loop, retrying after delay. TrackedTaskCount={TrackedTaskCount}, PollIntervalMs={PollIntervalMs}",
+                        _trackedTasks.Count,
+                        Env.AgentChunkPollingIntervalMilliseconds);
+                } catch (Exception ex) {
+                    _logger.LogError(
+                        ex,
+                        "Unexpected error in ChunkPollingService poll loop. TrackedTaskCount={TrackedTaskCount}, PollIntervalMs={PollIntervalMs}",
+                        _trackedTasks.Count,
+                        Env.AgentChunkPollingIntervalMilliseconds);
                 }
 
                 try {
@@ -193,8 +214,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     tracked.LastContent = snapshot.Content;
                     await tracked.Channel.Writer.WriteAsync(snapshot, cancellationToken);
                 }
-            } catch (Exception) {
-                // Best-effort: don't let snapshot read failure prevent task completion
+            } catch (Exception ex) {
+                _logger.LogWarning(ex, "ChunkPollingService: failed to deliver final snapshot for task {TaskId}", taskId);
             }
         }
 

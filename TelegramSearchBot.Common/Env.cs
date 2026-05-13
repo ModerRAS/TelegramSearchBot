@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Newtonsoft.Json;
+using Serilog.Events;
 
 namespace TelegramSearchBot.Common {
     public static class Env {
@@ -42,6 +43,7 @@ namespace TelegramSearchBot.Common {
             OLTPAuth = config.OLTPAuth;
             OLTPAuthUrl = config.OLTPAuthUrl;
             OLTPName = config.OLTPName;
+            SerilogMinimumLevel = ResolveSerilogMinimumLevel(config.LogLevel);
             BraveApiKey = config.BraveApiKey;
             EnableAccounting = config.EnableAccounting;
             EnableAutoUpdate = config.EnableAutoUpdate;
@@ -120,6 +122,7 @@ namespace TelegramSearchBot.Common {
         public static string OLTPAuth { get; set; } = null!;
         public static string OLTPAuthUrl { get; set; } = null!;
         public static string OLTPName { get; set; } = null!;
+        public static readonly LogEventLevel SerilogMinimumLevel;
         public static string BraveApiKey { get; set; } = null!;
         public static bool EnableAccounting { get; set; } = false;
         public static int MaxToolCycles { get; set; }
@@ -153,6 +156,15 @@ namespace TelegramSearchBot.Common {
 
             return NormalizeBaseUrl(uri.ToString(), DefaultUpdateBaseUrl);
         }
+
+        public static LogEventLevel ResolveSerilogMinimumLevel(string? logLevel) {
+            if (Enum.TryParse<LogEventLevel>(logLevel, ignoreCase: true, out var parsed) &&
+                Enum.IsDefined(typeof(LogEventLevel), parsed)) {
+                return parsed;
+            }
+
+            return LogEventLevel.Verbose;
+        }
     }
     public class Config {
         public string BaseUrl { get; set; } = "https://api.telegram.org";
@@ -178,6 +190,7 @@ namespace TelegramSearchBot.Common {
         public string OLTPAuth { get; set; } = null!;
         public string OLTPAuthUrl { get; set; } = null!;
         public string OLTPName { get; set; } = null!;
+        public string LogLevel { get; set; } = "Verbose";
         public string BraveApiKey { get; set; } = null!;
         public bool EnableAccounting { get; set; } = false;
         public int MaxToolCycles { get; set; } = 25;

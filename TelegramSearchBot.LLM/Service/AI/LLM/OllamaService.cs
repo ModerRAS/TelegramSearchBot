@@ -214,8 +214,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         } catch (Exception ex) {
                             isError = true;
-                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, parsedToolName);
-                            toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Error executing Ollama XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                parsedToolName,
+                                JsonConvert.SerializeObject(toolArguments),
+                                ex.GetLogSummary());
+                            toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
                         }
 
                         string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";

@@ -198,11 +198,13 @@ namespace TelegramSearchBot.LLMAgent.Service {
                     retryAttempt++;
                     var delay = _transientRetryDelayFactory(retryAttempt);
                     currentRecoveredContent = latestSnapshot;
+                    var retryReason = ex.GetLogSummary();
 
                     _logger.LogWarning(
                         ex,
-                        "Agent task {TaskId} hit transient LLM overload. Retrying in {DelaySeconds}s (attempt {RetryAttempt}/{MaxRetries})",
+                        "Agent task {TaskId} hit transient LLM overload ({RetryReason}). Retrying in {DelaySeconds}s (attempt {RetryAttempt}/{MaxRetries})",
                         task.TaskId,
+                        retryReason,
                         delay.TotalSeconds,
                         retryAttempt,
                         MaxTransientOverloadRetries);
@@ -214,27 +216,32 @@ namespace TelegramSearchBot.LLMAgent.Service {
                         ["lastSequence"] = sequence.ToString(),
                         ["transientRetryCount"] = retryAttempt.ToString(),
                         ["lastRetryAtUtc"] = DateTime.UtcNow.ToString("O"),
-                        ["lastRetryReason"] = ex.Message
+                        ["lastRetryReason"] = retryReason,
+                        ["lastRetryDetails"] = ex.ToString(),
+                        ["lastRetryExceptionType"] = ex.GetPrimaryException().GetType().FullName ?? ex.GetType().FullName
                     });
 
                     if (delay > TimeSpan.Zero) {
                         await Task.Delay(delay, cancellationToken);
                     }
                 } catch (Exception ex) {
-                    _logger.LogError(ex, "Agent task {TaskId} failed", task.TaskId);
+                    var errorSummary = ex.GetLogSummary();
+                    _logger.LogError(ex, "Agent task {TaskId} failed ({ErrorSummary})", task.TaskId, errorSummary);
                     await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
                         TaskId = task.TaskId,
                         Type = AgentChunkType.Error,
                         Sequence = sequence,
-                        ErrorMessage = ex.Message
+                        ErrorMessage = errorSummary
                     });
-                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Failed, ex.Message, new Dictionary<string, string> {
+                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Failed, errorSummary, new Dictionary<string, string> {
                         ["payload"] = payload,
                         ["workerChatId"] = workerChatId.ToString(),
                         ["failedAtUtc"] = DateTime.UtcNow.ToString("O"),
                         ["lastContent"] = latestSnapshot,
                         ["lastSequence"] = sequence.ToString(),
-                        ["transientRetryCount"] = retryAttempt.ToString()
+                        ["transientRetryCount"] = retryAttempt.ToString(),
+                        ["errorType"] = ex.GetPrimaryException().GetType().FullName ?? ex.GetType().FullName,
+                        ["errorDetails"] = ex.ToString()
                     });
                     return;
                 }

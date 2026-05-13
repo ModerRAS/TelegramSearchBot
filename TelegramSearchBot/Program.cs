@@ -21,22 +21,25 @@ namespace TelegramSearchBot {
                 .CreateLogger();
 
             Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information() // 设置最低日志级别
+            .MinimumLevel.Is(Env.SerilogMinimumLevel) // 默认打开完整日志，便于追踪 LLM/Agent 级异常
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Debug) // SQL 语句只在 Debug 级别输出
             .WriteTo.Console(
-                restrictedToMinimumLevel: LogEventLevel.Information,
+                restrictedToMinimumLevel: Env.SerilogMinimumLevel,
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
+              restrictedToMinimumLevel: Env.SerilogMinimumLevel,
               rollingInterval: RollingInterval.Day,
               outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.OpenTelemetry(options => {
-                options.Endpoint = Env.OLTPAuthUrl;
-                options.Headers = new Dictionary<string, string>() {
+            .WriteTo.OpenTelemetry(
+                endpoint: Env.OLTPAuthUrl,
+                protocol: OtlpProtocol.HttpProtobuf,
+                headers: new Dictionary<string, string>() {
                     { "Authorization", $"Basic {Env.OLTPAuth}" },
                     { "stream-name", Env.OLTPName }
-                };
-                options.Protocol = OtlpProtocol.HttpProtobuf;
-            })
+                },
+                resourceAttributes: null,
+                includedData: null,
+                restrictedToMinimumLevel: Env.SerilogMinimumLevel)
             .CreateLogger();
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
             if (args.Length == 0) {

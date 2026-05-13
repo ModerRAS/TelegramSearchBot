@@ -437,8 +437,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         toolResult = McpToolHelper.ConvertToolResultToString(result);
                     } catch (Exception ex) {
                         isError = true;
-                        _logger.LogError(ex, "Error executing tool {ToolName}", firstToolCall.toolName);
-                        toolResult = $"Error executing tool {firstToolCall.toolName}: {ex.Message}";
+                        _logger.LogError(
+                            ex,
+                            "{ServiceName}: Error executing Gemini XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                            ServiceName,
+                            firstToolCall.toolName,
+                            JsonConvert.SerializeObject(firstToolCall.arguments),
+                            ex.GetLogSummary());
+                        toolResult = $"Error executing tool {firstToolCall.toolName}: {ex.GetLogSummary()}";
                     }
 
                     string feedback = isError

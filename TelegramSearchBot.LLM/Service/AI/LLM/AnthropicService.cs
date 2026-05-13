@@ -591,9 +591,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         assistantContentBlocks.Add(new TextBlockParam(responseText));
                     }
                     foreach (var (id, name, inputJson) in toolUseBlocks) {
-                        var parsedInput = string.IsNullOrWhiteSpace(inputJson)
-                            ? new Dictionary<string, JsonElement>()
-                            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson);
+                        Dictionary<string, JsonElement> parsedInput;
+                        try {
+                            parsedInput = string.IsNullOrWhiteSpace(inputJson)
+                                ? new Dictionary<string, JsonElement>()
+                                : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson);
+                        } catch (Exception ex) {
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Failed to deserialize Anthropic native tool input for assistant history. ToolUseId={ToolUseId}, ToolName={ToolName}, InputJson={InputJson}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                id,
+                                name,
+                                inputJson,
+                                ex.GetLogSummary());
+                            parsedInput = new Dictionary<string, JsonElement>();
+                        }
                         assistantContentBlocks.Add(new ToolUseBlockParam {
                             ID = id,
                             Name = name,
@@ -615,7 +628,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             try {
                                 argsDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson)
                                     .ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
-                            } catch { }
+                            } catch (Exception ex) {
+                                _logger.LogError(
+                                    ex,
+                                    "{ServiceName}: Failed to deserialize Anthropic native tool input for display. ToolUseId={ToolUseId}, ToolName={ToolName}, InputJson={InputJson}, ErrorSummary={ErrorSummary}",
+                                    ServiceName,
+                                    id,
+                                    name,
+                                    inputJson,
+                                    ex.GetLogSummary());
+                            }
                         }
                         argsDict ??= new Dictionary<string, string>();
                         toolNamesBuilder.Append(McpToolHelper.FormatToolCallDisplay(name, argsDict));
@@ -642,8 +664,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result length: {Length}", ServiceName, name, toolResultString.Length);
                         } catch (Exception ex) {
                             isError = true;
-                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, name);
-                            toolResultString = $"Error executing tool {name}: {ex.Message}";
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Error executing Anthropic native tool {ToolName}. ToolUseId={ToolUseId}, InputJson={InputJson}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                name,
+                                id,
+                                inputJson,
+                                ex.GetLogSummary());
+                            toolResultString = $"Error executing tool {name}: {ex.GetLogSummary()}";
                         }
 
                         toolResultBlocks.Add(new ToolResultBlockParam(id) {
@@ -765,8 +794,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                     } catch (Exception ex) {
                         isError = true;
-                        _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, parsedToolName);
-                        toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                        _logger.LogError(
+                            ex,
+                            "{ServiceName}: Error executing Anthropic XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                            ServiceName,
+                            parsedToolName,
+                            JsonConvert.SerializeObject(toolArguments),
+                            ex.GetLogSummary());
+                        toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
                     }
 
                     string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
@@ -896,8 +931,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
                     } catch (Exception ex) {
                         isError = true;
-                        _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName} (resume).", ServiceName, parsedToolName);
-                        toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                        _logger.LogError(
+                            ex,
+                            "{ServiceName}: Error executing Anthropic XML tool {ToolName} (resume). Arguments={Arguments}, SnapshotId={SnapshotId}, ErrorSummary={ErrorSummary}",
+                            ServiceName,
+                            parsedToolName,
+                            JsonConvert.SerializeObject(firstToolCall.arguments),
+                            snapshot.SnapshotId,
+                            ex.GetLogSummary());
+                        toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
                     }
 
                     string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";

@@ -329,12 +329,11 @@ namespace TelegramSearchBot.AppBootstrap {
                 }
             } catch (TargetInvocationException ex) {
                 // 被调用的 Startup 方法内部抛出了异常
-                Log.Error($"错误：启动过程 '{startupKey}' 中发生异常: {ex.InnerException?.Message ?? ex.Message}");
-                // 可以考虑记录更详细的堆栈信息 ex.InnerException.StackTrace
+                Log.Error(ex, "错误：启动过程 '{StartupKey}' 中发生异常", startupKey);
                 return false; // 目标方法执行失败
             } catch (Exception ex) {
                 // 其他反射或运行时错误
-                Log.Error($"处理启动类型 '{startupKey}' 时发生意外错误: {ex.Message}");
+                Log.Error(ex, "处理启动类型 '{StartupKey}' 时发生意外错误", startupKey);
                 return false; // 反射或其他错误
             }
         }
@@ -364,7 +363,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 }
 
             } catch (Exception ex) {
-                Log.Error($"  (无法自动列出类型: {ex.Message})");
+                Log.Error(ex, "  (无法自动列出类型)");
             }
         }
     }

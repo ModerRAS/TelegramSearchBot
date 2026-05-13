@@ -8,6 +8,7 @@ using System.Net;
 using System.Net.Http; // Added for IHttpClientFactory
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,27 @@ namespace TelegramSearchBot.Service.AI.LLM {
             } catch {
                 return new Dictionary<string, string>();
             }
+        }
+
+        private static string SanitizeAndTruncateArguments(string arguments, int maxChars = 2048) {
+            if (string.IsNullOrWhiteSpace(arguments)) {
+                return string.Empty;
+            }
+
+            var sanitized = arguments;
+            var sensitiveKeys = new[] { "api_key", "apikey", "apiKey", "token", "password", "secret", "authorization" };
+            foreach (var key in sensitiveKeys) {
+                sanitized = Regex.Replace(
+                    sanitized,
+                    $"(\"{Regex.Escape(key)}\"\\s*:\\s*\")[^\"]*(\")",
+                    "$1***$2",
+                    RegexOptions.IgnoreCase);
+            }
+
+            sanitized = sanitized.Replace("\r", "\\r").Replace("\n", "\\n");
+            return sanitized.Length <= maxChars
+                ? sanitized
+                : sanitized.Substring(0, maxChars) + $"...<truncated {sanitized.Length - maxChars} chars>";
         }
 
         private readonly ILogger<OpenAIService> _logger;
@@ -1105,7 +1127,20 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             }
                             currentMessageContentBuilder.Append(toolIndicators.ToString());
                         } catch (Exception ex) {
-                            _logger.LogError(ex, "{ServiceName}: Error building tool calls, returning error to LLM for self-correction", ServiceName);
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Error building native tool calls, returning error to LLM for self-correction. FinishReason={FinishReason}, ToolCallCount={ToolCallCount}, ToolCallMetadata={ToolCallMetadata}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                finishReason,
+                                toolCallAccumulators.Count,
+                                JsonConvert.SerializeObject(toolCallAccumulators.ToDictionary(
+                                    kvp => kvp.Key,
+                                    kvp => new {
+                                        kvp.Value.Id,
+                                        kvp.Value.Name,
+                                        ArgumentsPreview = SanitizeAndTruncateArguments(kvp.Value.Arguments.ToString())
+                                    })),
+                                ex.GetLogSummary());
                             const string errorMsg = "Tool call failed before execution due to malformed tool metadata. Please verify the tool name and parameters, then try again.";
                             providerHistory.Add(new UserChatMessage(errorMsg));
                             continue;
@@ -1129,8 +1164,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                     toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
                                     _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result length: {Length}", ServiceName, toolName, toolResultString.Length);
                                 } catch (Exception ex) {
-                                    _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, toolName);
-                                    toolResultString = $"Error executing tool {toolName}: {ex.Message}";
+                                    _logger.LogError(
+                                        ex,
+                                        "{ServiceName}: Error executing native tool {ToolName}. ToolCallId={ToolCallId}, Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                                        ServiceName,
+                                        toolName,
+                                        toolCall.Id,
+                                        toolCall.FunctionArguments?.ToString(),
+                                        ex.GetLogSummary());
+                                    toolResultString = $"Error executing tool {toolName}: {ex.GetLogSummary()}";
                                 }
 
                                 // Add tool result to history using the proper ToolChatMessage
@@ -1247,8 +1289,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         } catch (Exception ex) {
                             isError = true;
-                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, parsedToolName);
-                            toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Error executing XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                parsedToolName,
+                                JsonConvert.SerializeObject(toolArguments),
+                                ex.GetLogSummary());
+                            toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
                         }
 
                         string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
@@ -1368,8 +1416,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
                         } catch (Exception ex) {
                             isError = true;
-                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName} (resume).", ServiceName, parsedToolName);
-                            toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Error executing XML tool {ToolName} (resume). Arguments={Arguments}, SnapshotId={SnapshotId}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                parsedToolName,
+                                JsonConvert.SerializeObject(toolArguments),
+                                snapshot.SnapshotId,
+                                ex.GetLogSummary());
+                            toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
                         }
 
                         string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
