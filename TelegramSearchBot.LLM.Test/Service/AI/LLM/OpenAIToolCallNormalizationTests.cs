@@ -1,4 +1,6 @@
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 using Xunit;
 
 namespace TelegramSearchBot.LLM.Test.Service.AI.LLM {
@@ -60,6 +62,36 @@ namespace TelegramSearchBot.LLM.Test.Service.AI.LLM {
             var arguments = OpenAIService.DeserializeToolArgumentsForDisplay("{not json");
 
             Assert.Empty(arguments);
+        }
+
+        [Fact]
+        public void IsMiniMaxCompatibleEndpoint_MiniMaxProvider_ReturnsTrue() {
+            var channel = new LLMChannel {
+                Provider = LLMProvider.MiniMax,
+                Gateway = "https://api.minimaxi.com/v1"
+            };
+
+            Assert.True(OpenAIService.IsMiniMaxCompatibleEndpoint(channel, "MiniMax-M2.7"));
+        }
+
+        [Fact]
+        public void IsMiniMaxCompatibleEndpoint_MiniMaxGateway_ReturnsTrue() {
+            var channel = new LLMChannel {
+                Provider = LLMProvider.OpenAI,
+                Gateway = "https://api.minimaxi.com/v1"
+            };
+
+            Assert.True(OpenAIService.IsMiniMaxCompatibleEndpoint(channel, "some-model"));
+        }
+
+        [Fact]
+        public void IsMiniMaxCompatibleEndpoint_OpenAIProvider_ReturnsFalse() {
+            var channel = new LLMChannel {
+                Provider = LLMProvider.OpenAI,
+                Gateway = "https://api.openai.com/v1"
+            };
+
+            Assert.False(OpenAIService.IsMiniMaxCompatibleEndpoint(channel, "gpt-4.1"));
         }
     }
 }

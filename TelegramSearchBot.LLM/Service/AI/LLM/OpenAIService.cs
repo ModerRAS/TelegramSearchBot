@@ -74,6 +74,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
+        internal static bool IsMiniMaxCompatibleEndpoint(LLMChannel channel, string modelName) {
+            if (channel?.Provider == LLMProvider.MiniMax) {
+                return true;
+            }
+
+            var gateway = channel?.Gateway ?? string.Empty;
+            var model = modelName ?? string.Empty;
+            return gateway.Contains("minimax", StringComparison.OrdinalIgnoreCase) ||
+                   model.Contains("minimax", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string SanitizeAndTruncateArguments(string arguments, int maxChars = 2048) {
             if (string.IsNullOrWhiteSpace(arguments)) {
                 return string.Empty;
@@ -942,6 +953,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 useNativeToolCalling = false;
             }
 
+            var isMiniMaxCompatibleEndpoint = IsMiniMaxCompatibleEndpoint(channel, modelName);
+            _logger.LogInformation(
+                "{ServiceName}: Tool calling setup for model {Model}. UseNative={UseNative}, NativeToolCount={NativeToolCount}, Provider={Provider}, Gateway={Gateway}, IsMiniMaxCompatible={IsMiniMaxCompatible}",
+                ServiceName,
+                modelName,
+                useNativeToolCalling,
+                nativeTools?.Count ?? 0,
+                channel.Provider,
+                channel.Gateway,
+                isMiniMaxCompatibleEndpoint);
+
             if (useNativeToolCalling) {
                 bool nativeFailed = false;
                 var nativeEnumerator = ExecWithNativeToolCallingAsync(message, ChatId, modelName, channel, executionContext, nativeTools, cancellationToken);
@@ -1036,6 +1058,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
             foreach (var tool in nativeTools) {
                 completionOptions.Tools.Add(tool);
             }
+            _logger.LogInformation(
+                "{ServiceName}: Starting native tool call cycle. Model={Model}, ToolCount={ToolCount}, ToolNames={ToolNames}",
+                ServiceName,
+                modelName,
+                nativeTools.Count,
+                string.Join(",", nativeTools.Select(t => t.FunctionName).Take(80)));
             var includeEmptyReasoningContent = ShouldIncludeEmptyReasoningContent(channel, modelName);
 
             try {
@@ -1049,6 +1077,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     var reasoningContentBuilder = new StringBuilder();
                     var toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
                     ChatFinishReason? finishReason = null;
+
+                    _logger.LogDebug(
+                        "{ServiceName}: Native cycle {Cycle} request. HistoryCount={HistoryCount}, ToolCount={ToolCount}",
+                        ServiceName,
+                        cycle + 1,
+                        providerHistory.Count,
+                        completionOptions.Tools.Count);
 
                     // --- Call LLM with tools ---
                     await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, completionOptions, cancellationToken).WithCancellation(cancellationToken)) {
@@ -1093,6 +1128,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                     string responseText = contentBuilder.ToString().Trim();
                     string reasoningContent = reasoningContentBuilder.ToString().Trim();
+                    _logger.LogInformation(
+                        "{ServiceName}: Native cycle {Cycle} completed. FinishReason={FinishReason}, TextLength={TextLength}, ReasoningLength={ReasoningLength}, ToolCallUpdateCount={ToolCallUpdateCount}, ToolCallMetadata={ToolCallMetadata}, TextPreview={TextPreview}",
+                        ServiceName,
+                        cycle + 1,
+                        finishReason?.ToString() ?? "null",
+                        responseText.Length,
+                        reasoningContent.Length,
+                        toolCallAccumulators.Count,
+                        JsonConvert.SerializeObject(toolCallAccumulators.ToDictionary(
+                            kvp => kvp.Key,
+                            kvp => new {
+                                kvp.Value.Id,
+                                kvp.Value.Name,
+                                ArgumentsPreview = SanitizeAndTruncateArguments(kvp.Value.Arguments.ToString())
+                            })),
+                        SanitizeAndTruncateArguments(responseText, 1024));
 
                     // Check if this is a tool call response
                     if (finishReason == ChatFinishReason.ToolCalls && toolCallAccumulators.Any()) {
@@ -1146,19 +1197,25 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             continue;
                         }
 
-                        yield return currentMessageContentBuilder.ToString();
-
                         // Execute each tool call (has its own inner try-catch for per-tool errors)
                         if (chatToolCalls != null) {
                             foreach (var toolCall in chatToolCalls) {
                                 string toolName = toolCall.FunctionName;
-                                _logger.LogInformation("{ServiceName}: Native tool call: {ToolName} with arguments: {Arguments}", ServiceName, toolName, toolCall.FunctionArguments?.ToString());
 
                                 string toolResultString;
                                 try {
                                     // Parse arguments from JSON
                                     var argsDict = DeserializeToolArgumentsForDisplay(toolCall.FunctionArguments?.ToString());
 
+                                    _logger.LogInformation(
+                                        "{ServiceName}: Native tool call parsed; executing now. Tool={ToolName}, ToolCallId={ToolCallId}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Arguments={Arguments}",
+                                        ServiceName,
+                                        toolName,
+                                        toolCall.Id,
+                                        ChatId,
+                                        message.FromUserId,
+                                        message.MessageId,
+                                        JsonConvert.SerializeObject(argsDict));
                                     var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
                                     object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(toolName, argsDict, toolContext);
                                     toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
@@ -1180,13 +1237,36 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             }
                         }
 
+                        yield return currentMessageContentBuilder.ToString();
+
                         // Continue loop for next LLM call
                     } else {
+                        if (toolCallAccumulators.Any()) {
+                            _logger.LogWarning(
+                                "{ServiceName}: Native response contained tool call updates but finish reason was not ToolCalls. FinishReason={FinishReason}, ToolCallCount={ToolCallCount}",
+                                ServiceName,
+                                finishReason?.ToString() ?? "null",
+                                toolCallAccumulators.Count);
+                        }
+
                         // Not a tool call - regular text response
                         if (!string.IsNullOrWhiteSpace(responseText)) {
+                            _logger.LogInformation(
+                                "{ServiceName}: Native cycle produced final text without native tool calls. FinishReason={FinishReason}, TextLength={TextLength}, ToolCount={ToolCount}, TextPreview={TextPreview}",
+                                ServiceName,
+                                finishReason?.ToString() ?? "null",
+                                responseText.Length,
+                                completionOptions.Tools.Count,
+                                SanitizeAndTruncateArguments(responseText, 1024));
                             var assistantMsg = new AssistantChatMessage(responseText);
                             SetAssistantReasoningContent(assistantMsg, reasoningContent, includeEmptyReasoningContent);
                             providerHistory.Add(assistantMsg);
+                        } else {
+                            _logger.LogWarning(
+                                "{ServiceName}: Native cycle produced empty final text and no native tool calls. FinishReason={FinishReason}, ToolCount={ToolCount}",
+                                ServiceName,
+                                finishReason?.ToString() ?? "null",
+                                completionOptions.Tools.Count);
                         }
                         yield break;
                     }
@@ -1276,12 +1356,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
                         }
 
-                        currentMessageContentBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
-                        yield return currentMessageContentBuilder.ToString();
-
                         string toolResultString;
                         bool isError = false;
                         try {
+                            _logger.LogInformation(
+                                "{ServiceName}: XML tool call parsed; executing now. Tool={ToolName}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Arguments={Arguments}",
+                                ServiceName,
+                                parsedToolName,
+                                ChatId,
+                                message.FromUserId,
+                                message.MessageId,
+                                JsonConvert.SerializeObject(toolArguments));
                             var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
                             toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
@@ -1297,6 +1382,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                 ex.GetLogSummary());
                             toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
                         }
+
+                        currentMessageContentBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
+                        yield return currentMessageContentBuilder.ToString();
 
                         string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
                         string feedback = $"{feedbackPrefix}{toolResultString}]";
@@ -1403,17 +1491,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                         _logger.LogInformation("{ServiceName}: LLM requested tool (resume): {ToolName}", ServiceName, parsedToolName);
 
-                        var toolIndicator = McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments);
-                        newContentBuilder.Append(toolIndicator);
-                        fullContentBuilder.Append(toolIndicator);
-                        yield return newContentBuilder.ToString();
-
                         string toolResultString;
                         bool isError = false;
                         try {
+                            _logger.LogInformation(
+                                "{ServiceName}: XML tool call parsed during resume; executing now. Tool={ToolName}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Arguments={Arguments}",
+                                ServiceName,
+                                parsedToolName,
+                                snapshot.ChatId,
+                                snapshot.UserId,
+                                snapshot.OriginalMessageId,
+                                JsonConvert.SerializeObject(toolArguments));
                             var toolContext = new ToolContext { ChatId = snapshot.ChatId, UserId = snapshot.UserId, MessageId = snapshot.OriginalMessageId };
                             object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
                             toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
+                            _logger.LogInformation("{ServiceName}: Tool {ToolName} executed during resume. Result length: {Length}", ServiceName, parsedToolName, toolResultString.Length);
                         } catch (Exception ex) {
                             isError = true;
                             _logger.LogError(
@@ -1426,6 +1518,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                 ex.GetLogSummary());
                             toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
                         }
+
+                        var toolIndicator = McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments);
+                        newContentBuilder.Append(toolIndicator);
+                        fullContentBuilder.Append(toolIndicator);
+                        yield return newContentBuilder.ToString();
 
                         string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
                         string feedback = $"{feedbackPrefix}{toolResultString}]";
