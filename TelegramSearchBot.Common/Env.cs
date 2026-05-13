@@ -158,7 +158,8 @@ namespace TelegramSearchBot.Common {
         }
 
         public static LogEventLevel ResolveSerilogMinimumLevel(string? logLevel) {
-            if (Enum.TryParse<LogEventLevel>(logLevel, ignoreCase: true, out var parsed)) {
+            if (Enum.TryParse<LogEventLevel>(logLevel, ignoreCase: true, out var parsed) &&
+                Enum.IsDefined(typeof(LogEventLevel), parsed)) {
                 return parsed;
             }
 

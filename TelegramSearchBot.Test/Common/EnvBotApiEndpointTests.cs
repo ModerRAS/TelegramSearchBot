@@ -1,3 +1,4 @@
+using Serilog.Events;
 using TelegramSearchBot.Common;
 using Xunit;
 
@@ -67,6 +68,25 @@ namespace TelegramSearchBot.Test.Common {
             });
 
             Assert.Equal(Env.DefaultUpdateBaseUrl, result);
+        }
+
+        [Theory]
+        [InlineData("Verbose", LogEventLevel.Verbose)]
+        [InlineData("Error", LogEventLevel.Error)]
+        public void ResolveSerilogMinimumLevel_ReturnsDefinedLogLevel(string logLevel, LogEventLevel expected) {
+            var result = Env.ResolveSerilogMinimumLevel(logLevel);
+
+            Assert.Equal(expected, result);
+        }
+
+        [Theory]
+        [InlineData("999")]
+        [InlineData("NotARealLevel")]
+        [InlineData("")]
+        public void ResolveSerilogMinimumLevel_FallsBackToVerboseForInvalidValue(string? logLevel) {
+            var result = Env.ResolveSerilogMinimumLevel(logLevel);
+
+            Assert.Equal(LogEventLevel.Verbose, result);
         }
     }
 }
