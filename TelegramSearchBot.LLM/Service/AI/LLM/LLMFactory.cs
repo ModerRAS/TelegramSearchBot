@@ -1,64 +1,40 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using StackExchange.Redis;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
-using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
-using static GenerativeAI.VertexAIModels;
 
 namespace TelegramSearchBot.Service.AI.LLM {
-    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
+    [Injectable(ServiceLifetime.Transient)]
     public class LLMFactory : IService, ILLMFactory {
         public string ServiceName => "LLMFactory";
 
-        protected IConnectionMultiplexer connectionMultiplexer { get; set; }
-        private readonly DataDbContext _dbContext;
-        private readonly OpenAIService _openAIService;
-        private readonly OllamaService _ollamaService;
-        private readonly GeminiService _geminiService;
-        private readonly AnthropicService _anthropicService;
-        private readonly OpenAIResponsesService _openAIResponsesService;
+        private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<LLMFactory> _logger;
-        private readonly Dictionary<LLMProvider, ILLMService> _services;
-        public LLMFactory(
-            IConnectionMultiplexer connectionMultiplexer,
-            DataDbContext dbContext,
-            ILogger<LLMFactory> logger,
-            OllamaService ollamaService,
-            OpenAIService openAIService,
-            GeminiService geminiService,
-            AnthropicService anthropicService,
-            OpenAIResponsesService openAIResponsesService
-            ) {
-            this.connectionMultiplexer = connectionMultiplexer;
-            _dbContext = dbContext;
-            _logger = logger;
 
-            // Initialize services with default values
-            _openAIService = openAIService;
-            _ollamaService = ollamaService;
-            _geminiService = geminiService;
-            _anthropicService = anthropicService;
-            _openAIResponsesService = openAIResponsesService;
-            _services = new() {
-                [LLMProvider.OpenAI] = _openAIService,
-                [LLMProvider.Ollama] = _ollamaService,
-                [LLMProvider.Gemini] = _geminiService,
-                [LLMProvider.MiniMax] = _openAIService,
-                [LLMProvider.LMStudio] = _openAIService,
-                [LLMProvider.Anthropic] = _anthropicService,
-                [LLMProvider.ResponsesAPI] = _openAIResponsesService
-            };
+        public LLMFactory(
+            IServiceProvider serviceProvider,
+            ILogger<LLMFactory> logger
+            ) {
+            _logger = logger;
+            _serviceProvider = serviceProvider;
         }
 
-        public ILLMService GetLLMService(LLMProvider provider) => _services[provider];
+        public ILLMService GetLLMService(LLMProvider provider) {
+            return provider switch {
+                LLMProvider.OpenAI => _serviceProvider.GetRequiredService<OpenAIService>(),
+                LLMProvider.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
+                LLMProvider.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
+                LLMProvider.MiniMax => _serviceProvider.GetRequiredService<OpenAIService>(),
+                LLMProvider.LMStudio => _serviceProvider.GetRequiredService<OpenAIService>(),
+                LLMProvider.Anthropic => _serviceProvider.GetRequiredService<AnthropicService>(),
+                LLMProvider.ResponsesAPI => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
+                _ => throw new KeyNotFoundException($"No LLM service registered for provider {provider}.")
+            };
+        }
 
     }
 }

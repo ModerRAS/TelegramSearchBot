@@ -49,10 +49,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private readonly ILogger<OpenAIResponsesService> _logger;
-        private static string _botName;
+        private readonly IBotIdentityProvider _botIdentityProvider;
+        private string _fallbackBotName = string.Empty;
         public string BotName {
-            get => _botName;
-            set => _botName = value;
+            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            set {
+                if (_botIdentityProvider != null) {
+                    _botIdentityProvider.SetIdentity(Env.BotId, value);
+                } else {
+                    _fallbackBotName = value ?? string.Empty;
+                }
+            }
         }
         private readonly DataDbContext _dbContext;
         private readonly IHttpClientFactory _httpClientFactory;
@@ -62,12 +69,31 @@ namespace TelegramSearchBot.Service.AI.LLM {
             DataDbContext context,
             ILogger<OpenAIResponsesService> logger,
             IMessageExtensionService messageExtensionService,
-            IHttpClientFactory httpClientFactory) {
+            IHttpClientFactory httpClientFactory)
+            : this(context, logger, messageExtensionService, httpClientFactory, null) {
+        }
+
+        public OpenAIResponsesService(
+            DataDbContext context,
+            ILogger<OpenAIResponsesService> logger,
+            IMessageExtensionService messageExtensionService,
+            IHttpClientFactory httpClientFactory,
+            IBotIdentityProvider botIdentityProvider) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
+            _botIdentityProvider = botIdentityProvider;
             _logger.LogInformation("OpenAIResponsesService instance created.");
+        }
+
+        private async Task<string> GetBotNameAsync() {
+            if (_botIdentityProvider == null) {
+                return _fallbackBotName;
+            }
+
+            var identity = await _botIdentityProvider.GetIdentityAsync();
+            return identity.UserName ?? string.Empty;
         }
 
         // ========================================================================
@@ -114,7 +140,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
 
             // --- Build system instructions ---
-            string instructions = McpToolHelper.FormatSystemPromptForNativeToolCalling(BotName, ChatId);
+            var botName = await GetBotNameAsync();
+            string instructions = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, ChatId);
 
             // --- Get native tool definitions and convert to ResponseTool format ---
             var nativeToolDefs = McpToolHelper.GetNativeToolDefinitions();
@@ -320,7 +347,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var inputItems = DeserializeResponseItemsFromSnapshot(snapshot.ProviderHistory);
 
             // Restore instructions
-            string instructions = McpToolHelper.FormatSystemPromptForNativeToolCalling(BotName, snapshot.ChatId);
+            var botName = await GetBotNameAsync();
+            string instructions = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, snapshot.ChatId);
 
             // Get tools
             var nativeToolDefs = McpToolHelper.GetNativeToolDefinitions();

@@ -32,11 +32,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly IMessageExtensionService _messageExtensionService;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IBotIdentityProvider _botIdentityProvider;
+        private string _fallbackBotName = string.Empty;
 
-        public static string _botName;
         public string BotName {
-            get => _botName;
-            set => _botName = value;
+            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            set {
+                if (_botIdentityProvider != null) {
+                    _botIdentityProvider.SetIdentity(Env.BotId, value);
+                } else {
+                    _fallbackBotName = value ?? string.Empty;
+                }
+            }
         }
 
         private static readonly string[] _anthropicModels = {
@@ -53,12 +60,31 @@ namespace TelegramSearchBot.Service.AI.LLM {
             DataDbContext context,
             ILogger<AnthropicService> logger,
             IMessageExtensionService messageExtensionService,
-            IHttpClientFactory httpClientFactory) {
+            IHttpClientFactory httpClientFactory)
+            : this(context, logger, messageExtensionService, httpClientFactory, null) {
+        }
+
+        public AnthropicService(
+            DataDbContext context,
+            ILogger<AnthropicService> logger,
+            IMessageExtensionService messageExtensionService,
+            IHttpClientFactory httpClientFactory,
+            IBotIdentityProvider botIdentityProvider) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
+            _botIdentityProvider = botIdentityProvider;
             _logger.LogInformation("AnthropicService instance created. McpToolHelper should be initialized at application startup.");
+        }
+
+        private async Task<string> GetBotNameAsync() {
+            if (_botIdentityProvider == null) {
+                return _fallbackBotName;
+            }
+
+            var identity = await _botIdentityProvider.GetIdentityAsync();
+            return identity.UserName ?? string.Empty;
         }
 
         private AnthropicClient CreateClient(LLMChannel channel) {
@@ -496,7 +522,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             List<OpenAI.Chat.ChatTool> nativeTools,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
 
-            string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(BotName, ChatId);
+            var botName = await GetBotNameAsync();
+            string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, ChatId);
             bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
             var (_, providerHistory) = await GetChatHistory(ChatId, systemPrompt, message, supportsVision);
 
@@ -663,7 +690,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
 
-            string systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId);
+            var botName = await GetBotNameAsync();
+            string systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
             bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
             var (_, providerHistory) = await GetChatHistory(ChatId, systemPrompt, message, supportsVision);
 

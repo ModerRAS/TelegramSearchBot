@@ -34,19 +34,49 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpClientFactory _httpClientFactory;
-        public string BotName { get; set; }
+        private readonly IBotIdentityProvider _botIdentityProvider;
+        private string _fallbackBotName = string.Empty;
+        public string BotName {
+            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            set {
+                if (_botIdentityProvider != null) {
+                    _botIdentityProvider.SetIdentity(Env.BotId, value);
+                } else {
+                    _fallbackBotName = value ?? string.Empty;
+                }
+            }
+        }
+
+        public OllamaService(
+            DataDbContext context,
+            ILogger<OllamaService> logger,
+            IServiceProvider serviceProvider,
+            IHttpClientFactory httpClientFactory)
+            : this(context, logger, serviceProvider, httpClientFactory, null) {
+        }
 
         // Constructor requires dependencies needed directly by this class
         public OllamaService(
             DataDbContext context,
             ILogger<OllamaService> logger,
             IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory) {
+            IHttpClientFactory httpClientFactory,
+            IBotIdentityProvider botIdentityProvider) {
             _logger = logger;
             _dbContext = context;
             _serviceProvider = serviceProvider;
             _httpClientFactory = httpClientFactory;
+            _botIdentityProvider = botIdentityProvider;
             _logger.LogInformation("OllamaService instance created. McpToolHelper should be initialized at application startup.");
+        }
+
+        private async Task<string> GetBotNameAsync() {
+            if (_botIdentityProvider == null) {
+                return _fallbackBotName;
+            }
+
+            var identity = await _botIdentityProvider.GetIdentityAsync();
+            return identity.UserName ?? string.Empty;
         }
 
         // --- Helper methods specific to this service ---
@@ -122,7 +152,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // --- History and Prompt Setup ---
             // NOTE: History context is limited as OllamaSharp.Chat manages it.
-            var systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId);
+            var botName = await GetBotNameAsync();
+            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
 
             var chat = new OllamaSharp.Chat(ollama, systemPrompt);
 

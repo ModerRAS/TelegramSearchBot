@@ -29,16 +29,45 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly Dictionary<long, ChatSession> _chatSessions = new();
         private readonly IHttpClientFactory _httpClientFactory;
-        public string BotName { get; set; }
+        private readonly IBotIdentityProvider _botIdentityProvider;
+        private string _fallbackBotName = string.Empty;
+        public string BotName {
+            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            set {
+                if (_botIdentityProvider != null) {
+                    _botIdentityProvider.SetIdentity(Env.BotId, value);
+                } else {
+                    _fallbackBotName = value ?? string.Empty;
+                }
+            }
+        }
 
         public GeminiService(
             DataDbContext context,
             ILogger<GeminiService> logger,
-            IHttpClientFactory httpClientFactory) {
+            IHttpClientFactory httpClientFactory)
+            : this(context, logger, httpClientFactory, null) {
+        }
+
+        public GeminiService(
+            DataDbContext context,
+            ILogger<GeminiService> logger,
+            IHttpClientFactory httpClientFactory,
+            IBotIdentityProvider botIdentityProvider) {
             _logger = logger;
             _dbContext = context;
             _httpClientFactory = httpClientFactory;
+            _botIdentityProvider = botIdentityProvider;
             _logger.LogInformation("GeminiService instance created");
+        }
+
+        private async Task<string> GetBotNameAsync() {
+            if (_botIdentityProvider == null) {
+                return _fallbackBotName;
+            }
+
+            var identity = await _botIdentityProvider.GetIdentityAsync();
+            return identity.UserName ?? string.Empty;
         }
 
         private void AddMessageToHistory(List<GenerativeAI.Types.Content> chatHistory, long fromUserId, string content) {
@@ -369,7 +398,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var currentMessageBuilder = new StringBuilder();
             // Track history for snapshot
             var trackedHistory = new List<SerializedChatMessage>();
-            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = McpToolHelper.FormatSystemPrompt(null, ChatId) });
+            var botName = await GetBotNameAsync();
+            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = McpToolHelper.FormatSystemPrompt(botName, ChatId) });
 
             for (int cycle = 0; cycle < maxToolCycles; cycle++) {
                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
