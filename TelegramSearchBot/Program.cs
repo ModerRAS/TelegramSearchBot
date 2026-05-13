@@ -21,12 +21,13 @@ namespace TelegramSearchBot {
                 .CreateLogger();
 
             Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information() // 设置最低日志级别
+            .MinimumLevel.Verbose() // 打开完整日志，便于追踪 LLM/Agent 级异常
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Debug) // SQL 语句只在 Debug 级别输出
             .WriteTo.Console(
-                restrictedToMinimumLevel: LogEventLevel.Information,
+                restrictedToMinimumLevel: LogEventLevel.Verbose,
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
+              restrictedToMinimumLevel: LogEventLevel.Verbose,
               rollingInterval: RollingInterval.Day,
               outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.OpenTelemetry(options => {

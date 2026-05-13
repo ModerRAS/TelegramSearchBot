@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -12,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Tools;
@@ -34,6 +36,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private static string _sCachedProxyToolsXml;
         private static bool _sIsInitialized = false;
         private static readonly object _initializationLock = new object();
+        private const int MaxToolLogValueLength = 2048;
+        private const int MaxToolLogPayloadLength = 8192;
 
         /// <summary>
         /// Information about an external tool from an MCP server.
@@ -699,95 +703,270 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// Use the scoped overload when executing tools that require scoped services (e.g., DbContext).
         /// </summary>
         public static async Task<object> ExecuteRegisteredToolAsync(string toolName, Dictionary<string, string> stringArguments, IServiceProvider scopedProvider, ToolContext toolContext = null) {
+            var elapsed = Stopwatch.StartNew();
+            var originalArguments = stringArguments ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var route = GetToolRoute(toolName);
+            _sLogger?.LogDebug(
+                "Tool execution requested. Tool={ToolName}, Route={Route}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, ArgumentKeys={ArgumentKeys}, ArgumentPreview={ArgumentPreview}",
+                toolName,
+                route,
+                toolContext?.ChatId,
+                toolContext?.UserId,
+                toolContext?.MessageId,
+                string.Join(",", originalArguments.Keys),
+                FormatArgumentsForLog(originalArguments));
+            _sLogger?.LogTrace(
+                "Tool execution full argument snapshot. Tool={ToolName}, Arguments={Arguments}",
+                toolName,
+                FormatArgumentsForLog(originalArguments, MaxToolLogPayloadLength));
+
             // Clean CDATA markers if present and trim values
-            var cleanedArguments = new Dictionary<string, string>();
-            foreach (var kvp in stringArguments) {
+            var cleanedArguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in originalArguments) {
                 var value = kvp.Value;
-                value = Regex.Replace(value, @"<!\[CDATA\[(.*?)\]\]>", "$1").Trim();
+                value = Regex.Replace(value ?? string.Empty, @"<!\[CDATA\[(.*?)\]\]>", "$1").Trim();
                 cleanedArguments[kvp.Key] = value;
             }
             stringArguments = cleanedArguments;
 
-            // Check if this is a proxy tool (routed to remote process via IPC)
-            if (ProxyToolRegistry.ContainsKey(toolName) && _proxyToolExecutor != null) {
-                var proxyArguments = new Dictionary<string, string>(stringArguments, StringComparer.OrdinalIgnoreCase);
-                if (toolContext != null) {
-                    proxyArguments["__chatId"] = toolContext.ChatId.ToString(CultureInfo.InvariantCulture);
-                    proxyArguments["__userId"] = toolContext.UserId.ToString(CultureInfo.InvariantCulture);
-                    proxyArguments["__messageId"] = toolContext.MessageId.ToString(CultureInfo.InvariantCulture);
-                }
-
-                var proxyResult = await _proxyToolExecutor(toolName, proxyArguments);
-                return proxyResult;
-            }
-
-            // Check if this is an external MCP tool
-            if (ExternalToolRegistry.TryGetValue(toolName, out var externalTool)) {
-                return await ExecuteExternalToolAsync(toolName, externalTool, stringArguments);
-            }
-
-            if (!ToolRegistry.TryGetValue(toolName, out var toolInfo)) {
-                throw new ArgumentException($"Tool '{toolName}' not registered.");
-            }
-
-            var method = toolInfo.Method;
-            var owningType = toolInfo.OwningType;
-            var methodParams = method.GetParameters();
-            var convertedArgs = new object[methodParams.Length];
-
-            for (int i = 0; i < methodParams.Length; i++) {
-                var paramInfo = methodParams[i];
-                if (paramInfo.ParameterType == typeof(ToolContext)) {
-                    convertedArgs[i] = toolContext;
-                    continue;
-                }
-
-                if (stringArguments.TryGetValue(paramInfo.Name, out var stringValue)) {
-                    convertedArgs[i] = ConvertArgumentValue(stringValue, paramInfo.ParameterType, paramInfo.Name);
-                } else if (paramInfo.HasDefaultValue) {
-                    convertedArgs[i] = paramInfo.DefaultValue;
-                } else if (paramInfo.IsOptional) {
-                    convertedArgs[i] = Type.Missing;
-                } else {
-                    // Check both attribute types
-                    var builtInParamAttr = paramInfo.GetCustomAttribute<BuiltInParameterAttribute>();
-                    var mcpParamAttr = paramInfo.GetCustomAttribute<McpParameterAttribute>();
-                    bool isActuallyRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !paramInfo.IsOptional && !paramInfo.HasDefaultValue && !( paramInfo.ParameterType.IsValueType && Nullable.GetUnderlyingType(paramInfo.ParameterType) == null ) );
-                    if (isActuallyRequired)
-                        throw new ArgumentException($"Missing required parameter '{paramInfo.Name}' for tool '{toolName}'.");
-                    else
-                        convertedArgs[i] = null;
-                }
-            }
-
-            // Use scoped provider if available, fallback to root provider
-            var provider = scopedProvider ?? _sServiceProvider;
-            object instance = null;
-            if (!method.IsStatic) {
-                if (provider != null) {
-                    instance = provider.GetService(owningType);
-                    if (instance == null) {
-                        if (owningType.GetConstructor(Type.EmptyTypes) != null)
-                            instance = Activator.CreateInstance(owningType);
+            try {
+                // Check if this is a proxy tool (routed to remote process via IPC)
+                if (ProxyToolRegistry.ContainsKey(toolName) && _proxyToolExecutor != null) {
+                    var proxyArguments = new Dictionary<string, string>(stringArguments, StringComparer.OrdinalIgnoreCase);
+                    if (toolContext != null) {
+                        proxyArguments["__chatId"] = toolContext.ChatId.ToString(CultureInfo.InvariantCulture);
+                        proxyArguments["__userId"] = toolContext.UserId.ToString(CultureInfo.InvariantCulture);
+                        proxyArguments["__messageId"] = toolContext.MessageId.ToString(CultureInfo.InvariantCulture);
                     }
-                } else if (owningType.GetConstructor(Type.EmptyTypes) != null) {
-                    instance = Activator.CreateInstance(owningType);
+
+                    _sLogger?.LogInformation(
+                        "Executing proxy tool via agent IPC. Tool={ToolName}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Arguments={Arguments}",
+                        toolName,
+                        toolContext?.ChatId,
+                        toolContext?.UserId,
+                        toolContext?.MessageId,
+                        FormatArgumentsForLog(stringArguments));
+                    var proxyResult = await _proxyToolExecutor(toolName, proxyArguments);
+                    _sLogger?.LogInformation(
+                        "Proxy tool completed. Tool={ToolName}, ElapsedMs={ElapsedMs}, ResultLength={ResultLength}, ResultPreview={ResultPreview}",
+                        toolName,
+                        elapsed.ElapsedMilliseconds,
+                        proxyResult?.Length ?? 0,
+                        TruncateForLog(proxyResult));
+                    return proxyResult;
                 }
 
-                if (instance == null)
-                    throw new InvalidOperationException($"Could not create an instance of type '{owningType.FullName}' to execute non-static tool '{toolName}'. Ensure McpToolHelper.EnsureInitialized was called with a valid IServiceProvider and the type is registered in DI or has a parameterless constructor.");
-            }
-
-            var result = method.Invoke(instance, convertedArgs);
-
-            if (result is Task taskResult) {
-                await taskResult;
-                if (taskResult.GetType().IsGenericType) {
-                    return ( ( dynamic ) taskResult ).Result;
+                // Check if this is an external MCP tool
+                if (ExternalToolRegistry.TryGetValue(toolName, out var externalTool)) {
+                    var externalResult = await ExecuteExternalToolAsync(toolName, externalTool, stringArguments);
+                    _sLogger?.LogInformation(
+                        "External MCP tool completed. Tool={ToolName}, Server={ServerName}, ElapsedMs={ElapsedMs}, ResultType={ResultType}, ResultPreview={ResultPreview}",
+                        toolName,
+                        externalTool.ServerName,
+                        elapsed.ElapsedMilliseconds,
+                        externalResult?.GetType().FullName ?? "null",
+                        TruncateForLog(ConvertToolResultToString(externalResult)));
+                    return externalResult;
                 }
-                return null;
+
+                if (!ToolRegistry.TryGetValue(toolName, out var toolInfo)) {
+                    _sLogger?.LogError(
+                        "Tool is not registered. Tool={ToolName}, Route={Route}, BuiltInCount={BuiltInCount}, ExternalCount={ExternalCount}, ProxyCount={ProxyCount}, AvailableTools={AvailableTools}, Arguments={Arguments}",
+                        toolName,
+                        route,
+                        ToolRegistry.Count,
+                        ExternalToolRegistry.Count,
+                        ProxyToolRegistry.Count,
+                        GetAvailableToolNamesForLog(),
+                        FormatArgumentsForLog(stringArguments));
+                    throw new ArgumentException($"Tool '{toolName}' not registered.");
+                }
+
+                var method = toolInfo.Method;
+                var owningType = toolInfo.OwningType;
+                var methodParams = method.GetParameters();
+                var convertedArgs = new object[methodParams.Length];
+
+                _sLogger?.LogDebug(
+                    "Resolving local tool method. Tool={ToolName}, Type={TypeName}, Method={MethodName}, IsStatic={IsStatic}, Parameters={Parameters}, ScopedProvider={ScopedProviderType}, RootProvider={RootProviderType}",
+                    toolName,
+                    owningType.FullName,
+                    method.Name,
+                    method.IsStatic,
+                    string.Join(",", methodParams.Select(p => $"{p.Name}:{p.ParameterType.Name}")),
+                    scopedProvider?.GetType().FullName ?? "null",
+                    _sServiceProvider?.GetType().FullName ?? "null");
+
+                for (int i = 0; i < methodParams.Length; i++) {
+                    var paramInfo = methodParams[i];
+                    if (paramInfo.ParameterType == typeof(ToolContext)) {
+                        convertedArgs[i] = toolContext;
+                        _sLogger?.LogTrace("Injected ToolContext for tool parameter. Tool={ToolName}, Parameter={ParameterName}", toolName, paramInfo.Name);
+                        continue;
+                    }
+
+                    if (paramInfo.Name != null && stringArguments.TryGetValue(paramInfo.Name, out var stringValue)) {
+                        convertedArgs[i] = ConvertArgumentValue(stringValue, paramInfo.ParameterType, paramInfo.Name);
+                        _sLogger?.LogTrace(
+                            "Converted tool argument. Tool={ToolName}, Parameter={ParameterName}, TargetType={TargetType}, ValuePreview={ValuePreview}",
+                            toolName,
+                            paramInfo.Name,
+                            paramInfo.ParameterType.FullName,
+                            TruncateForLog(stringValue));
+                    } else if (paramInfo.HasDefaultValue) {
+                        convertedArgs[i] = paramInfo.DefaultValue;
+                        _sLogger?.LogDebug("Using default value for missing tool parameter. Tool={ToolName}, Parameter={ParameterName}", toolName, paramInfo.Name);
+                    } else if (paramInfo.IsOptional) {
+                        convertedArgs[i] = Type.Missing;
+                        _sLogger?.LogDebug("Using Type.Missing for optional tool parameter. Tool={ToolName}, Parameter={ParameterName}", toolName, paramInfo.Name);
+                    } else {
+                        // Check both attribute types
+                        var builtInParamAttr = paramInfo.GetCustomAttribute<BuiltInParameterAttribute>();
+                        var mcpParamAttr = paramInfo.GetCustomAttribute<McpParameterAttribute>();
+                        bool isActuallyRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !paramInfo.IsOptional && !paramInfo.HasDefaultValue && !( paramInfo.ParameterType.IsValueType && Nullable.GetUnderlyingType(paramInfo.ParameterType) == null ) );
+                        if (isActuallyRequired) {
+                            _sLogger?.LogError(
+                                "Missing required tool parameter. Tool={ToolName}, Parameter={ParameterName}, AvailableArgumentKeys={ArgumentKeys}, Arguments={Arguments}",
+                                toolName,
+                                paramInfo.Name,
+                                string.Join(",", stringArguments.Keys),
+                                FormatArgumentsForLog(stringArguments));
+                            throw new ArgumentException($"Missing required parameter '{paramInfo.Name}' for tool '{toolName}'.");
+                        } else {
+                            convertedArgs[i] = null;
+                        }
+                    }
+                }
+
+                // Use scoped provider if available, fallback to root provider
+                var provider = scopedProvider ?? _sServiceProvider;
+                object instance = null;
+                if (!method.IsStatic) {
+                    if (provider != null) {
+                        instance = provider.GetService(owningType);
+                        if (instance == null) {
+                            _sLogger?.LogWarning(
+                                "DI did not resolve local tool type; trying parameterless constructor. Tool={ToolName}, Type={TypeName}, Provider={ProviderType}",
+                                toolName,
+                                owningType.FullName,
+                                provider.GetType().FullName);
+                            if (owningType.GetConstructor(Type.EmptyTypes) != null)
+                                instance = Activator.CreateInstance(owningType);
+                        }
+                    } else if (owningType.GetConstructor(Type.EmptyTypes) != null) {
+                        _sLogger?.LogWarning(
+                            "No IServiceProvider available; creating local tool type via parameterless constructor. Tool={ToolName}, Type={TypeName}",
+                            toolName,
+                            owningType.FullName);
+                        instance = Activator.CreateInstance(owningType);
+                    }
+
+                    if (instance == null)
+                        throw new InvalidOperationException($"Could not create an instance of type '{owningType.FullName}' to execute non-static tool '{toolName}'. Ensure McpToolHelper.EnsureInitialized was called with a valid IServiceProvider and the type is registered in DI or has a parameterless constructor.");
+                }
+
+                var result = method.Invoke(instance, convertedArgs);
+
+                object finalResult;
+                if (result is Task taskResult) {
+                    await taskResult;
+                    if (taskResult.GetType().IsGenericType) {
+                        finalResult = ( ( dynamic ) taskResult ).Result;
+                    } else {
+                        finalResult = null;
+                    }
+                } else {
+                    finalResult = result;
+                }
+
+                _sLogger?.LogInformation(
+                    "Local tool completed. Tool={ToolName}, Type={TypeName}, Method={MethodName}, ElapsedMs={ElapsedMs}, ResultType={ResultType}, ResultPreview={ResultPreview}",
+                    toolName,
+                    owningType.FullName,
+                    method.Name,
+                    elapsed.ElapsedMilliseconds,
+                    finalResult?.GetType().FullName ?? "null",
+                    TruncateForLog(ConvertToolResultToString(finalResult)));
+                return finalResult;
+            } catch (Exception ex) {
+                _sLogger?.LogError(
+                    ex,
+                    "Tool execution failed. Tool={ToolName}, Route={Route}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, ElapsedMs={ElapsedMs}, ErrorSummary={ErrorSummary}, Arguments={Arguments}, AvailableTools={AvailableTools}",
+                    toolName,
+                    route,
+                    toolContext?.ChatId,
+                    toolContext?.UserId,
+                    toolContext?.MessageId,
+                    elapsed.ElapsedMilliseconds,
+                    ex.GetLogSummary(),
+                    FormatArgumentsForLog(stringArguments),
+                    GetAvailableToolNamesForLog());
+                throw;
             }
-            return result;
+        }
+
+        private static string GetToolRoute(string toolName) {
+            if (string.IsNullOrWhiteSpace(toolName)) {
+                return "EmptyName";
+            }
+
+            if (ProxyToolRegistry.ContainsKey(toolName)) {
+                return _proxyToolExecutor == null ? "ProxyMissingExecutor" : "Proxy";
+            }
+
+            if (ExternalToolRegistry.ContainsKey(toolName)) {
+                return _externalToolExecutor == null ? "ExternalMcpMissingExecutor" : "ExternalMcp";
+            }
+
+            if (ToolRegistry.ContainsKey(toolName)) {
+                return "Local";
+            }
+
+            return "Unregistered";
+        }
+
+        private static string GetAvailableToolNamesForLog() {
+            var toolNames = ToolRegistry.Keys
+                .Concat(ExternalToolRegistry.Keys)
+                .Concat(ProxyToolRegistry.Keys)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .Take(80)
+                .ToList();
+            var suffix = ToolRegistry.Count + ExternalToolRegistry.Count + ProxyToolRegistry.Count > toolNames.Count
+                ? ",..."
+                : string.Empty;
+            return string.Join(",", toolNames) + suffix;
+        }
+
+        private static string FormatArgumentsForLog(IDictionary<string, string> arguments, int maxPayloadLength = MaxToolLogValueLength) {
+            if (arguments == null || arguments.Count == 0) {
+                return "{}";
+            }
+
+            try {
+                var sanitized = arguments.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => TruncateForLog(kvp.Value, MaxToolLogValueLength),
+                    StringComparer.OrdinalIgnoreCase);
+                return TruncateForLog(JsonConvert.SerializeObject(sanitized), maxPayloadLength);
+            } catch (Exception ex) {
+                _sLogger?.LogWarning(ex, "Failed to serialize tool arguments for logging.");
+                return $"<argument logging failed: {ex.GetLogSummary()}>";
+            }
+        }
+
+        private static string TruncateForLog(string value, int maxLength = MaxToolLogValueLength) {
+            if (value == null) {
+                return "null";
+            }
+
+            value = value.Replace("\r", "\\r").Replace("\n", "\\n");
+            if (value.Length <= maxLength) {
+                return value;
+            }
+
+            return value.Substring(0, maxLength) + $"...<truncated {value.Length - maxLength} chars>";
         }
 
         private static object ConvertArgumentValue(string stringValue, Type targetType, string paramNameForError) {
@@ -949,13 +1128,32 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 throw new InvalidOperationException("External tool executor is not configured.");
             }
 
-            _sLogger?.LogInformation("Executing external MCP tool: {ToolName} on server {ServerName}", qualifiedToolName, toolInfo.ServerName);
+            _sLogger?.LogInformation(
+                "Executing external MCP tool. QualifiedTool={QualifiedToolName}, Server={ServerName}, ServerTool={ServerToolName}, Arguments={Arguments}",
+                qualifiedToolName,
+                toolInfo.ServerName,
+                toolInfo.ToolName,
+                FormatArgumentsForLog(arguments));
 
             try {
                 var result = await _externalToolExecutor(toolInfo.ServerName, toolInfo.ToolName, arguments);
+                _sLogger?.LogInformation(
+                    "External MCP tool returned. QualifiedTool={QualifiedToolName}, Server={ServerName}, ServerTool={ServerToolName}, ResultLength={ResultLength}, ResultPreview={ResultPreview}",
+                    qualifiedToolName,
+                    toolInfo.ServerName,
+                    toolInfo.ToolName,
+                    result?.Length ?? 0,
+                    TruncateForLog(result));
                 return result;
             } catch (Exception ex) {
-                _sLogger?.LogError(ex, "Error executing external MCP tool: {ToolName}", qualifiedToolName);
+                _sLogger?.LogError(
+                    ex,
+                    "Error executing external MCP tool. QualifiedTool={QualifiedToolName}, Server={ServerName}, ServerTool={ServerToolName}, ErrorSummary={ErrorSummary}, Arguments={Arguments}",
+                    qualifiedToolName,
+                    toolInfo.ServerName,
+                    toolInfo.ToolName,
+                    ex.GetLogSummary(),
+                    FormatArgumentsForLog(arguments));
                 throw;
             }
         }
@@ -986,6 +1184,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 // Clear stale registrations if no tools available
                 ExternalToolRegistry.Clear();
                 _sCachedExternalToolsXml = string.Empty;
+                _sLogger?.LogInformation("No external MCP tools available; cleared external tool registry.");
                 return;
             }
 
@@ -1076,6 +1275,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var json = JsonConvert.SerializeObject(toolDefs);
             await redis.GetDatabase().StringSetAsync(
                 LlmAgentRedisKeys.AgentToolDefs, json, TimeSpan.FromHours(24));
+            _sLogger?.LogInformation(
+                "Exported agent tool definitions to Redis. Count={Count}, PayloadBytes={PayloadBytes}, ToolNames={ToolNames}",
+                toolDefs.Count,
+                Encoding.UTF8.GetByteCount(json),
+                string.Join(",", toolDefs.Select(t => t.Name).Take(80)));
         }
 
         /// <summary>
@@ -1091,10 +1295,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             var sb = new StringBuilder();
             int registered = 0;
+            int skippedLocal = 0;
 
             foreach (var tool in toolDefinitions) {
                 // Skip tools already registered locally
                 if (ToolRegistry.ContainsKey(tool.Name)) {
+                    skippedLocal++;
                     continue;
                 }
 
@@ -1121,8 +1327,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             _sCachedProxyToolsXml = sb.ToString();
-            _sLogger?.LogInformation("Registered {Count} proxy tools (skipped {Skipped} locally available)",
-                registered, toolDefinitions.Count - registered);
+            _sLogger?.LogInformation(
+                "Registered proxy tools for agent process. Registered={RegisteredCount}, Provided={ProvidedCount}, SkippedLocal={SkippedLocalCount}, ProxyRegistryCount={ProxyRegistryCount}, ToolNames={ToolNames}",
+                registered,
+                toolDefinitions.Count,
+                skippedLocal,
+                ProxyToolRegistry.Count,
+                string.Join(",", ProxyToolRegistry.Keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Take(80)));
         }
     }
 }

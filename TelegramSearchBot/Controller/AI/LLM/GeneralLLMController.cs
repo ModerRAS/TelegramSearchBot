@@ -184,6 +184,11 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 if (agentTaskHandle != null) {
                     var terminalChunk = await agentTaskHandle.Completion;
                     if (terminalChunk.Type == AgentChunkType.Error) {
+                        logger.LogError(
+                            "AI Agent 执行失败，ChatId {ChatId}, MessageId {MessageId}, ErrorMessage: {ErrorMessage}",
+                            telegramMessage.Chat.Id,
+                            telegramMessage.MessageId,
+                            terminalChunk.ErrorMessage);
                         await SendMessageService.SendMessage($"AI Agent 执行失败：{terminalChunk.ErrorMessage}", telegramMessage.Chat.Id, telegramMessage.MessageId);
                     } else if (terminalChunk.Type == AgentChunkType.IterationLimitReached && terminalChunk.ContinuationSnapshot != null) {
                         var snapshotId = await ContinuationService.SaveSnapshotAsync(terminalChunk.ContinuationSnapshot);

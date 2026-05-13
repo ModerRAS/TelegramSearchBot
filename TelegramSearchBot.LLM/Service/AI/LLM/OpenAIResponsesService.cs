@@ -253,20 +253,44 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                     var toolIndicators = new StringBuilder();
                     foreach (var funcCall in completedFuncCalls) {
-                        string callId = funcCall.CallId;
-                        string name = funcCall.FunctionName;
-                        string argsJson = funcCall.FunctionArguments?.ToString() ?? "{}";
+                        string rawCallId = funcCall.CallId;
+                        string rawName = funcCall.FunctionName;
+                        string rawArgsJson = funcCall.FunctionArguments?.ToString() ?? "{}";
+                        string callId = rawCallId;
+                        string name = rawName;
+                        string argsJson = rawArgsJson;
 
                         // Normalize
                         callId = OpenAIService.NormalizeToolCallId(callId);
                         name = OpenAIService.NormalizeToolCallName(name);
                         argsJson = OpenAIService.NormalizeToolCallArguments(argsJson);
+                        _logger.LogDebug(
+                            "{ServiceName}: Responses API function call metadata normalized. RawCallId={RawCallId}, CallId={CallId}, RawName={RawName}, Name={Name}, RawArguments={RawArguments}, Arguments={Arguments}",
+                            ServiceName,
+                            rawCallId,
+                            callId,
+                            rawName,
+                            name,
+                            rawArgsJson,
+                            argsJson);
 
                         // Add function call item to history
-                        inputItems.Add(ResponseItem.CreateFunctionCallItem(
-                            callId,
-                            name,
-                            BinaryData.FromString(argsJson)));
+                        try {
+                            inputItems.Add(ResponseItem.CreateFunctionCallItem(
+                                callId,
+                                name,
+                                BinaryData.FromString(argsJson)));
+                        } catch (Exception ex) {
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Failed to create Responses API function call item. CallId={CallId}, ToolName={ToolName}, Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                callId,
+                                name,
+                                argsJson,
+                                ex.GetLogSummary());
+                            throw;
+                        }
 
                         // Format tool call display
                         var argsDict = OpenAIService.DeserializeToolArgumentsForDisplay(argsJson);
@@ -288,8 +312,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result length: {Length}",
                                 ServiceName, name, toolResultString.Length);
                         } catch (Exception ex) {
-                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, name);
-                            toolResultString = $"Error executing tool {name}: {ex.Message}";
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Error executing Responses API tool {ToolName}. CallId={CallId}, Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                name,
+                                callId,
+                                argsJson,
+                                ex.GetLogSummary());
+                            toolResultString = $"Error executing tool {name}: {ex.GetLogSummary()}";
                         }
 
                         // Add function call output to history
@@ -443,13 +474,38 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         }
 
                         foreach (var funcCall in completedFuncCalls) {
-                            string callId = OpenAIService.NormalizeToolCallId(funcCall.CallId);
-                            string name = OpenAIService.NormalizeToolCallName(funcCall.FunctionName);
-                            string argsJson = OpenAIService.NormalizeToolCallArguments(funcCall.FunctionArguments?.ToString() ?? "{}");
+                            string rawCallId = funcCall.CallId;
+                            string rawName = funcCall.FunctionName;
+                            string rawArgsJson = funcCall.FunctionArguments?.ToString() ?? "{}";
+                            string callId = OpenAIService.NormalizeToolCallId(rawCallId);
+                            string name = OpenAIService.NormalizeToolCallName(rawName);
+                            string argsJson = OpenAIService.NormalizeToolCallArguments(rawArgsJson);
+                            _logger.LogDebug(
+                                "{ServiceName}: Responses API resume function call metadata normalized. RawCallId={RawCallId}, CallId={CallId}, RawName={RawName}, Name={Name}, RawArguments={RawArguments}, Arguments={Arguments}",
+                                ServiceName,
+                                rawCallId,
+                                callId,
+                                rawName,
+                                name,
+                                rawArgsJson,
+                                argsJson);
 
-                            inputItems.Add(ResponseItem.CreateFunctionCallItem(
-                                callId, name,
-                                BinaryData.FromString(argsJson)));
+                            try {
+                                inputItems.Add(ResponseItem.CreateFunctionCallItem(
+                                    callId, name,
+                                    BinaryData.FromString(argsJson)));
+                            } catch (Exception ex) {
+                                _logger.LogError(
+                                    ex,
+                                    "{ServiceName}: Failed to create Responses API function call item during resume. CallId={CallId}, ToolName={ToolName}, Arguments={Arguments}, SnapshotId={SnapshotId}, ErrorSummary={ErrorSummary}",
+                                    ServiceName,
+                                    callId,
+                                    name,
+                                    argsJson,
+                                    snapshot.SnapshotId,
+                                    ex.GetLogSummary());
+                                throw;
+                            }
 
                             var argsDict = OpenAIService.DeserializeToolArgumentsForDisplay(argsJson);
                             var toolIndicator = McpToolHelper.FormatToolCallDisplay(name, argsDict);
@@ -467,8 +523,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                 object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(name, argsDict, toolContext);
                                 toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
                             } catch (Exception ex) {
-                                _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName} (resume).", ServiceName, name);
-                                toolResultString = $"Error executing tool {name}: {ex.Message}.";
+                                _logger.LogError(
+                                    ex,
+                                    "{ServiceName}: Error executing Responses API tool {ToolName} (resume). CallId={CallId}, Arguments={Arguments}, SnapshotId={SnapshotId}, ErrorSummary={ErrorSummary}",
+                                    ServiceName,
+                                    name,
+                                    callId,
+                                    argsJson,
+                                    snapshot.SnapshotId,
+                                    ex.GetLogSummary());
+                                toolResultString = $"Error executing tool {name}: {ex.GetLogSummary()}.";
                             }
 
                             inputItems.Add(ResponseItem.CreateFunctionCallOutputItem(callId, toolResultString));
@@ -1133,18 +1197,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 // Check for function call markers first
                 if (msg.Role == "__func_call__" || content.StartsWith(FuncCallMarker)) {
                     // Format: __FUNC_CALL__||callId||name||argsJson
-                    var parts = content.Substring(FuncCallMarker.Length).Split(new[] { "||" }, 3, StringSplitOptions.None);
-                    string callId = parts.Length > 0 ? parts[0] : "";
-                    string name = parts.Length > 1 ? parts[1] : "unknown";
-                    string argsJson = parts.Length > 2 ? parts[2] : "{}";
+                    var payload = content.StartsWith(FuncCallMarker)
+                        ? content.Substring(FuncCallMarker.Length)
+                        : content;
+                    var parts = payload.Split(new[] { "||" }, 3, StringSplitOptions.None);
+                    string callId = OpenAIService.NormalizeToolCallId(parts.Length > 0 ? parts[0] : "");
+                    string name = OpenAIService.NormalizeToolCallName(parts.Length > 1 ? parts[1] : "unknown");
+                    string argsJson = OpenAIService.NormalizeToolCallArguments(parts.Length > 2 ? parts[2] : "{}");
                     result.Add(ResponseItem.CreateFunctionCallItem(
                         callId,
                         name,
                         BinaryData.FromString(argsJson)));
                 } else if (msg.Role == "__func_output__" || content.StartsWith(FuncOutputMarker)) {
                     // Format: __FUNC_OUTPUT__||callId||output
-                    var parts = content.Substring(FuncOutputMarker.Length).Split(new[] { "||" }, 2, StringSplitOptions.None);
-                    string callId = parts.Length > 0 ? parts[0] : "";
+                    var payload = content.StartsWith(FuncOutputMarker)
+                        ? content.Substring(FuncOutputMarker.Length)
+                        : content;
+                    var parts = payload.Split(new[] { "||" }, 2, StringSplitOptions.None);
+                    string callId = OpenAIService.NormalizeToolCallId(parts.Length > 0 ? parts[0] : "");
                     string output = parts.Length > 1 ? parts[1] : "";
                     result.Add(ResponseItem.CreateFunctionCallOutputItem(callId, output));
                 } else {
