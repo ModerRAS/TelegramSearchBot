@@ -45,6 +45,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         public AgentTaskStreamHandle TrackTask(string taskId) {
             var tracked = _trackedTasks.GetOrAdd(taskId, _ => new TrackedTask());
+            _logger.LogDebug("ChunkPollingService: tracking task {TaskId}. TrackedTaskCount={TrackedTaskCount}", taskId, _trackedTasks.Count);
             return tracked.Handle;
         }
 
@@ -100,7 +101,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
             // Check for terminal chunk first (Done/Error/IterationLimitReached)
             var terminalJson = await db.StringGetAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
             if (terminalJson.HasValue) {
-                var terminal = JsonConvert.DeserializeObject<AgentStreamChunk>(terminalJson.ToString());
+                var terminalPayload = terminalJson.ToString();
+                _logger.LogInformation(
+                    "ChunkPollingService: terminal chunk found. TaskId={TaskId}, PayloadLength={PayloadLength}",
+                    taskId,
+                    terminalPayload.Length);
+                var terminal = JsonConvert.DeserializeObject<AgentStreamChunk>(terminalPayload);
                 if (terminal != null) {
                     // Before completing, read the final snapshot from Redis and deliver it
                     // so the consumer (SendDraftStream/SendFullMessageStream) sees the last content.
@@ -117,11 +123,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     tracked.Completion.TrySetResult(terminal);
                     tracked.Channel.Writer.TryComplete();
                     _trackedTasks.TryRemove(taskId, out _);
+                    _logger.LogInformation(
+                        "ChunkPollingService: task completed from terminal chunk. TaskId={TaskId}, TerminalType={TerminalType}, Error={Error}",
+                        taskId,
+                        terminal.Type,
+                        terminal.ErrorMessage);
                     // Cleanup keys (use TTL as safety net, no race condition)
                     _ = db.KeyDeleteAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
                     _ = db.KeyDeleteAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
                     return;
                 }
+
+                _logger.LogWarning("ChunkPollingService: terminal chunk payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(terminalPayload));
             }
 
             // Check for snapshot updates
@@ -142,6 +155,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (chunk != null && chunk.Content != tracked.LastContent) {
                 tracked.LastContent = chunk.Content;
                 await tracked.Channel.Writer.WriteAsync(chunk, cancellationToken);
+                _logger.LogDebug(
+                    "ChunkPollingService: delivered snapshot. TaskId={TaskId}, Sequence={Sequence}, ContentLength={ContentLength}",
+                    taskId,
+                    chunk.Sequence,
+                    chunk.Content?.Length ?? 0);
+            } else if (chunk == null) {
+                _logger.LogWarning("ChunkPollingService: snapshot payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(snapshotStr));
             }
         }
 
@@ -153,12 +173,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             var statusEntry = entries.FirstOrDefault(x => x.Name == "status").Value.ToString();
+            if (string.IsNullOrWhiteSpace(statusEntry)) {
+                _logger.LogWarning("ChunkPollingService: task state missing status. TaskId={TaskId}, FieldCount={FieldCount}", taskId, entries.Length);
+                return;
+            }
+
             if (!Enum.TryParse<AgentTaskStatus>(statusEntry, ignoreCase: true, out var status)) {
+                _logger.LogWarning("ChunkPollingService: task state has unknown status. TaskId={TaskId}, Status={Status}", taskId, statusEntry);
                 return;
             }
 
             if (status == AgentTaskStatus.Failed || status == AgentTaskStatus.Cancelled) {
                 var error = entries.FirstOrDefault(x => x.Name == "error").Value.ToString();
+                _logger.LogWarning(
+                    "ChunkPollingService: completing task from failed task state. TaskId={TaskId}, Status={Status}, Error={Error}",
+                    taskId,
+                    status,
+                    error);
                 await CompleteTrackedTaskAsync(taskId, tracked, new AgentStreamChunk {
                     TaskId = taskId,
                     Type = AgentChunkType.Error,
@@ -182,6 +213,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             Content = lastContent
                         }, cancellationToken);
                         tracked.LastContent = lastContent;
+                        _logger.LogInformation(
+                            "ChunkPollingService: delivered lastContent from completed task state. TaskId={TaskId}, ContentLength={ContentLength}",
+                            taskId,
+                            lastContent.Length);
                     }
                 }
 
@@ -209,14 +244,30 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 var snapshotJson = await db.StringGetAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
                 if (!snapshotJson.HasValue) return;
 
-                var snapshot = JsonConvert.DeserializeObject<AgentStreamChunk>(snapshotJson.ToString());
+                var snapshotPayload = snapshotJson.ToString();
+                var snapshot = JsonConvert.DeserializeObject<AgentStreamChunk>(snapshotPayload);
                 if (snapshot != null && !string.IsNullOrEmpty(snapshot.Content) && snapshot.Content != tracked.LastContent) {
                     tracked.LastContent = snapshot.Content;
                     await tracked.Channel.Writer.WriteAsync(snapshot, cancellationToken);
+                    _logger.LogInformation(
+                        "ChunkPollingService: delivered final snapshot. TaskId={TaskId}, Sequence={Sequence}, ContentLength={ContentLength}",
+                        taskId,
+                        snapshot.Sequence,
+                        snapshot.Content.Length);
+                } else if (snapshot == null) {
+                    _logger.LogWarning("ChunkPollingService: final snapshot payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(snapshotPayload));
                 }
             } catch (Exception ex) {
                 _logger.LogWarning(ex, "ChunkPollingService: failed to deliver final snapshot for task {TaskId}", taskId);
             }
+        }
+
+        private static string TruncateForLog(string value, int maxLength = 512) {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxLength) {
+                return value ?? string.Empty;
+            }
+
+            return value.Substring(0, maxLength) + $"...<truncated {value.Length - maxLength} chars>";
         }
 
         private sealed class TrackedTask {

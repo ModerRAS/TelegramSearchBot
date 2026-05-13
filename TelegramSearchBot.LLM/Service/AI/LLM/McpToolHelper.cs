@@ -484,7 +484,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     // Check if there's a wrapper element containing tool elements
                     if (doc.Root.Elements().Any(e =>
                         e.Name.LocalName.Equals("tool", StringComparison.OrdinalIgnoreCase) ||
-                        ToolRegistry.ContainsKey(e.Name.LocalName))) {
+                        IsToolRegistered(e.Name.LocalName))) {
                         // Process each tool element inside the wrapper
                         foreach (var toolElement in doc.Root.Elements()) {
                             var toolCall = ParseToolElement(toolElement);
@@ -500,11 +500,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                 // Fallback to regex parsing for individual tool blocks
                 var toolBlockMatches = Regex.Matches(processedInput, @"<(tool\b[^>]*|[\w]+)(?:\s[^>]*)?>[\s\S]*?<\/\1>", RegexOptions.IgnoreCase);
-                _sLogger?.LogInformation($"TryParseToolCalls: Found {toolBlockMatches.Count} tool elements in input: {processedInput}");
-                _sLogger?.LogInformation($"TryParseToolCalls: Raw regex matches - Count: {toolBlockMatches.Count}");
-                _sLogger?.LogInformation($"TryParseToolCalls: Using regex pattern: {@"<(tool\b[^>]*|[\w]+)(?:\s[^>]*)?>[\s\S]*?<\/\1>"}");
+                _sLogger?.LogInformation(
+                    "TryParseToolCalls: Found {ToolBlockCount} potential tool elements. BuiltInCount={BuiltInCount}, ExternalCount={ExternalCount}, ProxyCount={ProxyCount}, AvailableTools={AvailableTools}, InputPreview={InputPreview}",
+                    toolBlockMatches.Count,
+                    ToolRegistry.Count,
+                    ExternalToolRegistry.Count,
+                    ProxyToolRegistry.Count,
+                    GetAvailableToolNamesForLog(),
+                    TruncateForLog(processedInput, MaxToolLogPayloadLength));
+                _sLogger?.LogDebug($"TryParseToolCalls: Raw regex matches - Count: {toolBlockMatches.Count}");
+                _sLogger?.LogTrace($"TryParseToolCalls: Using regex pattern: {@"<(tool\b[^>]*|[\w]+)(?:\s[^>]*)?>[\s\S]*?<\/\1>"}");
                 for (int i = 0; i < toolBlockMatches.Count; i++) {
-                    _sLogger?.LogInformation($"Match {i}: {toolBlockMatches[i].Value}");
+                    _sLogger?.LogTrace($"Match {i}: {toolBlockMatches[i].Value}");
                 }
 
                 _sLogger?.LogDebug($"TryParseToolCalls: Found {toolBlockMatches.Count} potential tool blocks using regex.");
@@ -549,27 +556,30 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         private static (string toolName, Dictionary<string, string> arguments) ParseToolElement(XElement element) {
             string toolName = null;
+            var requestedToolName = element.Name.LocalName;
             var arguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             // 确定工具名称 - 更灵活的匹配逻辑
             if (element.Name.LocalName.Equals("tool", StringComparison.OrdinalIgnoreCase)) {
-                toolName = element.Attribute("name")?.Value;
-                if (string.IsNullOrEmpty(toolName)) {
+                requestedToolName = element.Attribute("name")?.Value;
+                if (string.IsNullOrEmpty(requestedToolName)) {
                     _sLogger?.LogWarning("ParseToolElement: Tool element has no name attribute");
                     return (null, null);
                 }
+                toolName = ResolveRegisteredToolName(requestedToolName);
             } else {
-                // 尝试匹配注册的工具名称 (built-in and external)
-                toolName = ToolRegistry.Keys.FirstOrDefault(k =>
-                    k.Equals(element.Name.LocalName, StringComparison.OrdinalIgnoreCase));
-                if (toolName == null) {
-                    toolName = ExternalToolRegistry.Keys.FirstOrDefault(k =>
-                        k.Equals(element.Name.LocalName, StringComparison.OrdinalIgnoreCase));
-                }
+                // 尝试匹配注册的工具名称 (built-in, external, or proxy)
+                toolName = ResolveRegisteredToolName(requestedToolName);
             }
 
-            if (toolName == null || ( !ToolRegistry.ContainsKey(toolName) && !ExternalToolRegistry.ContainsKey(toolName) )) {
-                _sLogger?.LogWarning($"ParseToolElement: Unregistered tool '{element.Name.LocalName}'");
+            if (toolName == null) {
+                _sLogger?.LogWarning(
+                    "ParseToolElement: Unregistered tool '{ToolName}'. BuiltInCount={BuiltInCount}, ExternalCount={ExternalCount}, ProxyCount={ProxyCount}, AvailableTools={AvailableTools}",
+                    requestedToolName,
+                    ToolRegistry.Count,
+                    ExternalToolRegistry.Count,
+                    ProxyToolRegistry.Count,
+                    GetAvailableToolNamesForLog());
                 return (null, null);
             }
 
@@ -696,6 +706,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         public static async Task<object> ExecuteRegisteredToolAsync(string toolName, Dictionary<string, string> stringArguments, ToolContext toolContext = null) {
             return await ExecuteRegisteredToolAsync(toolName, stringArguments, null, toolContext);
+        }
+
+        private static string ResolveRegisteredToolName(string toolName) {
+            if (string.IsNullOrWhiteSpace(toolName)) {
+                return null;
+            }
+
+            return ToolRegistry.Keys.FirstOrDefault(k => k.Equals(toolName, StringComparison.OrdinalIgnoreCase))
+                   ?? ExternalToolRegistry.Keys.FirstOrDefault(k => k.Equals(toolName, StringComparison.OrdinalIgnoreCase))
+                   ?? ProxyToolRegistry.Keys.FirstOrDefault(k => k.Equals(toolName, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>
@@ -1171,7 +1191,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// Check if a tool name is registered (built-in, external, or proxy).
         /// </summary>
         public static bool IsToolRegistered(string toolName) {
-            return ToolRegistry.ContainsKey(toolName) || ExternalToolRegistry.ContainsKey(toolName) || ProxyToolRegistry.ContainsKey(toolName);
+            return ResolveRegisteredToolName(toolName) != null;
         }
 
         /// <summary>

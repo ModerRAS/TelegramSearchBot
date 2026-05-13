@@ -292,13 +292,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             throw;
                         }
 
-                        // Format tool call display
                         var argsDict = OpenAIService.DeserializeToolArgumentsForDisplay(argsJson);
                         toolIndicators.Append(McpToolHelper.FormatToolCallDisplay(name, argsDict));
 
                         // Execute tool
-                        _logger.LogInformation("{ServiceName}: Responses API tool call: {ToolName} with arguments: {Arguments}",
-                            ServiceName, name, argsJson);
+                        _logger.LogInformation(
+                            "{ServiceName}: Responses API tool call parsed; executing now. Tool={ToolName}, CallId={CallId}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Arguments={Arguments}",
+                            ServiceName,
+                            name,
+                            callId,
+                            ChatId,
+                            message.FromUserId,
+                            message.MessageId,
+                            argsJson);
 
                         string toolResultString;
                         try {
@@ -508,13 +514,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             }
 
                             var argsDict = OpenAIService.DeserializeToolArgumentsForDisplay(argsJson);
-                            var toolIndicator = McpToolHelper.FormatToolCallDisplay(name, argsDict);
-                            newContentBuilder.Append(toolIndicator);
-                            fullContentBuilder.Append(toolIndicator);
-                            yield return newContentBuilder.ToString();
 
                             string toolResultString;
                             try {
+                                _logger.LogInformation(
+                                    "{ServiceName}: Responses API tool call parsed during resume; executing now. Tool={ToolName}, CallId={CallId}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Arguments={Arguments}",
+                                    ServiceName,
+                                    name,
+                                    callId,
+                                    snapshot.ChatId,
+                                    snapshot.UserId,
+                                    snapshot.OriginalMessageId,
+                                    argsJson);
                                 var toolContext = new ToolContext {
                                     ChatId = snapshot.ChatId,
                                     UserId = snapshot.UserId,
@@ -534,6 +545,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                     ex.GetLogSummary());
                                 toolResultString = $"Error executing tool {name}: {ex.GetLogSummary()}.";
                             }
+
+                            var toolIndicator = McpToolHelper.FormatToolCallDisplay(name, argsDict);
+                            newContentBuilder.Append(toolIndicator);
+                            fullContentBuilder.Append(toolIndicator);
+                            yield return newContentBuilder.ToString();
 
                             inputItems.Add(ResponseItem.CreateFunctionCallOutputItem(callId, toolResultString));
                         }
