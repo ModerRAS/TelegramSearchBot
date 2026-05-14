@@ -648,8 +648,10 @@ public static partial class SelfUpdateBootstrap
     private static bool IsZipPackage(UpdateCatalogEntry updateEntry)
     {
         return string.Equals(updateEntry.PackageFormat, UpdatePackageFormats.Zip, StringComparison.OrdinalIgnoreCase)
-            || updateEntry.PackagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-            || (updateEntry.PackageUrl?.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ?? false);
+            || (!string.IsNullOrWhiteSpace(updateEntry.PackagePath)
+                && updateEntry.PackagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(updateEntry.PackageUrl)
+                && updateEntry.PackageUrl.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void ExtractZipPackageToDirectory(Stream packageStream, string targetDirectory)
@@ -876,6 +878,10 @@ public static partial class SelfUpdateBootstrap
 
     private static string GetPackageCacheFileName(UpdateCatalogEntry entry)
     {
+        if (string.IsNullOrWhiteSpace(entry.PackageUrl) && string.IsNullOrWhiteSpace(entry.PackagePath)) {
+            throw new ArgumentException("Catalog entry must have either PackageUrl or PackagePath.", nameof(entry));
+        }
+
         var pathOrUrl = string.IsNullOrWhiteSpace(entry.PackageUrl)
             ? entry.PackagePath
             : entry.PackageUrl;

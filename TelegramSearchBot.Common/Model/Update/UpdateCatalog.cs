@@ -11,5 +11,5 @@ public sealed class UpdateCatalog
     public string? FullPackageUrl { get; init; }
     public string? FullPackageName { get; init; }
     public string? FullPackageChecksum { get; init; }
-    public long FullPackageSize { get; init; }
+    public long? FullPackageSize { get; init; }
 }

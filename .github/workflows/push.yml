@@ -287,7 +287,7 @@ jobs:
         New-Item -ItemType Directory -Path artifacts\anchor-release -Force | Out-Null
         gh release download $anchorTag --repo ${{ github.repository }} --pattern "TelegramSearchBot-win-x64-full-*.zip" --dir artifacts\anchor-release
         if ($LASTEXITCODE -ne 0) {
-          throw "Failed to download cumulative update anchor $anchorTag; refusing to publish a cumulative-free update feed."
+          throw "Failed to download cumulative update anchor $anchorTag; refusing to publish without cumulative package from anchor $anchorTag."
         }
 
         $zipFile = Get-ChildItem artifacts\anchor-release -Filter "TelegramSearchBot-win-x64-full-*.zip" | Select-Object -First 1
@@ -297,7 +297,7 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "ANCHOR_STANDALONE_DIR=artifacts\anchor-standalone" -Encoding utf8
           Write-Host "Extracted cumulative update anchor from $($zipFile.Name)."
         } else {
-          throw "No anchor full zip found; refusing to publish a cumulative-free update feed."
+          throw "No anchor full zip found; refusing to publish without cumulative package from anchor $anchorTag."
         }
     - name: Fetch previous cumulative update package
       shell: pwsh

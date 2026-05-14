@@ -324,11 +324,12 @@ public class SelfUpdateBootstrapTests
         int chainDepth = 0,
         long compressedSize = 1024,
         string? packageFormat = null,
-        string? packageUrl = null)
+        string? packageUrl = null,
+        string? packagePath = null)
     {
         return new UpdateCatalogEntry
         {
-            PackagePath = $"packages/v{minSourceVersion}_to_v{targetVersion}.tar.zst",
+            PackagePath = packagePath ?? $"packages/v{minSourceVersion}_to_v{targetVersion}.tar.zst",
             PackageUrl = packageUrl,
             PackageFormat = packageFormat ?? UpdatePackageFormats.ModerUpdateZstd,
             TargetVersion = targetVersion,
@@ -766,6 +767,36 @@ public class SelfUpdateBootstrapTests
             var extractedPath = Path.Combine(targetDirectory, "nested", "file.txt");
             Assert.True(File.Exists(extractedPath));
             Assert.Equal("hello from zip", File.ReadAllText(extractedPath));
+        }
+        finally
+        {
+            if (Directory.Exists(targetDirectory))
+            {
+                Directory.Delete(targetDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ExtractPackageToDirectory_DetectsZipPackageWithoutPackagePath()
+    {
+        using var package = CreateTestZipPackage(new Dictionary<string, string>
+        {
+            ["file.txt"] = "zip without path"
+        });
+        var targetDirectory = Path.Combine(Path.GetTempPath(), "SelfUpdateBootstrapTests", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var entry = CreateEntry(
+                "2.0.0",
+                "1.0.0",
+                packageFormat: UpdatePackageFormats.Zip,
+                packageUrl: "https://github.com/ModerRAS/TelegramSearchBot/releases/download/v2.0.0/full.zip",
+                packagePath: string.Empty);
+            InvokePrivateStatic<object?>("ExtractPackageToDirectory", package, targetDirectory, entry);
+
+            Assert.Equal("zip without path", File.ReadAllText(Path.Combine(targetDirectory, "file.txt")));
         }
         finally
         {

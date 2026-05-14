@@ -5,7 +5,18 @@ using System.Text.Json;
 using TelegramSearchBot.Common.Model.Update;
 using ZstdSharp;
 
-var arguments = BuilderArguments.Parse(args);
+BuilderArguments arguments;
+try
+{
+    arguments = BuilderArguments.Parse(args);
+}
+catch (ArgumentException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    BuilderArguments.PrintUsage();
+    return 1;
+}
+
 if (!arguments.IsValid)
 {
     BuilderArguments.PrintUsage();
@@ -167,7 +178,7 @@ if (!string.IsNullOrWhiteSpace(fullPackageUrl) && !string.IsNullOrWhiteSpace(ful
         ChainDepth = 0,
         PackageChecksum = fullPackageChecksum,
         FileCount = currentFiles.Count,
-        CompressedSize = fullPackageSize,
+        CompressedSize = fullPackageSize.GetValueOrDefault(),
         UncompressedSize = currentFiles.Sum(f => (long)f.Content.Length)
     });
 
@@ -517,7 +528,7 @@ internal sealed class BuilderArguments
     public string? FullPackageUrl { get; private init; }
     public string? FullPackageName { get; private init; }
     public string? FullPackageChecksum { get; private init; }
-    public long FullPackageSize { get; private init; }
+    public long? FullPackageSize { get; private init; }
     public string? UpdaterUrl { get; private init; }
     public string? PackageBaseUrl { get; private init; }
 
@@ -558,7 +569,21 @@ internal sealed class BuilderArguments
         values.TryGetValue("--full-package-size", out var fullPackageSizeText);
         values.TryGetValue("--updater-url", out var updaterUrl);
         values.TryGetValue("--package-base-url", out var packageBaseUrl);
-        _ = long.TryParse(fullPackageSizeText, out var fullPackageSize);
+        long? fullPackageSize = null;
+        if (!string.IsNullOrWhiteSpace(fullPackageSizeText))
+        {
+            if (!long.TryParse(fullPackageSizeText, out var parsedFullPackageSize) || parsedFullPackageSize < 0)
+            {
+                throw new ArgumentException("--full-package-size must be a non-negative integer.");
+            }
+
+            fullPackageSize = parsedFullPackageSize;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fullPackageUrl) && fullPackageSize is null)
+        {
+            throw new ArgumentException("--full-package-size is required when --full-package-url is provided.");
+        }
 
         return new BuilderArguments
         {
@@ -586,8 +611,20 @@ internal sealed class BuilderArguments
     public static void PrintUsage()
     {
         Console.WriteLine("Usage:");
-        Console.WriteLine(
-            "  TelegramSearchBot.UpdateBuilder --source-dir <dir> --output-dir <dir> --target-version <version> --min-source-version <version> [--prev-source-dir <dir> --prev-version <version>] [--existing-catalog <path>] [--anchor-version <version> --anchor-source-dir <dir>] [--base-cumulative-package <path>] [--cumulative-source-package-dir <dir>] [--full-package-url <url> --full-package-name <name> --full-package-checksum <sha512> --full-package-size <bytes>] [--updater-url <url>] [--package-base-url <url>]");
+        Console.WriteLine("  TelegramSearchBot.UpdateBuilder");
+        Console.WriteLine("    --source-dir <dir>");
+        Console.WriteLine("    --output-dir <dir>");
+        Console.WriteLine("    --target-version <version>");
+        Console.WriteLine("    --min-source-version <version>");
+        Console.WriteLine("    [--prev-source-dir <dir> --prev-version <version>]");
+        Console.WriteLine("    [--existing-catalog <path>]");
+        Console.WriteLine("    [--anchor-version <version> --anchor-source-dir <dir>]");
+        Console.WriteLine("    [--base-cumulative-package <path>]");
+        Console.WriteLine("    [--cumulative-source-package-dir <dir>]");
+        Console.WriteLine("    [--full-package-url <url> --full-package-name <name>");
+        Console.WriteLine("     --full-package-checksum <sha512> --full-package-size <bytes>]");
+        Console.WriteLine("    [--updater-url <url>]");
+        Console.WriteLine("    [--package-base-url <url>]");
     }
 }
 

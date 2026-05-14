@@ -365,7 +365,7 @@ namespace TelegramSearchBot.Test {
             Assert.Contains("Update feed catalog entries", pushYmlContent);
             Assert.Contains("Cumulative update package missing", pushYmlContent);
             Assert.Contains("Failed to download cumulative update anchor", pushYmlContent);
-            Assert.Contains("refusing to publish a cumulative-free update feed", pushYmlContent);
+            Assert.Contains("refusing to publish without cumulative package from anchor", pushYmlContent);
             Assert.Contains("PackageUrl", pushYmlContent);
             Assert.Contains("PackageFormat", pushYmlContent);
             Assert.Contains("PackagePath -notlike '*-cumulative.zst'", pushYmlContent);

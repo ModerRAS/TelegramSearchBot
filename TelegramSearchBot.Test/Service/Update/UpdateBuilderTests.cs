@@ -218,6 +218,29 @@ public class UpdateBuilderTests : IDisposable
         Assert.Contains(catalog.Entries, entry => entry.PackagePath.EndsWith("-cumulative.zst", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task BuildFeed_RejectsInvalidFullPackageSize()
+    {
+        var currentDir = CreateVersionDirectory("current-invalid-size", new Dictionary<string, string>
+        {
+            ["app.exe"] = "current"
+        });
+        var outputDir = Path.Combine(_testDirectory, "feed-invalid-size");
+
+        var result = await RunBuilderForResultAsync(
+            "--source-dir", currentDir,
+            "--output-dir", outputDir,
+            "--target-version", "2.0.0",
+            "--min-source-version", "1.0.0",
+            "--full-package-url", "https://github.com/ModerRAS/TelegramSearchBot/releases/download/v2.0.0/full.zip",
+            "--full-package-name", "full.zip",
+            "--full-package-checksum", new string('a', 128),
+            "--full-package-size", "not-a-number");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("--full-package-size must be a non-negative integer", result.StandardError);
+    }
+
     private string CreateVersionDirectory(string name, Dictionary<string, string> files)
     {
         var directory = Path.Combine(_testDirectory, name);
@@ -233,6 +256,13 @@ public class UpdateBuilderTests : IDisposable
     }
 
     private static async Task RunBuilderAsync(params string[] arguments)
+    {
+        var result = await RunBuilderForResultAsync(arguments);
+        Assert.True(result.ExitCode == 0,
+            $"UpdateBuilder failed with exit code {result.ExitCode}.\nSTDOUT:\n{result.StandardOutput}\nSTDERR:\n{result.StandardError}");
+    }
+
+    private static async Task<ProcessResult> RunBuilderForResultAsync(params string[] arguments)
     {
         var processInfo = new System.Diagnostics.ProcessStartInfo
         {
@@ -259,7 +289,7 @@ public class UpdateBuilderTests : IDisposable
         var stderr = await process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
 
-        Assert.True(process.ExitCode == 0, $"UpdateBuilder failed with exit code {process.ExitCode}.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        return new ProcessResult(process.ExitCode, stdout, stderr);
     }
 
     private static UpdateCatalog ReadCatalog(string outputDir)
@@ -326,6 +356,8 @@ public class UpdateBuilderTests : IDisposable
             // Best-effort test cleanup.
         }
     }
+
+    private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
