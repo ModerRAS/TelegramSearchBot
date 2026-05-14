@@ -238,7 +238,7 @@ jobs:
         } catch {
           Write-Host "No existing catalog found on CDN, will create fresh catalog."
         }
-    - name: Fetch previous release standalone for step package comparison
+    - name: Fetch previous release standalone for cumulative planning
       shell: pwsh
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -248,7 +248,7 @@ jobs:
           $prevTag = $prevRelease[0].tagName
           $prevVersion = $prevTag -replace '^v', ''
           if ($prevVersion -eq "${{ needs.prepare.outputs.build-version }}") {
-            Write-Host "Previous release is the current build version; skipping step package generation."
+            Write-Host "Previous release is the current build version; skipping previous-version cumulative planning."
             exit 0
           }
           Write-Host "Previous release: $prevTag (version: $prevVersion)"
@@ -261,7 +261,7 @@ jobs:
             Add-Content -Path $env:GITHUB_ENV -Value "PREV_STANDALONE_DIR=artifacts\prev-standalone" -Encoding utf8
             Write-Host "Extracted previous standalone from $($zipFile.Name)."
           } else {
-            Write-Host "No previous full zip found; step package will not be generated."
+            Write-Host "No previous full zip found; previous-version cumulative planning will be skipped."
           }
         } else {
           Write-Host "No previous release found; this is the first release."
@@ -287,7 +287,7 @@ jobs:
         New-Item -ItemType Directory -Path artifacts\anchor-release -Force | Out-Null
         gh release download $anchorTag --repo ${{ github.repository }} --pattern "TelegramSearchBot-win-x64-full-*.zip" --dir artifacts\anchor-release
         if ($LASTEXITCODE -ne 0) {
-          throw "Failed to download cumulative update anchor $anchorTag; refusing to publish a full-only update feed."
+          throw "Failed to download cumulative update anchor $anchorTag; refusing to publish a cumulative-free update feed."
         }
 
         $zipFile = Get-ChildItem artifacts\anchor-release -Filter "TelegramSearchBot-win-x64-full-*.zip" | Select-Object -First 1
@@ -297,7 +297,7 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "ANCHOR_STANDALONE_DIR=artifacts\anchor-standalone" -Encoding utf8
           Write-Host "Extracted cumulative update anchor from $($zipFile.Name)."
         } else {
-          throw "No anchor full zip found; refusing to publish a full-only update feed."
+          throw "No anchor full zip found; refusing to publish a cumulative-free update feed."
         }
     - name: Fetch previous cumulative update package
       shell: pwsh
@@ -315,7 +315,9 @@ jobs:
         $baseEntry = @($catalog.Entries | Where-Object {
           $_.TargetVersion -eq $env:PREV_VERSION `
             -and $_.MinSourceVersion -eq $env:CUMULATIVE_UPDATE_ANCHOR_VERSION `
-            -and $_.IsCumulative
+            -and $_.IsCumulative `
+            -and $_.PackagePath `
+            -and $_.PackagePath -like '*-cumulative.zst'
         } | Sort-Object CompressedSize | Select-Object -First 1)
 
         if ($baseEntry.Count -eq 0 -or -not $baseEntry[0].PackagePath) {
@@ -325,7 +327,11 @@ jobs:
 
         New-Item -ItemType Directory -Path artifacts\base-cumulative -Force | Out-Null
         $basePackagePath = 'artifacts\base-cumulative\base-cumulative.zst'
-        $uri = "$($env:UPDATE_BASE_URL.TrimEnd('/'))/$($baseEntry[0].PackagePath.TrimStart('/'))"
+        $uri = if ($baseEntry[0].PackageUrl) {
+          $baseEntry[0].PackageUrl
+        } else {
+          "$($env:UPDATE_BASE_URL.TrimEnd('/'))/$($baseEntry[0].PackagePath.TrimStart('/'))"
+        }
         try {
           Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $basePackagePath
         } catch {
@@ -339,10 +345,6 @@ jobs:
       env:
         BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
       run: |
-        if ($env:BASE_CUMULATIVE_PACKAGE -and (Test-Path $env:BASE_CUMULATIVE_PACKAGE)) {
-          Write-Host "Base cumulative package is available; historical source packages are not needed."
-          exit 0
-        }
         if (-not (Test-Path '.\artifacts\existing-catalog.json')) {
           Write-Host "No existing catalog found; cumulative source packages will not be used."
           exit 0
@@ -353,7 +355,7 @@ jobs:
         $catalog = Get-Content '.\artifacts\existing-catalog.json' -Raw | ConvertFrom-Json
         $entriesByVersion = @{}
         foreach ($entry in $catalog.Entries) {
-          if (-not $entry.PackagePath -or $entry.PackagePath -notlike '*-full.zst') {
+          if (-not $entry.PackagePath -or $entry.PackagePath -notlike '*-cumulative.zst') {
             continue
           }
 
@@ -374,7 +376,7 @@ jobs:
         }
 
         if ($entriesByVersion.Count -eq 0) {
-          Write-Host "No cumulative source full packages found in existing catalog."
+          Write-Host "No cumulative source packages found in existing catalog."
           exit 0
         }
 
@@ -383,7 +385,11 @@ jobs:
         foreach ($key in ($entriesByVersion.Keys | Sort-Object { [Version]$_ })) {
           $entry = $entriesByVersion[$key]
           $packagePath = Join-Path $sourcePackageDir ("source-$($key.Replace('.', '-')).zst")
-          $uri = "$($env:UPDATE_BASE_URL.TrimEnd('/'))/$($entry.PackagePath.TrimStart('/'))"
+          $uri = if ($entry.PackageUrl) {
+            $entry.PackageUrl
+          } else {
+            "$($env:UPDATE_BASE_URL.TrimEnd('/'))/$($entry.PackagePath.TrimStart('/'))"
+          }
           try {
             Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $packagePath
             Write-Host "Downloaded cumulative source package from CDN: $($entry.PackagePath)"
@@ -395,16 +401,43 @@ jobs:
         if ((Get-ChildItem $sourcePackageDir -Filter '*.zst' -File | Measure-Object).Count -gt 0) {
           Add-Content -Path $env:GITHUB_ENV -Value "CUMULATIVE_SOURCE_PACKAGE_DIR=$sourcePackageDir" -Encoding utf8
         }
+    - name: Package full release asset
+      shell: pwsh
+      env:
+        BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
+        RELEASE_TAG: ${{ needs.prepare.outputs.release-tag }}
+      run: |
+        $releaseDir = '.\artifacts\release'
+        if (Test-Path $releaseDir) {
+          Remove-Item $releaseDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $releaseDir | Out-Null
+        $packageName = "TelegramSearchBot-win-x64-full-$env:BUILD_VERSION.zip"
+        $packagePath = Join-Path $releaseDir $packageName
+        Compress-Archive -Path .\artifacts\standalone\* -DestinationPath $packagePath -CompressionLevel Optimal
+        $hashPath = "$packagePath.sha512"
+        $hash = (Get-FileHash $packagePath -Algorithm SHA512).Hash.ToLower()
+        Set-Content -Path $hashPath -Value "$hash  $packageName" -Encoding ascii
+        $repository = '${{ github.repository }}'
+        $fullUrl = "https://github.com/$repository/releases/download/$env:RELEASE_TAG/$packageName"
+        Add-Content -Path $env:GITHUB_ENV -Value "FULL_PACKAGE_NAME=$packageName" -Encoding utf8
+        Add-Content -Path $env:GITHUB_ENV -Value "FULL_PACKAGE_URL=$fullUrl" -Encoding utf8
+        Add-Content -Path $env:GITHUB_ENV -Value "FULL_PACKAGE_CHECKSUM=$hash" -Encoding utf8
+        Add-Content -Path $env:GITHUB_ENV -Value "FULL_PACKAGE_SIZE=$((Get-Item $packagePath).Length)" -Encoding utf8
     - name: Build Moder.Update feed
       shell: pwsh
       env:
         BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
+        RELEASE_TAG: ${{ needs.prepare.outputs.release-tag }}
       run: |
+        $updateBaseUrl = $env:UPDATE_BASE_URL.TrimEnd('/')
         $builderArgs = @(
           '--source-dir', '.\artifacts\standalone',
           '--output-dir', '.\artifacts\update-feed',
           '--target-version', $env:BUILD_VERSION,
-          '--min-source-version', $env:LEGACY_BRIDGE_VERSION
+          '--min-source-version', $env:LEGACY_BRIDGE_VERSION,
+          '--updater-url', "$updateBaseUrl/moder_update_updater.exe",
+          '--package-base-url', $updateBaseUrl
         )
         if (Test-Path '.\artifacts\existing-catalog.json') {
           $builderArgs += @('--existing-catalog', '.\artifacts\existing-catalog.json')
@@ -412,7 +445,7 @@ jobs:
         }
         if ($env:PREV_VERSION -and (Test-Path $env:PREV_STANDALONE_DIR)) {
           $builderArgs += @('--prev-source-dir', $env:PREV_STANDALONE_DIR, '--prev-version', $env:PREV_VERSION)
-          Write-Host "Passing previous version $env:PREV_VERSION for step package generation."
+          Write-Host "Passing previous version $env:PREV_VERSION for cumulative planning."
         }
         if ($env:ANCHOR_VERSION -and (Test-Path $env:ANCHOR_STANDALONE_DIR)) {
           $builderArgs += @('--anchor-source-dir', $env:ANCHOR_STANDALONE_DIR, '--anchor-version', $env:ANCHOR_VERSION)
@@ -424,6 +457,15 @@ jobs:
           }
           Write-Host "Passing cumulative update anchor $env:ANCHOR_VERSION."
         }
+        if ($env:FULL_PACKAGE_URL -and $env:FULL_PACKAGE_CHECKSUM) {
+          $builderArgs += @(
+            '--full-package-url', $env:FULL_PACKAGE_URL,
+            '--full-package-name', $env:FULL_PACKAGE_NAME,
+            '--full-package-checksum', $env:FULL_PACKAGE_CHECKSUM,
+            '--full-package-size', $env:FULL_PACKAGE_SIZE
+          )
+          Write-Host "Passing GitHub full package URL $env:FULL_PACKAGE_URL."
+        }
         dotnet run --project .\TelegramSearchBot.UpdateBuilder\TelegramSearchBot.UpdateBuilder.csproj `
           -c Release `
           --no-build `
@@ -433,11 +475,12 @@ jobs:
         $catalogPath = '.\artifacts\update-feed\catalog.json'
         $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
         $catalog | Add-Member -NotePropertyName UpdaterChecksum -NotePropertyValue ((Get-FileHash .\artifacts\update-feed\moder_update_updater.exe -Algorithm SHA512).Hash.ToLower()) -Force
+        $catalog | Add-Member -NotePropertyName UpdaterUrl -NotePropertyValue "$updateBaseUrl/moder_update_updater.exe" -Force
         $catalog | ConvertTo-Json -Depth 10 | Set-Content $catalogPath -Encoding utf8
         $catalog = Get-Content $catalogPath -Raw | ConvertFrom-Json
         $entryTable = $catalog.Entries |
           Sort-Object TargetVersion, PackagePath |
-          Select-Object TargetVersion, MinSourceVersion, MaxSourceVersion, IsCumulative, FileCount, CompressedSize, PackagePath |
+          Select-Object TargetVersion, MinSourceVersion, MaxSourceVersion, IsCumulative, PackageFormat, FileCount, CompressedSize, PackagePath, PackageUrl |
           Format-Table -AutoSize |
           Out-String
         Write-Host "Update feed catalog entries:"
@@ -453,22 +496,6 @@ jobs:
             throw "Cumulative update package missing for $env:ANCHOR_VERSION to $env:BUILD_VERSION."
           }
         }
-    - name: Package full release asset
-      shell: pwsh
-      env:
-        BUILD_VERSION: ${{ needs.prepare.outputs.build-version }}
-      run: |
-        $releaseDir = '.\artifacts\release'
-        if (Test-Path $releaseDir) {
-          Remove-Item $releaseDir -Recurse -Force
-        }
-        New-Item -ItemType Directory -Path $releaseDir | Out-Null
-        $packageName = "TelegramSearchBot-win-x64-full-$env:BUILD_VERSION.zip"
-        $packagePath = Join-Path $releaseDir $packageName
-        Compress-Archive -Path .\artifacts\standalone\* -DestinationPath $packagePath -CompressionLevel Optimal
-        $hashPath = "$packagePath.sha512"
-        $hash = (Get-FileHash $packagePath -Algorithm SHA512).Hash.ToLower()
-        Set-Content -Path $hashPath -Value "$hash  $packageName" -Encoding ascii
     - name: Upload update feed artifact
       uses: actions/upload-artifact@v4
       with:
@@ -636,7 +663,7 @@ jobs:
           $catalog = Get-Content $CatalogPath -Raw | ConvertFrom-Json
           $reachablePaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
           foreach ($entry in $catalog.Entries) {
-            if ($entry.PackagePath) {
+            if ($entry.PackagePath -and $entry.PackagePath -like 'packages/*') {
               $normalized = $entry.PackagePath -replace '^packages/', ''
               [void]$reachablePaths.Add("TelegramSearchBot/packages/$normalized")
             }
@@ -672,7 +699,9 @@ jobs:
           }
         }
 
-        b2 sync .\artifacts\update-feed\packages b2://$env:B2_BUCKET/TelegramSearchBot/packages --quiet
+        if (Test-Path .\artifacts\update-feed\packages) {
+          b2 sync .\artifacts\update-feed\packages b2://$env:B2_BUCKET/TelegramSearchBot/packages --quiet
+        }
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\moder_update_updater.exe TelegramSearchBot/moder_update_updater.exe
         b2 upload-file $env:B2_BUCKET .\artifacts\update-feed\catalog.json TelegramSearchBot/catalog.json
 

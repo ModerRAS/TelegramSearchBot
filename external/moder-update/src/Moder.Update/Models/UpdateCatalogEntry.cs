@@ -8,6 +8,12 @@ public class UpdateCatalogEntry
     /// <summary>Relative path to the compressed package (e.g. "packages/1.2.0.zst").</summary>
     public required string PackagePath { get; init; }
 
+    /// <summary>Absolute URL to the package. When present, this takes precedence over PackagePath.</summary>
+    public string? PackageUrl { get; init; }
+
+    /// <summary>Package payload format. Defaults to Moder.Update's custom zstd tar format.</summary>
+    public string PackageFormat { get; init; } = "moder-update-zst";
+
     /// <summary>Target version of this package.</summary>
     public required string TargetVersion { get; init; }
 

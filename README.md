@@ -96,7 +96,7 @@
 - **自动更新**:
   - `EnableAutoUpdate`: 是否启用内置自更新流程(默认true)
   - `UpdateBaseUrl`: 更新目录根地址，默认使用 `https://clickonce.miaostay.com/TelegramSearchBot`
-  - **说明**: 首次安装仍通过 `Publish.html` 分发桥接版；之后程序会从 `catalog.json`、`packages/` 和 `moder_update_updater.exe` 拉取更新并升级独立安装目录。每次主分支发布也会同步上传一份 `TelegramSearchBot-win-x64-full-*.zip` 到 GitHub Releases，便于手动全量更新或回滚。
+  - **说明**: 首次安装仍通过 `Publish.html` 分发桥接版；之后程序会从 `catalog.json`、累计更新包和 `moder_update_updater.exe` 拉取更新并升级独立安装目录。每次主分支发布也会同步上传一份普通 `TelegramSearchBot-win-x64-full-*.zip` 到 GitHub Releases，便于新用户手动部署、全量更新或回滚。
 
 - **AI相关**:
   - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")

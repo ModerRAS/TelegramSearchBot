@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -284,15 +285,15 @@ public static partial class SelfUpdateBootstrap
         foreach (var entry in updatePath)
         {
             Log.Information("下载更新包: {PackagePath} (from {MinVersion})",
-                entry.PackagePath, entry.MinSourceVersion);
+                entry.PackageUrl ?? entry.PackagePath, entry.MinSourceVersion);
 
-            var packagePath = Path.Combine(packageCacheDir, GetPackageCacheFileName(entry.PackagePath));
-            await DownloadFileAsync(httpClient, entry.PackagePath, packagePath, cancellationToken);
+            var packagePath = Path.Combine(packageCacheDir, GetPackageCacheFileName(entry));
+            await DownloadPackageAsync(httpClient, entry, packagePath, cancellationToken);
 
             await using var packageStream = File.OpenRead(packagePath);
             VerifyPackageChecksum(packageStream, entry);
             packageStream.Position = 0;
-            ExtractPackageToDirectory(packageStream, stagingDir);
+            ExtractPackageToDirectory(packageStream, stagingDir, entry);
         }
 
         var updaterPath = await DownloadUpdaterAsync(httpClient, cancellationToken);
@@ -313,6 +314,7 @@ public static partial class SelfUpdateBootstrap
         var catalog = await JsonSerializer.DeserializeAsync<UpdateCatalog>(stream, JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("Failed to deserialize update catalog.");
         UpdateCatalogCache.UpdaterChecksum = catalog.UpdaterChecksum;
+        UpdateCatalogCache.UpdaterUrl = catalog.UpdaterUrl;
         return catalog;
     }
 
@@ -334,7 +336,7 @@ public static partial class SelfUpdateBootstrap
     {
         Directory.CreateDirectory(Path.GetDirectoryName(UpdaterCachePath)!);
         var downloadPath = UpdaterCachePath + ".download";
-        await DownloadFileAsync(httpClient, UpdaterFileName, downloadPath, cancellationToken);
+        await DownloadFileAsync(httpClient, UpdateCatalogCache.UpdaterUrl ?? UpdaterFileName, downloadPath, cancellationToken);
 
         try {
             await using var updaterStream = File.OpenRead(downloadPath);
@@ -350,12 +352,33 @@ public static partial class SelfUpdateBootstrap
 
     private static async Task DownloadFileAsync(
         HttpClient httpClient,
-        string relativePath,
+        string pathOrUrl,
         string targetPath,
         CancellationToken cancellationToken)
     {
-        var requestUri = $"{Env.UpdateBaseUrl.TrimEnd('/')}/{relativePath.TrimStart('/')}";
+        var requestUri = ResolveDownloadUri(pathOrUrl);
         await DownloadFileFromUriAsync(httpClient, requestUri, targetPath, cancellationToken);
+    }
+
+    private static Task DownloadPackageAsync(
+        HttpClient httpClient,
+        UpdateCatalogEntry entry,
+        string targetPath,
+        CancellationToken cancellationToken)
+    {
+        var pathOrUrl = string.IsNullOrWhiteSpace(entry.PackageUrl)
+            ? entry.PackagePath
+            : entry.PackageUrl;
+        return DownloadFileAsync(httpClient, pathOrUrl, targetPath, cancellationToken);
+    }
+
+    private static string ResolveDownloadUri(string pathOrUrl)
+    {
+        if (Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var absoluteUri)) {
+            return absoluteUri.ToString();
+        }
+
+        return $"{Env.UpdateBaseUrl.TrimEnd('/')}/{pathOrUrl.TrimStart('/')}";
     }
 
     private static async Task DownloadFileFromUriAsync(
@@ -609,7 +632,59 @@ public static partial class SelfUpdateBootstrap
         }
     }
 
-    private static void ExtractPackageToDirectory(Stream packageStream, string targetDirectory)
+    private static void ExtractPackageToDirectory(
+        Stream packageStream,
+        string targetDirectory,
+        UpdateCatalogEntry updateEntry)
+    {
+        if (IsZipPackage(updateEntry)) {
+            ExtractZipPackageToDirectory(packageStream, targetDirectory);
+            return;
+        }
+
+        ExtractModerPackageToDirectory(packageStream, targetDirectory);
+    }
+
+    private static bool IsZipPackage(UpdateCatalogEntry updateEntry)
+    {
+        return string.Equals(updateEntry.PackageFormat, UpdatePackageFormats.Zip, StringComparison.OrdinalIgnoreCase)
+            || updateEntry.PackagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            || (updateEntry.PackageUrl?.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private static void ExtractZipPackageToDirectory(Stream packageStream, string targetDirectory)
+    {
+        Directory.CreateDirectory(targetDirectory);
+        var targetDirectoryPath = Path.GetFullPath(targetDirectory);
+        var directoryPrefix = targetDirectoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+
+        using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
+        foreach (var entry in archive.Entries) {
+            if (string.IsNullOrWhiteSpace(entry.Name)) {
+                var directoryPath = Path.GetFullPath(Path.Combine(targetDirectoryPath, NormalizeArchivePath(entry.FullName)));
+                EnsurePathWithinDirectory(directoryPath, directoryPrefix, entry.FullName);
+                Directory.CreateDirectory(directoryPath);
+                continue;
+            }
+
+            var normalizedPath = NormalizeArchivePath(entry.FullName);
+            if (Path.IsPathRooted(normalizedPath)) {
+                throw new InvalidDataException($"Package entry '{entry.FullName}' is rooted and cannot be extracted.");
+            }
+
+            var targetPath = Path.GetFullPath(Path.Combine(targetDirectoryPath, normalizedPath));
+            EnsurePathWithinDirectory(targetPath, directoryPrefix, entry.FullName);
+            var directory = Path.GetDirectoryName(targetPath);
+            if (directory is not null) {
+                Directory.CreateDirectory(directory);
+            }
+
+            entry.ExtractToFile(targetPath, overwrite: true);
+        }
+    }
+
+    private static void ExtractModerPackageToDirectory(Stream packageStream, string targetDirectory)
     {
         Directory.CreateDirectory(targetDirectory);
         var targetDirectoryPath = Path.GetFullPath(targetDirectory);
@@ -788,13 +863,28 @@ public static partial class SelfUpdateBootstrap
         return path.Replace('/', Path.DirectorySeparatorChar);
     }
 
+    private static string NormalizeArchivePath(string path)
+    {
+        if (path.StartsWith("./", StringComparison.Ordinal)) {
+            path = path[2..];
+        }
+
+        return path.Replace('/', Path.DirectorySeparatorChar);
+    }
+
     private static string SanitizeVersion(string version) => version.Replace('.', '_');
 
-    private static string GetPackageCacheFileName(string relativePath)
+    private static string GetPackageCacheFileName(UpdateCatalogEntry entry)
     {
-        var fileName = Path.GetFileName(relativePath.Replace('/', Path.DirectorySeparatorChar));
+        var pathOrUrl = string.IsNullOrWhiteSpace(entry.PackageUrl)
+            ? entry.PackagePath
+            : entry.PackageUrl;
+        var path = Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var absoluteUri)
+            ? absoluteUri.AbsolutePath
+            : pathOrUrl;
+        var fileName = Path.GetFileName(path.Replace('/', Path.DirectorySeparatorChar));
         if (string.IsNullOrWhiteSpace(fileName)) {
-            fileName = "package.zst";
+            fileName = IsZipPackage(entry) ? "package.zip" : "package.zst";
         }
 
         foreach (var invalidChar in Path.GetInvalidFileNameChars()) {
@@ -917,6 +1007,7 @@ public static partial class SelfUpdateBootstrap
     private static class UpdateCatalogCache
     {
         public static string? UpdaterChecksum { get; set; }
+        public static string? UpdaterUrl { get; set; }
     }
 }
 #endif
