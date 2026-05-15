@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -321,11 +322,16 @@ public class SelfUpdateBootstrapTests
         bool isCumulative = false,
         bool isAnchor = false,
         int chainDepth = 0,
-        long compressedSize = 1024)
+        long compressedSize = 1024,
+        string? packageFormat = null,
+        string? packageUrl = null,
+        string? packagePath = null)
     {
         return new UpdateCatalogEntry
         {
-            PackagePath = $"packages/v{minSourceVersion}_to_v{targetVersion}.tar.zst",
+            PackagePath = packagePath ?? $"packages/v{minSourceVersion}_to_v{targetVersion}.tar.zst",
+            PackageUrl = packageUrl,
+            PackageFormat = packageFormat ?? UpdatePackageFormats.ModerUpdateZstd,
             TargetVersion = targetVersion,
             MinSourceVersion = minSourceVersion,
             MaxSourceVersion = maxSourceVersion,
@@ -392,6 +398,23 @@ public class SelfUpdateBootstrapTests
         var packageStream = new MemoryStream();
         packageStream.Write([0x4D, 0x55, 0x50, 0x00]);
         compressedStream.CopyTo(packageStream);
+        packageStream.Position = 0;
+        return packageStream;
+    }
+
+    private static MemoryStream CreateTestZipPackage(Dictionary<string, string> files)
+    {
+        var packageStream = new MemoryStream();
+        using (var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var file in files)
+            {
+                var entry = archive.CreateEntry(file.Key.Replace('\\', '/'));
+                using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
+                writer.Write(file.Value);
+            }
+        }
+
         packageStream.Position = 0;
         return packageStream;
     }
@@ -557,7 +580,9 @@ public class SelfUpdateBootstrapTests
                 "2026.04.23.553",
                 isCumulative: true,
                 isAnchor: true,
-                compressedSize: 568_000_000),
+                compressedSize: 568_000_000,
+                packageFormat: UpdatePackageFormats.Zip,
+                packageUrl: "https://github.com/ModerRAS/TelegramSearchBot/releases/download/v2026.05.10.572/TelegramSearchBot-win-x64-full-2026.05.10.572.zip"),
             CreateEntry(
                 "2026.05.10.572",
                 "2026.04.25.561",
@@ -573,6 +598,7 @@ public class SelfUpdateBootstrapTests
 
         Assert.Single(result);
         Assert.Equal("2026.04.25.561", result[0].MinSourceVersion);
+        Assert.Null(result[0].PackageUrl);
     }
 
     [Fact]
@@ -585,7 +611,9 @@ public class SelfUpdateBootstrapTests
                 "2026.04.23.553",
                 isCumulative: true,
                 isAnchor: true,
-                compressedSize: 568_000_000),
+                compressedSize: 568_000_000,
+                packageFormat: UpdatePackageFormats.Zip,
+                packageUrl: "https://github.com/ModerRAS/TelegramSearchBot/releases/download/v2026.05.10.572/TelegramSearchBot-win-x64-full-2026.05.10.572.zip"),
             CreateEntry(
                 "2026.05.10.572",
                 "2026.04.25.561",
@@ -601,6 +629,7 @@ public class SelfUpdateBootstrapTests
 
         Assert.Single(result);
         Assert.Equal("2026.04.23.553", result[0].MinSourceVersion);
+        Assert.Equal(UpdatePackageFormats.Zip, result[0].PackageFormat);
     }
 
     // ── CanApplyEntry ──────────────────────────────────────────────
@@ -701,11 +730,73 @@ public class SelfUpdateBootstrapTests
 
         try
         {
-            InvokePrivateStatic<object?>("ExtractPackageToDirectory", package, targetDirectory);
+            var entry = CreateEntry("2.0.0", "1.0.0");
+            InvokePrivateStatic<object?>("ExtractPackageToDirectory", package, targetDirectory, entry);
 
             var extractedPath = Path.Combine(targetDirectory, "nested", "file.txt");
             Assert.True(File.Exists(extractedPath));
             Assert.Equal("hello", File.ReadAllText(extractedPath));
+        }
+        finally
+        {
+            if (Directory.Exists(targetDirectory))
+            {
+                Directory.Delete(targetDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ExtractPackageToDirectory_ExtractsZipPackage()
+    {
+        using var package = CreateTestZipPackage(new Dictionary<string, string>
+        {
+            ["nested/file.txt"] = "hello from zip"
+        });
+        var targetDirectory = Path.Combine(Path.GetTempPath(), "SelfUpdateBootstrapTests", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var entry = CreateEntry(
+                "2.0.0",
+                "1.0.0",
+                packageFormat: UpdatePackageFormats.Zip,
+                packageUrl: "https://github.com/ModerRAS/TelegramSearchBot/releases/download/v2.0.0/TelegramSearchBot-win-x64-full-2.0.0.zip");
+            InvokePrivateStatic<object?>("ExtractPackageToDirectory", package, targetDirectory, entry);
+
+            var extractedPath = Path.Combine(targetDirectory, "nested", "file.txt");
+            Assert.True(File.Exists(extractedPath));
+            Assert.Equal("hello from zip", File.ReadAllText(extractedPath));
+        }
+        finally
+        {
+            if (Directory.Exists(targetDirectory))
+            {
+                Directory.Delete(targetDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ExtractPackageToDirectory_DetectsZipPackageWithoutPackagePath()
+    {
+        using var package = CreateTestZipPackage(new Dictionary<string, string>
+        {
+            ["file.txt"] = "zip without path"
+        });
+        var targetDirectory = Path.Combine(Path.GetTempPath(), "SelfUpdateBootstrapTests", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var entry = CreateEntry(
+                "2.0.0",
+                "1.0.0",
+                packageFormat: UpdatePackageFormats.Zip,
+                packageUrl: "https://github.com/ModerRAS/TelegramSearchBot/releases/download/v2.0.0/full.zip",
+                packagePath: string.Empty);
+            InvokePrivateStatic<object?>("ExtractPackageToDirectory", package, targetDirectory, entry);
+
+            Assert.Equal("zip without path", File.ReadAllText(Path.Combine(targetDirectory, "file.txt")));
         }
         finally
         {
