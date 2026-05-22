@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Model.Mcp;
 
@@ -101,7 +102,9 @@ namespace TelegramSearchBot.Service.Mcp {
                         while (!capturedProcess.HasExited) {
                             var line = await capturedProcess.StandardError.ReadLineAsync();
                             if (line != null) {
-                                _logger.LogDebug("[MCP:{ServerName}:stderr] {Line}", ServerName, line);
+                                using (LoggerHolders.PushChatContentLogScope()) {
+                                    _logger.LogDebug("[MCP:{ServerName}:stderr] {Line}", ServerName, line);
+                                }
                             }
                         }
                     } catch { /* Process exited */ }
@@ -204,7 +207,9 @@ namespace TelegramSearchBot.Service.Mcp {
                     NullValueHandling = NullValueHandling.Ignore
                 });
 
-                _logger.LogDebug("[MCP:{ServerName}] Sending: {Json}", ServerName, json);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogDebug("[MCP:{ServerName}] Sending: {Json}", ServerName, json);
+                }
                 await _stdin.WriteLineAsync(json);
                 await _stdin.FlushAsync();
 
@@ -221,7 +226,9 @@ namespace TelegramSearchBot.Service.Mcp {
                     var responseLine = await ReadLineAsync(cts.Token);
                     if (string.IsNullOrWhiteSpace(responseLine)) continue;
 
-                    _logger.LogDebug("[MCP:{ServerName}] Received: {Json}", ServerName, responseLine);
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        _logger.LogDebug("[MCP:{ServerName}] Received: {Json}", ServerName, responseLine);
+                    }
 
                     try {
                         var response = JsonConvert.DeserializeObject<JsonRpcResponse>(responseLine);
@@ -235,7 +242,9 @@ namespace TelegramSearchBot.Service.Mcp {
                         // Not our response (could be a notification), continue reading
                     } catch (JsonException) {
                         // Not valid JSON-RPC, skip
-                        _logger.LogWarning("[MCP:{ServerName}] Received non-JSON-RPC message: {Line}", ServerName, responseLine);
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            _logger.LogWarning("[MCP:{ServerName}] Received non-JSON-RPC message: {Line}", ServerName, responseLine);
+                        }
                     }
                 }
 
@@ -258,7 +267,9 @@ namespace TelegramSearchBot.Service.Mcp {
                     NullValueHandling = NullValueHandling.Ignore
                 });
 
-                _logger.LogDebug("[MCP:{ServerName}] Sending notification: {Json}", ServerName, json);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogDebug("[MCP:{ServerName}] Sending notification: {Json}", ServerName, json);
+                }
                 await _stdin.WriteLineAsync(json);
                 await _stdin.FlushAsync();
             } finally {

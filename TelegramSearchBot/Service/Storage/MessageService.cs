@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Nito.AsyncEx;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
@@ -130,7 +131,9 @@ namespace TelegramSearchBot.Service.Storage {
         }
 
         public async Task<long> ExecuteAsync(MessageOption messageOption) {
-            Logger.LogInformation($"UserId: {messageOption.UserId}\nUserName: {messageOption.User.Username} {messageOption.User.FirstName} {messageOption.User.LastName}\nChatId: {messageOption.ChatId}\nChatName: {messageOption.Chat.Username}\nMessage: {messageOption.MessageId} {messageOption.Content}");
+            using (LoggerHolders.PushChatContentLogScope()) {
+                Logger.LogInformation($"UserId: {messageOption.UserId}\nUserName: {messageOption.User.Username} {messageOption.User.FirstName} {messageOption.User.LastName}\nChatId: {messageOption.ChatId}\nChatName: {messageOption.Chat.Username}\nMessage: {messageOption.MessageId} {messageOption.Content}");
+            }
             using (await _asyncLock.LockAsync()) {
                 return await AddToSqlite(messageOption);
             }

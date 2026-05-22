@@ -443,6 +443,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             try {
+                using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
                 string processedInput = input.Trim();
                 _sLogger?.LogDebug($"Original input: {processedInput}");
 
@@ -723,6 +724,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// Use the scoped overload when executing tools that require scoped services (e.g., DbContext).
         /// </summary>
         public static async Task<object> ExecuteRegisteredToolAsync(string toolName, Dictionary<string, string> stringArguments, IServiceProvider scopedProvider, ToolContext toolContext = null) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
             var elapsed = Stopwatch.StartNew();
             var originalArguments = stringArguments ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var route = GetToolRoute(toolName);

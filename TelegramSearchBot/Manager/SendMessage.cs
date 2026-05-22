@@ -29,7 +29,9 @@ namespace TelegramSearchBot.Manager {
             this.logger = logger;
         }
         public async Task Log(string Text) {
-            logger.LogInformation(Text);
+            using (LoggerHolders.PushChatContentLogScope()) {
+                logger.LogInformation(Text);
+            }
             await AddTask(async () => {
                 await botClient.SendMessage(
                     chatId: Env.AdminId,

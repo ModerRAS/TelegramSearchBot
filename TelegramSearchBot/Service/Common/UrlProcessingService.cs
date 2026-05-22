@@ -8,6 +8,7 @@ using System.Web; // For HttpUtility. NuGet: System.Web.HttpUtility if not avail
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging; // Added for ILogger
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 
 namespace TelegramSearchBot.Service.Common {
@@ -76,6 +77,8 @@ namespace TelegramSearchBot.Service.Common {
         }
 
         private async Task<string?> GetFinalRedirectedUrlAsync(string originalUrl) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
+
             if (!Uri.TryCreate(originalUrl, UriKind.Absolute, out var uri)) {
                 _logger.LogWarning("Invalid URL format: {OriginalUrl}", originalUrl);
                 return null;

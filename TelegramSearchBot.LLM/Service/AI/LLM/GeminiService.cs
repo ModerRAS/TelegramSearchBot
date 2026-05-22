@@ -382,6 +382,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LLMChannel channel,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
 
             var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());

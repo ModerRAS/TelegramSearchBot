@@ -10,6 +10,7 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Model;
 
@@ -390,12 +391,14 @@ namespace TelegramSearchBot.Service.BotAPI {
                         _draftUnsupportedChats.TryAdd(chatId, true);
                         logger.LogInformation("SendDraftStream: Chat {ChatId} does not support draft messages. Will use SendFullMessageStream for future requests.", chatId);
                     } else {
-                        logger.LogWarning(ex,
-                            "SendDraftStream: Failed to send initial draft placeholder. ChatId {ChatId}, DraftId {DraftId}, PlaceholderLength {PlaceholderLength}, PlaceholderPreview {PlaceholderPreview}. Falling back to SendFullMessageStream.",
-                            chatId,
-                            draftId,
-                            initialPlaceholderContent?.Length ?? 0,
-                            GetContentPreview(initialPlaceholderContent));
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            logger.LogWarning(ex,
+                                "SendDraftStream: Failed to send initial draft placeholder. ChatId {ChatId}, DraftId {DraftId}, PlaceholderLength {PlaceholderLength}, PlaceholderPreview {PlaceholderPreview}. Falling back to SendFullMessageStream.",
+                                chatId,
+                                draftId,
+                                initialPlaceholderContent?.Length ?? 0,
+                                GetContentPreview(initialPlaceholderContent));
+                        }
                     }
                     // Fall back to the old method if sendMessageDraft is not supported
                     return await SendFullMessageStream(fullMessagesStream, chatId, replyTo, initialPlaceholderContent, cancellationToken);
@@ -414,20 +417,24 @@ namespace TelegramSearchBot.Service.BotAPI {
                         if (!string.IsNullOrWhiteSpace(html)) {
                             await botClient.SendMessageDraft(chatId, draftId, html, parseMode: ParseMode.Html, cancellationToken: cancellationToken);
                         } else if (!string.IsNullOrWhiteSpace(displayMarkdown)) {
-                            logger.LogDebug(
-                                "SendDraftStream: Markdown collapsed to empty HTML. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
-                                chatId,
-                                draftId,
-                                displayMarkdown.Length,
-                                GetContentPreview(displayMarkdown));
+                            using (LoggerHolders.PushChatContentLogScope()) {
+                                logger.LogDebug(
+                                    "SendDraftStream: Markdown collapsed to empty HTML. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
+                                    chatId,
+                                    draftId,
+                                    displayMarkdown.Length,
+                                    GetContentPreview(displayMarkdown));
+                            }
                         }
                     } catch (Exception ex) {
-                        logger.LogWarning(ex,
-                            "SendDraftStream: Error sending draft update. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
-                            chatId,
-                            draftId,
-                            latestContent?.Length ?? 0,
-                            GetContentPreview(latestContent));
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            logger.LogWarning(ex,
+                                "SendDraftStream: Error sending draft update. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
+                                chatId,
+                                draftId,
+                                latestContent?.Length ?? 0,
+                                GetContentPreview(latestContent));
+                        }
                     }
                 }
             } catch (OperationCanceledException) {
@@ -445,12 +452,14 @@ namespace TelegramSearchBot.Service.BotAPI {
                         await botClient.SendMessageDraft(chatId, draftId, finalHtml, parseMode: ParseMode.Html, cancellationToken: CancellationToken.None);
                     }
                 } catch (Exception ex) {
-                    logger.LogWarning(ex,
-                        "SendDraftStream: Error sending final draft content. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
-                        chatId,
-                        draftId,
-                        latestContent.Length,
-                        GetContentPreview(latestContent));
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        logger.LogWarning(ex,
+                            "SendDraftStream: Error sending final draft content. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
+                            chatId,
+                            draftId,
+                            latestContent.Length,
+                            GetContentPreview(latestContent));
+                    }
                 }
             }
 

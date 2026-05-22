@@ -123,18 +123,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     tracked.Completion.TrySetResult(terminal);
                     tracked.Channel.Writer.TryComplete();
                     _trackedTasks.TryRemove(taskId, out _);
-                    _logger.LogInformation(
-                        "ChunkPollingService: task completed from terminal chunk. TaskId={TaskId}, TerminalType={TerminalType}, Error={Error}",
-                        taskId,
-                        terminal.Type,
-                        terminal.ErrorMessage);
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        _logger.LogInformation(
+                            "ChunkPollingService: task completed from terminal chunk. TaskId={TaskId}, TerminalType={TerminalType}, Error={Error}",
+                            taskId,
+                            terminal.Type,
+                            terminal.ErrorMessage);
+                    }
                     // Cleanup keys (use TTL as safety net, no race condition)
                     _ = db.KeyDeleteAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
                     _ = db.KeyDeleteAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
                     return;
                 }
 
-                _logger.LogWarning("ChunkPollingService: terminal chunk payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(terminalPayload));
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogWarning("ChunkPollingService: terminal chunk payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(terminalPayload));
+                }
             }
 
             // Check for snapshot updates
@@ -161,7 +165,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     chunk.Sequence,
                     chunk.Content?.Length ?? 0);
             } else if (chunk == null) {
-                _logger.LogWarning("ChunkPollingService: snapshot payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(snapshotStr));
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogWarning("ChunkPollingService: snapshot payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(snapshotStr));
+                }
             }
         }
 
@@ -185,11 +191,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             if (status == AgentTaskStatus.Failed || status == AgentTaskStatus.Cancelled) {
                 var error = entries.FirstOrDefault(x => x.Name == "error").Value.ToString();
-                _logger.LogWarning(
-                    "ChunkPollingService: completing task from failed task state. TaskId={TaskId}, Status={Status}, Error={Error}",
-                    taskId,
-                    status,
-                    error);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogWarning(
+                        "ChunkPollingService: completing task from failed task state. TaskId={TaskId}, Status={Status}, Error={Error}",
+                        taskId,
+                        status,
+                        error);
+                }
                 await CompleteTrackedTaskAsync(taskId, tracked, new AgentStreamChunk {
                     TaskId = taskId,
                     Type = AgentChunkType.Error,
@@ -255,7 +263,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         snapshot.Sequence,
                         snapshot.Content.Length);
                 } else if (snapshot == null) {
-                    _logger.LogWarning("ChunkPollingService: final snapshot payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(snapshotPayload));
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        _logger.LogWarning("ChunkPollingService: final snapshot payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(snapshotPayload));
+                    }
                 }
             } catch (Exception ex) {
                 _logger.LogWarning(ex, "ChunkPollingService: failed to deliver final snapshot for task {TaskId}", taskId);
