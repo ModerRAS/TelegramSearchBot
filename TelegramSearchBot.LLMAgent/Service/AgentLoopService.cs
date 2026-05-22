@@ -16,18 +16,21 @@ namespace TelegramSearchBot.LLMAgent.Service {
         private readonly GarnetRpcClient _rpcClient;
         private readonly ILogger<AgentLoopService> _logger;
         private readonly Func<int, TimeSpan> _transientRetryDelayFactory;
+        private readonly AgentToolRegistryService? _toolRegistryService;
 
         public AgentLoopService(
             IServiceProvider serviceProvider,
             GarnetClient garnetClient,
             GarnetRpcClient rpcClient,
             ILogger<AgentLoopService> logger,
-            Func<int, TimeSpan>? transientRetryDelayFactory = null) {
+            Func<int, TimeSpan>? transientRetryDelayFactory = null,
+            AgentToolRegistryService? toolRegistryService = null) {
             _serviceProvider = serviceProvider;
             _garnetClient = garnetClient;
             _rpcClient = rpcClient;
             _logger = logger;
             _transientRetryDelayFactory = transientRetryDelayFactory ?? GetDefaultTransientRetryDelay;
+            _toolRegistryService = toolRegistryService;
         }
 
         public async Task RunAsync(long chatId, int port, CancellationToken cancellationToken) {
@@ -43,6 +46,10 @@ namespace TelegramSearchBot.LLMAgent.Service {
             await _rpcClient.SaveSessionAsync(session);
 
             try {
+                if (_toolRegistryService != null) {
+                    await _toolRegistryService.RefreshUntilAvailableAsync(cancellationToken);
+                }
+
                 while (!cancellationToken.IsCancellationRequested) {
                     if (await IsShutdownRequestedAsync(chatId)) {
                         session.Status = "shutting_down";
@@ -104,6 +111,10 @@ namespace TelegramSearchBot.LLMAgent.Service {
 
                     var shouldStopAfterTask = false;
                     try {
+                        if (_toolRegistryService != null) {
+                            await _toolRegistryService.RefreshAsync(cancellationToken);
+                        }
+
                         _logger.LogInformation(
                             "Agent loop starting task. TaskId={TaskId}, Kind={Kind}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Model={Model}, RecoveryAttempt={RecoveryAttempt}, RecoveredContentLength={RecoveredContentLength}",
                             task.TaskId,

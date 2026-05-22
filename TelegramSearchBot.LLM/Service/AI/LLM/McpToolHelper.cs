@@ -1296,7 +1296,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var toolDefs = ExportToolDefinitions();
             var json = JsonConvert.SerializeObject(toolDefs);
             await redis.GetDatabase().StringSetAsync(
-                LlmAgentRedisKeys.AgentToolDefs, json, TimeSpan.FromHours(24));
+                LlmAgentRedisKeys.AgentToolDefs, json);
             _sLogger?.LogInformation(
                 "Exported agent tool definitions to Redis. Count={Count}, PayloadBytes={PayloadBytes}, ToolNames={ToolNames}",
                 toolDefs.Count,
