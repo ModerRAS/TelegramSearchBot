@@ -138,6 +138,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             Message message, long ChatId, string modelName, LLMChannel channel,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
 
             // --- Build system instructions ---
             var botName = await GetBotNameAsync();
@@ -365,6 +366,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LlmContinuationSnapshot snapshot, LLMChannel channel,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
             if (snapshot == null) {
                 _logger.LogError("{ServiceName}: Cannot resume from null snapshot.", ServiceName);
                 yield break;

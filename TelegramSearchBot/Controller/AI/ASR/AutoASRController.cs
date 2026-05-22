@@ -82,7 +82,9 @@ namespace TelegramSearchBot.Controller.AI.ASR {
                 //logger.LogInformation($"Get Audio File: {e.Message.Chat.Id}/{e.Message.MessageId}");
                 var path = GetFilePath(e);
                 var AsrStr = await autoASRService.ExecuteAsync(path);
-                logger.LogInformation(AsrStr);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    logger.LogInformation(AsrStr);
+                }
                 await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "ASR_Result", AsrStr);
                 if (AsrStr.Length > 4095) {
                     await SendMessageService.SendDocument(AsrStr, $"{e.Message.MessageId}.srt", e.Message.Chat.Id, e.Message.MessageId);

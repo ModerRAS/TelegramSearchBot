@@ -20,6 +20,7 @@ using TelegramSearchBot.Model; // Added for MessageOption
 using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
 using TelegramSearchBot.Service.AI.QR; // Added for AutoQRService
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Storage; // Added for MessageService
 
@@ -75,8 +76,10 @@ namespace TelegramSearchBot.Controller.AI.QR {
                     return;
                 }
 
-                _logger.LogInformation("QR Code recognized for {ChatId}/{MessageId}. Content: {QrStr}, Length: {QrStrLen}",
-                    e.Message.Chat.Id, e.Message.MessageId, qrStr, qrStr.Length);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogInformation("QR Code recognized for {ChatId}/{MessageId}. Content: {QrStr}, Length: {QrStrLen}",
+                        e.Message.Chat.Id, e.Message.MessageId, qrStr, qrStr.Length);
+                }
 
                 // Add QR result to processing results
                 p.ProcessingResults.Add($"[QR识别结果] {qrStr}");

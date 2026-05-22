@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 using Nito.AsyncEx;
 using Serilog;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class AppBootstrap {
@@ -251,12 +252,24 @@ namespace TelegramSearchBot.AppBootstrap {
 
             process.OutputDataReceived += (_, e) => {
                 if (!string.IsNullOrWhiteSpace(e.Data)) {
-                    Log.Logger.Information("[{Process}] {Message}", processDisplayName, e.Data);
+                    if (ShouldRouteChildOutputToChatContentLog(processDisplayName)) {
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            Log.Logger.Information("[{Process}] {Message}", processDisplayName, e.Data);
+                        }
+                    } else {
+                        Log.Logger.Information("[{Process}] {Message}", processDisplayName, e.Data);
+                    }
                 }
             };
             process.ErrorDataReceived += (_, e) => {
                 if (!string.IsNullOrWhiteSpace(e.Data)) {
-                    Log.Logger.Warning("[{Process}] {Message}", processDisplayName, e.Data);
+                    if (ShouldRouteChildOutputToChatContentLog(processDisplayName)) {
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            Log.Logger.Warning("[{Process}] {Message}", processDisplayName, e.Data);
+                        }
+                    } else {
+                        Log.Logger.Warning("[{Process}] {Message}", processDisplayName, e.Data);
+                    }
                 }
             };
             process.Exited += (_, _) => {
@@ -276,6 +289,11 @@ namespace TelegramSearchBot.AppBootstrap {
             childProcessManager.AddProcess(process, processMemoryLimitBytes);
             Log.Logger.Information("{Process}已启动", processDisplayName);
             return process;
+        }
+
+        private static bool ShouldRouteChildOutputToChatContentLog(string processDisplayName) {
+            return processDisplayName.Contains("LLMAgent", StringComparison.OrdinalIgnoreCase) ||
+                   processDisplayName.Contains("SubAgent", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

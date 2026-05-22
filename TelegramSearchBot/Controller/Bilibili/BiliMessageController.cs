@@ -10,6 +10,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramSearchBot.Controller.AI.OCR;
 using TelegramSearchBot.Controller.AI.QR;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface.Bilibili;
 using TelegramSearchBot.Interface.Controller;
@@ -97,36 +98,52 @@ namespace TelegramSearchBot.Controller.Bilibili { // Namespace open
                     } else if (BiliOpusUrlPattern.IsMatch(url)) {
                         await ProcessOpusUrlAsync(message, url);
                     } else {
-                        _logger.LogWarning("URL {Url} matched general Bili regex but not specific patterns. Attempting video parse first.", url);
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            _logger.LogWarning("URL {Url} matched general Bili regex but not specific patterns. Attempting video parse first.", url);
+                        }
                         var videoInfo = await _biliApiService.GetVideoInfoAsync(url);
                         if (videoInfo != null) await HandleVideoInfoAsync(message, videoInfo);
                         else {
                             var opusInfo = await _biliApiService.GetOpusInfoAsync(url);
                             if (opusInfo != null) await HandleOpusInfoAsync(message, opusInfo);
-                            else _logger.LogWarning("Could not parse Bilibili URL: {Url} as either video or opus.", url);
+                            else {
+                                using (LoggerHolders.PushChatContentLogScope()) {
+                                    _logger.LogWarning("Could not parse Bilibili URL: {Url} as either video or opus.", url);
+                                }
+                            }
                         }
                     }
                 } catch (Exception ex) {
-                    _logger.LogError(ex, "Error processing Bilibili URL: {Url}", url);
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        _logger.LogError(ex, "Error processing Bilibili URL: {Url}", url);
+                    }
                 }
             }
         }
 
         private async Task ProcessVideoUrlAsync(Message message, string url) {
-            _logger.LogInformation("Processing Bilibili video URL: {Url}", url);
+            using (LoggerHolders.PushChatContentLogScope()) {
+                _logger.LogInformation("Processing Bilibili video URL: {Url}", url);
+            }
             var videoInfo = await _biliApiService.GetVideoInfoAsync(url);
             if (videoInfo == null) {
-                _logger.LogWarning("Failed to get video info for {Url}", url);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogWarning("Failed to get video info for {Url}", url);
+                }
                 return;
             }
             await HandleVideoInfoAsync(message, videoInfo);
         }
 
         private async Task ProcessOpusUrlAsync(Message message, string url) {
-            _logger.LogInformation("Processing Bilibili opus URL: {Url}", url);
+            using (LoggerHolders.PushChatContentLogScope()) {
+                _logger.LogInformation("Processing Bilibili opus URL: {Url}", url);
+            }
             var opusInfo = await _biliApiService.GetOpusInfoAsync(url);
             if (opusInfo == null) {
-                _logger.LogWarning("Failed to get opus info for {Url}", url);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogWarning("Failed to get opus info for {Url}", url);
+                }
                 return;
             }
             await HandleOpusInfoAsync(message, opusInfo);

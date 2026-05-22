@@ -78,7 +78,9 @@ namespace TelegramSearchBot.Controller.AI.OCR {
                 logger.LogInformation($"使用OCR引擎: {engine}");
                 OcrStr = await ocrService.ExecuteAsync(new MemoryStream(PhotoStream));
                 if (!string.IsNullOrWhiteSpace(OcrStr)) {
-                    logger.LogInformation(OcrStr);
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        logger.LogInformation(OcrStr);
+                    }
                     await MessageExtensionService.AddOrUpdateAsync(p.MessageDataId, "OCR_Result", OcrStr);
                     p.ProcessingResults.Add($"[OCR识别结果] {OcrStr}");
                 }

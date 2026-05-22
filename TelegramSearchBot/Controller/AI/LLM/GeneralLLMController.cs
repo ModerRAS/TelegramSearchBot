@@ -93,7 +93,9 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                     string commandText = Message.Substring(botCommandEntity.Offset, botCommandEntity.Length);
                     // Check if the command text itself contains @BotName (e.g., /cmd@MyBot)
                     if (commandText.Contains($"@{botIdentity.UserName}")) {
-                        logger.LogInformation($"Ignoring command '{commandText}' in GeneralLLMController as it's a direct command to the bot and should be handled by a dedicated command handler. MessageId: {telegramMessage.MessageId}");
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            logger.LogInformation($"Ignoring command '{commandText}' in GeneralLLMController as it's a direct command to the bot and should be handled by a dedicated command handler. MessageId: {telegramMessage.MessageId}");
+                        }
                         return; // Let other command handlers process it
                     }
                 }
