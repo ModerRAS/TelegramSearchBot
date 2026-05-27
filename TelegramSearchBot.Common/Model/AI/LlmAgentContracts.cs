@@ -115,6 +115,25 @@ namespace TelegramSearchBot.Model.AI {
         public DateTime CompletedAtUtc { get; set; } = DateTime.UtcNow;
     }
 
+    public sealed class SandboxToolTask {
+        public string RequestId { get; set; } = Guid.NewGuid().ToString("N");
+        public string ToolName { get; set; } = string.Empty;
+        public Dictionary<string, string> Arguments { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public long ChatId { get; set; }
+        public long UserId { get; set; }
+        public long MessageId { get; set; }
+        public string BoxName { get; set; } = string.Empty;
+        public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public sealed class SandboxToolResult {
+        public string RequestId { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string Result { get; set; } = string.Empty;
+        public string ErrorMessage { get; set; } = string.Empty;
+        public DateTime CompletedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
     public sealed class AgentSessionInfo {
         public long ChatId { get; set; }
         public int ProcessId { get; set; }
@@ -217,5 +236,8 @@ namespace TelegramSearchBot.Model.AI {
         public static string AgentControl(long chatId) => $"AGENT_CONTROL:{chatId}";
         public static string TelegramResult(string requestId) => $"TELEGRAM_RESULT:{requestId}";
         public static string SubAgentResult(string requestId) => $"SUBAGENT_RESULT:{requestId}";
+        public static string SandboxToolQueue(long chatId) => $"SANDBOX_TOOL_TASKS:{chatId}";
+        public static string SandboxToolHeartbeat(long chatId) => $"SANDBOX_TOOL_HEARTBEAT:{chatId}";
+        public static string SandboxToolResult(string requestId) => $"SANDBOX_TOOL_RESULT:{requestId}";
     }
 }

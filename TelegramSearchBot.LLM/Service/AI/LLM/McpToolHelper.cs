@@ -1309,11 +1309,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// <summary>
         /// Registers proxy tools that are executed remotely via IPC (e.g., agent calling main process tools).
         /// Unlike RegisterExternalTools, this preserves original tool names without any prefix.
-        /// Tools already registered locally (in ToolRegistry) are skipped.
+        /// Tools already registered locally (in ToolRegistry) are skipped unless allowLocalOverride is true.
         /// </summary>
         public static void RegisterProxyTools(
             List<ProxyToolDefinition> toolDefinitions,
-            Func<string, Dictionary<string, string>, Task<string>> executor) {
+            Func<string, Dictionary<string, string>, Task<string>> executor,
+            bool allowLocalOverride = false) {
             _proxyToolExecutor = executor;
             ProxyToolRegistry.Clear();
 
@@ -1322,8 +1323,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             int skippedLocal = 0;
 
             foreach (var tool in toolDefinitions) {
-                // Skip tools already registered locally
-                if (ToolRegistry.ContainsKey(tool.Name)) {
+                // Skip tools already registered locally unless explicitly overriding them (used by OS-sandboxed tool hosts).
+                if (!allowLocalOverride && ToolRegistry.ContainsKey(tool.Name)) {
                     skippedLocal++;
                     continue;
                 }

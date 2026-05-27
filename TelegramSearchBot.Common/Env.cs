@@ -60,6 +60,25 @@ namespace TelegramSearchBot.Common {
             AgentMaxRecoveryAttempts = config.AgentMaxRecoveryAttempts;
             AgentQueueBacklogWarningThreshold = config.AgentQueueBacklogWarningThreshold;
             AgentProcessMemoryLimitMb = config.AgentProcessMemoryLimitMb;
+            EnableLlmSandboxie = config.EnableLlmSandboxie;
+            SandboxieStartExe = string.IsNullOrWhiteSpace(config.SandboxieStartExe)
+                ? @"C:\Program Files\Sandboxie-Plus\Start.exe"
+                : config.SandboxieStartExe.Trim();
+            SandboxieIniPath = string.IsNullOrWhiteSpace(config.SandboxieIniPath)
+                ? @"C:\Windows\Sandboxie.ini"
+                : config.SandboxieIniPath.Trim();
+            SandboxieAutoRegisterImportBox = config.SandboxieAutoRegisterImportBox;
+            SandboxieDenyHostFileSystem = config.SandboxieDenyHostFileSystem;
+            SandboxieBoxImportDirectory = string.IsNullOrWhiteSpace(config.SandboxieBoxImportDirectory)
+                ? Path.Combine(WorkDir, "Sandboxie", "Boxes")
+                : config.SandboxieBoxImportDirectory;
+            SandboxieBoxPrefix = string.IsNullOrWhiteSpace(config.SandboxieBoxPrefix) ? "TGSB_G_" : config.SandboxieBoxPrefix;
+            SandboxieGroupFilesRoot = string.IsNullOrWhiteSpace(config.SandboxieGroupFilesRoot)
+                ? string.Empty
+                : config.SandboxieGroupFilesRoot.Trim();
+            SandboxieGlobalReadPaths = config.SandboxieGlobalReadPaths ?? new List<string>();
+            SandboxieGlobalClosedPaths = config.SandboxieGlobalClosedPaths ?? new List<string>();
+            SandboxieToolTimeoutSeconds = Math.Clamp(config.SandboxieToolTimeoutSeconds, 5, 3600);
         }
 
         public static BotApiEndpointSettings ResolveBotApiEndpoint(Config config) {
@@ -137,6 +156,17 @@ namespace TelegramSearchBot.Common {
         public static int AgentMaxRecoveryAttempts { get; set; } = 2;
         public static int AgentQueueBacklogWarningThreshold { get; set; } = 20;
         public static int AgentProcessMemoryLimitMb { get; set; } = 256;
+        public static bool EnableLlmSandboxie { get; set; } = false;
+        public static string SandboxieStartExe { get; set; } = @"C:\Program Files\Sandboxie-Plus\Start.exe";
+        public static string SandboxieIniPath { get; set; } = @"C:\Windows\Sandboxie.ini";
+        public static bool SandboxieAutoRegisterImportBox { get; set; } = true;
+        public static bool SandboxieDenyHostFileSystem { get; set; } = false;
+        public static string SandboxieBoxImportDirectory { get; set; } = null!;
+        public static string SandboxieBoxPrefix { get; set; } = "TGSB_G_";
+        public static string SandboxieGroupFilesRoot { get; set; } = null!;
+        public static List<string> SandboxieGlobalReadPaths { get; set; } = new List<string>();
+        public static List<string> SandboxieGlobalClosedPaths { get; set; } = new List<string>();
+        public static int SandboxieToolTimeoutSeconds { get; set; } = 120;
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
 
@@ -205,6 +235,17 @@ namespace TelegramSearchBot.Common {
         public int AgentMaxRecoveryAttempts { get; set; } = 2;
         public int AgentQueueBacklogWarningThreshold { get; set; } = 20;
         public int AgentProcessMemoryLimitMb { get; set; } = 256;
+        public bool EnableLlmSandboxie { get; set; } = false;
+        public string SandboxieStartExe { get; set; } = @"C:\Program Files\Sandboxie-Plus\Start.exe";
+        public string SandboxieIniPath { get; set; } = @"C:\Windows\Sandboxie.ini";
+        public bool SandboxieAutoRegisterImportBox { get; set; } = true;
+        public bool SandboxieDenyHostFileSystem { get; set; } = false;
+        public string SandboxieBoxImportDirectory { get; set; } = string.Empty;
+        public string SandboxieBoxPrefix { get; set; } = "TGSB_G_";
+        public string SandboxieGroupFilesRoot { get; set; } = string.Empty;
+        public List<string> SandboxieGlobalReadPaths { get; set; } = new List<string>();
+        public List<string> SandboxieGlobalClosedPaths { get; set; } = new List<string>();
+        public int SandboxieToolTimeoutSeconds { get; set; } = 120;
     }
 
     public sealed record BotApiEndpointSettings(string BaseUrl, bool IsLocalApi, string ExternalLocalBotApiBaseUrl);

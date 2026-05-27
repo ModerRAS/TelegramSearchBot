@@ -17,7 +17,7 @@ namespace TelegramSearchBot.Service.Tools {
     /// Built-in tool for executing shell commands.
     /// On Windows, uses PowerShell (preferring pwsh over powershell).
     /// On Linux/macOS, uses /bin/bash.
-    /// Restricted to admin users for security.
+    /// Restricted to admin users or OS-sandboxed tool hosts for security.
     /// </summary>
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
     public class BashToolService : IService, IBashToolService {
@@ -80,16 +80,16 @@ namespace TelegramSearchBot.Service.Tools {
         [BuiltInTool("Execute a shell command and return the output. " +
                       "On Windows, commands are executed using PowerShell (pwsh if available, otherwise powershell). " +
                       "On Linux/macOS, commands are executed using bash. " +
-                      "Only available to admin users.")]
+                      "Only available to admin users or OS-sandboxed tool hosts.")]
         public async Task<string> ExecuteCommand(
             [BuiltInParameter("The shell command to execute")] string command,
             ToolContext toolContext,
             [BuiltInParameter("Working directory for command execution. Defaults to the bot's work directory.", IsRequired = false)] string workingDirectory = null,
             [BuiltInParameter("Timeout in milliseconds. Defaults to 30000 (30 seconds).", IsRequired = false)] int timeoutMs = 30000) {
 
-            // Security check: only allow admin users
-            if (toolContext == null || toolContext.UserId != Env.AdminId) {
-                return "Error: Command execution is only available to admin users.";
+            // Security check: only allow admin users or OS-sandboxed tool hosts.
+            if (toolContext == null || ( toolContext.UserId != Env.AdminId && !toolContext.IsSandboxed )) {
+                return "Error: Command execution is only available to admin users or sandboxed tool hosts.";
             }
 
             if (string.IsNullOrWhiteSpace(command)) {
