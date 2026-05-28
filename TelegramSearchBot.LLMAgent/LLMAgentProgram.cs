@@ -16,10 +16,15 @@ namespace TelegramSearchBot.LLMAgent {
     public static class LLMAgentProgram {
         public static async Task RunAsync(string[] args) {
             var effectiveArgs = NormalizeArgs(args);
+            if (effectiveArgs.Length > 0 && effectiveArgs[0].Equals("SandboxToolHost", StringComparison.OrdinalIgnoreCase)) {
+                await RunSandboxToolHostAsync(effectiveArgs.Skip(1).ToArray());
+                return;
+            }
+
             if (effectiveArgs.Length != 2 ||
                 !long.TryParse(effectiveArgs[0], out var chatId) ||
                 !int.TryParse(effectiveArgs[1], out var port)) {
-                Console.Error.WriteLine("Usage: LLMAgent <chatId> <port>");
+                Console.Error.WriteLine("Usage: LLMAgent <chatId> <port> | SandboxToolHost <chatId> <port> <boxName> <parentPid> <parentStartTicksUtc>");
                 Environment.ExitCode = 1;
                 return;
             }
@@ -31,14 +36,42 @@ namespace TelegramSearchBot.LLMAgent {
                 services, logger);
 
             var loop = services.GetRequiredService<Service.AgentLoopService>();
-            using var shutdownCts = new CancellationTokenSource();
+            using var shutdownCts = CreateShutdownTokenSource();
+
+            await loop.RunAsync(chatId, port, shutdownCts.Token);
+        }
+
+        private static async Task RunSandboxToolHostAsync(string[] args) {
+            if (args.Length != 5 ||
+                !long.TryParse(args[0], out var chatId) ||
+                !int.TryParse(args[1], out var port) ||
+                !int.TryParse(args[3], out var parentProcessId) ||
+                !long.TryParse(args[4], out var parentStartTicksUtc)) {
+                Console.Error.WriteLine("Usage: SandboxToolHost <chatId> <port> <boxName> <parentPid> <parentStartTicksUtc>");
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var boxName = args[2];
+            using var services = BuildServices(port);
+            var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("SandboxToolHost");
+            McpToolHelper.EnsureInitialized(
+                typeof(FileToolService).Assembly,
+                services, logger);
+
+            using var shutdownCts = CreateShutdownTokenSource();
+            var consumer = services.GetRequiredService<Service.SandboxToolConsumer>();
+            await consumer.RunAsync(chatId, boxName, parentProcessId, parentStartTicksUtc, shutdownCts.Token);
+        }
+
+        private static CancellationTokenSource CreateShutdownTokenSource() {
+            var shutdownCts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, eventArgs) => {
                 eventArgs.Cancel = true;
                 shutdownCts.Cancel();
             };
             AppDomain.CurrentDomain.ProcessExit += (_, _) => shutdownCts.Cancel();
-
-            await loop.RunAsync(chatId, port, shutdownCts.Token);
+            return shutdownCts;
         }
 
         private static string[] NormalizeArgs(string[] args) {
@@ -82,6 +115,7 @@ namespace TelegramSearchBot.LLMAgent {
             services.AddSingleton<Service.GarnetRpcClient>();
             services.AddSingleton<Service.AgentToolRegistryService>();
             services.AddSingleton<Service.AgentLoopService>();
+            services.AddSingleton<Service.SandboxToolConsumer>();
             return services.BuildServiceProvider();
         }
     }

@@ -70,6 +70,17 @@
   "AgentQueueBacklogWarningThreshold": 20,
   "AgentProcessMemoryLimitMb": 256,
   "MaxToolCycles": 25,
+  "EnableLlmSandboxie": false,
+  "SandboxieStartExe": "C:\\Program Files\\Sandboxie-Plus\\Start.exe",
+  "SandboxieIniPath": "C:\\Windows\\Sandboxie.ini",
+  "SandboxieAutoRegisterImportBox": true,
+  "SandboxieDenyHostFileSystem": false,
+  "SandboxieBoxImportDirectory": "",
+  "SandboxieBoxPrefix": "TGSB_G_",
+  "SandboxieGroupFilesRoot": "",
+  "SandboxieGlobalReadPaths": [],
+  "SandboxieGlobalClosedPaths": [],
+  "SandboxieToolTimeoutSeconds": 120,
   "OLTPAuth": "",
   "OLTPAuthUrl": "",
   "OLTPName": "",
@@ -114,6 +125,16 @@
   - `AgentQueueBacklogWarningThreshold`: Agent 任务队列告警阈值(默认20)
   - `AgentProcessMemoryLimitMb`: Agent 进程工作集上限(默认256MB)
   - `MaxToolCycles`: LLM工具调用最大迭代次数(默认25)，防止无限循环
+  - `EnableLlmSandboxie`: 是否启用 Sandboxie Plus LLM 工具沙箱(默认false)。启用后 `ReadFile`/`WriteFile`/`EditFile`/`SearchText`/`ListFiles`/`ExecuteCommand` 会通过每群一个 Sandboxie portable box 的 ToolHost 执行。
+  - `SandboxieStartExe`: Sandboxie Plus `Start.exe` 路径。
+  - `SandboxieIniPath`: Sandboxie 主配置路径。仅在 `SandboxieAutoRegisterImportBox=true` 时用于自动加入 `ImportBox=<SandboxieBoxImportDirectory>\\*`。
+  - `SandboxieAutoRegisterImportBox`: 是否由程序自动把 portable box 目录注册到 Sandboxie 主配置(默认true)。如希望自行在 Sandboxie Plus 中添加便携容器目录，可设为 false。
+  - `SandboxieDenyHostFileSystem`: 是否默认关闭宿主机盘符根目录访问(默认false)。保持 false 时更适合运行 bash/npm/python 等工具链；写入仍由 Sandboxie 虚拟化，敏感项目数据仍会通过 `ClosedFilePath` 阻断。需要极严格白名单模式时可设为 true。
+  - `SandboxieBoxImportDirectory`: portable box ini 目录；为空时默认 `%LOCALAPPDATA%/TelegramSearchBot/Sandboxie/Boxes`。每个群聊的 box ini 和虚拟文件根都生成在这里。
+  - `SandboxieGroupFilesRoot`: 可选的额外每群文件根目录；为空时不开放。配置后，每个群只读开放 `<root>/<chatId>`。
+  - 程序默认会关闭聊天资源父目录 `Photos`、`Audios`、`Videos`、`Files`，再仅为当前群的既有聊天媒体/文件目录生成只读授权：`Photos/<chatId>`、`Audios/<chatId>`、`Videos/<chatId>`、`Files/<chatId>`。其他群的资源目录默认不可读。Lucene `Index_Data` 不开放给 ToolHost；搜索仍由主进程侧服务完成。
+  - `SandboxieGlobalReadPaths` / `SandboxieGlobalClosedPaths`: 额外全局只读开放/禁止访问路径。
+  - `SandboxieToolTimeoutSeconds`: 沙箱工具调用等待超时(默认120秒)。
 
 启用 `EnableLLMAgentProcess=true` 后，主进程会负责任务排队、Telegram 发消息和流式转发；独立 Agent 进程负责执行 LLM 循环、本地工具和故障恢复。主进程会在 Agent 心跳超时、任务超时或配置切换时执行恢复、重试、死信投递和优雅停机。
 

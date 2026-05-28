@@ -216,6 +216,11 @@ namespace TelegramSearchBot.AppBootstrap {
             McpToolHelper.EnsureInitialized(mainAssembly, llmAssembly, service, mcpLogger);
             Log.Information("McpToolHelper has been initialized with built-in tools.");
 
+            if (Env.EnableLlmSandboxie) {
+                RegisterSandboxieTools(service);
+                Log.Information("Sandboxie LLM tool sandbox is enabled.");
+            }
+
             // Initialize external MCP tool servers
             try {
                 var mcpServerManager = service.GetRequiredService<IMcpServerManager>();
@@ -263,6 +268,34 @@ namespace TelegramSearchBot.AppBootstrap {
         /// </summary>
         private static void RegisterExternalMcpTools(IMcpServerManager mcpServerManager) {
             McpToolHelper.RegisterExternalMcpTools(mcpServerManager);
+        }
+
+        private static void RegisterSandboxieTools(IServiceProvider services) {
+            var sandboxService = services.GetRequiredService<SandboxieToolHostService>();
+            McpToolHelper.RegisterProxyTools(
+                SandboxieToolHostService.GetToolDefinitions(),
+                async (toolName, arguments) => {
+                    long chatId = 0, userId = 0, messageId = 0;
+                    if (arguments.TryGetValue("__chatId", out var cid)) {
+                        long.TryParse(cid, out chatId);
+                        arguments.Remove("__chatId");
+                    }
+                    if (arguments.TryGetValue("__userId", out var uid)) {
+                        long.TryParse(uid, out userId);
+                        arguments.Remove("__userId");
+                    }
+                    if (arguments.TryGetValue("__messageId", out var mid)) {
+                        long.TryParse(mid, out messageId);
+                        arguments.Remove("__messageId");
+                    }
+
+                    if (chatId == 0) {
+                        throw new InvalidOperationException("Sandboxed tool execution requires a valid __chatId context value.");
+                    }
+
+                    return await sandboxService.ExecuteToolAsync(toolName, arguments, chatId, userId, messageId);
+                },
+                allowLocalOverride: true);
         }
     }
 }

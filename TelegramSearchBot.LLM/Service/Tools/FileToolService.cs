@@ -39,8 +39,8 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("Starting line number (1-based). If omitted, reads from the beginning.", IsRequired = false)] int? startLine = null,
             [BuiltInParameter("Ending line number (1-based, inclusive). If omitted, reads to the end.", IsRequired = false)] int? endLine = null) {
 
-            if (toolContext == null || toolContext.UserId != Env.AdminId) {
-                return "Error: File operations are only available to admin users.";
+            if (!IsFileToolAllowed(toolContext)) {
+                return "Error: File operations are only available to admin users or sandboxed tool hosts.";
             }
 
             try {
@@ -89,8 +89,8 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("Content to write to the file")] string content,
             ToolContext toolContext) {
 
-            if (toolContext == null || toolContext.UserId != Env.AdminId) {
-                return "Error: File operations are only available to admin users.";
+            if (!IsFileToolAllowed(toolContext)) {
+                return "Error: File operations are only available to admin users or sandboxed tool hosts.";
             }
 
             try {
@@ -117,8 +117,8 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("The new text to replace the old text with")] string newText,
             ToolContext toolContext) {
 
-            if (toolContext == null || toolContext.UserId != Env.AdminId) {
-                return "Error: File operations are only available to admin users.";
+            if (!IsFileToolAllowed(toolContext)) {
+                return "Error: File operations are only available to admin users or sandboxed tool hosts.";
             }
 
             try {
@@ -166,8 +166,8 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("File glob pattern to filter files (e.g., '*.cs', '*.json'). Defaults to all files.", IsRequired = false)] string fileGlob = null,
             [BuiltInParameter("Whether to ignore case. Defaults to true.", IsRequired = false)] bool ignoreCase = true) {
 
-            if (toolContext == null || toolContext.UserId != Env.AdminId) {
-                return "Error: File operations are only available to admin users.";
+            if (!IsFileToolAllowed(toolContext)) {
+                return "Error: File operations are only available to admin users or sandboxed tool hosts.";
             }
 
             try {
@@ -237,8 +237,8 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("Directory path to list. Defaults to bot work directory.", IsRequired = false)] string path = null,
             [BuiltInParameter("Glob pattern to filter files (e.g., '*.cs'). If omitted, lists all.", IsRequired = false)] string pattern = null) {
 
-            if (toolContext == null || toolContext.UserId != Env.AdminId) {
-                return "Error: File operations are only available to admin users.";
+            if (!IsFileToolAllowed(toolContext)) {
+                return "Error: File operations are only available to admin users or sandboxed tool hosts.";
             }
 
             try {
@@ -271,6 +271,10 @@ namespace TelegramSearchBot.Service.Tools {
                 _logger.LogError(ex, "Error listing files in: {Path}", path);
                 return $"Error listing files: {ex.Message}";
             }
+        }
+
+        private static bool IsFileToolAllowed(ToolContext toolContext) {
+            return toolContext != null && ( toolContext.UserId == Env.AdminId || toolContext.IsSandboxed );
         }
 
         private static string ResolvePath(string path) {
