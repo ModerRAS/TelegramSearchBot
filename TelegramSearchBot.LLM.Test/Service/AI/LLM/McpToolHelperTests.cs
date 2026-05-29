@@ -710,6 +710,26 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         [Fact]
+        public void SetBuiltInToolEnabled_WhenDisabled_HidesToolFromPromptAndNativeDefinitions() {
+            const string toolName = "StaticTool";
+
+            try {
+                McpToolHelper.SetBuiltInToolEnabled(toolName, false);
+
+                var prompt = McpToolHelper.FormatSystemPrompt("TestBot", 12345);
+                var tools = McpToolHelper.GetNativeToolDefinitions();
+                var parsed = McpToolHelper.TryParseToolCalls("<StaticTool><arg1>hidden</arg1></StaticTool>", out var parsedToolCalls);
+
+                Assert.DoesNotContain(toolName, prompt);
+                Assert.DoesNotContain(tools, tool => tool.FunctionName == toolName);
+                Assert.False(parsed);
+                Assert.Empty(parsedToolCalls);
+            } finally {
+                McpToolHelper.SetBuiltInToolEnabled(toolName, true);
+            }
+        }
+
+        [Fact]
         public void GetNativeToolDefinitions_IncludesExternalMcpTools() {
             // Register some external tools
             var externalTools = new List<(string serverName, McpToolHelper.ExternalToolInfo tool)> {

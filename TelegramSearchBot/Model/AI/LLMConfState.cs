@@ -11,6 +11,9 @@ namespace TelegramSearchBot.Model.AI {
         [Description("setting_alt_photo_model")]
         SettingAltPhotoModel,
 
+        [Description("setting_image_generation_model")]
+        SettingImageGenerationModel,
+
         [Description("awaiting_name")]
         AwaitingName,
 

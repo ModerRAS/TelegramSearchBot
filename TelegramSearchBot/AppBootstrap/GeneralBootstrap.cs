@@ -34,6 +34,7 @@ using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Scheduler;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Service.Tools;
 using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.View;
 
@@ -209,6 +210,18 @@ namespace TelegramSearchBot.AppBootstrap {
             using CancellationTokenSource cts = new();
             service = host.Services;
 
+            // SQLite 数据库初始化
+            using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
+                var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
+                var searchCacheContext = serviceScope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
+                //context.Database.EnsureCreated();
+                context.Database.Migrate();
+                await searchCacheContext.Database.MigrateAsync();
+
+                var imageGenerationSettings = serviceScope.ServiceProvider.GetRequiredService<ImageGenerationToolSettingsService>();
+                await imageGenerationSettings.InitializeToolVisibilityAsync();
+            }
+
             var loggerFactory = service.GetRequiredService<ILoggerFactory>();
             var mcpLogger = loggerFactory.CreateLogger("McpToolHelperInitialization");
             var mainAssembly = typeof(GeneralBootstrap).Assembly;
@@ -240,15 +253,6 @@ namespace TelegramSearchBot.AppBootstrap {
                 Log.Information("Exported tool definitions to Redis for agent discovery.");
             } catch (Exception ex) {
                 Log.Warning(ex, "Failed to export tool definitions to Redis. Agent processes may have limited tools.");
-            }
-
-            // SQLite 数据库初始化
-            using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
-                var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
-                var searchCacheContext = serviceScope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
-                //context.Database.EnsureCreated();
-                context.Database.Migrate();
-                await searchCacheContext.Database.MigrateAsync();
             }
 
             // 启动Host，SchedulerService作为HostedService会自动启动

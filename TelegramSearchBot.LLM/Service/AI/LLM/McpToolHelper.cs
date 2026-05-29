@@ -34,8 +34,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private static string _sCachedToolsXml;
         private static string _sCachedExternalToolsXml;
         private static string _sCachedProxyToolsXml;
+        private static readonly ConcurrentDictionary<string, byte> DisabledBuiltInTools = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private static bool _sIsInitialized = false;
         private static readonly object _initializationLock = new object();
+        private const string NoBuiltInToolsXml = "<!-- No tools are currently available. -->";
         private const int MaxToolLogValueLength = 2048;
         private const int MaxToolLogPayloadLength = 8192;
 
@@ -95,7 +97,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
                 _sCachedToolsXml = RegisterToolsAndGetPromptString(assemblies);
                 if (string.IsNullOrWhiteSpace(_sCachedToolsXml)) {
-                    _sCachedToolsXml = "<!-- No tools are currently available. -->";
+                    _sCachedToolsXml = NoBuiltInToolsXml;
                     _sLogger?.LogWarning("McpToolHelper.EnsureInitialized: No tools found or registered. Prompt will indicate no tools available.");
                 } else {
                     _sLogger?.LogInformation("McpToolHelper.EnsureInitialized: Tools registered and XML prompt cached successfully.");
@@ -110,6 +112,28 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// </summary>
         public static void EnsureInitialized(Assembly assembly, IServiceProvider serviceProvider, ILogger logger) {
             EnsureInitialized(assembly, null, serviceProvider, logger);
+        }
+
+        public static void SetBuiltInToolEnabled(string toolName, bool enabled) {
+            if (string.IsNullOrWhiteSpace(toolName)) {
+                return;
+            }
+
+            if (enabled) {
+                DisabledBuiltInTools.TryRemove(toolName.Trim(), out _);
+            } else {
+                DisabledBuiltInTools[toolName.Trim()] = 1;
+            }
+
+            _sLogger?.LogInformation("Built-in tool visibility changed. Tool={ToolName}, Enabled={Enabled}", toolName, enabled);
+        }
+
+        public static bool IsBuiltInToolEnabled(string toolName) {
+            return string.IsNullOrWhiteSpace(toolName) || !DisabledBuiltInTools.ContainsKey(toolName.Trim());
+        }
+
+        private static IEnumerable<KeyValuePair<string, (MethodInfo Method, Type OwningType)>> GetEnabledBuiltInToolEntries() {
+            return ToolRegistry.Where(kvp => IsBuiltInToolEnabled(kvp.Key));
         }
 
         /// <summary>
@@ -130,7 +154,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                               m.GetCustomAttribute<McpToolAttribute>() != null)
                                   .ToList();
 
-            var sb = new StringBuilder();
             foreach (var method in methods) {
                 // Prefer BuiltInToolAttribute, fall back to McpToolAttribute
                 var builtInAttr = method.GetCustomAttribute<BuiltInToolAttribute>();
@@ -146,30 +169,47 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     loggerForRegistration?.LogWarning($"Duplicate tool name '{toolName}' found. Method {method.DeclaringType.FullName}.{method.Name} will be ignored.");
                     continue;
                 }
-
-                sb.AppendLine($"- <tool name=\"{toolName}\">");
-                sb.AppendLine($"    <description>{description}</description>");
-                sb.AppendLine($"    <parameters>");
-                foreach (var param in method.GetParameters()) {
-                    // Skip injected context parameters (e.g. ToolContext) that are not part of the tool API
-                    if (param.ParameterType == typeof(ToolContext)) continue;
-
-                    // Check both attribute types
-                    var builtInParamAttr = param.GetCustomAttribute<BuiltInParameterAttribute>();
-                    var mcpParamAttr = param.GetCustomAttribute<McpParameterAttribute>();
-
-                    // Skip parameters that have no tool parameter attribute - they are internally injected
-                    if (builtInParamAttr == null && mcpParamAttr == null) continue;
-
-                    var paramDescription = builtInParamAttr?.Description ?? mcpParamAttr?.Description ?? $"Parameter '{param.Name}'";
-                    var paramIsRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !param.IsOptional && !param.HasDefaultValue && !( param.ParameterType.IsValueType && Nullable.GetUnderlyingType(param.ParameterType) == null ) );
-                    var paramType = GetSimplifiedTypeName(param.ParameterType);
-                    sb.AppendLine($"        <parameter name=\"{param.Name}\" type=\"{paramType}\" required=\"{paramIsRequired.ToString().ToLower()}\">{paramDescription}</parameter>");
-                }
-                sb.AppendLine($"    </parameters>");
-                sb.AppendLine($"  </tool>");
             }
+            return BuildBuiltInToolsXml();
+        }
+
+        private static string BuildBuiltInToolsXml() {
+            var sb = new StringBuilder();
+            foreach (var (toolName, toolInfo) in GetEnabledBuiltInToolEntries()) {
+                var method = toolInfo.Method;
+                var builtInAttr = method.GetCustomAttribute<BuiltInToolAttribute>();
+                var mcpAttr = method.GetCustomAttribute<McpToolAttribute>();
+                var description = builtInAttr?.Description ?? mcpAttr?.Description;
+                if (description == null) continue;
+
+                AppendToolXml(sb, toolName, method, description);
+            }
+
             return sb.ToString();
+        }
+
+        private static void AppendToolXml(StringBuilder sb, string toolName, MethodInfo method, string description) {
+            sb.AppendLine($"- <tool name=\"{toolName}\">");
+            sb.AppendLine($"    <description>{description}</description>");
+            sb.AppendLine($"    <parameters>");
+            foreach (var param in method.GetParameters()) {
+                // Skip injected context parameters (e.g. ToolContext) that are not part of the tool API
+                if (param.ParameterType == typeof(ToolContext)) continue;
+
+                // Check both attribute types
+                var builtInParamAttr = param.GetCustomAttribute<BuiltInParameterAttribute>();
+                var mcpParamAttr = param.GetCustomAttribute<McpParameterAttribute>();
+
+                // Skip parameters that have no tool parameter attribute - they are internally injected
+                if (builtInParamAttr == null && mcpParamAttr == null) continue;
+
+                var paramDescription = builtInParamAttr?.Description ?? mcpParamAttr?.Description ?? $"Parameter '{param.Name}'";
+                var paramIsRequired = builtInParamAttr?.IsRequired ?? mcpParamAttr?.IsRequired ?? ( !param.IsOptional && !param.HasDefaultValue && !( param.ParameterType.IsValueType && Nullable.GetUnderlyingType(param.ParameterType) == null ) );
+                var paramType = GetSimplifiedTypeName(param.ParameterType);
+                sb.AppendLine($"        <parameter name=\"{param.Name}\" type=\"{paramType}\" required=\"{paramIsRequired.ToString().ToLower()}\">{paramDescription}</parameter>");
+            }
+            sb.AppendLine($"    </parameters>");
+            sb.AppendLine($"  </tool>");
         }
 
         /// <summary>
@@ -180,7 +220,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var tools = new List<OpenAI.Chat.ChatTool>();
 
             // Built-in tools
-            foreach (var (toolName, toolInfo) in ToolRegistry) {
+            foreach (var (toolName, toolInfo) in GetEnabledBuiltInToolEntries()) {
                 var method = toolInfo.Method;
                 var builtInAttr = method.GetCustomAttribute<BuiltInToolAttribute>();
                 var mcpAttr = method.GetCustomAttribute<McpToolAttribute>();
@@ -247,7 +287,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // Proxy tools (remote tools from main process)
             foreach (var (name, entry) in ProxyToolRegistry) {
-                if (ToolRegistry.ContainsKey(name)) continue; // already registered locally
+                if (ToolRegistry.ContainsKey(name) && IsBuiltInToolEnabled(name)) continue; // already registered locally
                 var properties = new Dictionary<string, object>();
                 var required = new List<string>();
 
@@ -306,7 +346,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             if (string.IsNullOrWhiteSpace(botName)) botName = "AI Assistant";
-            string builtInToolsXml = _sCachedToolsXml ?? "<!-- No built-in tools available. -->";
+            string builtInToolsXml = BuildBuiltInToolsXml();
+            if (string.IsNullOrWhiteSpace(builtInToolsXml)) {
+                builtInToolsXml = NoBuiltInToolsXml;
+            }
             string externalToolsXml = _sCachedExternalToolsXml ?? "";
 
             var toolsSectionBuilder = new StringBuilder();
@@ -714,7 +757,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return null;
             }
 
-            return ToolRegistry.Keys.FirstOrDefault(k => k.Equals(toolName, StringComparison.OrdinalIgnoreCase))
+            return ToolRegistry.Keys.FirstOrDefault(k => IsBuiltInToolEnabled(k) && k.Equals(toolName, StringComparison.OrdinalIgnoreCase))
                    ?? ExternalToolRegistry.Keys.FirstOrDefault(k => k.Equals(toolName, StringComparison.OrdinalIgnoreCase))
                    ?? ProxyToolRegistry.Keys.FirstOrDefault(k => k.Equals(toolName, StringComparison.OrdinalIgnoreCase));
         }
@@ -754,6 +797,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             stringArguments = cleanedArguments;
 
             try {
+                if (ToolRegistry.ContainsKey(toolName) && !IsBuiltInToolEnabled(toolName)) {
+                    throw new InvalidOperationException($"Built-in tool '{toolName}' is disabled.");
+                }
+
                 // Check if this is a proxy tool (routed to remote process via IPC)
                 if (ProxyToolRegistry.ContainsKey(toolName) && _proxyToolExecutor != null) {
                     var proxyArguments = new Dictionary<string, string>(stringArguments, StringComparer.OrdinalIgnoreCase);
@@ -943,21 +990,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             if (ToolRegistry.ContainsKey(toolName)) {
-                return "Local";
+                return IsBuiltInToolEnabled(toolName) ? "Local" : "LocalDisabled";
             }
 
             return "Unregistered";
         }
 
         private static string GetAvailableToolNamesForLog() {
-            var toolNames = ToolRegistry.Keys
+            var toolNames = ToolRegistry.Keys.Where(IsBuiltInToolEnabled)
                 .Concat(ExternalToolRegistry.Keys)
                 .Concat(ProxyToolRegistry.Keys)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .Take(80)
                 .ToList();
-            var suffix = ToolRegistry.Count + ExternalToolRegistry.Count + ProxyToolRegistry.Count > toolNames.Count
+            var enabledBuiltInCount = ToolRegistry.Keys.Count(IsBuiltInToolEnabled);
+            var suffix = enabledBuiltInCount + ExternalToolRegistry.Count + ProxyToolRegistry.Count > toolNames.Count
                 ? ",..."
                 : string.Empty;
             return string.Join(",", toolNames) + suffix;
@@ -1245,7 +1293,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var result = new List<ProxyToolDefinition>();
 
             // Export built-in tools
-            foreach (var (toolName, toolInfo) in ToolRegistry) {
+            foreach (var (toolName, toolInfo) in GetEnabledBuiltInToolEntries()) {
                 var method = toolInfo.Method;
                 var builtInAttr = method.GetCustomAttribute<BuiltInToolAttribute>();
                 var mcpAttr = method.GetCustomAttribute<McpToolAttribute>();
@@ -1324,7 +1372,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             foreach (var tool in toolDefinitions) {
                 // Skip tools already registered locally unless explicitly overriding them (used by OS-sandboxed tool hosts).
-                if (!allowLocalOverride && ToolRegistry.ContainsKey(tool.Name)) {
+                if (!allowLocalOverride && ToolRegistry.ContainsKey(tool.Name) && IsBuiltInToolEnabled(tool.Name)) {
                     skippedLocal++;
                     continue;
                 }
