@@ -15,6 +15,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Service.Tools;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -22,6 +23,7 @@ namespace TelegramSearchBot.Service.Manage {
         public string ServiceName => "EditLLMConfService";
         protected readonly DataDbContext DataContext;
         protected readonly IEditLLMConfHelper Helper;
+        private readonly ImageGenerationToolSettingsService _imageGenerationToolSettingsService;
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
 
         // 状态处理器映射字典
@@ -33,11 +35,13 @@ namespace TelegramSearchBot.Service.Manage {
         public EditLLMConfService(
             IEditLLMConfHelper helper,
             DataDbContext context,
-            IConnectionMultiplexer connectionMultiplexer
+            IConnectionMultiplexer connectionMultiplexer,
+            ImageGenerationToolSettingsService imageGenerationToolSettingsService
             ) {
             this.connectionMultiplexer = connectionMultiplexer;
             DataContext = context;
             Helper = helper ?? throw new ArgumentNullException(nameof(helper));
+            _imageGenerationToolSettingsService = imageGenerationToolSettingsService ?? throw new ArgumentNullException(nameof(imageGenerationToolSettingsService));
 
             // 初始化状态处理器映射
             _stateHandlers = new Dictionary<string, Func<EditLLMConfRedisHelper, string, Task<(bool, string)>>>
@@ -58,7 +62,8 @@ namespace TelegramSearchBot.Service.Manage {
                 { LLMConfState.ViewingModelSelectChannel.GetDescription(), HandleViewingModelSelectChannelAsync },
                 { LLMConfState.EditingInputValue.GetDescription(), HandleEditingInputValueAsync },
                 { LLMConfState.SettingMaxRetry.GetDescription(), HandleSettingMaxRetryAsync },
-                { LLMConfState.SettingMaxImageRetry.GetDescription(), HandleSettingMaxImageRetryAsync }
+                { LLMConfState.SettingMaxImageRetry.GetDescription(), HandleSettingMaxImageRetryAsync },
+                { LLMConfState.SettingImageGenerationModel.GetDescription(), HandleSettingImageGenerationModelAsync }
             };
 
             // 初始化字段更新处理器映射
@@ -183,6 +188,17 @@ namespace TelegramSearchBot.Service.Manage {
                 return (true, $"图片分析模型已设置为: {command}");
             } catch {
                 return (false, "设置图片分析模型失败");
+            }
+        }
+
+        private async Task<(bool, string)> HandleSettingImageGenerationModelAsync(EditLLMConfRedisHelper redis, string command) {
+            try {
+                await _imageGenerationToolSettingsService.SetModelNameAsync(command);
+                await redis.DeleteKeysAsync();
+                return (true, $"生图模型已设置为: {command.Trim()}。请确保该模型已通过 `添加模型` 关联到一个 OpenAI-compatible 渠道。");
+            } catch {
+                await redis.DeleteKeysAsync();
+                return (false, "设置生图模型失败");
             }
         }
 
@@ -481,6 +497,31 @@ namespace TelegramSearchBot.Service.Manage {
             if (cmd.Equals("设置图片模型", StringComparison.OrdinalIgnoreCase)) {
                 await redis.SetStateAsync(LLMConfState.SettingAltPhotoModel.GetDescription());
                 return (true, "请输入图片分析使用的模型名称:");
+            }
+
+            if (cmd.Equals("开启生图工具", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("启用生图工具", StringComparison.OrdinalIgnoreCase)) {
+                await _imageGenerationToolSettingsService.SetToolEnabledAsync(true);
+                var modelName = await _imageGenerationToolSettingsService.GetModelNameAsync();
+                return (true, $"生图工具已开启，会注入到 LLM 工具提示词中。当前生图模型: {modelName}");
+            }
+
+            if (cmd.Equals("关闭生图工具", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("禁用生图工具", StringComparison.OrdinalIgnoreCase)) {
+                await _imageGenerationToolSettingsService.SetToolEnabledAsync(false);
+                return (true, "生图工具已关闭，并会从 LLM 工具提示词中隐藏。");
+            }
+
+            if (cmd.Equals("生图工具状态", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("查看生图工具", StringComparison.OrdinalIgnoreCase)) {
+                var enabled = await _imageGenerationToolSettingsService.IsToolEnabledAsync();
+                var modelName = await _imageGenerationToolSettingsService.GetModelNameAsync();
+                return (true, $"生图工具: {( enabled ? "已开启" : "已关闭" )}\n当前生图模型: {modelName}\nAPI 地址与 API Key 来自该模型关联的 LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址。");
+            }
+
+            if (cmd.Equals("设置生图模型", StringComparison.OrdinalIgnoreCase)) {
+                await redis.SetStateAsync(LLMConfState.SettingImageGenerationModel.GetDescription());
+                return (true, $"请输入生图使用的模型名称(默认 {ImageGenerationToolSettingsService.DefaultModelName}):");
             }
 
             return null;
