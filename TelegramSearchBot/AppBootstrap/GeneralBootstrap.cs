@@ -220,6 +220,9 @@ namespace TelegramSearchBot.AppBootstrap {
 
                 var imageGenerationSettings = serviceScope.ServiceProvider.GetRequiredService<ImageGenerationToolSettingsService>();
                 await imageGenerationSettings.InitializeToolVisibilityAsync();
+
+                var musicGenerationSettings = serviceScope.ServiceProvider.GetRequiredService<MusicGenerationToolSettingsService>();
+                await musicGenerationSettings.InitializeToolVisibilityAsync();
             }
 
             var loggerFactory = service.GetRequiredService<ILoggerFactory>();

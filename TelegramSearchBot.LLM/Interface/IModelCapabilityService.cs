@@ -50,6 +50,11 @@ namespace TelegramSearchBot.Interface {
         Task<IEnumerable<ChannelWithModel>> GetImageGenerationModels();
 
         /// <summary>
+        /// 获取音乐生成模型
+        /// </summary>
+        Task<IEnumerable<ChannelWithModel>> GetMusicGenerationModels();
+
+        /// <summary>
         /// 删除过期的模型能力信息
         /// </summary>
         Task<int> CleanupOldCapabilities(int daysOld = 30);

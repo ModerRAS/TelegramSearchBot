@@ -50,6 +50,11 @@ namespace TelegramSearchBot.Model.AI {
         public bool SupportsImageGeneration => GetCapabilityBool("image_generation") || GetCapabilityBool("text_to_image") || IsKnownImageGenerationModelName(ModelName);
 
         /// <summary>
+        /// 是否是音乐生成模型
+        /// </summary>
+        public bool SupportsMusicGeneration => GetCapabilityBool("music_generation") || GetCapabilityBool("text_to_music") || IsKnownMusicGenerationModelName(ModelName);
+
+        /// <summary>
         /// 获取布尔类型的能力值
         /// </summary>
         public bool GetCapabilityBool(string capabilityName) {
@@ -94,6 +99,18 @@ namespace TelegramSearchBot.Model.AI {
                    lowerName.Contains("flux") ||
                    lowerName.Contains("stable-diffusion") ||
                    lowerName.Contains("sdxl");
+        }
+
+        public static bool IsKnownMusicGenerationModelName(string modelName) {
+            if (string.IsNullOrWhiteSpace(modelName)) {
+                return false;
+            }
+
+            var lowerName = modelName.Trim().ToLowerInvariant();
+            return lowerName.Equals("music-2.6") ||
+                   lowerName.Equals("music-2.6-free") ||
+                   lowerName.Equals("music-cover") ||
+                   lowerName.Equals("music-cover-free");
         }
     }
 }

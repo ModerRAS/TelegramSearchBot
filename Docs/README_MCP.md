@@ -69,6 +69,25 @@ API 地址和 API Key 来自该模型关联的 LLM 渠道，因此可通过 `新
 
 MiniMax 不支持选择输出文件格式；`output_format` 仅用于 OpenAI-compatible 图片接口。MiniMax 的 URL 响应会按实际 Content-Type 或 URL 扩展名保存，base64 响应默认按 PNG 保存。
 
+### 2.2.2 音乐生成工具
+
+| 工具名称 | 描述 | 参数 |
+|---------|------|------|
+| `generate_music` | 通过配置的 MiniMax 音乐 API 生成歌曲或翻唱，默认使用当前群的音乐模型；未配置时使用全局默认 `music-2.6`；接口走 `/v1/music_generation`；音频保存到本地并默认自动回复到当前聊天 | `prompt?`, `lyrics?`, `model?`, `isInstrumental?`, `lyricsOptimizer?`, `outputFormat?`, `sampleRate?`, `bitrate?`, `format?`, `aigcWatermark?`, `audioUrl?`, `audioBase64?`, `coverFeatureId?`, `sendToChat?`, `caption?`, `title?`, `performer?`, `replyToMessageId?`, `timeoutSeconds?` |
+
+管理员命令：
+- `开启音乐工具`：允许 `generate_music` 注入到 LLM 工具提示词和 native tool definitions。
+- `关闭音乐工具`：隐藏 `generate_music`，关闭后 LLM 不会看到该工具。
+- `音乐工具状态`：查看开关状态和默认音乐模型。
+- `设置默认音乐模型`：设置无群级配置时使用的全局默认音乐模型，内置默认 `music-2.6`；MiniMax 可设置为 `music-2.6`、`music-2.6-free`、`music-cover` 或 `music-cover-free`。
+- 群内普通管理员可发送 `选择音乐模型` 从已识别的音乐生成模型里按编号选择，也可用 `设置音乐模型 <模型名>` 直接设置当前群的音乐模型，或用 `清除音乐模型` 恢复使用全局默认。
+
+音乐模型识别优先使用模型能力 `music_generation` / `text_to_music`；没有能力数据时，会按 MiniMax `music-2.6` / `music-2.6-free` / `music-cover` / `music-cover-free` 兜底识别。
+
+API 地址和 API Key 来自该模型关联的 LLM 渠道，因此可通过 `新建渠道` / `编辑渠道` 自定义网关地址，例如 `https://api.minimaxi.com`。配置 MiniMax 时，渠道类型建议选择 `MiniMax`，再通过 `添加模型` 关联音乐模型。
+
+`music-2.6` / `music-2.6-free` 支持文生音乐和纯音乐；非纯音乐默认需要传 `lyrics`，除非 `lyricsOptimizer` 为 true。`music-cover` / `music-cover-free` 支持基于 `audioUrl`、`audioBase64` 或预处理得到的 `coverFeatureId` 生成翻唱。
+
 **文件大小限制**:
 - 本地 Bot API（内置或外部）: 最大 2GB
 - 云端API: 最大 50MB

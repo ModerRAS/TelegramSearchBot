@@ -30,6 +30,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly IBotIdentityProvider _botIdentityProvider;
         private readonly IGroupLlmSettingsService _groupLlmSettingsService;
         private readonly ImageGenerationToolSettingsService _imageGenerationToolSettingsService;
+        private readonly MusicGenerationToolSettingsService _musicGenerationToolSettingsService;
         private readonly IModelCapabilityService _modelCapabilityService;
         private readonly IConnectionMultiplexer _connectionMultiplexer;
         public List<Type> Dependencies => new List<Type>();
@@ -53,6 +54,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             IBotIdentityProvider botIdentityProvider,
             IGroupLlmSettingsService groupLlmSettingsService,
             ImageGenerationToolSettingsService imageGenerationToolSettingsService,
+            MusicGenerationToolSettingsService musicGenerationToolSettingsService,
             IModelCapabilityService modelCapabilityService,
             IConnectionMultiplexer connectionMultiplexer
             ) {
@@ -68,6 +70,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             _botIdentityProvider = botIdentityProvider;
             _groupLlmSettingsService = groupLlmSettingsService;
             _imageGenerationToolSettingsService = imageGenerationToolSettingsService;
+            _musicGenerationToolSettingsService = musicGenerationToolSettingsService;
             _modelCapabilityService = modelCapabilityService;
             _connectionMultiplexer = connectionMultiplexer;
 
@@ -119,6 +122,10 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 return;
             }
 
+            if (isNormalAdmin && await TryHandlePendingMusicGenerationModelSelectionAsync(telegramMessage, Message, fromUserId)) {
+                return;
+            }
+
             if (Message.Equals("选择生图模型", StringComparison.OrdinalIgnoreCase) ||
                 Message.Equals("生图模型列表", StringComparison.OrdinalIgnoreCase) ||
                 Message.Equals("可用生图模型", StringComparison.OrdinalIgnoreCase)) {
@@ -137,6 +144,24 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 return;
             }
 
+            if (Message.Equals("选择音乐模型", StringComparison.OrdinalIgnoreCase) ||
+                Message.Equals("音乐模型列表", StringComparison.OrdinalIgnoreCase) ||
+                Message.Equals("可用音乐模型", StringComparison.OrdinalIgnoreCase)) {
+                if (!isNormalAdmin) {
+                    return;
+                }
+
+                var options = await LoadMusicGenerationModelOptionsAsync();
+                if (options.Count == 0) {
+                    await SendMessageService.SendMessage("当前没有识别到可用音乐模型。请先通过 `新建渠道` / `添加模型` 关联 MiniMax `music-2.6`、`music-2.6-free`、`music-cover` 或 `music-cover-free`，或刷新渠道能力。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    return;
+                }
+
+                await SaveMusicGenerationModelSelectionAsync(telegramMessage.Chat.Id, fromUserId, options);
+                await SendMessageService.SendMessage(BuildMusicGenerationModelSelectionMessage(options), telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
             if (Message.StartsWith("设置生图模型 ") && isNormalAdmin) {
                 var requestedModelName = Message.Substring(7).Trim();
                 if (string.IsNullOrWhiteSpace(requestedModelName)) {
@@ -150,6 +175,19 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 return;
             }
 
+            if (Message.StartsWith("设置音乐模型 ") && isNormalAdmin) {
+                var requestedModelName = Message.Substring(7).Trim();
+                if (string.IsNullOrWhiteSpace(requestedModelName)) {
+                    await SendMessageService.SendMessage("音乐模型名称不能为空", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    return;
+                }
+
+                var (previous, current) = await _musicGenerationToolSettingsService.SetGroupModelNameAsync(telegramMessage.Chat.Id, requestedModelName);
+                logger.LogInformation($"群{telegramMessage.Chat.Id}音乐模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{telegramMessage.MessageId}");
+                await SendMessageService.SendMessage($"音乐模型设置成功，原模型：{previous}，现模型：{current}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
             if (( Message.Equals("清除生图模型", StringComparison.OrdinalIgnoreCase) ||
                   Message.Equals("重置生图模型", StringComparison.OrdinalIgnoreCase) ) &&
                 isNormalAdmin) {
@@ -159,11 +197,28 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 return;
             }
 
+            if (( Message.Equals("清除音乐模型", StringComparison.OrdinalIgnoreCase) ||
+                  Message.Equals("重置音乐模型", StringComparison.OrdinalIgnoreCase) ) &&
+                isNormalAdmin) {
+                var defaultModel = await _musicGenerationToolSettingsService.ClearGroupModelNameAsync(telegramMessage.Chat.Id);
+                logger.LogInformation($"群{telegramMessage.Chat.Id}音乐模型已清除，将使用默认模型：{defaultModel}。消息来源：{telegramMessage.MessageId}");
+                await SendMessageService.SendMessage($"音乐模型已清除，当前会使用默认模型：{defaultModel}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
             if (( Message.Equals("生图模型", StringComparison.OrdinalIgnoreCase) ||
                   Message.Equals("查看生图模型", StringComparison.OrdinalIgnoreCase) ) &&
                 isNormalAdmin) {
                 var modelName = await _imageGenerationToolSettingsService.GetModelNameAsync(telegramMessage.Chat.Id);
                 await SendMessageService.SendMessage($"当前生图模型：{modelName}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
+            if (( Message.Equals("音乐模型", StringComparison.OrdinalIgnoreCase) ||
+                  Message.Equals("查看音乐模型", StringComparison.OrdinalIgnoreCase) ) &&
+                isNormalAdmin) {
+                var modelName = await _musicGenerationToolSettingsService.GetModelNameAsync(telegramMessage.Chat.Id);
+                await SendMessageService.SendMessage($"当前音乐模型：{modelName}", telegramMessage.Chat.Id, telegramMessage.MessageId);
                 return;
             }
 
@@ -343,6 +398,43 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             return true;
         }
 
+        private async Task<bool> TryHandlePendingMusicGenerationModelSelectionAsync(Telegram.Bot.Types.Message telegramMessage, string messageText, long userId) {
+            var db = _connectionMultiplexer.GetDatabase();
+            var key = GetMusicGenerationModelSelectionKey(telegramMessage.Chat.Id, userId);
+            var stored = await db.StringGetAsync(key);
+            if (!stored.HasValue) {
+                return false;
+            }
+
+            var trimmed = messageText.Trim();
+            if (trimmed.Equals("取消", StringComparison.OrdinalIgnoreCase)) {
+                await db.KeyDeleteAsync(key);
+                await SendMessageService.SendMessage("已取消选择音乐模型。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return true;
+            }
+
+            if (!int.TryParse(trimmed, out var index)) {
+                await SendMessageService.SendMessage("请输入音乐模型编号，或发送 `取消`。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return true;
+            }
+
+            var modelNames = stored.ToString()
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+            if (index < 1 || index > modelNames.Count) {
+                await SendMessageService.SendMessage($"无效编号，请输入 1 到 {modelNames.Count} 之间的数字，或发送 `取消`。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return true;
+            }
+
+            var modelName = modelNames[index - 1];
+            var (previous, current) = await _musicGenerationToolSettingsService.SetGroupModelNameAsync(telegramMessage.Chat.Id, modelName);
+            await db.KeyDeleteAsync(key);
+
+            logger.LogInformation($"群{telegramMessage.Chat.Id}音乐模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{telegramMessage.MessageId}");
+            await SendMessageService.SendMessage($"音乐模型设置成功，原模型：{previous}，现模型：{current}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+            return true;
+        }
+
         private async Task<List<ImageGenerationModelSelectionOption>> LoadImageGenerationModelOptionsAsync() {
             var models = await _modelCapabilityService.GetImageGenerationModels();
             return models
@@ -363,9 +455,36 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 .ToList();
         }
 
+        private async Task<List<MusicGenerationModelSelectionOption>> LoadMusicGenerationModelOptionsAsync() {
+            var models = await _modelCapabilityService.GetMusicGenerationModels();
+            return models
+                .Where(x => !string.IsNullOrWhiteSpace(x.ModelName) && x.LLMChannel != null)
+                .GroupBy(x => x.ModelName.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(group => {
+                    var channels = group
+                        .Select(x => $"{x.LLMChannel.Name}#{x.LLMChannel.Id}/{x.LLMChannel.Provider}")
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(x => x)
+                        .ToList();
+                    var channelSummary = channels.Count <= 3
+                        ? string.Join(", ", channels)
+                        : $"{string.Join(", ", channels.Take(3))} 等 {channels.Count} 个渠道";
+                    return new MusicGenerationModelSelectionOption(group.Key, channelSummary);
+                })
+                .OrderBy(x => x.ModelName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         private async Task SaveImageGenerationModelSelectionAsync(long chatId, long userId, List<ImageGenerationModelSelectionOption> options) {
             var db = _connectionMultiplexer.GetDatabase();
             var key = GetImageGenerationModelSelectionKey(chatId, userId);
+            var modelNames = options.Take(50).Select(x => x.ModelName);
+            await db.StringSetAsync(key, string.Join('\n', modelNames), TimeSpan.FromMinutes(10));
+        }
+
+        private async Task SaveMusicGenerationModelSelectionAsync(long chatId, long userId, List<MusicGenerationModelSelectionOption> options) {
+            var db = _connectionMultiplexer.GetDatabase();
+            var key = GetMusicGenerationModelSelectionKey(chatId, userId);
             var modelNames = options.Take(50).Select(x => x.ModelName);
             await db.StringSetAsync(key, string.Join('\n', modelNames), TimeSpan.FromMinutes(10));
         }
@@ -386,10 +505,31 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             return sb.ToString();
         }
 
+        private static string BuildMusicGenerationModelSelectionMessage(List<MusicGenerationModelSelectionOption> options) {
+            var limited = options.Take(50).ToList();
+            var sb = new StringBuilder();
+            sb.AppendLine("请选择当前群使用的音乐模型，回复编号即可：");
+            for (var i = 0; i < limited.Count; i++) {
+                sb.AppendLine($"{i + 1}. {limited[i].ModelName} ({limited[i].ChannelSummary})");
+            }
+
+            if (options.Count > limited.Count) {
+                sb.AppendLine($"仅显示前 {limited.Count} 个，共 {options.Count} 个。");
+            }
+
+            sb.AppendLine("发送 `取消` 可退出选择。");
+            return sb.ToString();
+        }
+
         private static string GetImageGenerationModelSelectionKey(long chatId, long userId) {
             return $"image_generation:model_select:{chatId}:{userId}";
         }
 
+        private static string GetMusicGenerationModelSelectionKey(long chatId, long userId) {
+            return $"music_generation:model_select:{chatId}:{userId}";
+        }
+
         private sealed record ImageGenerationModelSelectionOption(string ModelName, string ChannelSummary);
+        private sealed record MusicGenerationModelSelectionOption(string ModelName, string ChannelSummary);
     }
 }

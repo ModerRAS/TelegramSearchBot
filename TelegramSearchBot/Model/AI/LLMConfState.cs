@@ -14,6 +14,9 @@ namespace TelegramSearchBot.Model.AI {
         [Description("setting_image_generation_model")]
         SettingImageGenerationModel,
 
+        [Description("setting_music_generation_model")]
+        SettingMusicGenerationModel,
+
         [Description("awaiting_name")]
         AwaitingName,
 

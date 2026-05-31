@@ -288,6 +288,68 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         [Fact]
+        public async Task GetMusicGenerationModels_UsesCapabilitiesAndKnownNames() {
+            var channel = new LLMChannel {
+                Name = "openai",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
+            };
+            var minimaxChannel = new LLMChannel {
+                Name = "minimax",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.MiniMax,
+                Parallel = 1,
+                Priority = 1
+            };
+            _dbContext.LLMChannels.AddRange(channel, minimaxChannel);
+            await _dbContext.SaveChangesAsync();
+
+            _dbContext.ChannelsWithModel.AddRange(
+                new ChannelWithModel {
+                    ModelName = "custom-music-model",
+                    LLMChannelId = channel.Id,
+                    Capabilities = new List<ModelCapability> {
+                        new ModelCapability {
+                            CapabilityName = "music_generation",
+                            CapabilityValue = "true",
+                            LastUpdated = DateTime.UtcNow
+                        }
+                    }
+                },
+                new ChannelWithModel {
+                    ModelName = "music-2.6",
+                    LLMChannelId = minimaxChannel.Id
+                },
+                new ChannelWithModel {
+                    ModelName = "music-cover-free",
+                    LLMChannelId = minimaxChannel.Id
+                },
+                new ChannelWithModel {
+                    ModelName = "gpt-4o",
+                    LLMChannelId = channel.Id,
+                    Capabilities = new List<ModelCapability> {
+                        new ModelCapability {
+                            CapabilityName = "vision",
+                            CapabilityValue = "true",
+                            LastUpdated = DateTime.UtcNow
+                        }
+                    }
+                });
+            await _dbContext.SaveChangesAsync();
+
+            var result = ( await _service.GetMusicGenerationModels() )
+                .Select(x => x.ModelName)
+                .OrderBy(x => x)
+                .ToList();
+
+            Assert.Equal(new[] { "custom-music-model", "music-2.6", "music-cover-free" }, result);
+        }
+
+        [Fact]
         public async Task CleanupOldCapabilities_RemovesOldEntries() {
             // Arrange
             var channel = new LLMChannel {

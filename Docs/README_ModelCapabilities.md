@@ -44,7 +44,7 @@
 
 #### ModelWithCapabilities.cs
 - 数据传输对象，包含模型信息和能力信息
-- 提供便捷的属性访问（如 SupportsToolCalling、SupportsVision、SupportsEmbedding）
+- 提供便捷的属性访问（如 SupportsToolCalling、SupportsVision、SupportsEmbedding、SupportsImageGeneration、SupportsMusicGeneration）
 - 包含能力设置和获取的辅助方法
 
 ### 2. 数据库更改
@@ -112,6 +112,8 @@ OpenRouter提供的详细能力信息包括：
    - 自动检测`tools`、`function_calling`支持
    - 检测`stream`、`response_format`等参数
    - 记录完整的支持参数列表
+   - 图片生成模型可通过 `image_generation` / `text_to_image` 能力或常见模型名识别
+   - 音乐生成模型可通过 `music_generation` / `text_to_music` 能力或 MiniMax `music-2.6` / `music-cover` 系列模型名识别
 
 4. **定价信息**
    - prompt价格
@@ -162,6 +164,10 @@ OpenRouter提供的详细能力信息包括：
    
    // 查询支持视觉的模型
    var visionModels = await modelCapabilityService.GetModelsByCapability("vision", true);
+
+   // 查询图片/音乐生成模型
+   var imageModels = await modelCapabilityService.GetImageGenerationModels();
+   var musicModels = await modelCapabilityService.GetMusicGenerationModels();
    ```
 
 ## 技术特点
@@ -191,4 +197,4 @@ OpenRouter提供的详细能力信息包括：
 ✅ **编译成功** - 所有功能已实现并通过编译
 ⚠️ **文件锁定** - 由于程序正在运行，无法覆盖exe文件（这是正常现象）
 
-OpenRouter适配现已完成，可以正常获取模型列表和详细的能力信息！ 
+OpenRouter适配现已完成，可以正常获取模型列表和详细的能力信息！

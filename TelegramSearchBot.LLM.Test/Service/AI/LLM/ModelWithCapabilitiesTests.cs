@@ -96,6 +96,23 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         [Fact]
+        public void SupportsMusicGeneration_CapabilitySet_ReturnsTrue() {
+            var model = new ModelWithCapabilities { ModelName = "test" };
+            model.SetCapability("music_generation", true);
+            Assert.True(model.SupportsMusicGeneration);
+        }
+
+        [Theory]
+        [InlineData("music-2.6")]
+        [InlineData("music-2.6-free")]
+        [InlineData("music-cover")]
+        [InlineData("music-cover-free")]
+        public void SupportsMusicGeneration_KnownName_ReturnsTrue(string modelName) {
+            var model = new ModelWithCapabilities { ModelName = modelName };
+            Assert.True(model.SupportsMusicGeneration);
+        }
+
+        [Fact]
         public void GetCapabilityBool_InvalidValue_ReturnsFalse() {
             var model = new ModelWithCapabilities { ModelName = "test" };
             model.SetCapability("function_calling", "not_a_bool");

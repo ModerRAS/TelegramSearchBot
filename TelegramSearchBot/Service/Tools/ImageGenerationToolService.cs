@@ -255,7 +255,7 @@ namespace TelegramSearchBot.Service.Tools {
 
         [BuiltInTool(@"Generate an image through the configured image API and optionally send it to the current Telegram chat.
 The default model is the current chat's configured image generation model, falling back to the bot-wide default gpt-image-2 when the chat has no image model configured. OpenAI-compatible models use /v1/images/generations. MiniMax image-01 and image-01-live use /v1/image_generation. The API base URL and API key are read from the configured LLM channel for the selected image model, so administrators can use OpenAI, MiniMax, or a compatible custom endpoint.
-Use this when the user asks you to draw, create, render, generate, or revise an image. The tool saves generated image files under the bot work directory and returns their file paths.")]
+Use this when the user asks you to draw, create, render, generate, or revise an image. The tool saves generated image files under the bot work directory and returns their file paths.", Name = ToolName)]
         public async Task<ImageGenerationResult> GenerateImage(
             [BuiltInParameter("Image prompt. Be specific about subject, style, composition, lighting, colors, and any text that should appear.")] string prompt,
             ToolContext toolContext,
