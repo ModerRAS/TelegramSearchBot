@@ -8,6 +8,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace TelegramSearchBot.Model.Data {
 
+    public enum GroupAgentChatMode {
+        GuidedBatch = 0,
+        Sequential = 1
+    }
+
     [Index(nameof(GroupId), IsUnique = true)]
     public class GroupSettings {
         [Key]
@@ -17,6 +22,9 @@ namespace TelegramSearchBot.Model.Data {
         public string LLMModelName { get; set; }
         public string ImageGenerationModelName { get; set; }
         public string MusicGenerationModelName { get; set; }
+        public bool IsAgentChatEnabled { get; set; }
+        public GroupAgentChatMode AgentChatMode { get; set; } = GroupAgentChatMode.GuidedBatch;
+        public int? AgentChatBatchWindowSeconds { get; set; }
         /// <summary>
         /// 是否是有管理员权限的群，是的所有群友都可以作为管理员操作一部分功能
         /// </summary>
