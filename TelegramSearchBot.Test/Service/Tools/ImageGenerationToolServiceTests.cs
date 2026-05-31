@@ -1,6 +1,12 @@
 using System;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Newtonsoft.Json.Linq;
+using StackExchange.Redis;
+using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.Tools;
 using Xunit;
 
@@ -119,6 +125,44 @@ namespace TelegramSearchBot.Test.Service.Tools {
             Assert.Equal("YWJj", images.Last().Base64Data);
         }
 
+        [Fact]
+        public async Task ImageGenerationSettings_UsesGroupModelBeforeDefault() {
+            await using var dbContext = CreateDbContext();
+            dbContext.AppConfigurationItems.Add(new AppConfigurationItem {
+                Key = ImageGenerationToolSettingsService.ModelNameKey,
+                Value = "gpt-image-2"
+            });
+            dbContext.GroupSettings.Add(new GroupSettings {
+                GroupId = -100,
+                ImageGenerationModelName = "image-01"
+            });
+            await dbContext.SaveChangesAsync();
+
+            var settings = CreateSettingsService(dbContext);
+
+            Assert.Equal("image-01", await settings.GetModelNameAsync(-100));
+            Assert.Equal("gpt-image-2", await settings.GetModelNameAsync(-200));
+        }
+
+        [Fact]
+        public async Task SetGroupModelNameAsync_DoesNotOverwriteChatLlmModel() {
+            await using var dbContext = CreateDbContext();
+            dbContext.GroupSettings.Add(new GroupSettings {
+                GroupId = -100,
+                LLMModelName = "gpt-4o"
+            });
+            await dbContext.SaveChangesAsync();
+
+            var settings = CreateSettingsService(dbContext);
+            var (previous, current) = await settings.SetGroupModelNameAsync(-100, "image-01-live");
+
+            var groupSettings = await dbContext.GroupSettings.SingleAsync(x => x.GroupId == -100);
+            Assert.Equal(ImageGenerationToolSettingsService.DefaultModelName, previous);
+            Assert.Equal("image-01-live", current);
+            Assert.Equal("gpt-4o", groupSettings.LLMModelName);
+            Assert.Equal("image-01-live", groupSettings.ImageGenerationModelName);
+        }
+
         private static T Value<T>(JObject obj, string key) {
             var token = obj[key];
             Assert.NotNull(token);
@@ -129,6 +173,20 @@ namespace TelegramSearchBot.Test.Service.Tools {
             var parent = obj[parentKey] as JObject;
             Assert.NotNull(parent);
             return Value<T>(parent!, key);
+        }
+
+        private static DataDbContext CreateDbContext() {
+            var options = new DbContextOptionsBuilder<DataDbContext>()
+                .UseInMemoryDatabase($"ImageGenerationToolServiceTests_{Guid.NewGuid():N}")
+                .Options;
+            return new DataDbContext(options);
+        }
+
+        private static ImageGenerationToolSettingsService CreateSettingsService(DataDbContext dbContext) {
+            return new ImageGenerationToolSettingsService(
+                dbContext,
+                new Mock<IConnectionMultiplexer>().Object,
+                NullLogger<ImageGenerationToolSettingsService>.Instance);
         }
     }
 }

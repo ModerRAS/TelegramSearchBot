@@ -64,17 +64,100 @@ namespace TelegramSearchBot.Service.Tools {
             await RefreshAgentToolDefinitionsAsync();
         }
 
-        public async Task<string> GetModelNameAsync() {
+        public async Task<string> GetDefaultModelNameAsync() {
             var value = await GetConfigurationValueAsync(ModelNameKey);
             return string.IsNullOrWhiteSpace(value) ? DefaultModelName : value.Trim();
         }
 
-        public async Task SetModelNameAsync(string modelName) {
+        public Task<string> GetModelNameAsync() {
+            return GetDefaultModelNameAsync();
+        }
+
+        public async Task<string> GetModelNameAsync(long chatId) {
+            if (chatId != 0) {
+                var groupModelName = await _dbContext.GroupSettings
+                    .AsNoTracking()
+                    .Where(x => x.GroupId == chatId)
+                    .Select(x => x.ImageGenerationModelName)
+                    .FirstOrDefaultAsync();
+
+                if (!string.IsNullOrWhiteSpace(groupModelName)) {
+                    return groupModelName.Trim();
+                }
+            }
+
+            return await GetDefaultModelNameAsync();
+        }
+
+        public async Task SetDefaultModelNameAsync(string modelName) {
             if (string.IsNullOrWhiteSpace(modelName)) {
                 throw new ArgumentException("Image generation model name cannot be empty.", nameof(modelName));
             }
 
             await UpsertConfigurationAsync(ModelNameKey, modelName.Trim());
+        }
+
+        public Task SetModelNameAsync(string modelName) {
+            return SetDefaultModelNameAsync(modelName);
+        }
+
+        public async Task<(string Previous, string Current)> SetGroupModelNameAsync(long chatId, string modelName) {
+            if (chatId == 0) {
+                throw new ArgumentException("Chat id is required.", nameof(chatId));
+            }
+
+            if (string.IsNullOrWhiteSpace(modelName)) {
+                throw new ArgumentException("Image generation model name cannot be empty.", nameof(modelName));
+            }
+
+            var normalizedModelName = modelName.Trim();
+            var defaultModelName = await GetDefaultModelNameAsync();
+            var settings = await _dbContext.GroupSettings
+                .FirstOrDefaultAsync(x => x.GroupId == chatId);
+            var previous = settings == null ? null : settings.ImageGenerationModelName;
+            GroupSettings newSettings = null;
+
+            if (settings == null) {
+                newSettings = new GroupSettings {
+                    GroupId = chatId,
+                    ImageGenerationModelName = normalizedModelName
+                };
+                await _dbContext.GroupSettings.AddAsync(newSettings);
+            } else {
+                settings.ImageGenerationModelName = normalizedModelName;
+            }
+
+            try {
+                await _dbContext.SaveChangesAsync();
+            } catch (DbUpdateException) when (newSettings != null) {
+                _dbContext.Entry(newSettings).State = EntityState.Detached;
+                settings = await _dbContext.GroupSettings
+                    .FirstOrDefaultAsync(x => x.GroupId == chatId);
+                if (settings == null) {
+                    throw;
+                }
+
+                previous = settings.ImageGenerationModelName;
+                settings.ImageGenerationModelName = normalizedModelName;
+                await _dbContext.SaveChangesAsync();
+            }
+
+            return (string.IsNullOrWhiteSpace(previous) ? defaultModelName : previous.Trim(), normalizedModelName);
+        }
+
+        public async Task<string> ClearGroupModelNameAsync(long chatId) {
+            if (chatId == 0) {
+                throw new ArgumentException("Chat id is required.", nameof(chatId));
+            }
+
+            var settings = await _dbContext.GroupSettings
+                .FirstOrDefaultAsync(x => x.GroupId == chatId);
+            if (settings != null) {
+                settings.ImageGenerationModelName = null;
+                await _dbContext.SaveChangesAsync();
+            }
+
+            return await GetDefaultModelNameAsync();
         }
 
         private static void ApplyToolVisibility(bool enabled) {
@@ -171,12 +254,12 @@ namespace TelegramSearchBot.Service.Tools {
         }
 
         [BuiltInTool(@"Generate an image through the configured image API and optionally send it to the current Telegram chat.
-The default model is gpt-image-2. OpenAI-compatible models use /v1/images/generations. MiniMax image-01 and image-01-live use /v1/image_generation. The API base URL and API key are read from the configured LLM channel for the selected image model, so administrators can use OpenAI, MiniMax, or a compatible custom endpoint.
+The default model is the current chat's configured image generation model, falling back to the bot-wide default gpt-image-2 when the chat has no image model configured. OpenAI-compatible models use /v1/images/generations. MiniMax image-01 and image-01-live use /v1/image_generation. The API base URL and API key are read from the configured LLM channel for the selected image model, so administrators can use OpenAI, MiniMax, or a compatible custom endpoint.
 Use this when the user asks you to draw, create, render, generate, or revise an image. The tool saves generated image files under the bot work directory and returns their file paths.")]
         public async Task<ImageGenerationResult> GenerateImage(
             [BuiltInParameter("Image prompt. Be specific about subject, style, composition, lighting, colors, and any text that should appear.")] string prompt,
             ToolContext toolContext,
-            [BuiltInParameter("Image model name. Defaults to the administrator-configured image generation model, normally gpt-image-2. Use image-01 or image-01-live for MiniMax.", IsRequired = false)] string model = null,
+            [BuiltInParameter("Image model name. Defaults to the current chat's configured image generation model, or the bot-wide default gpt-image-2 when unset. Use image-01 or image-01-live for MiniMax.", IsRequired = false)] string model = null,
             [BuiltInParameter("Image size such as 1024x1024, 1536x1024, 1024x1536, or auto. Defaults to 1024x1024.", IsRequired = false)] string size = DefaultSize,
             [BuiltInParameter("Quality: auto, low, medium, or high. Defaults to auto.", IsRequired = false)] string quality = DefaultQuality,
             [BuiltInParameter("OpenAI-compatible output format: png, jpeg, or webp. Defaults to png. MiniMax does not support choosing output file format; MiniMax base64 results are saved as png unless a downloaded URL provides a more specific content type.", IsRequired = false)] string outputFormat = DefaultOutputFormat,
@@ -206,7 +289,7 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
                 }
 
                 var effectiveModel = string.IsNullOrWhiteSpace(model)
-                    ? await _settingsService.GetModelNameAsync()
+                    ? await _settingsService.GetModelNameAsync(toolContext?.ChatId ?? 0)
                     : model.Trim();
                 var normalizedSize = NormalizeSize(size);
                 var normalizedQuality = NormalizeChoice(quality, "quality", DefaultQuality, "auto", "low", "medium", "high");

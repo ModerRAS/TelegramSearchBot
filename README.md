@@ -18,7 +18,7 @@
    - Anthropic Claude API
    - 可配置多模型通道管理
    - **MCP (Model Context Protocol) 工具支持**
-   - **生图工具**: 内置 `generate_image`，默认 `gpt-image-2`，支持 OpenAI-compatible Image API 与 MiniMax `image-01` / `image-01-live`，API 地址可通过 LLM 渠道自定义
+   - **生图工具**: 内置 `generate_image`，按当前群配置选择生图模型，未配置时默认 `gpt-image-2`，支持 OpenAI-compatible Image API 与 MiniMax `image-01` / `image-01-live`，API 地址可通过 LLM 渠道自定义
 5. 高级功能:
    - 短链接映射服务
    - 消息扩展存储
@@ -160,7 +160,7 @@
 ## MCP (Model Context Protocol) 支持
 通过MCP协议扩展机器人能力，支持外部工具服务器：
 - ✅ **内置工具**: 发送文件、搜索、URL处理等24+内置工具
-- ✅ **内置生图**: 管理员可用 `开启生图工具` / `关闭生图工具` 控制是否向 LLM 注入 `generate_image`，默认模型 `gpt-image-2`，也可设置为 MiniMax `image-01` / `image-01-live`
+- ✅ **内置生图**: 管理员可用 `开启生图工具` / `关闭生图工具` 控制是否向 LLM 注入 `generate_image`，群内可用 `设置生图模型 <模型名>` 配置当前群生图模型，未配置时使用全局默认 `gpt-image-2`
 - ✅ **外部MCP服务器**: 可动态添加第三方MCP服务器
 - ✅ **管理员管理**: 通过指令管理MCP服务器（`新建渠道`等）
 

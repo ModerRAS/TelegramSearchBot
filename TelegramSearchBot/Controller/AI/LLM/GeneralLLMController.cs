@@ -19,6 +19,7 @@ using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Service.Tools;
 
 namespace TelegramSearchBot.Controller.AI.LLM {
     public class GeneralLLMController : IOnUpdate {
@@ -26,6 +27,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly SendMessage Send;
         private readonly IBotIdentityProvider _botIdentityProvider;
         private readonly IGroupLlmSettingsService _groupLlmSettingsService;
+        private readonly ImageGenerationToolSettingsService _imageGenerationToolSettingsService;
         public List<Type> Dependencies => new List<Type>();
         public ITelegramBotClient botClient { get; set; }
         public MessageService messageService { get; set; }
@@ -45,7 +47,8 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             ILlmContinuationService continuationService,
             LLMTaskQueueService llmTaskQueueService,
             IBotIdentityProvider botIdentityProvider,
-            IGroupLlmSettingsService groupLlmSettingsService
+            IGroupLlmSettingsService groupLlmSettingsService,
+            ImageGenerationToolSettingsService imageGenerationToolSettingsService
             ) {
             this.logger = logger;
             this.botClient = botClient;
@@ -58,6 +61,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             LlmTaskQueueService = llmTaskQueueService;
             _botIdentityProvider = botIdentityProvider;
             _groupLlmSettingsService = groupLlmSettingsService;
+            _imageGenerationToolSettingsService = imageGenerationToolSettingsService;
 
         }
         public async Task ExecuteAsync(PipelineContext p) {
@@ -99,6 +103,36 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                         return; // Let other command handlers process it
                     }
                 }
+            }
+
+            if (Message.StartsWith("设置生图模型 ") && fromUserId != 0 && await adminService.IsNormalAdmin(fromUserId)) {
+                var requestedModelName = Message.Substring(7).Trim();
+                if (string.IsNullOrWhiteSpace(requestedModelName)) {
+                    await SendMessageService.SendMessage("生图模型名称不能为空", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    return;
+                }
+
+                var (previous, current) = await _imageGenerationToolSettingsService.SetGroupModelNameAsync(telegramMessage.Chat.Id, requestedModelName);
+                logger.LogInformation($"群{telegramMessage.Chat.Id}生图模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{telegramMessage.MessageId}");
+                await SendMessageService.SendMessage($"生图模型设置成功，原模型：{previous}，现模型：{current}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
+            if (( Message.Equals("清除生图模型", StringComparison.OrdinalIgnoreCase) ||
+                  Message.Equals("重置生图模型", StringComparison.OrdinalIgnoreCase) ) &&
+                fromUserId != 0 && await adminService.IsNormalAdmin(fromUserId)) {
+                var defaultModel = await _imageGenerationToolSettingsService.ClearGroupModelNameAsync(telegramMessage.Chat.Id);
+                logger.LogInformation($"群{telegramMessage.Chat.Id}生图模型已清除，将使用默认模型：{defaultModel}。消息来源：{telegramMessage.MessageId}");
+                await SendMessageService.SendMessage($"生图模型已清除，当前会使用默认模型：{defaultModel}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
+            if (( Message.Equals("生图模型", StringComparison.OrdinalIgnoreCase) ||
+                  Message.Equals("查看生图模型", StringComparison.OrdinalIgnoreCase) ) &&
+                fromUserId != 0 && await adminService.IsNormalAdmin(fromUserId)) {
+                var modelName = await _imageGenerationToolSettingsService.GetModelNameAsync(telegramMessage.Chat.Id);
+                await SendMessageService.SendMessage($"当前生图模型：{modelName}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
             }
 
             if (Message.StartsWith("设置模型 ") && fromUserId != 0 && await adminService.IsNormalAdmin(fromUserId)) {
