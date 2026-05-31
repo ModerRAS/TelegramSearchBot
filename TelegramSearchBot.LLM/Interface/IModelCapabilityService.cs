@@ -45,6 +45,11 @@ namespace TelegramSearchBot.Interface {
         Task<IEnumerable<ChannelWithModel>> GetEmbeddingModels();
 
         /// <summary>
+        /// 获取图片生成模型
+        /// </summary>
+        Task<IEnumerable<ChannelWithModel>> GetImageGenerationModels();
+
+        /// <summary>
         /// 删除过期的模型能力信息
         /// </summary>
         Task<int> CleanupOldCapabilities(int daysOld = 30);

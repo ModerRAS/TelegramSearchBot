@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq; // Added for LINQ methods
+using System.Text;
 using System.Threading; // For CancellationToken
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums; // Added for MessageEntityType
@@ -19,6 +21,7 @@ using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Service.Tools;
 
 namespace TelegramSearchBot.Controller.AI.LLM {
     public class GeneralLLMController : IOnUpdate {
@@ -26,6 +29,9 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly SendMessage Send;
         private readonly IBotIdentityProvider _botIdentityProvider;
         private readonly IGroupLlmSettingsService _groupLlmSettingsService;
+        private readonly ImageGenerationToolSettingsService _imageGenerationToolSettingsService;
+        private readonly IModelCapabilityService _modelCapabilityService;
+        private readonly IConnectionMultiplexer _connectionMultiplexer;
         public List<Type> Dependencies => new List<Type>();
         public ITelegramBotClient botClient { get; set; }
         public MessageService messageService { get; set; }
@@ -45,7 +51,10 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             ILlmContinuationService continuationService,
             LLMTaskQueueService llmTaskQueueService,
             IBotIdentityProvider botIdentityProvider,
-            IGroupLlmSettingsService groupLlmSettingsService
+            IGroupLlmSettingsService groupLlmSettingsService,
+            ImageGenerationToolSettingsService imageGenerationToolSettingsService,
+            IModelCapabilityService modelCapabilityService,
+            IConnectionMultiplexer connectionMultiplexer
             ) {
             this.logger = logger;
             this.botClient = botClient;
@@ -58,6 +67,9 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             LlmTaskQueueService = llmTaskQueueService;
             _botIdentityProvider = botIdentityProvider;
             _groupLlmSettingsService = groupLlmSettingsService;
+            _imageGenerationToolSettingsService = imageGenerationToolSettingsService;
+            _modelCapabilityService = modelCapabilityService;
+            _connectionMultiplexer = connectionMultiplexer;
 
         }
         public async Task ExecuteAsync(PipelineContext p) {
@@ -101,7 +113,61 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 }
             }
 
-            if (Message.StartsWith("设置模型 ") && fromUserId != 0 && await adminService.IsNormalAdmin(fromUserId)) {
+            var isNormalAdmin = fromUserId != 0 && await adminService.IsNormalAdmin(fromUserId);
+
+            if (isNormalAdmin && await TryHandlePendingImageGenerationModelSelectionAsync(telegramMessage, Message, fromUserId)) {
+                return;
+            }
+
+            if (Message.Equals("选择生图模型", StringComparison.OrdinalIgnoreCase) ||
+                Message.Equals("生图模型列表", StringComparison.OrdinalIgnoreCase) ||
+                Message.Equals("可用生图模型", StringComparison.OrdinalIgnoreCase)) {
+                if (!isNormalAdmin) {
+                    return;
+                }
+
+                var options = await LoadImageGenerationModelOptionsAsync();
+                if (options.Count == 0) {
+                    await SendMessageService.SendMessage("当前没有识别到可用生图模型。请先通过 `新建渠道` / `添加模型` 关联 `gpt-image-*`、`dall-e*`、MiniMax `image-01` / `image-01-live`，或刷新渠道能力。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    return;
+                }
+
+                await SaveImageGenerationModelSelectionAsync(telegramMessage.Chat.Id, fromUserId, options);
+                await SendMessageService.SendMessage(BuildImageGenerationModelSelectionMessage(options), telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
+            if (Message.StartsWith("设置生图模型 ") && isNormalAdmin) {
+                var requestedModelName = Message.Substring(7).Trim();
+                if (string.IsNullOrWhiteSpace(requestedModelName)) {
+                    await SendMessageService.SendMessage("生图模型名称不能为空", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    return;
+                }
+
+                var (previous, current) = await _imageGenerationToolSettingsService.SetGroupModelNameAsync(telegramMessage.Chat.Id, requestedModelName);
+                logger.LogInformation($"群{telegramMessage.Chat.Id}生图模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{telegramMessage.MessageId}");
+                await SendMessageService.SendMessage($"生图模型设置成功，原模型：{previous}，现模型：{current}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
+            if (( Message.Equals("清除生图模型", StringComparison.OrdinalIgnoreCase) ||
+                  Message.Equals("重置生图模型", StringComparison.OrdinalIgnoreCase) ) &&
+                isNormalAdmin) {
+                var defaultModel = await _imageGenerationToolSettingsService.ClearGroupModelNameAsync(telegramMessage.Chat.Id);
+                logger.LogInformation($"群{telegramMessage.Chat.Id}生图模型已清除，将使用默认模型：{defaultModel}。消息来源：{telegramMessage.MessageId}");
+                await SendMessageService.SendMessage($"生图模型已清除，当前会使用默认模型：{defaultModel}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
+            if (( Message.Equals("生图模型", StringComparison.OrdinalIgnoreCase) ||
+                  Message.Equals("查看生图模型", StringComparison.OrdinalIgnoreCase) ) &&
+                isNormalAdmin) {
+                var modelName = await _imageGenerationToolSettingsService.GetModelNameAsync(telegramMessage.Chat.Id);
+                await SendMessageService.SendMessage($"当前生图模型：{modelName}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return;
+            }
+
+            if (Message.StartsWith("设置模型 ") && isNormalAdmin) {
                 var requestedModelName = Message.Substring(5).Trim();
                 if (string.IsNullOrWhiteSpace(requestedModelName)) {
                     await SendMessageService.SendMessage("模型名称不能为空", telegramMessage.Chat.Id, telegramMessage.MessageId);
@@ -239,5 +305,91 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 return;
             }
         }
+
+        private async Task<bool> TryHandlePendingImageGenerationModelSelectionAsync(Telegram.Bot.Types.Message telegramMessage, string messageText, long userId) {
+            var db = _connectionMultiplexer.GetDatabase();
+            var key = GetImageGenerationModelSelectionKey(telegramMessage.Chat.Id, userId);
+            var stored = await db.StringGetAsync(key);
+            if (!stored.HasValue) {
+                return false;
+            }
+
+            var trimmed = messageText.Trim();
+            if (trimmed.Equals("取消", StringComparison.OrdinalIgnoreCase)) {
+                await db.KeyDeleteAsync(key);
+                await SendMessageService.SendMessage("已取消选择生图模型。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return true;
+            }
+
+            if (!int.TryParse(trimmed, out var index)) {
+                await SendMessageService.SendMessage("请输入生图模型编号，或发送 `取消`。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return true;
+            }
+
+            var modelNames = stored.ToString()
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+            if (index < 1 || index > modelNames.Count) {
+                await SendMessageService.SendMessage($"无效编号，请输入 1 到 {modelNames.Count} 之间的数字，或发送 `取消`。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                return true;
+            }
+
+            var modelName = modelNames[index - 1];
+            var (previous, current) = await _imageGenerationToolSettingsService.SetGroupModelNameAsync(telegramMessage.Chat.Id, modelName);
+            await db.KeyDeleteAsync(key);
+
+            logger.LogInformation($"群{telegramMessage.Chat.Id}生图模型设置成功，原模型：{previous}，现模型：{current}。消息来源：{telegramMessage.MessageId}");
+            await SendMessageService.SendMessage($"生图模型设置成功，原模型：{previous}，现模型：{current}", telegramMessage.Chat.Id, telegramMessage.MessageId);
+            return true;
+        }
+
+        private async Task<List<ImageGenerationModelSelectionOption>> LoadImageGenerationModelOptionsAsync() {
+            var models = await _modelCapabilityService.GetImageGenerationModels();
+            return models
+                .Where(x => !string.IsNullOrWhiteSpace(x.ModelName) && x.LLMChannel != null)
+                .GroupBy(x => x.ModelName.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(group => {
+                    var channels = group
+                        .Select(x => $"{x.LLMChannel.Name}#{x.LLMChannel.Id}/{x.LLMChannel.Provider}")
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(x => x)
+                        .ToList();
+                    var channelSummary = channels.Count <= 3
+                        ? string.Join(", ", channels)
+                        : $"{string.Join(", ", channels.Take(3))} 等 {channels.Count} 个渠道";
+                    return new ImageGenerationModelSelectionOption(group.Key, channelSummary);
+                })
+                .OrderBy(x => x.ModelName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private async Task SaveImageGenerationModelSelectionAsync(long chatId, long userId, List<ImageGenerationModelSelectionOption> options) {
+            var db = _connectionMultiplexer.GetDatabase();
+            var key = GetImageGenerationModelSelectionKey(chatId, userId);
+            var modelNames = options.Take(50).Select(x => x.ModelName);
+            await db.StringSetAsync(key, string.Join('\n', modelNames), TimeSpan.FromMinutes(10));
+        }
+
+        private static string BuildImageGenerationModelSelectionMessage(List<ImageGenerationModelSelectionOption> options) {
+            var limited = options.Take(50).ToList();
+            var sb = new StringBuilder();
+            sb.AppendLine("请选择当前群使用的生图模型，回复编号即可：");
+            for (var i = 0; i < limited.Count; i++) {
+                sb.AppendLine($"{i + 1}. {limited[i].ModelName} ({limited[i].ChannelSummary})");
+            }
+
+            if (options.Count > limited.Count) {
+                sb.AppendLine($"仅显示前 {limited.Count} 个，共 {options.Count} 个。");
+            }
+
+            sb.AppendLine("发送 `取消` 可退出选择。");
+            return sb.ToString();
+        }
+
+        private static string GetImageGenerationModelSelectionKey(long chatId, long userId) {
+            return $"image_generation:model_select:{chatId}:{userId}";
+        }
+
+        private sealed record ImageGenerationModelSelectionOption(string ModelName, string ChannelSummary);
     }
 }

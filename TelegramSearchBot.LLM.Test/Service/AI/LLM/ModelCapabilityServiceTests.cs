@@ -226,6 +226,68 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         [Fact]
+        public async Task GetImageGenerationModels_UsesCapabilitiesAndKnownNames() {
+            var channel = new LLMChannel {
+                Name = "openai",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
+            };
+            var minimaxChannel = new LLMChannel {
+                Name = "minimax",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.MiniMax,
+                Parallel = 1,
+                Priority = 1
+            };
+            _dbContext.LLMChannels.AddRange(channel, minimaxChannel);
+            await _dbContext.SaveChangesAsync();
+
+            _dbContext.ChannelsWithModel.AddRange(
+                new ChannelWithModel {
+                    ModelName = "custom-image-model",
+                    LLMChannelId = channel.Id,
+                    Capabilities = new List<ModelCapability> {
+                        new ModelCapability {
+                            CapabilityName = "image_generation",
+                            CapabilityValue = "true",
+                            LastUpdated = DateTime.UtcNow
+                        }
+                    }
+                },
+                new ChannelWithModel {
+                    ModelName = "gpt-image-2",
+                    LLMChannelId = channel.Id
+                },
+                new ChannelWithModel {
+                    ModelName = "image-01",
+                    LLMChannelId = minimaxChannel.Id
+                },
+                new ChannelWithModel {
+                    ModelName = "gpt-4o",
+                    LLMChannelId = channel.Id,
+                    Capabilities = new List<ModelCapability> {
+                        new ModelCapability {
+                            CapabilityName = "vision",
+                            CapabilityValue = "true",
+                            LastUpdated = DateTime.UtcNow
+                        }
+                    }
+                });
+            await _dbContext.SaveChangesAsync();
+
+            var result = ( await _service.GetImageGenerationModels() )
+                .Select(x => x.ModelName)
+                .OrderBy(x => x)
+                .ToList();
+
+            Assert.Equal(new[] { "custom-image-model", "gpt-image-2", "image-01" }, result);
+        }
+
+        [Fact]
         public async Task CleanupOldCapabilities_RemovesOldEntries() {
             // Arrange
             var channel = new LLMChannel {

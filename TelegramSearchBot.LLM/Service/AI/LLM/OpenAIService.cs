@@ -276,7 +276,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
             "MiniMax-M2.5-highspeed",
             "MiniMax-M2.1",
             "MiniMax-M2.1-highspeed",
-            "MiniMax-M2"
+            "MiniMax-M2",
+            "image-01",
+            "image-01-live"
         };
 
         /// <summary>
@@ -320,6 +322,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public virtual async Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel) {
             if (channel.Provider.Equals(LLMProvider.Ollama)) {
                 return new List<ModelWithCapabilities>();
+            }
+
+            if (channel.Provider == LLMProvider.MiniMax) {
+                return _miniMaxModels.Select(InferOpenAIModelCapabilities);
             }
 
             // 检查是否为OpenRouter
@@ -455,9 +461,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     model.SetCapability("response_json_object", true);
                 }
             }
-            // DALL-E模型
-            else if (lowerName.Contains("dall-e")) {
+            // 图片生成模型
+            else if (ModelWithCapabilities.IsKnownImageGenerationModelName(modelName)) {
                 model.SetCapability("image_generation", true);
+                model.SetCapability("text_to_image", true);
                 model.SetCapability("function_calling", false);
             }
             // Whisper模型

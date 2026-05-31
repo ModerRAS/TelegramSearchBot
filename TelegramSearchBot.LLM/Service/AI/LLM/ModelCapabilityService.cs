@@ -152,6 +152,28 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
+        /// 获取图片生成模型
+        /// </summary>
+        public async Task<IEnumerable<ChannelWithModel>> GetImageGenerationModels() {
+            var models = await _dbContext.ChannelsWithModel
+                .Include(c => c.LLMChannel)
+                .Include(c => c.Capabilities)
+                .Where(c => !c.IsDeleted)
+                .ToListAsync();
+
+            return models.Where(IsImageGenerationModelRecord).ToList();
+        }
+
+        private static bool IsImageGenerationModelRecord(ChannelWithModel model) {
+            return model.Capabilities.Any(cap =>
+                       ( cap.CapabilityName == "image_generation" || cap.CapabilityName == "text_to_image" ) &&
+                       string.Equals(cap.CapabilityValue, "true", StringComparison.OrdinalIgnoreCase)) ||
+                   ModelWithCapabilities.IsKnownImageGenerationModelName(model.ModelName) ||
+                   ( model.LLMChannel?.Provider == LLMProvider.MiniMax &&
+                     ( model.ModelName == "image-01" || model.ModelName == "image-01-live" ) );
+        }
+
+        /// <summary>
         /// 删除过期的模型能力信息
         /// </summary>
         public async Task<int> CleanupOldCapabilities(int daysOld = 30) {
@@ -221,6 +243,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 "embedding" => "文本嵌入模型",
                 "streaming" => "支持流式响应",
                 "multimodal" => "支持多模态输入",
+                "image_generation" => "图片生成模型",
+                "text_to_image" => "文生图模型",
                 "code_generation" => "支持代码生成",
                 "audio_content" => "支持音频处理",
                 "video_content" => "支持视频处理",

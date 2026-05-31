@@ -193,12 +193,12 @@ namespace TelegramSearchBot.Service.Manage {
 
         private async Task<(bool, string)> HandleSettingImageGenerationModelAsync(EditLLMConfRedisHelper redis, string command) {
             try {
-                await _imageGenerationToolSettingsService.SetModelNameAsync(command);
+                await _imageGenerationToolSettingsService.SetDefaultModelNameAsync(command);
                 await redis.DeleteKeysAsync();
-                return (true, $"生图模型已设置为: {command.Trim()}。请确保该模型已通过 `添加模型` 关联到一个 OpenAI-compatible 渠道。");
+                return (true, $"默认生图模型已设置为: {command.Trim()}。群内没有单独配置生图模型时会使用该默认值；请确保该模型已通过 `添加模型` 关联到一个 OpenAI-compatible 或 MiniMax 渠道。");
             } catch {
                 await redis.DeleteKeysAsync();
-                return (false, "设置生图模型失败");
+                return (false, "设置默认生图模型失败");
             }
         }
 
@@ -502,8 +502,8 @@ namespace TelegramSearchBot.Service.Manage {
             if (cmd.Equals("开启生图工具", StringComparison.OrdinalIgnoreCase) ||
                 cmd.Equals("启用生图工具", StringComparison.OrdinalIgnoreCase)) {
                 await _imageGenerationToolSettingsService.SetToolEnabledAsync(true);
-                var modelName = await _imageGenerationToolSettingsService.GetModelNameAsync();
-                return (true, $"生图工具已开启，会注入到 LLM 工具提示词中。当前生图模型: {modelName}");
+                var modelName = await _imageGenerationToolSettingsService.GetDefaultModelNameAsync();
+                return (true, $"生图工具已开启，会注入到 LLM 工具提示词中。默认生图模型: {modelName}");
             }
 
             if (cmd.Equals("关闭生图工具", StringComparison.OrdinalIgnoreCase) ||
@@ -515,13 +515,14 @@ namespace TelegramSearchBot.Service.Manage {
             if (cmd.Equals("生图工具状态", StringComparison.OrdinalIgnoreCase) ||
                 cmd.Equals("查看生图工具", StringComparison.OrdinalIgnoreCase)) {
                 var enabled = await _imageGenerationToolSettingsService.IsToolEnabledAsync();
-                var modelName = await _imageGenerationToolSettingsService.GetModelNameAsync();
-                return (true, $"生图工具: {( enabled ? "已开启" : "已关闭" )}\n当前生图模型: {modelName}\nAPI 地址与 API Key 来自该模型关联的 LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址。");
+                var modelName = await _imageGenerationToolSettingsService.GetDefaultModelNameAsync();
+                return (true, $"生图工具: {( enabled ? "已开启" : "已关闭" )}\n默认生图模型: {modelName}\n群内可用 `选择生图模型` 或 `设置生图模型 <模型名>` 设置当前群的生图模型；未配置时使用默认值。\nAPI 地址与 API Key 来自对应模型关联的 LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址，支持 OpenAI-compatible 和 MiniMax。");
             }
 
-            if (cmd.Equals("设置生图模型", StringComparison.OrdinalIgnoreCase)) {
+            if (cmd.Equals("设置默认生图模型", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("设置生图默认模型", StringComparison.OrdinalIgnoreCase)) {
                 await redis.SetStateAsync(LLMConfState.SettingImageGenerationModel.GetDescription());
-                return (true, $"请输入生图使用的模型名称(默认 {ImageGenerationToolSettingsService.DefaultModelName}):");
+                return (true, $"请输入没有群级配置时使用的默认生图模型名称(内置默认 {ImageGenerationToolSettingsService.DefaultModelName}，MiniMax 可用 image-01 或 image-01-live):");
             }
 
             return null;

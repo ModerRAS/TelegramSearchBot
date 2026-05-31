@@ -45,6 +45,11 @@ namespace TelegramSearchBot.Model.AI {
         public bool SupportsEmbedding => GetCapabilityBool("embedding") || GetCapabilityBool("text_embedding");
 
         /// <summary>
+        /// 是否是图片生成模型
+        /// </summary>
+        public bool SupportsImageGeneration => GetCapabilityBool("image_generation") || GetCapabilityBool("text_to_image") || IsKnownImageGenerationModelName(ModelName);
+
+        /// <summary>
         /// 获取布尔类型的能力值
         /// </summary>
         public bool GetCapabilityBool(string capabilityName) {
@@ -73,6 +78,22 @@ namespace TelegramSearchBot.Model.AI {
         /// </summary>
         public void SetCapability(string capabilityName, bool value) {
             Capabilities[capabilityName] = value.ToString().ToLower();
+        }
+
+        public static bool IsKnownImageGenerationModelName(string modelName) {
+            if (string.IsNullOrWhiteSpace(modelName)) {
+                return false;
+            }
+
+            var lowerName = modelName.Trim().ToLowerInvariant();
+            return lowerName.Contains("gpt-image") ||
+                   lowerName.Contains("dall-e") ||
+                   lowerName.Equals("image-01") ||
+                   lowerName.Equals("image-01-live") ||
+                   lowerName.Contains("imagen") ||
+                   lowerName.Contains("flux") ||
+                   lowerName.Contains("stable-diffusion") ||
+                   lowerName.Contains("sdxl");
         }
     }
 }
