@@ -16,6 +16,7 @@ namespace TelegramSearchBot.Model.Data {
         public long GroupId { get; set; }
         public string LLMModelName { get; set; }
         public string ImageGenerationModelName { get; set; }
+        public string MusicGenerationModelName { get; set; }
         /// <summary>
         /// 是否是有管理员权限的群，是的所有群友都可以作为管理员操作一部分功能
         /// </summary>

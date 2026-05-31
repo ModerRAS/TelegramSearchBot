@@ -119,7 +119,11 @@ namespace TelegramSearchBot.Test.Manage {
                 new ImageGenerationToolSettingsService(
                     _context,
                     _redisMock.Object,
-                    Mock.Of<ILogger<ImageGenerationToolSettingsService>>()));
+                    Mock.Of<ILogger<ImageGenerationToolSettingsService>>()),
+                new MusicGenerationToolSettingsService(
+                    _context,
+                    _redisMock.Object,
+                    Mock.Of<ILogger<MusicGenerationToolSettingsService>>()));
         }
 
         [Fact]

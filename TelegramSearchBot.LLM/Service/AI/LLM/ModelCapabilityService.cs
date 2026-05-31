@@ -164,6 +164,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return models.Where(IsImageGenerationModelRecord).ToList();
         }
 
+        /// <summary>
+        /// 获取音乐生成模型
+        /// </summary>
+        public async Task<IEnumerable<ChannelWithModel>> GetMusicGenerationModels() {
+            var models = await _dbContext.ChannelsWithModel
+                .Include(c => c.LLMChannel)
+                .Include(c => c.Capabilities)
+                .Where(c => !c.IsDeleted)
+                .ToListAsync();
+
+            return models.Where(IsMusicGenerationModelRecord).ToList();
+        }
+
         private static bool IsImageGenerationModelRecord(ChannelWithModel model) {
             return model.Capabilities.Any(cap =>
                        ( cap.CapabilityName == "image_generation" || cap.CapabilityName == "text_to_image" ) &&
@@ -171,6 +184,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                    ModelWithCapabilities.IsKnownImageGenerationModelName(model.ModelName) ||
                    ( model.LLMChannel?.Provider == LLMProvider.MiniMax &&
                      ( model.ModelName == "image-01" || model.ModelName == "image-01-live" ) );
+        }
+
+        private static bool IsMusicGenerationModelRecord(ChannelWithModel model) {
+            return model.Capabilities.Any(cap =>
+                       ( cap.CapabilityName == "music_generation" || cap.CapabilityName == "text_to_music" ) &&
+                       string.Equals(cap.CapabilityValue, "true", StringComparison.OrdinalIgnoreCase)) ||
+                   ModelWithCapabilities.IsKnownMusicGenerationModelName(model.ModelName) ||
+                   ( model.LLMChannel?.Provider == LLMProvider.MiniMax &&
+                     ( model.ModelName == "music-2.6" ||
+                       model.ModelName == "music-2.6-free" ||
+                       model.ModelName == "music-cover" ||
+                       model.ModelName == "music-cover-free" ) );
         }
 
         /// <summary>
@@ -245,6 +270,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 "multimodal" => "支持多模态输入",
                 "image_generation" => "图片生成模型",
                 "text_to_image" => "文生图模型",
+                "music_generation" => "音乐生成模型",
+                "text_to_music" => "文生音乐模型",
                 "code_generation" => "支持代码生成",
                 "audio_content" => "支持音频处理",
                 "video_content" => "支持视频处理",
