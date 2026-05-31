@@ -282,9 +282,9 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private async Task<bool> HasPendingConfigurationStateAsync(long chatId, long userId) {
             var db = _redis.GetDatabase();
             var pendingKeys = new[] {
-                $"modelselect:{chatId}:state",
-                $"image_generation:model_select:{chatId}:{userId}",
-                $"music_generation:model_select:{chatId}:{userId}"
+                LlmAgentRedisKeys.ModelSelectState(chatId),
+                LlmAgentRedisKeys.ImageGenerationModelSelection(chatId, userId),
+                LlmAgentRedisKeys.MusicGenerationModelSelection(chatId, userId)
             };
 
             foreach (var key in pendingKeys) {

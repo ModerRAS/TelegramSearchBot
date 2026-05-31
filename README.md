@@ -180,9 +180,9 @@
 
 ### AI交互
 - @机器人 + 问题: 使用配置的LLM回复
-- 管理员发送 `开启Agent聊天`: 当前群进入引导模式，普通文本、Caption 以及 OCR/QR/ASR 提取内容会短窗口合并后自动触发 Agent 回复
+- 管理员发送 `开启Agent聊天` / `开启Agent引导聊天`: 当前群进入引导模式，普通文本、Caption 以及 OCR/QR/ASR 提取内容会短窗口合并后自动触发 Agent 回复
 - 管理员发送 `开启Agent队列聊天`: 当前群进入逐条队列模式，每条触发消息按顺序进入 Agent 队列
-- 管理员发送 `关闭Agent聊天` / `Agent聊天状态`: 关闭或查看当前群 Agent 聊天模式
+- 管理员发送 `关闭Agent聊天` / `Agent聊天状态` / `查看Agent聊天`: 关闭或查看当前群 Agent 聊天模式
 
 完整命令列表: [Docs/Bot_Commands_User_Guide.md](Docs/Bot_Commands_User_Guide.md)
 

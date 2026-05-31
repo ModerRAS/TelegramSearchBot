@@ -240,6 +240,10 @@ namespace TelegramSearchBot.Model.AI {
         public static string SandboxToolQueue(long chatId) => $"SANDBOX_TOOL_TASKS:{chatId}";
         public static string SandboxToolHeartbeat(long chatId) => $"SANDBOX_TOOL_HEARTBEAT:{chatId}";
         public static string SandboxToolResult(string requestId) => $"SANDBOX_TOOL_RESULT:{requestId}";
+        public static string ModelSelectState(long chatId) => $"modelselect:{chatId}:state";
+        public static string ModelSelectModels(long chatId) => $"modelselect:{chatId}:models";
+        public static string ImageGenerationModelSelection(long chatId, long userId) => $"image_generation:model_select:{chatId}:{userId}";
+        public static string MusicGenerationModelSelection(long chatId, long userId) => $"music_generation:model_select:{chatId}:{userId}";
         public static string AgentChatBatchList(long chatId) => $"AGENT_CHAT_BATCH:{chatId}:MESSAGES";
         public static string AgentChatBatchMeta(long chatId) => $"AGENT_CHAT_BATCH:{chatId}:META";
         public static string AgentChatBatchLock(long chatId) => $"AGENT_CHAT_BATCH:{chatId}:LOCK";

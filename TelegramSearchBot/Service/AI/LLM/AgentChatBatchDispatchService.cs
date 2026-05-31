@@ -15,8 +15,22 @@ using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     public sealed class AgentChatBatchDispatchService : BackgroundService {
+        private const int MaxDueChatFetchCount = 20;
+        private const int MaxDispatchConcurrency = 4;
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan LockTtl = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan LockRenewInterval = TimeSpan.FromSeconds(10);
+        private const string ReleaseLockScript = @"
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0";
+        private const string RenewLockScript = @"
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('PEXPIRE', KEYS[1], ARGV[2])
+  return 1
+end
+return 0";
         private readonly IConnectionMultiplexer _redis;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<AgentChatBatchDispatchService> _logger;
@@ -48,17 +62,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 LlmAgentRedisKeys.AgentChatBatchDueSet,
                 stop: now,
                 order: Order.Ascending,
-                take: 20);
+                take: MaxDueChatFetchCount);
 
-            foreach (var chatIdValue in dueChatIds) {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!long.TryParse(chatIdValue.ToString(), out var chatId)) {
-                    await db.SortedSetRemoveAsync(LlmAgentRedisKeys.AgentChatBatchDueSet, chatIdValue);
-                    continue;
-                }
+            await Parallel.ForEachAsync(
+                dueChatIds,
+                new ParallelOptions {
+                    CancellationToken = cancellationToken,
+                    MaxDegreeOfParallelism = MaxDispatchConcurrency
+                },
+                async (chatIdValue, token) => {
+                    token.ThrowIfCancellationRequested();
+                    if (!long.TryParse(chatIdValue.ToString(), out var chatId)) {
+                        await db.SortedSetRemoveAsync(LlmAgentRedisKeys.AgentChatBatchDueSet, chatIdValue);
+                        return;
+                    }
 
-                await TryDispatchChatBatchAsync(db, chatId, cancellationToken);
-            }
+                    await TryDispatchChatBatchAsync(db, chatId, token);
+                });
         }
 
         private async Task TryDispatchChatBatchAsync(IDatabase db, long chatId, CancellationToken cancellationToken) {
@@ -67,6 +87,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (!await db.StringSetAsync(lockKey, lockValue, LockTtl, When.NotExists)) {
                 return;
             }
+
+            using var lockRenewalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var lockRenewalTask = RenewLockUntilCanceledAsync(db, lockKey, lockValue, lockRenewalCts.Token);
 
             try {
                 await db.SortedSetRemoveAsync(LlmAgentRedisKeys.AgentChatBatchDueSet, chatId.ToString());
@@ -108,8 +131,42 @@ namespace TelegramSearchBot.Service.AI.LLM {
             } catch (Exception ex) when (ex is not OperationCanceledException) {
                 _logger.LogError(ex, "Failed to dispatch agent chat batch. ChatId={ChatId}", chatId);
             } finally {
-                await db.KeyDeleteAsync(lockKey);
+                lockRenewalCts.Cancel();
+                try {
+                    await lockRenewalTask;
+                } catch (OperationCanceledException) {
+                    // Normal cancellation after dispatch exits.
+                }
+
+                await ReleaseLockIfOwnedAsync(db, lockKey, lockValue);
             }
+        }
+
+        private async Task RenewLockUntilCanceledAsync(IDatabase db, string lockKey, string lockValue, CancellationToken cancellationToken) {
+            using var timer = new PeriodicTimer(LockRenewInterval);
+            try {
+                while (await timer.WaitForNextTickAsync(cancellationToken)) {
+                    var renewed = await db.ScriptEvaluateAsync(
+                        RenewLockScript,
+                        new RedisKey[] { lockKey },
+                        new RedisValue[] { lockValue, (long)LockTtl.TotalMilliseconds });
+                    if (( int ) renewed != 1) {
+                        _logger.LogWarning("Lost agent chat batch lock before dispatch completed. LockKey={LockKey}", lockKey);
+                        return;
+                    }
+                }
+            } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+                // Normal cancellation after dispatch exits.
+            } catch (Exception ex) {
+                _logger.LogWarning(ex, "Failed to renew agent chat batch lock. LockKey={LockKey}", lockKey);
+            }
+        }
+
+        private static async Task ReleaseLockIfOwnedAsync(IDatabase db, string lockKey, string lockValue) {
+            await db.ScriptEvaluateAsync(
+                ReleaseLockScript,
+                new RedisKey[] { lockKey },
+                new RedisValue[] { lockValue });
         }
 
         private static async Task<List<AgentChatBufferedMessage>> DrainBufferedMessagesAsync(IDatabase db, long chatId) {
@@ -123,7 +180,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 var buffered = JsonConvert.DeserializeObject<AgentChatBufferedMessage>(value.ToString());
-                if (buffered != null && !string.IsNullOrWhiteSpace(buffered.Message.Content)) {
+                if (buffered?.Message != null && !string.IsNullOrWhiteSpace(buffered.Message.Content)) {
                     result.Add(buffered);
                 }
             }

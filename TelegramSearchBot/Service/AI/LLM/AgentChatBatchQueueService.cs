@@ -9,7 +9,7 @@ using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model.AI;
 
 namespace TelegramSearchBot.Service.AI.LLM {
-    [Injectable(ServiceLifetime.Transient)]
+    [Injectable(ServiceLifetime.Singleton)]
     public sealed class AgentChatBatchQueueService : IService {
         private static readonly TimeSpan BatchTtl = TimeSpan.FromMinutes(30);
         private readonly IConnectionMultiplexer _redis;

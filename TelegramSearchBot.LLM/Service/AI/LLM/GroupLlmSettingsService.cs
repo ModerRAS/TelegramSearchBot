@@ -14,6 +14,8 @@ using TelegramSearchBot.Model.Data;
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(ServiceLifetime.Scoped)]
     public class GroupLlmSettingsService : IService, IGroupLlmSettingsService {
+        private const int MinBatchWindowSeconds = 1;
+        private const int MaxBatchWindowSeconds = 60;
         private readonly DataDbContext _dbContext;
 
         public GroupLlmSettingsService(DataDbContext dbContext) {
@@ -136,7 +138,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return GroupAgentChatSettings.DefaultBatchWindowSeconds;
             }
 
-            return Math.Clamp(batchWindowSeconds.Value, 1, 60);
+            return Math.Clamp(batchWindowSeconds.Value, MinBatchWindowSeconds, MaxBatchWindowSeconds);
         }
     }
 }

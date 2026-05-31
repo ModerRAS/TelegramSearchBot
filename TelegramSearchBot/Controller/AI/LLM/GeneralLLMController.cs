@@ -522,11 +522,11 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         }
 
         private static string GetImageGenerationModelSelectionKey(long chatId, long userId) {
-            return $"image_generation:model_select:{chatId}:{userId}";
+            return LlmAgentRedisKeys.ImageGenerationModelSelection(chatId, userId);
         }
 
         private static string GetMusicGenerationModelSelectionKey(long chatId, long userId) {
-            return $"music_generation:model_select:{chatId}:{userId}";
+            return LlmAgentRedisKeys.MusicGenerationModelSelection(chatId, userId);
         }
 
         private sealed record ImageGenerationModelSelectionOption(string ModelName, string ChannelSummary);
