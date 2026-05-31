@@ -21,6 +21,7 @@ using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Model.Tools;
 using TelegramSearchBot.Service.AI.LLM;
@@ -134,9 +135,13 @@ namespace TelegramSearchBot.Service.Tools {
         private const string DefaultSize = "1024x1024";
         private const string DefaultQuality = "auto";
         private const string DefaultOutputFormat = "png";
-        private const int MaxImageCount = 4;
+        private const int MaxImageCount = 9;
+        private const string DefaultMiniMaxResponseFormat = "url";
         private const long TelegramPhotoLimitBytes = 10 * 1024 * 1024;
         private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(120);
+        private static readonly string[] MiniMaxImageModels = { "image-01", "image-01-live" };
+        private static readonly string[] MiniMaxAspectRatios = { "1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9" };
+        private static readonly string[] MiniMaxStyleTypes = { "漫画", "元气", "中世纪", "水彩" };
 
         public string ServiceName => "ImageGenerationToolService";
 
@@ -165,19 +170,26 @@ namespace TelegramSearchBot.Service.Tools {
             _logger = logger;
         }
 
-        [BuiltInTool(@"Generate an image through the configured OpenAI-compatible Image API and optionally send it to the current Telegram chat.
-The default model is gpt-image-2. The API base URL and API key are read from the configured LLM channel for the selected image model, so administrators can use OpenAI or a compatible custom endpoint.
+        [BuiltInTool(@"Generate an image through the configured image API and optionally send it to the current Telegram chat.
+The default model is gpt-image-2. OpenAI-compatible models use /v1/images/generations. MiniMax image-01 and image-01-live use /v1/image_generation. The API base URL and API key are read from the configured LLM channel for the selected image model, so administrators can use OpenAI, MiniMax, or a compatible custom endpoint.
 Use this when the user asks you to draw, create, render, generate, or revise an image. The tool saves generated image files under the bot work directory and returns their file paths.")]
         public async Task<ImageGenerationResult> GenerateImage(
             [BuiltInParameter("Image prompt. Be specific about subject, style, composition, lighting, colors, and any text that should appear.")] string prompt,
             ToolContext toolContext,
-            [BuiltInParameter("Image model name. Defaults to the administrator-configured image generation model, normally gpt-image-2.", IsRequired = false)] string model = null,
+            [BuiltInParameter("Image model name. Defaults to the administrator-configured image generation model, normally gpt-image-2. Use image-01 or image-01-live for MiniMax.", IsRequired = false)] string model = null,
             [BuiltInParameter("Image size such as 1024x1024, 1536x1024, 1024x1536, or auto. Defaults to 1024x1024.", IsRequired = false)] string size = DefaultSize,
             [BuiltInParameter("Quality: auto, low, medium, or high. Defaults to auto.", IsRequired = false)] string quality = DefaultQuality,
             [BuiltInParameter("Output format: png, jpeg, or webp. Defaults to png.", IsRequired = false)] string outputFormat = DefaultOutputFormat,
             [BuiltInParameter("Background: auto, opaque, or transparent. Leave empty unless the user asked for a specific background.", IsRequired = false)] string background = null,
             [BuiltInParameter("Moderation setting: auto or low. Defaults to auto.", IsRequired = false)] string moderation = "auto",
-            [BuiltInParameter("Number of images to generate, from 1 to 4. Defaults to 1.", IsRequired = false)] int count = 1,
+            [BuiltInParameter("MiniMax aspect ratio: 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, or 21:9. If set, MiniMax ignores size. Leave empty for OpenAI-compatible models.", IsRequired = false)] string aspectRatio = null,
+            [BuiltInParameter("MiniMax response format: url or base64. Defaults to url. Leave empty for OpenAI-compatible models.", IsRequired = false)] string minimaxResponseFormat = DefaultMiniMaxResponseFormat,
+            [BuiltInParameter("MiniMax random seed for reproducible similar results. Leave empty unless the user asks for a seed.", IsRequired = false)] long? seed = null,
+            [BuiltInParameter("Whether to enable MiniMax prompt_optimizer. Defaults to false.", IsRequired = false)] bool promptOptimizer = false,
+            [BuiltInParameter("Whether to add the MiniMax AIGC watermark. Defaults to false.", IsRequired = false)] bool aigcWatermark = false,
+            [BuiltInParameter("MiniMax image-01-live style_type. Supported values: 漫画, 元气, 中世纪, 水彩. Leave empty unless the user asks for one of these styles.", IsRequired = false)] string styleType = null,
+            [BuiltInParameter("MiniMax image-01-live style_weight in (0, 1]. Defaults to MiniMax service default when empty.", IsRequired = false)] double? styleWeight = null,
+            [BuiltInParameter("Number of images to generate, from 1 to 9. Defaults to 1.", IsRequired = false)] int count = 1,
             [BuiltInParameter("Whether to send generated images to the current Telegram chat. Defaults to true.", IsRequired = false)] bool sendToChat = true,
             [BuiltInParameter("Optional Telegram photo caption. Keep it short.", IsRequired = false)] string caption = null,
             [BuiltInParameter("Optional Telegram message ID to reply to. Defaults to the original user message.", IsRequired = false)] long? replyToMessageId = null,
@@ -201,6 +213,9 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
                 var normalizedOutputFormat = NormalizeChoice(outputFormat, "outputFormat", DefaultOutputFormat, "png", "jpeg", "webp");
                 var normalizedBackground = NormalizeOptionalChoice(background, "background", "auto", "opaque", "transparent");
                 var normalizedModeration = NormalizeOptionalChoice(moderation, "moderation", "auto", "low") ?? "auto";
+                var normalizedMiniMaxResponseFormat = string.IsNullOrWhiteSpace(minimaxResponseFormat)
+                    ? DefaultMiniMaxResponseFormat
+                    : minimaxResponseFormat.Trim();
                 var normalizedCount = Math.Clamp(count, 1, MaxImageCount);
                 var normalizedTimeoutSeconds = Math.Clamp(timeoutSeconds, 30, 600);
 
@@ -209,7 +224,7 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
                 var channels = await LoadChannelsAsync(effectiveModel);
                 if (channels.Count == 0) {
                     return Failure(
-                        $"No channel is configured for image model '{effectiveModel}'. Add an OpenAI-compatible channel and associate model '{effectiveModel}' with it. The channel gateway can be a custom base URL, for example https://api.openai.com/v1.");
+                        $"No channel is configured for image model '{effectiveModel}'. Add an OpenAI-compatible or MiniMax channel and associate model '{effectiveModel}' with it. The channel gateway can be a custom base URL, for example https://api.openai.com/v1 or https://api.minimaxi.com.");
                 }
 
                 Exception lastException = null;
@@ -219,19 +234,39 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
                     }
 
                     try {
-                        var endpoint = BuildImageGenerationEndpoint(channel.Gateway);
-                        var generated = await RequestImagesAsync(
-                            endpoint,
-                            channel,
-                            prompt.Trim(),
-                            effectiveModel,
-                            normalizedSize,
-                            normalizedQuality,
-                            normalizedOutputFormat,
-                            normalizedBackground,
-                            normalizedModeration,
-                            normalizedCount,
-                            normalizedTimeoutSeconds);
+                        var useMiniMax = IsMiniMaxImageGeneration(channel, effectiveModel);
+                        var endpoint = useMiniMax
+                            ? BuildMiniMaxImageGenerationEndpoint(channel.Gateway)
+                            : BuildImageGenerationEndpoint(channel.Gateway);
+                        var generated = useMiniMax
+                            ? await RequestMiniMaxImagesAsync(
+                                endpoint,
+                                channel,
+                                prompt.Trim(),
+                                effectiveModel,
+                                normalizedSize,
+                                normalizedOutputFormat,
+                                normalizedMiniMaxResponseFormat,
+                                aspectRatio,
+                                seed,
+                                promptOptimizer,
+                                aigcWatermark,
+                                styleType,
+                                styleWeight,
+                                normalizedCount,
+                                normalizedTimeoutSeconds)
+                            : await RequestImagesAsync(
+                                endpoint,
+                                channel,
+                                prompt.Trim(),
+                                effectiveModel,
+                                normalizedSize,
+                                normalizedQuality,
+                                normalizedOutputFormat,
+                                normalizedBackground,
+                                normalizedModeration,
+                                normalizedCount,
+                                normalizedTimeoutSeconds);
 
                         result.ChannelId = channel.Id;
                         result.ChannelName = channel.Name;
@@ -295,6 +330,24 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             }
 
             return $"{normalized}/v1/images/generations";
+        }
+
+        public static string BuildMiniMaxImageGenerationEndpoint(string gateway) {
+            if (string.IsNullOrWhiteSpace(gateway)) {
+                throw new ArgumentException("MiniMax image generation channel gateway cannot be empty.", nameof(gateway));
+            }
+
+            var normalized = gateway.Trim().TrimEnd('/');
+            if (normalized.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) {
+                return $"{normalized}/image_generation";
+            }
+
+            if (normalized.EndsWith("/v1/image_generation", StringComparison.OrdinalIgnoreCase) ||
+                normalized.EndsWith("/image_generation", StringComparison.OrdinalIgnoreCase)) {
+                return normalized;
+            }
+
+            return $"{normalized}/v1/image_generation";
         }
 
         private async Task<List<LLMChannel>> LoadChannelsAsync(string modelName) {
@@ -390,6 +443,68 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             var images = ExtractImages(responseText);
             if (images.Count == 0) {
                 throw new InvalidOperationException("The image API response did not include b64_json or url image data.");
+            }
+
+            var saved = new List<GeneratedImagePayload>();
+            for (var i = 0; i < images.Count; i++) {
+                var savedImage = await SaveImageAsync(httpClient, images[i], outputFormat, i + 1, cts.Token);
+                saved.Add(savedImage);
+            }
+
+            return saved;
+        }
+
+        private async Task<List<GeneratedImagePayload>> RequestMiniMaxImagesAsync(
+            string endpoint,
+            LLMChannel channel,
+            string prompt,
+            string model,
+            string size,
+            string outputFormat,
+            string responseFormat,
+            string aspectRatio,
+            long? seed,
+            bool promptOptimizer,
+            bool aigcWatermark,
+            string styleType,
+            double? styleWeight,
+            int count,
+            int timeoutSeconds) {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+            var requestBody = BuildMiniMaxImageGenerationRequestBody(
+                prompt,
+                model,
+                size,
+                count,
+                responseFormat,
+                aspectRatio,
+                seed,
+                promptOptimizer,
+                aigcWatermark,
+                styleType,
+                styleWeight);
+
+            var httpClient = _httpClientFactory.CreateClient();
+            httpClient.Timeout = Timeout.InfiniteTimeSpan;
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint) {
+                Content = new StringContent(requestBody.ToString(Formatting.None), Encoding.UTF8, "application/json")
+            };
+
+            if (!string.IsNullOrWhiteSpace(channel.ApiKey)) {
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {channel.ApiKey}");
+            }
+
+            using var response = await httpClient.SendAsync(request, cts.Token);
+            var responseText = await response.Content.ReadAsStringAsync(cts.Token);
+            if (!response.IsSuccessStatusCode) {
+                throw new InvalidOperationException($"MiniMax image API returned HTTP {( int ) response.StatusCode}: {ExtractErrorMessage(responseText)}");
+            }
+
+            EnsureMiniMaxResponseSucceeded(responseText);
+            var images = ExtractImages(responseText);
+            if (images.Count == 0) {
+                throw new InvalidOperationException("The MiniMax image API response did not include image_urls or image_base64 data.");
             }
 
             var saved = new List<GeneratedImagePayload>();
@@ -506,26 +621,115 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             return messageId.HasValue ? new ReplyParameters { MessageId = ( int ) messageId.Value } : null;
         }
 
-        private static List<ImageResponseData> ExtractImages(string responseText) {
+        internal static JObject BuildMiniMaxImageGenerationRequestBody(
+            string prompt,
+            string model,
+            string size,
+            int count,
+            string responseFormat,
+            string aspectRatio,
+            long? seed,
+            bool promptOptimizer,
+            bool aigcWatermark,
+            string styleType,
+            double? styleWeight) {
+            if (string.IsNullOrWhiteSpace(prompt)) {
+                throw new ArgumentException("MiniMax prompt cannot be empty.", nameof(prompt));
+            }
+
+            if (prompt.Length > 1500) {
+                throw new ArgumentException("MiniMax prompt cannot exceed 1500 characters.", nameof(prompt));
+            }
+
+            var normalizedModel = string.IsNullOrWhiteSpace(model)
+                ? "image-01"
+                : model.Trim();
+            if (!IsMiniMaxImageModel(normalizedModel)) {
+                throw new ArgumentException("MiniMax image generation model must be image-01 or image-01-live.", nameof(model));
+            }
+
+            var normalizedResponseFormat = NormalizeChoice(responseFormat, "minimaxResponseFormat", DefaultMiniMaxResponseFormat, "url", "base64");
+            var requestBody = new JObject {
+                ["model"] = normalizedModel,
+                ["prompt"] = prompt.Trim(),
+                ["n"] = Math.Clamp(count, 1, MaxImageCount),
+                ["response_format"] = normalizedResponseFormat,
+                ["prompt_optimizer"] = promptOptimizer,
+                ["aigc_watermark"] = aigcWatermark
+            };
+
+            if (seed.HasValue) {
+                requestBody["seed"] = seed.Value;
+            }
+
+            var normalizedAspectRatio = NormalizeMiniMaxAspectRatio(aspectRatio, normalizedModel);
+            if (!string.IsNullOrWhiteSpace(normalizedAspectRatio)) {
+                requestBody["aspect_ratio"] = normalizedAspectRatio;
+            } else if (normalizedModel.Equals("image-01", StringComparison.OrdinalIgnoreCase) &&
+                       TryParseMiniMaxSize(size, out var width, out var height)) {
+                requestBody["width"] = width;
+                requestBody["height"] = height;
+            }
+
+            var normalizedStyleType = NormalizeMiniMaxStyleType(styleType, normalizedModel);
+            if (!string.IsNullOrWhiteSpace(normalizedStyleType)) {
+                var style = new JObject {
+                    ["style_type"] = normalizedStyleType
+                };
+                if (styleWeight.HasValue) {
+                    if (styleWeight.Value <= 0 || styleWeight.Value > 1) {
+                        throw new ArgumentException("MiniMax styleWeight must be in (0, 1].", nameof(styleWeight));
+                    }
+
+                    style["style_weight"] = styleWeight.Value;
+                }
+
+                requestBody["style"] = style;
+            } else if (styleWeight.HasValue) {
+                throw new ArgumentException("MiniMax styleWeight requires styleType.", nameof(styleWeight));
+            }
+
+            return requestBody;
+        }
+
+        internal static void EnsureMiniMaxResponseSucceeded(string responseText) {
+            if (string.IsNullOrWhiteSpace(responseText)) {
+                throw new InvalidOperationException("MiniMax image API returned an empty response body.");
+            }
+
+            var token = JToken.Parse(responseText);
+            var statusToken = token.SelectToken("$.base_resp.status_code");
+            if (statusToken == null || statusToken.Type == JTokenType.Null) {
+                return;
+            }
+
+            var statusCode = statusToken.Value<int>();
+            if (statusCode == 0) {
+                return;
+            }
+
+            var statusMessage = token.SelectToken("$.base_resp.status_msg")?.Value<string>();
+            throw new InvalidOperationException($"MiniMax image API returned status {statusCode}: {statusMessage ?? "unknown error"}");
+        }
+
+        internal static List<ImageResponseData> ExtractImages(string responseText) {
             var token = JToken.Parse(responseText);
             var images = new List<ImageResponseData>();
             var dataArray = token["data"] as JArray;
 
             if (dataArray != null) {
                 foreach (var item in dataArray.OfType<JObject>()) {
-                    var image = ExtractImageFromObject(item);
-                    if (image != null) {
-                        images.Add(image);
-                    }
+                    images.AddRange(ExtractImagesFromObject(item));
                 }
+            }
+
+            if (images.Count == 0 && token["data"] is JObject dataObject) {
+                images.AddRange(ExtractImagesFromObject(dataObject));
             }
 
             if (images.Count == 0) {
                 foreach (var item in EnumerateObjects(token)) {
-                    var image = ExtractImageFromObject(item);
-                    if (image != null) {
-                        images.Add(image);
-                    }
+                    images.AddRange(ExtractImagesFromObject(item));
                 }
             }
 
@@ -541,6 +745,21 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
                 foreach (var item in EnumerateObjects(child)) {
                     yield return item;
                 }
+            }
+        }
+
+        private static IEnumerable<ImageResponseData> ExtractImagesFromObject(JObject obj) {
+            foreach (var url in GetStringArrayValues(obj, "image_urls")) {
+                yield return new ImageResponseData(null, url, null);
+            }
+
+            foreach (var base64 in GetStringArrayValues(obj, "image_base64")) {
+                yield return new ImageResponseData(base64, null, null);
+            }
+
+            var image = ExtractImageFromObject(obj);
+            if (image != null) {
+                yield return image;
             }
         }
 
@@ -563,6 +782,22 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             return null;
         }
 
+        private static IEnumerable<string> GetStringArrayValues(JObject obj, params string[] keys) {
+            foreach (var key in keys) {
+                if (!obj.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var token) ||
+                    token is not JArray values) {
+                    continue;
+                }
+
+                foreach (var item in values) {
+                    var value = item.Type == JTokenType.String ? item.Value<string>()?.Trim() : null;
+                    if (!string.IsNullOrWhiteSpace(value)) {
+                        yield return value;
+                    }
+                }
+            }
+        }
+
         private static string GetFirstString(JObject obj, params string[] keys) {
             foreach (var key in keys) {
                 if (obj.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var token) &&
@@ -575,6 +810,74 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             }
 
             return null;
+        }
+
+        private static bool IsMiniMaxImageGeneration(LLMChannel channel, string modelName) {
+            return channel?.Provider == LLMProvider.MiniMax || IsMiniMaxImageModel(modelName);
+        }
+
+        private static bool IsMiniMaxImageModel(string modelName) {
+            return MiniMaxImageModels.Contains(modelName?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeMiniMaxAspectRatio(string aspectRatio, string modelName) {
+            if (string.IsNullOrWhiteSpace(aspectRatio)) {
+                return null;
+            }
+
+            var normalized = aspectRatio.Trim();
+            if (!MiniMaxAspectRatios.Contains(normalized, StringComparer.OrdinalIgnoreCase)) {
+                throw new ArgumentException($"MiniMax aspectRatio must be one of: {string.Join(", ", MiniMaxAspectRatios)}.", nameof(aspectRatio));
+            }
+
+            if (normalized.Equals("21:9", StringComparison.OrdinalIgnoreCase) &&
+                !modelName.Equals("image-01", StringComparison.OrdinalIgnoreCase)) {
+                throw new ArgumentException("MiniMax aspectRatio 21:9 is only supported by image-01.", nameof(aspectRatio));
+            }
+
+            return normalized;
+        }
+
+        private static string NormalizeMiniMaxStyleType(string styleType, string modelName) {
+            if (string.IsNullOrWhiteSpace(styleType)) {
+                return null;
+            }
+
+            if (!modelName.Equals("image-01-live", StringComparison.OrdinalIgnoreCase)) {
+                throw new ArgumentException("MiniMax styleType is only supported by image-01-live.", nameof(styleType));
+            }
+
+            var normalized = styleType.Trim();
+            if (!MiniMaxStyleTypes.Contains(normalized, StringComparer.Ordinal)) {
+                throw new ArgumentException($"MiniMax styleType must be one of: {string.Join(", ", MiniMaxStyleTypes)}.", nameof(styleType));
+            }
+
+            return normalized;
+        }
+
+        private static bool TryParseMiniMaxSize(string size, out int width, out int height) {
+            width = 0;
+            height = 0;
+            if (string.IsNullOrWhiteSpace(size) || size.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase)) {
+                return false;
+            }
+
+            var match = Regex.Match(size.Trim(), @"^(?<width>[1-9]\d{1,4})x(?<height>[1-9]\d{1,4})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!match.Success ||
+                !int.TryParse(match.Groups["width"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out width) ||
+                !int.TryParse(match.Groups["height"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out height)) {
+                throw new ArgumentException("MiniMax size must be auto or a WIDTHxHEIGHT value, for example 1024x1024.", nameof(size));
+            }
+
+            if (!IsValidMiniMaxDimension(width) || !IsValidMiniMaxDimension(height)) {
+                throw new ArgumentException("MiniMax width and height must be in [512, 2048] and multiples of 8.", nameof(size));
+            }
+
+            return true;
+        }
+
+        private static bool IsValidMiniMaxDimension(int value) {
+            return value >= 512 && value <= 2048 && value % 8 == 0;
         }
 
         private static string ExtractErrorMessage(string responseText) {
@@ -697,7 +1000,7 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             }
         }
 
-        private sealed record ImageResponseData(string Base64Data, string Url, string ContentType);
+        internal sealed record ImageResponseData(string Base64Data, string Url, string ContentType);
         private sealed record GeneratedImagePayload(byte[] Bytes, GeneratedImageInfo Info);
     }
 }

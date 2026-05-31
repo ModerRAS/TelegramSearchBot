@@ -197,9 +197,9 @@
             4.  机器人回复: `生图工具已关闭，并会从 LLM 工具提示词中隐藏。`
             5.  管理员发送: `设置生图模型`
             6.  机器人回复: `请输入生图使用的模型名称...`
-            7.  管理员发送: `gpt-image-2`
+            7.  管理员发送: `gpt-image-2`，或 MiniMax 的 `image-01` / `image-01-live`
             8.  机器人回复: `生图模型已设置为: gpt-image-2...`
-        *   **说明**: 生图工具使用内置工具 `generate_image`，默认模型为 `gpt-image-2`。API 地址和 API Key 不在工具参数中填写，而是来自该模型关联的 LLM 渠道；因此可通过 `新建渠道` / `编辑渠道` 自定义 OpenAI-compatible API 地址，例如 `https://api.openai.com/v1` 或自建兼容网关。
+        *   **说明**: 生图工具使用内置工具 `generate_image`，默认模型为 `gpt-image-2`。OpenAI-compatible 模型调用 `/v1/images/generations`；MiniMax `image-01` / `image-01-live` 调用 `/v1/image_generation`。API 地址和 API Key 不在工具参数中填写，而是来自该模型关联的 LLM 渠道；因此可通过 `新建渠道` / `编辑渠道` 自定义 API 地址，例如 `https://api.openai.com/v1`、`https://api.minimaxi.com` 或自建兼容网关。
     *   **指令**: `新建渠道`
         *   **功能**: 开始创建新的LLM（大语言模型）API渠道的流程，包括名称、网关地址、API类型 (OpenAI/Ollama)、API Key、最大并行数和优先级。
     *   **指令**: `编辑渠道`
@@ -221,7 +221,7 @@
         *   **指令**: `开启生图工具` / `关闭生图工具` / `生图工具状态`
         *   **功能**: 开启、关闭或查看 LLM 生图内置工具。关闭后工具不会注入到 LLM 工具提示词或 native tool definitions 中。
         *   **指令**: `设置生图模型`
-        *   **功能**: 设置生图工具默认使用的模型名称，默认 `gpt-image-2`。需要将该模型通过 `添加模型` 关联到一个带自定义 API 地址的 LLM 渠道。
+        *   **功能**: 设置生图工具默认使用的模型名称，默认 `gpt-image-2`；MiniMax 可用 `image-01` / `image-01-live`。需要将该模型通过 `添加模型` 关联到一个带自定义 API 地址的 LLM 渠道。
 
 *   **MCP服务器管理** (在群组中由全局管理员发送，会触发交互式配置流程)
     *   **说明**: 以下指令用于管理MCP (Model Context Protocol) 服务器。它们会启动一个多步骤的对话流程（状态机），机器人会依次询问配置所需的各项信息。请按照机器人的提示逐步回复。

@@ -276,7 +276,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
             "MiniMax-M2.5-highspeed",
             "MiniMax-M2.1",
             "MiniMax-M2.1-highspeed",
-            "MiniMax-M2"
+            "MiniMax-M2",
+            "image-01",
+            "image-01-live"
         };
 
         /// <summary>

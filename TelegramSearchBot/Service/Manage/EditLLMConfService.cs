@@ -195,7 +195,7 @@ namespace TelegramSearchBot.Service.Manage {
             try {
                 await _imageGenerationToolSettingsService.SetModelNameAsync(command);
                 await redis.DeleteKeysAsync();
-                return (true, $"生图模型已设置为: {command.Trim()}。请确保该模型已通过 `添加模型` 关联到一个 OpenAI-compatible 渠道。");
+                return (true, $"生图模型已设置为: {command.Trim()}。请确保该模型已通过 `添加模型` 关联到一个 OpenAI-compatible 或 MiniMax 渠道。");
             } catch {
                 await redis.DeleteKeysAsync();
                 return (false, "设置生图模型失败");
@@ -516,12 +516,12 @@ namespace TelegramSearchBot.Service.Manage {
                 cmd.Equals("查看生图工具", StringComparison.OrdinalIgnoreCase)) {
                 var enabled = await _imageGenerationToolSettingsService.IsToolEnabledAsync();
                 var modelName = await _imageGenerationToolSettingsService.GetModelNameAsync();
-                return (true, $"生图工具: {( enabled ? "已开启" : "已关闭" )}\n当前生图模型: {modelName}\nAPI 地址与 API Key 来自该模型关联的 LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址。");
+                return (true, $"生图工具: {( enabled ? "已开启" : "已关闭" )}\n当前生图模型: {modelName}\nAPI 地址与 API Key 来自该模型关联的 LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址，支持 OpenAI-compatible 和 MiniMax。");
             }
 
             if (cmd.Equals("设置生图模型", StringComparison.OrdinalIgnoreCase)) {
                 await redis.SetStateAsync(LLMConfState.SettingImageGenerationModel.GetDescription());
-                return (true, $"请输入生图使用的模型名称(默认 {ImageGenerationToolSettingsService.DefaultModelName}):");
+                return (true, $"请输入生图使用的模型名称(默认 {ImageGenerationToolSettingsService.DefaultModelName}，MiniMax 可用 image-01 或 image-01-live):");
             }
 
             return null;
