@@ -324,6 +324,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return new List<ModelWithCapabilities>();
             }
 
+            if (channel.Provider == LLMProvider.MiniMax) {
+                return _miniMaxModels.Select(InferOpenAIModelCapabilities);
+            }
+
             // 检查是否为OpenRouter
             if (IsOpenRouter(channel.Gateway)) {
                 return await GetOpenRouterModelsWithCapabilities(channel);
@@ -457,9 +461,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     model.SetCapability("response_json_object", true);
                 }
             }
-            // DALL-E模型
-            else if (lowerName.Contains("dall-e")) {
+            // 图片生成模型
+            else if (ModelWithCapabilities.IsKnownImageGenerationModelName(modelName)) {
                 model.SetCapability("image_generation", true);
+                model.SetCapability("text_to_image", true);
                 model.SetCapability("function_calling", false);
             }
             // Whisper模型

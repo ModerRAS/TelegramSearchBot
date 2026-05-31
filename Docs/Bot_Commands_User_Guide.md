@@ -54,7 +54,7 @@
     *   **功能**: 为当前聊天（群组或私聊）设置 `generate_image` 默认使用的图片生成模型；未设置时使用全局默认生图模型。
     *   **示例**: `设置生图模型 gpt-image-2`，或 `设置生图模型 image-01`
     *   **权限**: 普通管理员或全局管理员。
-    *   **相关指令**: `生图模型` / `查看生图模型` 查看当前生图模型，`清除生图模型` 恢复使用全局默认。
+    *   **相关指令**: `选择生图模型` 显示可用生图模型并通过编号选择，`生图模型` / `查看生图模型` 查看当前生图模型，`清除生图模型` 恢复使用全局默认。
 
 ### 2. 全局管理员指令
 
@@ -206,7 +206,7 @@
             6.  机器人回复: `请输入没有群级配置时使用的默认生图模型名称...`
             7.  管理员发送: `gpt-image-2`，或 MiniMax 的 `image-01` / `image-01-live`
             8.  机器人回复: `默认生图模型已设置为: gpt-image-2...`
-        *   **说明**: 生图工具使用内置工具 `generate_image`，默认优先使用当前群通过 `设置生图模型 <模型名>` 配置的模型；群内未配置时使用全局默认 `gpt-image-2`。OpenAI-compatible 模型调用 `/v1/images/generations`；MiniMax `image-01` / `image-01-live` 调用 `/v1/image_generation`。API 地址和 API Key 不在工具参数中填写，而是来自该模型关联的 LLM 渠道；因此可通过 `新建渠道` / `编辑渠道` 自定义 API 地址，例如 `https://api.openai.com/v1`、`https://api.minimaxi.com` 或自建兼容网关。
+        *   **说明**: 生图工具使用内置工具 `generate_image`，默认优先使用当前群通过 `设置生图模型 <模型名>` 或 `选择生图模型` 配置的模型；群内未配置时使用全局默认 `gpt-image-2`。OpenAI-compatible 模型调用 `/v1/images/generations`；MiniMax `image-01` / `image-01-live` 调用 `/v1/image_generation`。API 地址和 API Key 不在工具参数中填写，而是来自该模型关联的 LLM 渠道；因此可通过 `新建渠道` / `编辑渠道` 自定义 API 地址，例如 `https://api.openai.com/v1`、`https://api.minimaxi.com` 或自建兼容网关。
     *   **指令**: `新建渠道`
         *   **功能**: 开始创建新的LLM（大语言模型）API渠道的流程，包括名称、网关地址、API类型 (OpenAI/Ollama)、API Key、最大并行数和优先级。
     *   **指令**: `编辑渠道`

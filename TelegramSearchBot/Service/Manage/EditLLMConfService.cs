@@ -516,7 +516,7 @@ namespace TelegramSearchBot.Service.Manage {
                 cmd.Equals("查看生图工具", StringComparison.OrdinalIgnoreCase)) {
                 var enabled = await _imageGenerationToolSettingsService.IsToolEnabledAsync();
                 var modelName = await _imageGenerationToolSettingsService.GetDefaultModelNameAsync();
-                return (true, $"生图工具: {( enabled ? "已开启" : "已关闭" )}\n默认生图模型: {modelName}\n群内可用 `设置生图模型 <模型名>` 设置当前群的生图模型；未配置时使用默认值。\nAPI 地址与 API Key 来自对应模型关联的 LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址，支持 OpenAI-compatible 和 MiniMax。");
+                return (true, $"生图工具: {( enabled ? "已开启" : "已关闭" )}\n默认生图模型: {modelName}\n群内可用 `选择生图模型` 或 `设置生图模型 <模型名>` 设置当前群的生图模型；未配置时使用默认值。\nAPI 地址与 API Key 来自对应模型关联的 LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址，支持 OpenAI-compatible 和 MiniMax。");
             }
 
             if (cmd.Equals("设置默认生图模型", StringComparison.OrdinalIgnoreCase) ||

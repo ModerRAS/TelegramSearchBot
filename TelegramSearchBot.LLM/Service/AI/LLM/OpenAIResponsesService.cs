@@ -1015,8 +1015,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 if (lowerName.Contains("1106") || lowerName.Contains("0125")) {
                     model.SetCapability("response_json_object", true);
                 }
-            } else if (lowerName.Contains("dall-e")) {
+            } else if (ModelWithCapabilities.IsKnownImageGenerationModelName(modelName)) {
                 model.SetCapability("image_generation", true);
+                model.SetCapability("text_to_image", true);
                 model.SetCapability("function_calling", false);
             } else if (lowerName.Contains("whisper")) {
                 model.SetCapability("audio_transcription", true);

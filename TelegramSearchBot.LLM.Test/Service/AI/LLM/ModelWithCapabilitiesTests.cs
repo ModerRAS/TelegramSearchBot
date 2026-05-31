@@ -78,6 +78,24 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         [Fact]
+        public void SupportsImageGeneration_CapabilitySet_ReturnsTrue() {
+            var model = new ModelWithCapabilities { ModelName = "test" };
+            model.SetCapability("image_generation", true);
+            Assert.True(model.SupportsImageGeneration);
+        }
+
+        [Theory]
+        [InlineData("gpt-image-2")]
+        [InlineData("dall-e-3")]
+        [InlineData("image-01")]
+        [InlineData("flux-pro")]
+        [InlineData("stable-diffusion-xl")]
+        public void SupportsImageGeneration_KnownName_ReturnsTrue(string modelName) {
+            var model = new ModelWithCapabilities { ModelName = modelName };
+            Assert.True(model.SupportsImageGeneration);
+        }
+
+        [Fact]
         public void GetCapabilityBool_InvalidValue_ReturnsFalse() {
             var model = new ModelWithCapabilities { ModelName = "test" };
             model.SetCapability("function_calling", "not_a_bool");
