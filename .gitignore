@@ -360,6 +360,9 @@ example/
 # Moder.Update Rust build artifacts
 external/moder-update/**/target/
 
+# Rust sidecar build artifacts
+/TelegramSearchBot.RmuxSidecar/target/
+
 # Moder.Update C# build artifacts
 external/moder-update/**/bin/
 external/moder-update/**/obj/
