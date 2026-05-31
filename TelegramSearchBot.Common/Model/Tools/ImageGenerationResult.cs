@@ -10,6 +10,7 @@ namespace TelegramSearchBot.Model.Tools {
         public string Endpoint { get; set; } = null!;
         public List<GeneratedImageInfo> Images { get; set; } = new();
         public List<SendPhotoResult> SentPhotos { get; set; } = new();
+        public List<SendDocumentResult> SentOriginalFiles { get; set; } = new();
     }
 
     public class GeneratedImageInfo {

@@ -213,7 +213,7 @@
             6.  机器人回复: `请输入没有群级配置时使用的默认生图模型名称...`
             7.  管理员发送: `gpt-image-2`，或 MiniMax 的 `image-01` / `image-01-live`
             8.  机器人回复: `默认生图模型已设置为: gpt-image-2...`
-        *   **说明**: 生图工具使用内置工具 `generate_image`，默认优先使用当前群通过 `设置生图模型 <模型名>` 或 `选择生图模型` 配置的模型；群内未配置时使用全局默认 `gpt-image-2`。OpenAI-compatible 模型调用 `/v1/images/generations`；MiniMax `image-01` / `image-01-live` 调用 `/v1/image_generation`。API 地址和 API Key 不在工具参数中填写，而是来自该模型关联的 LLM 渠道；因此可通过 `新建渠道` / `编辑渠道` 自定义 API 地址，例如 `https://api.openai.com/v1`、`https://api.minimaxi.com` 或自建兼容网关。
+        *   **说明**: 生图工具使用内置工具 `generate_image`，默认优先使用当前群通过 `设置生图模型 <模型名>` 或 `选择生图模型` 配置的模型；群内未配置时使用全局默认 `gpt-image-2`。OpenAI-compatible 模型调用 `/v1/images/generations`；MiniMax `image-01` / `image-01-live` 调用 `/v1/image_generation`。API 地址和 API Key 不在工具参数中填写，而是来自该模型关联的 LLM 渠道；因此可通过 `新建渠道` / `编辑渠道` 自定义 API 地址，例如 `https://api.openai.com/v1`、`https://api.minimaxi.com` 或自建兼容网关。生图发送到群内时默认会同时发送 Telegram photo 预览和原图 document 文件。
         *   **音乐工具开关与模型设置：**
             1.  管理员发送: `开启音乐工具`
             2.  机器人回复: `音乐工具已开启...`
