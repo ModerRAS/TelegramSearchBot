@@ -221,6 +221,7 @@ namespace TelegramSearchBot.Service.Tools {
         private const int MaxImageCount = 9;
         private const string DefaultMiniMaxResponseFormat = "base64";
         private const long TelegramPhotoLimitBytes = 10 * 1024 * 1024;
+        private static long TelegramDocumentLimitBytes => Env.IsLocalAPI ? 2L * 1024 * 1024 * 1024 : 50L * 1024 * 1024;
         private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(120);
         private static readonly string[] MiniMaxImageModels = { "image-01", "image-01-live" };
         private static readonly string[] MiniMaxAspectRatios = { "1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9" };
@@ -253,9 +254,9 @@ namespace TelegramSearchBot.Service.Tools {
             _logger = logger;
         }
 
-        [BuiltInTool(@"Generate an image through the configured image API and optionally send it to the current Telegram chat.
+[BuiltInTool(@"Generate an image through the configured image API and optionally send it to the current Telegram chat.
 The default model is the current chat's configured image generation model, falling back to the bot-wide default gpt-image-2 when the chat has no image model configured. OpenAI-compatible models use /v1/images/generations. MiniMax image-01 and image-01-live use /v1/image_generation. The API base URL and API key are read from the configured LLM channel for the selected image model, so administrators can use OpenAI, MiniMax, or a compatible custom endpoint.
-Use this when the user asks you to draw, create, render, generate, or revise an image. The tool saves generated image files under the bot work directory and returns their file paths.", Name = ToolName)]
+Use this when the user asks you to draw, create, render, generate, or revise an image. The tool saves generated image files under the bot work directory and returns their file paths. When sending to chat, it sends a Telegram photo preview and, by default, the original saved image file as a document.", Name = ToolName)]
         public async Task<ImageGenerationResult> GenerateImage(
             [BuiltInParameter("Image prompt. Be specific about subject, style, composition, lighting, colors, and any text that should appear.")] string prompt,
             ToolContext toolContext,
@@ -274,6 +275,7 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             [BuiltInParameter("MiniMax image-01-live style_weight in (0, 1]. Defaults to MiniMax service default when empty.", IsRequired = false)] double? styleWeight = null,
             [BuiltInParameter("Number of images to generate, from 1 to 9. Defaults to 1.", IsRequired = false)] int count = 1,
             [BuiltInParameter("Whether to send generated images to the current Telegram chat. Defaults to true.", IsRequired = false)] bool sendToChat = true,
+            [BuiltInParameter("Whether to also send the original generated image files as Telegram documents. Defaults to true. Only applies when sendToChat is true.", IsRequired = false)] bool sendOriginalFile = true,
             [BuiltInParameter("Optional Telegram photo caption. Keep it short.", IsRequired = false)] string caption = null,
             [BuiltInParameter("Optional Telegram message ID to reply to. Defaults to the original user message.", IsRequired = false)] long? replyToMessageId = null,
             [BuiltInParameter("Request timeout in seconds, from 30 to 600. Defaults to 300.", IsRequired = false)] int timeoutSeconds = 300) {
@@ -358,18 +360,28 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
 
                         if (sendToChat) {
                             foreach (var image in generated) {
-                                result.SentPhotos.Add(await SendGeneratedImageAsync(
+                                var fileName = Path.GetFileName(image.Info.FilePath);
+                                result.SentPhotos.Add(await SendGeneratedImagePhotoAsync(
                                     image.Bytes,
-                                    Path.GetFileName(image.Info.FilePath),
+                                    fileName,
                                     toolContext,
                                     caption,
                                     replyToMessageId));
+
+                                if (sendOriginalFile) {
+                                    result.SentOriginalFiles.Add(await SendGeneratedImageDocumentAsync(
+                                        image.Bytes,
+                                        fileName,
+                                        toolContext,
+                                        replyToMessageId));
+                                }
                             }
                         }
 
                         result.Success = result.Images.Count > 0;
-                        if (result.Success && result.SentPhotos.Any(x => !x.Success)) {
-                            result.Error = "Generated image files were saved, but one or more Telegram photo sends failed.";
+                        if (result.Success &&
+                            ( result.SentPhotos.Any(x => !x.Success) || result.SentOriginalFiles.Any(x => !x.Success) )) {
+                            result.Error = "Generated image files were saved, but one or more Telegram sends failed.";
                         }
 
                         return result;
@@ -648,7 +660,7 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
                 });
         }
 
-        private async Task<SendPhotoResult> SendGeneratedImageAsync(
+        private async Task<SendPhotoResult> SendGeneratedImagePhotoAsync(
             byte[] imageBytes,
             string fileName,
             ToolContext toolContext,
@@ -695,6 +707,52 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
                     Success = false,
                     ChatId = toolContext?.ChatId ?? 0,
                     Error = $"Failed to send generated image: {ex.Message}"
+                };
+            }
+        }
+
+        private async Task<SendDocumentResult> SendGeneratedImageDocumentAsync(
+            byte[] imageBytes,
+            string fileName,
+            ToolContext toolContext,
+            long? replyToMessageId) {
+            try {
+                if (toolContext == null || toolContext.ChatId == 0) {
+                    return new SendDocumentResult {
+                        Success = false,
+                        Error = "Cannot send original generated image because chat context is missing."
+                    };
+                }
+
+                if (imageBytes.LongLength > TelegramDocumentLimitBytes) {
+                    return new SendDocumentResult {
+                        Success = false,
+                        ChatId = toolContext.ChatId,
+                        Error = $"Generated image file is too large for Telegram document upload ({imageBytes.LongLength / 1024 / 1024}MB). Maximum allowed size is {( Env.IsLocalAPI ? "2GB" : "50MB" )}."
+                    };
+                }
+
+                var document = InputFile.FromStream(new MemoryStream(imageBytes), fileName);
+                var replyParameters = GetReplyParameters(replyToMessageId, toolContext);
+
+                using var cts = new CancellationTokenSource(SendTimeout);
+                var message = await _sendMessage.AddTaskWithResult(async () => await _botClient.SendDocument(
+                    chatId: toolContext.ChatId,
+                    document: document,
+                    replyParameters: replyParameters,
+                    cancellationToken: cts.Token
+                ), toolContext.ChatId);
+
+                return new SendDocumentResult {
+                    Success = true,
+                    MessageId = message.MessageId,
+                    ChatId = message.Chat.Id
+                };
+            } catch (Exception ex) {
+                return new SendDocumentResult {
+                    Success = false,
+                    ChatId = toolContext?.ChatId ?? 0,
+                    Error = $"Failed to send original generated image: {ex.Message}"
                 };
             }
         }
