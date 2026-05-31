@@ -219,7 +219,7 @@ namespace TelegramSearchBot.Service.Tools {
         private const string DefaultQuality = "auto";
         private const string DefaultOutputFormat = "png";
         private const int MaxImageCount = 9;
-        private const string DefaultMiniMaxResponseFormat = "url";
+        private const string DefaultMiniMaxResponseFormat = "base64";
         private const long TelegramPhotoLimitBytes = 10 * 1024 * 1024;
         private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(120);
         private static readonly string[] MiniMaxImageModels = { "image-01", "image-01-live" };
@@ -266,7 +266,7 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             [BuiltInParameter("Background: auto, opaque, or transparent. Leave empty unless the user asked for a specific background.", IsRequired = false)] string background = null,
             [BuiltInParameter("Moderation setting: auto or low. Defaults to auto.", IsRequired = false)] string moderation = "auto",
             [BuiltInParameter("MiniMax aspect ratio: 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, or 21:9. If set, MiniMax ignores size. Leave empty for OpenAI-compatible models.", IsRequired = false)] string aspectRatio = null,
-            [BuiltInParameter("MiniMax response format: url or base64. Defaults to url. Leave empty for OpenAI-compatible models.", IsRequired = false)] string minimaxResponseFormat = DefaultMiniMaxResponseFormat,
+            [BuiltInParameter("MiniMax response format: base64 or url. Defaults to base64. Leave empty for OpenAI-compatible models.", IsRequired = false)] string minimaxResponseFormat = DefaultMiniMaxResponseFormat,
             [BuiltInParameter("MiniMax random seed for reproducible similar results. Leave empty unless the user asks for a seed.", IsRequired = false)] long? seed = null,
             [BuiltInParameter("Whether to enable MiniMax prompt_optimizer. Defaults to false.", IsRequired = false)] bool promptOptimizer = false,
             [BuiltInParameter("Whether to add the MiniMax AIGC watermark. Defaults to false.", IsRequired = false)] bool aigcWatermark = false,
@@ -837,7 +837,11 @@ Use this when the user asks you to draw, create, render, generate, or revise an 
             }
 
             foreach (var base64 in GetStringArrayValues(obj, "image_base64")) {
-                yield return new ImageResponseData(base64, null, null);
+                if (TryParseImageDataUrl(base64, out _, out var contentType, out var strippedBase64)) {
+                    yield return new ImageResponseData(strippedBase64, null, contentType);
+                } else {
+                    yield return new ImageResponseData(base64, null, null);
+                }
             }
 
             var image = ExtractImageFromObject(obj);

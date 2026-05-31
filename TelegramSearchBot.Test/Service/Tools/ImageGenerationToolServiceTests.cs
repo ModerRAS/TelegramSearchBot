@@ -91,6 +91,24 @@ namespace TelegramSearchBot.Test.Service.Tools {
         }
 
         [Fact]
+        public void BuildMiniMaxImageGenerationRequestBody_DefaultResponseFormatIsBase64() {
+            var body = ImageGenerationToolService.BuildMiniMaxImageGenerationRequestBody(
+                "A minimal product render",
+                "image-01",
+                "1024x1024",
+                1,
+                null,
+                null,
+                null,
+                false,
+                false,
+                null,
+                null);
+
+            Assert.Equal("base64", Value<string>(body, "response_format"));
+        }
+
+        [Fact]
         public void BuildMiniMaxImageGenerationRequestBody_WhenImage01SizeInvalid_Throws() {
             Assert.Throws<ArgumentException>(() => ImageGenerationToolService.BuildMiniMaxImageGenerationRequestBody(
                 "A large render",
@@ -118,11 +136,12 @@ namespace TelegramSearchBot.Test.Service.Tools {
         [Fact]
         public void ExtractImages_ReadsMiniMaxUrlAndBase64Arrays() {
             var images = ImageGenerationToolService.ExtractImages(
-                @"{""data"":{""image_urls"":[""https://example.test/a.png""],""image_base64"":[""YWJj""]},""base_resp"":{""status_code"":0,""status_msg"":""success""}}");
+                @"{""data"":{""image_urls"":[""https://example.test/a.png""],""image_base64"":[""data:image/webp;base64,YWJj""]},""base_resp"":{""status_code"":0,""status_msg"":""success""}}");
 
             Assert.Equal(2, images.Count);
             Assert.Equal("https://example.test/a.png", images.First().Url);
             Assert.Equal("YWJj", images.Last().Base64Data);
+            Assert.Equal("image/webp", images.Last().ContentType);
         }
 
         [Fact]
