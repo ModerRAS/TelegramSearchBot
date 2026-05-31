@@ -190,12 +190,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return model.Capabilities.Any(cap =>
                        ( cap.CapabilityName == "music_generation" || cap.CapabilityName == "text_to_music" ) &&
                        string.Equals(cap.CapabilityValue, "true", StringComparison.OrdinalIgnoreCase)) ||
-                   ModelWithCapabilities.IsKnownMusicGenerationModelName(model.ModelName) ||
-                   ( model.LLMChannel?.Provider == LLMProvider.MiniMax &&
-                     ( model.ModelName == "music-2.6" ||
-                       model.ModelName == "music-2.6-free" ||
-                       model.ModelName == "music-cover" ||
-                       model.ModelName == "music-cover-free" ) );
+                   ModelWithCapabilities.IsKnownMusicGenerationModelName(model.ModelName);
         }
 
         /// <summary>

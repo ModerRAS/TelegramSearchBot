@@ -225,6 +225,19 @@ namespace TelegramSearchBot.Service.Tools {
         private static readonly int[] AllowedSampleRates = { 16000, 24000, 32000, 44100 };
         private static readonly int[] AllowedBitrates = { 32000, 64000, 128000, 256000 };
         private static readonly string[] AllowedAudioFormats = { "mp3", "wav", "pcm" };
+        private const string AcquireChannelSemaphoreScript = @"
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local current = tonumber(redis.call('GET', key) or '0')
+if current < 0 then
+  redis.call('SET', key, 0)
+  current = 0
+end
+if current < limit then
+  redis.call('INCR', key)
+  return 1
+end
+return 0";
 
         public string ServiceName => "MusicGenerationToolService";
 
@@ -414,15 +427,12 @@ Use this when the user asks you to compose, generate, create, or cover a song/mu
         private async Task<bool> TryAcquireChannelAsync(LLMChannel channel) {
             var redisDb = _connectionMultiplexer.GetDatabase();
             var key = GetSemaphoreKey(channel.Id);
-            var currentCount = await redisDb.StringGetAsync(key);
-            var current = currentCount.HasValue ? ( int ) currentCount : 0;
             var limit = Math.Max(1, channel.Parallel);
-            if (current >= limit) {
-                return false;
-            }
-
-            await redisDb.StringIncrementAsync(key);
-            return true;
+            var result = await redisDb.ScriptEvaluateAsync(
+                AcquireChannelSemaphoreScript,
+                new RedisKey[] { key },
+                new RedisValue[] { limit });
+            return ( int ) result == 1;
         }
 
         private async Task ReleaseChannelAsync(LLMChannel channel) {

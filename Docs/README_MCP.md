@@ -86,7 +86,7 @@ MiniMax 不支持选择输出文件格式；`output_format` 仅用于 OpenAI-com
 
 API 地址和 API Key 来自该模型关联的 LLM 渠道，因此可通过 `新建渠道` / `编辑渠道` 自定义网关地址，例如 `https://api.minimaxi.com`。配置 MiniMax 时，渠道类型建议选择 `MiniMax`，再通过 `添加模型` 关联音乐模型。
 
-`music-2.6` / `music-2.6-free` 支持文生音乐和纯音乐；非纯音乐默认需要传 `lyrics`，除非 `lyrics_optimizer` 为 true。`music-cover` / `music-cover-free` 支持基于 `audio_url`、`audio_base64` 或预处理得到的 `cover_feature_id` 生成翻唱。
+`music-2.6` / `music-2.6-free` 支持文生音乐和纯音乐；非纯音乐默认需要传 `lyrics`，除非 `lyricsOptimizer` 为 true。`music-cover` / `music-cover-free` 支持基于 `audioUrl`、`audioBase64` 或预处理得到的 `coverFeatureId` 生成翻唱。
 
 **文件大小限制**:
 - 本地 Bot API（内置或外部）: 最大 2GB
