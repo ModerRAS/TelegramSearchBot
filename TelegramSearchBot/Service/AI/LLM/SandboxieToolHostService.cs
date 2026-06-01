@@ -221,6 +221,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             };
 
             var defaultReadPaths = GetDefaultToolHostReadPaths(instance.ChatId).ToList();
+            var globalReadPaths = Env.SandboxieGlobalReadPaths
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Select(NormalizeSandboxiePath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             foreach (var path in defaultReadPaths
                          .Concat(Env.SandboxieGlobalReadPaths)
                          .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -234,6 +239,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                          .Where(p => !string.IsNullOrWhiteSpace(p))
                          .Distinct(StringComparer.OrdinalIgnoreCase)) {
                 lines.Add($"ClosedFilePath={NormalizeSandboxiePath(path)}{(Directory.Exists(path) ? "\\*" : string.Empty)}");
+            }
+
+            foreach (var path in GetDefaultWorkDirClosedPaths(defaultReadPaths, globalReadPaths)) {
+                lines.Add($"ClosedFilePath={path}\\*");
             }
 
             lines.Add(string.Empty);
@@ -311,6 +320,30 @@ namespace TelegramSearchBot.Service.AI.LLM {
             yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
         }
 
+        internal static IEnumerable<string> GetDefaultWorkDirClosedPaths(
+            IEnumerable<string> allowedReadPaths,
+            ISet<string>? extraAllowedPaths = null) {
+            var comparer = StringComparer.OrdinalIgnoreCase;
+            var normalizedWorkDir = NormalizeSandboxiePath(Env.WorkDir);
+            var allowedRoots = allowedReadPaths
+                .Concat(extraAllowedPaths ?? Enumerable.Empty<string>())
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(NormalizeSandboxiePath)
+                .Where(path => path.StartsWith(normalizedWorkDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                .Distinct(comparer)
+                .ToList();
+
+            foreach (var childDir in Directory.Exists(Env.WorkDir)
+                         ? Directory.EnumerateDirectories(Env.WorkDir).Select(NormalizeSandboxiePath).Distinct(comparer)
+                         : Array.Empty<string>()) {
+                if (allowedRoots.Any(allowed => IsSameOrSubPath(childDir, allowed, comparer))) {
+                    continue;
+                }
+
+                yield return childDir;
+            }
+        }
+
         internal static IEnumerable<string> GetChatResourceParentPaths() {
             if (!string.IsNullOrWhiteSpace(Env.SandboxieGroupFilesRoot)) {
                 yield return Env.SandboxieGroupFilesRoot;
@@ -334,6 +367,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         private static string NormalizeSandboxiePath(string path) {
             return Path.GetFullPath(path.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        private static bool IsSameOrSubPath(string path, string root, StringComparer comparer) {
+            return comparer.Equals(path, root) ||
+                   path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
         }
     }
 
