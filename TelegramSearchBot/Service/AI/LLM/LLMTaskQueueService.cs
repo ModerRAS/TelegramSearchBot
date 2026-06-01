@@ -111,6 +111,50 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return await EnqueueTaskAsync(task);
         }
 
+        public async Task<AgentTaskStreamHandle> EnqueueSyntheticMessageTaskAsync(
+            long chatId,
+            long userId,
+            long messageId,
+            string inputMessage,
+            string botName,
+            long botUserId,
+            DateTime createdAtUtc,
+            CancellationToken cancellationToken = default) {
+            if (string.IsNullOrWhiteSpace(inputMessage)) {
+                throw new ArgumentException("Synthetic LLM input cannot be empty.", nameof(inputMessage));
+            }
+
+            var modelName = await _dbContext.GroupSettings.AsNoTracking()
+                .Where(x => x.GroupId == chatId)
+                .Select(x => x.LLMModelName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(modelName)) {
+                throw new InvalidOperationException("请先为当前群组设置模型。");
+            }
+
+            var channelInfo = await LoadChannelAsync(modelName, null, cancellationToken);
+            var history = await LoadHistoryAsync(chatId, cancellationToken);
+            var task = new AgentExecutionTask {
+                TaskId = Guid.NewGuid().ToString("N"),
+                Kind = AgentTaskKind.Message,
+                ChatId = chatId,
+                UserId = userId,
+                MessageId = messageId,
+                BotName = botName,
+                BotUserId = botUserId,
+                ModelName = modelName,
+                InputMessage = inputMessage,
+                MaxToolCycles = Env.MaxToolCycles,
+                Channel = channelInfo,
+                History = history,
+                CreatedAtUtc = createdAtUtc
+            };
+
+            await _agentRegistryService.EnsureAgentAsync(task.ChatId, cancellationToken);
+            return await EnqueueTaskAsync(task);
+        }
+
         private async Task<AgentTaskStreamHandle> EnqueueTaskAsync(AgentExecutionTask task) {
             var db = _redis.GetDatabase();
             var payload = JsonConvert.SerializeObject(task);
