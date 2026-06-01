@@ -7,7 +7,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 
 namespace TelegramSearchBot.Service.Tools {
-    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
+    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public sealed class CodingAgentToolService : IService {
         private readonly CodingAgentPathPolicy _pathPolicy;
         private readonly CodingAgentJobService _jobService;

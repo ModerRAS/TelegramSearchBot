@@ -109,6 +109,13 @@ struct AgentRunResult {
     error: String,
 }
 
+#[derive(Debug)]
+struct JobOutcome {
+    status: CodingAgentJobStatus,
+    output: String,
+    error: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -127,13 +134,21 @@ async fn main() -> Result<()> {
     let config = Arc::new(args);
 
     info!("coding agent sidecar started; max_concurrent={max_concurrent}");
-    let mut queue_conn = client.get_multiplexed_async_connection().await?;
+    let mut queue_conn = connect_with_retry(&client).await?;
     loop {
-        let result: Option<(String, String)> = redis::cmd("BRPOP")
+        let result: Option<(String, String)> = match redis::cmd("BRPOP")
             .arg(JOB_QUEUE)
             .arg(2)
             .query_async(&mut queue_conn)
-            .await?;
+            .await
+        {
+            Ok(result) => result,
+            Err(err) => {
+                warn!(error = %err, "BRPOP failed; reconnecting Redis queue connection");
+                queue_conn = connect_with_retry(&client).await?;
+                continue;
+            }
+        };
 
         let Some((_, payload)) = result else {
             continue;
@@ -156,6 +171,18 @@ async fn main() -> Result<()> {
                 error!(error = %err, "coding agent job processing failed");
             }
         });
+    }
+}
+
+async fn connect_with_retry(client: &redis::Client) -> Result<redis::aio::MultiplexedConnection> {
+    loop {
+        match client.get_multiplexed_async_connection().await {
+            Ok(conn) => return Ok(conn),
+            Err(err) => {
+                warn!(error = %err, "failed to connect Redis; retrying in 1 s");
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        }
     }
 }
 
@@ -188,33 +215,108 @@ async fn process_job(
     )
     .await?;
 
+    let core_result = {
+        let mut conn = client.get_multiplexed_async_connection().await?;
+        update_state(
+            &mut conn,
+            &request.job_id,
+            CodingAgentJobStatus::Running,
+            &[
+                ("startedAtUtc", started_at.as_str()),
+                ("logPath", &log_path.to_string_lossy()),
+                ("updatedAtUtc", &utc_now()),
+            ],
+        )
+        .await?;
+        run_job_core(
+            &client,
+            config,
+            &request,
+            &log_path,
+            &session_dir,
+            &mut conn,
+        )
+        .await
+    };
+
+    let outcome = match core_result {
+        Ok(outcome) => outcome,
+        Err(err) => {
+            let message = err.to_string();
+            let _ = append_line(&log_path, &format!("job core failed: {message}")).await;
+            JobOutcome {
+                status: CodingAgentJobStatus::Failed,
+                output: String::new(),
+                error: message,
+            }
+        }
+    };
+
+    let completed_at = utc_now();
+    let summary = build_summary(outcome.status, &outcome.output, &outcome.error);
+    let report = CodingAgentJobReport {
+        job_id: request.job_id.clone(),
+        status: outcome.status,
+        chat_id: request.chat_id,
+        user_id: request.user_id,
+        message_id: request.message_id,
+        prompt: request.prompt.clone(),
+        working_directory: request.working_directory.clone(),
+        summary: summary.clone(),
+        output: outcome.output,
+        error_message: outcome.error.clone(),
+        log_path: log_path.to_string_lossy().to_string(),
+        started_at_utc: started_at,
+        completed_at_utc: completed_at.clone(),
+    };
+
     let mut conn = client.get_multiplexed_async_connection().await?;
     update_state(
         &mut conn,
         &request.job_id,
-        CodingAgentJobStatus::Running,
+        outcome.status,
         &[
-            ("startedAtUtc", started_at.as_str()),
-            ("logPath", &log_path.to_string_lossy()),
+            ("summary", summary.as_str()),
+            ("error", outcome.error.as_str()),
+            ("completedAtUtc", completed_at.as_str()),
             ("updatedAtUtc", &utc_now()),
         ],
     )
     .await?;
 
+    let report_payload = serde_json::to_string(&report)?;
+    let _: usize = conn.lpush(REPORT_QUEUE, report_payload).await?;
+    cleanup_job(&mut conn, &request.job_id).await?;
+    append_line(
+        &log_path,
+        &format!("job {} finished with {:?}", request.job_id, outcome.status),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn run_job_core(
+    client: &redis::Client,
+    config: Arc<Args>,
+    request: &CodingAgentJobRequest,
+    log_path: &Path,
+    session_dir: &Path,
+    conn: &mut redis::aio::MultiplexedConnection,
+) -> Result<JobOutcome> {
     let mut outputs = Vec::new();
     let mut final_status = CodingAgentJobStatus::Completed;
     let mut error_message = String::new();
-    let agents = parse_agents(&request);
+    let agents = parse_agents(request);
 
     for agent in agents {
-        if is_cancel_requested(&mut conn, &request.job_id).await? {
+        if is_cancel_requested(conn, &request.job_id).await? {
             final_status = CodingAgentJobStatus::Cancelled;
             error_message = "Job was cancelled before the next agent started.".to_owned();
             break;
         }
 
         update_state(
-            &mut conn,
+            conn,
             &request.job_id,
             CodingAgentJobStatus::Running,
             &[
@@ -227,10 +329,10 @@ async fn process_job(
         let result = run_agent(
             client.clone(),
             config.clone(),
-            &request,
+            request,
             &agent,
-            &log_path,
-            &session_dir,
+            log_path,
+            session_dir,
         )
         .await;
 
@@ -255,47 +357,11 @@ async fn process_job(
         }
     }
 
-    let completed_at = utc_now();
-    let output = outputs.join("\n\n");
-    let summary = build_summary(final_status, &output, &error_message);
-    let report = CodingAgentJobReport {
-        job_id: request.job_id.clone(),
+    Ok(JobOutcome {
         status: final_status,
-        chat_id: request.chat_id,
-        user_id: request.user_id,
-        message_id: request.message_id,
-        prompt: request.prompt.clone(),
-        working_directory: request.working_directory.clone(),
-        summary: summary.clone(),
-        output,
-        error_message: error_message.clone(),
-        log_path: log_path.to_string_lossy().to_string(),
-        started_at_utc: started_at,
-        completed_at_utc: completed_at.clone(),
-    };
-
-    update_state(
-        &mut conn,
-        &request.job_id,
-        final_status,
-        &[
-            ("summary", summary.as_str()),
-            ("error", error_message.as_str()),
-            ("completedAtUtc", completed_at.as_str()),
-            ("updatedAtUtc", &utc_now()),
-        ],
-    )
-    .await?;
-
-    let report_payload = serde_json::to_string(&report)?;
-    let _: usize = conn.lpush(REPORT_QUEUE, report_payload).await?;
-    cleanup_job(&mut conn, &request.job_id).await?;
-    append_line(
-        &log_path,
-        &format!("job {} finished with {:?}", request.job_id, final_status),
-    )
-    .await?;
-    Ok(())
+        output: outputs.join("\n\n"),
+        error: error_message,
+    })
 }
 
 async fn run_agent(
@@ -630,8 +696,10 @@ async fn append_line(path: &Path, line: &str) -> Result<()> {
         .append(true)
         .open(path)
         .await?;
-    file.write_all(line.as_bytes()).await?;
-    file.write_all(b"\n").await?;
+    let mut buffer = Vec::with_capacity(line.len() + 1);
+    buffer.extend_from_slice(line.as_bytes());
+    buffer.push(b'\n');
+    file.write_all(&buffer).await?;
     Ok(())
 }
 

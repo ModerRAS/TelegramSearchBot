@@ -138,6 +138,39 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Database.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync((RedisKey key, CommandFlags _) => _strings.TryGetValue(key.ToString(), out var value) ? ( RedisValue ) value : RedisValue.Null);
 
+            Database.Setup(d => d.ScriptEvaluateAsync(It.IsAny<string>(), It.IsAny<RedisKey[]>(), It.IsAny<RedisValue[]>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync((string _, RedisKey[] keys, RedisValue[] values, CommandFlags _) => {
+                    lock (_gate) {
+                        var activeKey = keys[0].ToString();
+                        var stateKey = keys[1].ToString();
+                        var queueKey = keys[2].ToString();
+                        var jobId = values[0].ToString();
+                        var maxActive = ( int ) values[1];
+                        var activeSet = _sets.GetOrAdd(activeKey, _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                        if (activeSet.Count >= maxActive) {
+                            return RedisResult.Create(( RedisValue ) 0);
+                        }
+
+                        activeSet.Add(jobId);
+                        var hash = _hashes.GetOrAdd(stateKey, _ => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+                        hash["status"] = values[4].ToString();
+                        hash["chatId"] = values[5].ToString();
+                        hash["userId"] = values[6].ToString();
+                        hash["messageId"] = values[7].ToString();
+                        hash["workingDirectory"] = values[8].ToString();
+                        hash["createdAtUtc"] = values[9].ToString();
+                        hash["updatedAtUtc"] = values[10].ToString();
+                        hash["payload"] = values[3].ToString();
+                        hash["summary"] = string.Empty;
+                        hash["error"] = string.Empty;
+                        hash["logPath"] = string.Empty;
+
+                        var list = _lists.GetOrAdd(queueKey, _ => []);
+                        list.Insert(0, values[3].ToString());
+                        return RedisResult.Create(( RedisValue ) 1);
+                    }
+                });
+
             Database.Setup(d => d.KeyDeleteAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync((RedisKey key, CommandFlags flags) => {
                     var removed = false;

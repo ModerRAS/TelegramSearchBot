@@ -10,6 +10,37 @@ namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public sealed class CodingAgentJobService : IService {
         private static readonly TimeSpan StateTtl = TimeSpan.FromDays(7);
+        private const string EnqueueJobScript = @"
+local activeKey = KEYS[1]
+local stateKey = KEYS[2]
+local queueKey = KEYS[3]
+local jobId = ARGV[1]
+local maxActive = tonumber(ARGV[2])
+local ttlSeconds = tonumber(ARGV[3])
+local payload = ARGV[4]
+
+if redis.call('SCARD', activeKey) >= maxActive then
+    return 0
+end
+
+redis.call('SADD', activeKey, jobId)
+redis.call('HSET', stateKey,
+    'status', ARGV[5],
+    'chatId', ARGV[6],
+    'userId', ARGV[7],
+    'messageId', ARGV[8],
+    'workingDirectory', ARGV[9],
+    'createdAtUtc', ARGV[10],
+    'updatedAtUtc', ARGV[11],
+    'payload', payload,
+    'summary', '',
+    'error', '',
+    'logPath', ''
+)
+redis.call('EXPIRE', stateKey, ttlSeconds)
+redis.call('LPUSH', queueKey, payload)
+return 1
+";
         private readonly IConnectionMultiplexer _redis;
         private readonly ILogger<CodingAgentJobService> _logger;
 
@@ -27,37 +58,36 @@ namespace TelegramSearchBot.Service.Tools {
             }
 
             var db = _redis.GetDatabase();
-            var activeCount = await db.SetLengthAsync(LlmAgentRedisKeys.CodingAgentActiveJobSet);
-            if (activeCount >= Env.CodingAgentMaxConcurrentJobs) {
-                throw new InvalidOperationException($"Coding agent job limit reached: {activeCount}/{Env.CodingAgentMaxConcurrentJobs}.");
-            }
-
             request.CreatedAtUtc = DateTime.UtcNow;
             var payload = JsonConvert.SerializeObject(request);
             var stateKey = LlmAgentRedisKeys.CodingAgentJobState(request.JobId);
-
-            try {
-                await db.HashSetAsync(stateKey, [
-                    new HashEntry("status", CodingAgentJobStatus.Pending.ToString()),
-                    new HashEntry("chatId", request.ChatId),
-                    new HashEntry("userId", request.UserId),
-                    new HashEntry("messageId", request.MessageId),
-                    new HashEntry("workingDirectory", request.WorkingDirectory),
-                    new HashEntry("createdAtUtc", request.CreatedAtUtc.ToString("O")),
-                    new HashEntry("updatedAtUtc", DateTime.UtcNow.ToString("O")),
-                    new HashEntry("payload", payload),
-                    new HashEntry("summary", string.Empty),
-                    new HashEntry("error", string.Empty),
-                    new HashEntry("logPath", string.Empty)
+            var updatedAtUtc = DateTime.UtcNow.ToString("O");
+            var result = await db.ScriptEvaluateAsync(
+                EnqueueJobScript,
+                [
+                    LlmAgentRedisKeys.CodingAgentActiveJobSet,
+                    stateKey,
+                    LlmAgentRedisKeys.CodingAgentJobQueue
+                ],
+                [
+                    request.JobId,
+                    Env.CodingAgentMaxConcurrentJobs,
+                    ( long ) StateTtl.TotalSeconds,
+                    payload,
+                    CodingAgentJobStatus.Pending.ToString(),
+                    request.ChatId,
+                    request.UserId,
+                    request.MessageId,
+                    request.WorkingDirectory,
+                    request.CreatedAtUtc.ToString("O"),
+                    updatedAtUtc
                 ]);
-                await db.KeyExpireAsync(stateKey, StateTtl);
-                await db.SetAddAsync(LlmAgentRedisKeys.CodingAgentActiveJobSet, request.JobId);
-                await db.ListLeftPushAsync(LlmAgentRedisKeys.CodingAgentJobQueue, payload);
-                return request;
-            } catch {
-                await db.SetRemoveAsync(LlmAgentRedisKeys.CodingAgentActiveJobSet, request.JobId);
-                throw;
+
+            if (( int ) result != 1) {
+                throw new InvalidOperationException($"Coding agent job limit reached: {Env.CodingAgentMaxConcurrentJobs}.");
             }
+
+            return request;
         }
 
         public async Task<IReadOnlyDictionary<string, string>> GetStateAsync(string jobId) {

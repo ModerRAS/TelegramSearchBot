@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -52,7 +53,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         continue;
                     }
 
-                    var report = JsonConvert.DeserializeObject<CodingAgentJobReport>(payload);
+                    CodingAgentJobReport report;
+                    try {
+                        report = JsonConvert.DeserializeObject<CodingAgentJobReport>(payload);
+                    } catch (JsonException ex) {
+                        _logger.LogWarning(ex, "Ignoring malformed coding agent report payload.");
+                        continue;
+                    }
+
                     if (report == null) {
                         continue;
                     }
@@ -71,6 +79,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     break;
                 } catch (RedisException ex) {
                     _logger.LogWarning(ex, "Redis error in CodingAgentReportConsumer, retrying in 1 s.");
+                    await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+                } catch (Exception ex) when (ex is not OperationCanceledException) {
+                    _logger.LogError(ex, "Unexpected error in CodingAgentReportConsumer, retrying in 1 s.");
                     await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
                 }
             }
@@ -108,7 +119,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var sendMessageService = scopedProvider.GetRequiredService<ISendMessageService>();
             var botIdentity = await EnsureBotIdentityAsync(scopedProvider, stoppingToken);
             var replyTo = ToTelegramMessageId(report.MessageId);
-            LlmContinuationSnapshot? continuationSnapshot = null;
+            LlmContinuationSnapshot continuationSnapshot = null;
 
             for (var attempt = 0; attempt <= Env.CodingAgentMaxAutoResumeContinuations; attempt++) {
                 AgentTaskStreamHandle handle;
@@ -209,9 +220,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
             sb.AppendLine("Coding agent job finished / 编码任务已结束");
             sb.AppendLine($"JobId: {report.JobId}");
             sb.AppendLine($"Status: {report.Status}");
-            sb.AppendLine($"Workspace: {report.WorkingDirectory}");
+            sb.AppendLine($"Workspace: {GetPathDisplayName(report.WorkingDirectory)}");
             if (!string.IsNullOrWhiteSpace(report.LogPath)) {
-                sb.AppendLine($"Log: {report.LogPath}");
+                sb.AppendLine($"Log: {GetPathDisplayName(report.LogPath)}");
             }
             if (!string.IsNullOrWhiteSpace(report.Summary)) {
                 sb.AppendLine();
@@ -232,8 +243,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             sb.AppendLine();
             sb.AppendLine($"JobId: {report.JobId}");
             sb.AppendLine($"Status: {report.Status}");
-            sb.AppendLine($"Workspace: {report.WorkingDirectory}");
-            sb.AppendLine($"LogPath: {report.LogPath}");
+            sb.AppendLine($"Workspace: {GetPathDisplayName(report.WorkingDirectory)}");
+            if (!string.IsNullOrWhiteSpace(report.LogPath)) {
+                sb.AppendLine($"Log: {GetPathDisplayName(report.LogPath)}");
+            }
             sb.AppendLine();
             sb.AppendLine("Original prompt:");
             sb.AppendLine(report.Prompt);
@@ -284,6 +297,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             return value[..maxLength] + "\n... [truncated]";
+        }
+
+        private static string GetPathDisplayName(string path) {
+            if (string.IsNullOrWhiteSpace(path)) {
+                return "(redacted)";
+            }
+
+            var trimmed = path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var displayName = Path.GetFileName(trimmed);
+            return string.IsNullOrWhiteSpace(displayName) ? "(redacted)" : displayName;
         }
     }
 }

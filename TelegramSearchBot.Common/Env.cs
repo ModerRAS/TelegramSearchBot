@@ -223,8 +223,12 @@ namespace TelegramSearchBot.Common {
                 .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
                 .Select(prefix => NormalizeDeniedPathPrefix(prefix))
                 .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(GetCodingAgentPathComparer())
                 .ToList();
+        }
+
+        private static StringComparer GetCodingAgentPathComparer() {
+            return OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         }
 
         private static IEnumerable<string> GetDefaultCodingAgentDeniedPathPrefixes() {
