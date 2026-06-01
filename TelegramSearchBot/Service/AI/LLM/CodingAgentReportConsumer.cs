@@ -210,9 +210,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             sb.AppendLine($"JobId: {report.JobId}");
             sb.AppendLine($"Status: {report.Status}");
             sb.AppendLine($"Workspace: {report.WorkingDirectory}");
-            if (report.RmuxSessionNames.Count > 0) {
-                sb.AppendLine($"rmux: {string.Join(", ", report.RmuxSessionNames)}");
-            }
             if (!string.IsNullOrWhiteSpace(report.LogPath)) {
                 sb.AppendLine($"Log: {report.LogPath}");
             }
@@ -237,9 +234,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             sb.AppendLine($"Status: {report.Status}");
             sb.AppendLine($"Workspace: {report.WorkingDirectory}");
             sb.AppendLine($"LogPath: {report.LogPath}");
-            if (report.RmuxSessionNames.Count > 0) {
-                sb.AppendLine($"RmuxSessions: {string.Join(", ", report.RmuxSessionNames)}");
-            }
             sb.AppendLine();
             sb.AppendLine("Original prompt:");
             sb.AppendLine(report.Prompt);

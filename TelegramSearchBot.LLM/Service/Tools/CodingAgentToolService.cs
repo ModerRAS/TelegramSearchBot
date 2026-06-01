@@ -25,7 +25,7 @@ namespace TelegramSearchBot.Service.Tools {
         public string ServiceName => nameof(CodingAgentToolService);
 
         [BuiltInTool(
-            "Start a background pi coding agent job in an rmux-observable workspace. Returns immediately with a job id; the final report is posted back to Telegram and the LLM loop is resumed automatically. / 启动后台 pi coding agent 任务，立即返回 job id；结束后会把报告发回 Telegram 并自动续跑 LLM。",
+            "Start a background pi coding agent job. Returns immediately with a job id; the final report is posted back to Telegram and the LLM loop is resumed automatically. / 启动后台 pi coding agent 任务，立即返回 job id；结束后会把报告发回 Telegram 并自动续跑 LLM。",
             Name = "run_coding_agent")]
         public async Task<string> RunCodingAgentAsync(
             [BuiltInParameter("Coding task prompt for pi. / 交给 pi 的编码任务说明。")] string prompt,

@@ -96,7 +96,7 @@ API 地址和 API Key 来自该模型关联的 LLM 渠道，因此可通过 `新
 
 | 工具名称 | 描述 | 参数 |
 |---------|------|------|
-| `run_coding_agent` | 启动后台 `pi --mode rpc` 编码任务，任务由 rmux sidecar 管理；工具立即返回 job id，任务完成后会发回报告并自动续跑 LLM。 / Starts a background `pi --mode rpc` coding job managed by the rmux sidecar; returns a job id immediately, then posts a report and resumes the LLM loop when done. | `prompt`, `workingDirectory`, `agents?`, `timeoutMinutes?`, `provider?`, `model?`, `tools?` |
+| `run_coding_agent` | 启动后台 `pi --mode rpc` 编码任务，任务由 coding-agent sidecar 管理；工具立即返回 job id，任务完成后会发回报告并自动续跑 LLM。 / Starts a background `pi --mode rpc` coding job managed by the coding-agent sidecar; returns a job id immediately, then posts a report and resumes the LLM loop when done. | `prompt`, `workingDirectory`, `agents?`, `timeoutMinutes?`, `provider?`, `model?`, `tools?` |
 | `get_coding_agent_job` | 查询后台编码任务状态。 / Gets background coding job status. | `jobId` |
 | `cancel_coding_agent_job` | 请求取消后台编码任务。 / Requests cancellation for a background coding job. | `jobId`, `reason?` |
 

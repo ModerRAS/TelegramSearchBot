@@ -90,7 +90,7 @@ namespace TelegramSearchBot.Common {
                 ? "pi"
                 : config.CodingAgentPiCommand.Trim();
             CodingAgentSidecarCommand = string.IsNullOrWhiteSpace(config.CodingAgentSidecarCommand)
-                ? "telegramsearchbot-rmux-sidecar"
+                ? "telegramsearchbot-coding-agent-sidecar"
                 : config.CodingAgentSidecarCommand.Trim();
         }
 
@@ -187,7 +187,7 @@ namespace TelegramSearchBot.Common {
         public static int CodingAgentMaxConcurrentJobs { get; set; } = 2;
         public static int CodingAgentMaxAutoResumeContinuations { get; set; } = 4;
         public static string CodingAgentPiCommand { get; set; } = "pi";
-        public static string CodingAgentSidecarCommand { get; set; } = "telegramsearchbot-rmux-sidecar";
+        public static string CodingAgentSidecarCommand { get; set; } = "telegramsearchbot-coding-agent-sidecar";
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
 
@@ -350,7 +350,7 @@ namespace TelegramSearchBot.Common {
         public int CodingAgentMaxConcurrentJobs { get; set; } = 2;
         public int CodingAgentMaxAutoResumeContinuations { get; set; } = 4;
         public string CodingAgentPiCommand { get; set; } = "pi";
-        public string CodingAgentSidecarCommand { get; set; } = "telegramsearchbot-rmux-sidecar";
+        public string CodingAgentSidecarCommand { get; set; } = "telegramsearchbot-coding-agent-sidecar";
     }
 
     public sealed record BotApiEndpointSettings(string BaseUrl, bool IsLocalApi, string ExternalLocalBotApiBaseUrl);

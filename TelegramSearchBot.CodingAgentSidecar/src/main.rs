@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use chrono::{SecondsFormat, Utc};
 use clap::Parser;
 use redis::AsyncCommands;
-use rmux_sdk::{EnsureSession, Rmux};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -76,7 +75,6 @@ struct CodingAgentJobReport {
     output: String,
     error_message: String,
     log_path: String,
-    rmux_session_names: Vec<String>,
     started_at_utc: String,
     completed_at_utc: String,
 }
@@ -109,7 +107,6 @@ struct AgentRunResult {
     status: CodingAgentJobStatus,
     text: String,
     error: String,
-    rmux_session_name: Option<String>,
 }
 
 #[tokio::main]
@@ -129,7 +126,7 @@ async fn main() -> Result<()> {
     let semaphore = Arc::new(Semaphore::new(max_concurrent));
     let config = Arc::new(args);
 
-    info!("rmux/pi sidecar started; max_concurrent={max_concurrent}");
+    info!("coding agent sidecar started; max_concurrent={max_concurrent}");
     let mut queue_conn = client.get_multiplexed_async_connection().await?;
     loop {
         let result: Option<(String, String)> = redis::cmd("BRPOP")
@@ -204,7 +201,6 @@ async fn process_job(
     )
     .await?;
 
-    let mut rmux_session_names = Vec::new();
     let mut outputs = Vec::new();
     let mut final_status = CodingAgentJobStatus::Completed;
     let mut error_message = String::new();
@@ -240,9 +236,6 @@ async fn process_job(
 
         match result {
             Ok(agent_result) => {
-                if let Some(session_name) = agent_result.rmux_session_name {
-                    rmux_session_names.push(session_name);
-                }
                 outputs.push(format!("## {}\n{}", agent.name, agent_result.text));
                 match agent_result.status {
                     CodingAgentJobStatus::Completed => {}
@@ -277,7 +270,6 @@ async fn process_job(
         output,
         error_message: error_message.clone(),
         log_path: log_path.to_string_lossy().to_string(),
-        rmux_session_names: rmux_session_names.clone(),
         started_at_utc: started_at,
         completed_at_utc: completed_at.clone(),
     };
@@ -290,10 +282,6 @@ async fn process_job(
             ("summary", summary.as_str()),
             ("error", error_message.as_str()),
             ("completedAtUtc", completed_at.as_str()),
-            (
-                "rmuxSessionNames",
-                &serde_json::to_string(&rmux_session_names)?,
-            ),
             ("updatedAtUtc", &utc_now()),
         ],
     )
@@ -319,21 +307,6 @@ async fn run_agent(
     session_dir: &Path,
 ) -> Result<AgentRunResult> {
     append_line(log_path, &format!("agent {} starting", agent.name)).await?;
-    let rmux_session_name = match ensure_rmux_observer(
-        &request.job_id,
-        &agent.name,
-        &request.working_directory,
-        log_path,
-    )
-    .await
-    {
-        Ok(session_name) => Some(session_name),
-        Err(err) => {
-            append_line(log_path, &format!("rmux observer failed: {err}")).await?;
-            None
-        }
-    };
-
     let mut command = Command::new(&config.pi_command);
     command
         .arg("--mode")
@@ -466,7 +439,6 @@ async fn run_agent(
         status,
         text: assistant_text,
         error,
-        rmux_session_name,
     })
 }
 
@@ -504,51 +476,6 @@ async fn get_last_assistant_text(
                 }
             }
         }
-    }
-}
-
-async fn ensure_rmux_observer(
-    job_id: &str,
-    agent_name: &str,
-    working_directory: &str,
-    log_path: &Path,
-) -> Result<String> {
-    let session_name = sanitize_session_name(&format!("tgsb-ca-{job_id}-{agent_name}"));
-    let rmux = Rmux::builder().connect_or_start().await?;
-    let argv = tail_log_command(log_path);
-    rmux.ensure_session(
-        EnsureSession::try_named(&session_name)?
-            .create_or_reuse()
-            .detached(true)
-            .working_directory(working_directory)
-            .argv(argv),
-    )
-    .await?;
-    Ok(session_name)
-}
-
-fn tail_log_command(log_path: &Path) -> Vec<String> {
-    let path = log_path.to_string_lossy();
-    if cfg!(windows) {
-        let escaped = path.replace('\'', "''");
-        vec![
-            "powershell.exe".to_owned(),
-            "-NoLogo".to_owned(),
-            "-NoProfile".to_owned(),
-            "-Command".to_owned(),
-            format!(
-                "Write-Host 'TelegramSearchBot coding agent log: {escaped}'; if (Test-Path -LiteralPath '{escaped}') {{ Get-Content -LiteralPath '{escaped}' -Wait }} else {{ while ($true) {{ Start-Sleep -Seconds 5 }} }}"
-            ),
-        ]
-    } else {
-        let escaped = shell_single_quote(&path);
-        vec![
-            "sh".to_owned(),
-            "-lc".to_owned(),
-            format!(
-                "printf '%s\\n' 'TelegramSearchBot coding agent log: {path}'; touch {escaped}; tail -n +1 -f {escaped}"
-            ),
-        ]
     }
 }
 
@@ -738,10 +665,6 @@ fn sanitize_session_name(value: &str) -> String {
         sanitized.truncate(80);
     }
     sanitized
-}
-
-fn shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 fn trim_chars(value: &str, max_chars: usize) -> String {

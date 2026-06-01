@@ -79,7 +79,7 @@ namespace TelegramSearchBot.Extension {
                 .AddHostedService(sp => sp.GetRequiredService<AgentRegistryService>())
                 .AddHostedService<TelegramTaskConsumer>()
                 .AddHostedService<AgentChatBatchDispatchService>()
-                .AddHostedService<RmuxSidecarLauncherService>()
+                .AddHostedService<CodingAgentSidecarLauncherService>()
                 .AddHostedService<CodingAgentReportConsumer>()
                 .AddSingleton<Func<string, Task>>(sp => sp.GetRequiredService<SendMessage>().Log)
                 .AddSingleton<LuceneManager>()

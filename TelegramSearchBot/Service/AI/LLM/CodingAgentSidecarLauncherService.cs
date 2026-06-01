@@ -9,24 +9,24 @@ using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.Service.AI.LLM {
-    public sealed class RmuxSidecarLauncherService : IHostedService {
-        private readonly ILogger<RmuxSidecarLauncherService> _logger;
+    public sealed class CodingAgentSidecarLauncherService : IHostedService {
+        private readonly ILogger<CodingAgentSidecarLauncherService> _logger;
         private Process? _process;
 
-        public RmuxSidecarLauncherService(ILogger<RmuxSidecarLauncherService> logger) {
+        public CodingAgentSidecarLauncherService(ILogger<CodingAgentSidecarLauncherService> logger) {
             _logger = logger;
         }
 
         public Task StartAsync(CancellationToken cancellationToken) {
             if (!Env.EnableCodingAgentTool) {
-                _logger.LogDebug("Coding agent tool disabled; rmux sidecar will not start.");
+                _logger.LogDebug("Coding agent tool disabled; coding agent sidecar will not start.");
                 return Task.CompletedTask;
             }
 
             var command = ResolveCommand(Env.CodingAgentSidecarCommand);
             if (string.IsNullOrWhiteSpace(command)) {
                 _logger.LogWarning(
-                    "Coding agent tool is enabled but sidecar command was not found: {Command}. Install/build telegramsearchbot-rmux-sidecar or set CodingAgentSidecarCommand.",
+                    "Coding agent tool is enabled but sidecar command was not found: {Command}. Install/build telegramsearchbot-coding-agent-sidecar or set CodingAgentSidecarCommand.",
                     Env.CodingAgentSidecarCommand);
                 return Task.CompletedTask;
             }
@@ -54,32 +54,32 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 };
                 process.OutputDataReceived += (_, e) => {
                     if (!string.IsNullOrWhiteSpace(e.Data)) {
-                        _logger.LogInformation("[rmux-sidecar] {Message}", e.Data);
+                        _logger.LogInformation("[coding-agent-sidecar] {Message}", e.Data);
                     }
                 };
                 process.ErrorDataReceived += (_, e) => {
                     if (!string.IsNullOrWhiteSpace(e.Data)) {
-                        _logger.LogWarning("[rmux-sidecar] {Message}", e.Data);
+                        _logger.LogWarning("[coding-agent-sidecar] {Message}", e.Data);
                     }
                 };
                 process.Exited += (_, _) => {
                     try {
-                        _logger.LogWarning("rmux sidecar exited with code {ExitCode}", process.ExitCode);
+                        _logger.LogWarning("Coding agent sidecar exited with code {ExitCode}", process.ExitCode);
                     } catch {
                     }
                 };
 
                 if (!process.Start()) {
-                    _logger.LogWarning("Failed to start rmux sidecar process.");
+                    _logger.LogWarning("Failed to start coding agent sidecar process.");
                     return Task.CompletedTask;
                 }
 
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 _process = process;
-                _logger.LogInformation("rmux sidecar started. Path={Path}, Pid={Pid}", command, process.Id);
+                _logger.LogInformation("Coding agent sidecar started. Path={Path}, Pid={Pid}", command, process.Id);
             } catch (Exception ex) {
-                _logger.LogWarning(ex, "Failed to start rmux sidecar. Command={Command}", command);
+                _logger.LogWarning(ex, "Failed to start coding agent sidecar. Command={Command}", command);
             }
 
             return Task.CompletedTask;
@@ -91,7 +91,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     _process.Kill(entireProcessTree: true);
                 }
             } catch (Exception ex) {
-                _logger.LogWarning(ex, "Failed to stop rmux sidecar process.");
+                _logger.LogWarning(ex, "Failed to stop coding agent sidecar process.");
             } finally {
                 _process?.Dispose();
                 _process = null;
