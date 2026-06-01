@@ -40,6 +40,7 @@ namespace TelegramSearchBot.Service.Manage {
         private readonly IGeneralLLMService _generalLLMService;
         private readonly FaissVectorService _faissVectorService;
         private readonly ConversationSegmentationService _conversationSegmentationService;
+        private readonly LlmVisibilityService _llmVisibilityService;
 
         public RefreshService(ILogger<RefreshService> logger,
                             LuceneManager lucene,
@@ -53,7 +54,8 @@ namespace TelegramSearchBot.Service.Manage {
                             IGeneralLLMService generalLLMService,
                             IMediator mediator,
                             FaissVectorService faissVectorService,
-                            ConversationSegmentationService conversationSegmentationService) : base(logger, lucene, Send, context, mediator) {
+                            ConversationSegmentationService conversationSegmentationService,
+                            LlmVisibilityService llmVisibilityService) : base(logger, lucene, Send, context, mediator) {
             _logger = logger;
             _chatImport = chatImport;
             _autoASRService = autoASRService;
@@ -63,6 +65,7 @@ namespace TelegramSearchBot.Service.Manage {
             _generalLLMService = generalLLMService;
             _faissVectorService = faissVectorService;
             _conversationSegmentationService = conversationSegmentationService;
+            _llmVisibilityService = llmVisibilityService;
         }
 
         private async Task RebuildIndex() {
@@ -322,6 +325,12 @@ namespace TelegramSearchBot.Service.Manage {
                         var messageDataId = await _messageExtensionService.GetMessageIdByMessageIdAndGroupId(messageId, chatId);
                         if (messageDataId.HasValue) {
                             var extensions = await _messageExtensionService.GetByMessageDataIdAsync(messageDataId.Value);
+                            var message = await DataContext.Messages.AsNoTracking()
+                                .FirstOrDefaultAsync(m => m.Id == messageDataId.Value);
+                            if (message != null &&
+                                await _llmVisibilityService.IsUserInvisibleAsync(chatId, message.FromUserId)) {
+                                continue;
+                            }
 
                             // 处理Alt信息
                             if (!extensions.Any(x => x.Name == "Alt_Result")) {

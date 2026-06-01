@@ -64,13 +64,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IMessageExtensionService _messageExtensionService;
+        private readonly LlmVisibilityService _llmVisibilityService;
 
         public OpenAIResponsesService(
             DataDbContext context,
             ILogger<OpenAIResponsesService> logger,
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory)
-            : this(context, logger, messageExtensionService, httpClientFactory, null) {
+            : this(context, logger, messageExtensionService, httpClientFactory, null, null) {
         }
 
         public OpenAIResponsesService(
@@ -78,12 +79,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ILogger<OpenAIResponsesService> logger,
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider) {
+            IBotIdentityProvider botIdentityProvider,
+            LlmVisibilityService llmVisibilityService = null) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
             _botIdentityProvider = botIdentityProvider;
+            _llmVisibilityService = llmVisibilityService;
             _logger.LogInformation("OpenAIResponsesService instance created.");
         }
 
@@ -785,7 +788,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     .ToListAsync();
             }
 
-            if (inputToken != null) {
+            if (_llmVisibilityService != null) {
+                messages = await _llmVisibilityService.FilterVisibleMessagesAsync(ChatId, messages);
+            }
+
+            if (inputToken != null &&
+                ( _llmVisibilityService == null ||
+                  !await _llmVisibilityService.IsUserInvisibleAsync(ChatId, inputToken.FromUserId) )) {
                 messages.Add(inputToken);
             }
 

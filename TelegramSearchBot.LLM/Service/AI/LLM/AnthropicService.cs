@@ -33,6 +33,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IMessageExtensionService _messageExtensionService;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IBotIdentityProvider _botIdentityProvider;
+        private readonly LlmVisibilityService _llmVisibilityService;
         private string _fallbackBotName = string.Empty;
 
         public string BotName {
@@ -61,7 +62,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ILogger<AnthropicService> logger,
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory)
-            : this(context, logger, messageExtensionService, httpClientFactory, null) {
+            : this(context, logger, messageExtensionService, httpClientFactory, null, null) {
         }
 
         public AnthropicService(
@@ -69,12 +70,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ILogger<AnthropicService> logger,
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider) {
+            IBotIdentityProvider botIdentityProvider,
+            LlmVisibilityService llmVisibilityService = null) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
             _botIdentityProvider = botIdentityProvider;
+            _llmVisibilityService = llmVisibilityService;
             _logger.LogInformation("AnthropicService instance created. McpToolHelper should be initialized at application startup.");
         }
 
@@ -181,7 +184,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     .ToListAsync();
             }
 
-            if (inputMessage != null) {
+            if (_llmVisibilityService != null) {
+                dbMessages = await _llmVisibilityService.FilterVisibleMessagesAsync(chatId, dbMessages);
+            }
+
+            if (inputMessage != null &&
+                ( _llmVisibilityService == null ||
+                  !await _llmVisibilityService.IsUserInvisibleAsync(chatId, inputMessage.FromUserId) )) {
                 dbMessages.Add(inputMessage);
             }
 

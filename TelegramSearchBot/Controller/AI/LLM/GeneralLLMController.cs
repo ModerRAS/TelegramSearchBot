@@ -33,6 +33,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly MusicGenerationToolSettingsService _musicGenerationToolSettingsService;
         private readonly IModelCapabilityService _modelCapabilityService;
         private readonly IConnectionMultiplexer _connectionMultiplexer;
+        private readonly LlmVisibilityService _llmVisibilityService;
         public List<Type> Dependencies => new List<Type>();
         public ITelegramBotClient botClient { get; set; }
         public MessageService messageService { get; set; }
@@ -56,7 +57,8 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             ImageGenerationToolSettingsService imageGenerationToolSettingsService,
             MusicGenerationToolSettingsService musicGenerationToolSettingsService,
             IModelCapabilityService modelCapabilityService,
-            IConnectionMultiplexer connectionMultiplexer
+            IConnectionMultiplexer connectionMultiplexer,
+            LlmVisibilityService llmVisibilityService
             ) {
             this.logger = logger;
             this.botClient = botClient;
@@ -73,6 +75,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             _musicGenerationToolSettingsService = musicGenerationToolSettingsService;
             _modelCapabilityService = modelCapabilityService;
             _connectionMultiplexer = connectionMultiplexer;
+            _llmVisibilityService = llmVisibilityService;
 
         }
         public async Task ExecuteAsync(PipelineContext p) {
@@ -242,6 +245,13 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             bool isReplyToBot = telegramMessage.ReplyToMessage != null && telegramMessage.ReplyToMessage.From != null && telegramMessage.ReplyToMessage.From.Id == botIdentity.UserId;
 
             if (isMentionToBot || isReplyToBot) {
+                if (fromUserId != 0 && await _llmVisibilityService.IsUserInvisibleAsync(telegramMessage.Chat.Id, fromUserId)) {
+                    logger.LogInformation("User {UserId} in chat {ChatId} is LLM invisible; skipping LLM execution for message {MessageId}.",
+                        fromUserId, telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    await SendMessageService.SendMessage("你已开启 LLM 隐身，这条消息不会发送给 LLM。发送 `取消LLM隐身` 可恢复。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    return;
+                }
+
                 var modelName = await _groupLlmSettingsService.GetModelAsync(telegramMessage.Chat.Id);
                 if (string.IsNullOrWhiteSpace(modelName)) {
                     logger.LogWarning("请指定模型名称");

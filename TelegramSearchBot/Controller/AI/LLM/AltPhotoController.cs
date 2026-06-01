@@ -31,6 +31,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly ILogger<AutoOCRController> logger;
         private readonly ISendMessageService SendMessageService;
         private readonly MessageExtensionService MessageExtensionService;
+        private readonly LlmVisibilityService LlmVisibilityService;
         public AltPhotoController(
             ITelegramBotClient botClient,
             IGeneralLLMService generalLLMService,
@@ -38,7 +39,8 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             MessageService messageService,
             ILogger<AutoOCRController> logger,
             ISendMessageService sendMessageService,
-            MessageExtensionService messageExtensionService
+            MessageExtensionService messageExtensionService,
+            LlmVisibilityService llmVisibilityService
             ) {
             this.generalLLMService = generalLLMService;
             this.messageService = messageService;
@@ -47,6 +49,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             this.logger = logger;
             SendMessageService = sendMessageService;
             MessageExtensionService = messageExtensionService;
+            LlmVisibilityService = llmVisibilityService;
         }
         public async Task ExecuteAsync(PipelineContext p) {
             var e = p.Update;
@@ -60,6 +63,12 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             try {
                 var PhotoPath = IProcessPhoto.GetPhotoPath(e);
                 logger.LogInformation($"Get Photo File: {e.Message.Chat.Id}/{e.Message.MessageId}");
+                if (e.Message.From != null &&
+                    await LlmVisibilityService.IsUserInvisibleAsync(e.Message.Chat.Id, e.Message.From.Id)) {
+                    logger.LogInformation("Skip Alt generation for LLM invisible user {UserId} in chat {ChatId}, message {MessageId}",
+                        e.Message.From.Id, e.Message.Chat.Id, e.Message.MessageId);
+                    return;
+                }
                 OcrStr = await generalLLMService.AnalyzeImageAsync(PhotoPath, e.Message.Chat.Id);
                 using (LoggerHolders.PushChatContentLogScope()) {
                     logger.LogInformation(OcrStr);

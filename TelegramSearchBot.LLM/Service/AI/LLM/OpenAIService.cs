@@ -112,6 +112,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IMessageExtensionService _messageExtensionService;
         private readonly IBotIdentityProvider _botIdentityProvider;
         private readonly IGroupLlmSettingsService _groupLlmSettingsService;
+        private readonly LlmVisibilityService _llmVisibilityService;
         private string _fallbackBotName = string.Empty;
 
         public OpenAIService(
@@ -119,7 +120,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ILogger<OpenAIService> logger,
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory)
-            : this(context, logger, messageExtensionService, httpClientFactory, null, null) {
+            : this(context, logger, messageExtensionService, httpClientFactory, null, null, null) {
         }
 
         public OpenAIService(
@@ -128,13 +129,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory,
             IBotIdentityProvider botIdentityProvider,
-            IGroupLlmSettingsService groupLlmSettingsService) {
+            IGroupLlmSettingsService groupLlmSettingsService,
+            LlmVisibilityService llmVisibilityService = null) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
             _botIdentityProvider = botIdentityProvider;
             _groupLlmSettingsService = groupLlmSettingsService;
+            _llmVisibilityService = llmVisibilityService;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
         }
 
@@ -836,7 +839,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             .OrderBy(m => m.DateTime)
                             .ToListAsync();
             }
-            if (InputToken != null) {
+
+            if (_llmVisibilityService != null) {
+                Messages = await _llmVisibilityService.FilterVisibleMessagesAsync(ChatId, Messages);
+            }
+
+            if (InputToken != null &&
+                ( _llmVisibilityService == null ||
+                  !await _llmVisibilityService.IsUserInvisibleAsync(ChatId, InputToken.FromUserId) )) {
                 Messages.Add(InputToken);
             }
             _logger.LogInformation($"OpenAI GetChatHistory: Found {Messages.Count} messages for ChatId {ChatId}.");
