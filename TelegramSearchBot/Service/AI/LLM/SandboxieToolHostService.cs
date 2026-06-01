@@ -115,6 +115,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             await _lock.WaitAsync(cancellationToken);
             try {
                 var instance = BuildInstance(chatId);
+                EnsureBoxesDirectory(instance.BoxesDirectory);
                 if (Env.SandboxieAutoRegisterImportBox) {
                     EnsureImportBoxDirective(instance.BoxesDirectory);
                 }
@@ -181,8 +182,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 Path.Combine(boxesDir, boxName));
         }
 
+        internal static void EnsureBoxesDirectory(string boxesDirectory) {
+            if (string.IsNullOrWhiteSpace(boxesDirectory)) {
+                throw new InvalidOperationException("Sandboxie box import directory is not configured.");
+            }
+
+            Directory.CreateDirectory(boxesDirectory);
+        }
+
         private void EnsurePortableBoxDefinition(SandboxieInstance instance) {
-            Directory.CreateDirectory(instance.BoxesDirectory);
+            EnsureBoxesDirectory(instance.BoxesDirectory);
             var content = BuildPortableBoxIni(instance);
             if (File.Exists(instance.BoxIniPath)) {
                 var existing = File.ReadAllText(instance.BoxIniPath, Encoding.Unicode);

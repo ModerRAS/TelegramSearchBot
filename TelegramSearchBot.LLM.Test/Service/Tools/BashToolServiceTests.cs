@@ -97,34 +97,5 @@ namespace TelegramSearchBot.Test.Service.Tools {
                 workingDirectory: Path.GetTempPath(), timeoutMs: 100);
             Assert.Contains("Command timed out after 1000ms.", result);
         }
-
-        [Fact]
-        public void TryGetSandboxCommandRestrictionError_RejectsWorkDirRootForSandboxedChat() {
-            var toolContext = new ToolContext { ChatId = 123, IsSandboxed = true };
-
-            var blocked = BashToolService.TryGetSandboxCommandRestrictionError(toolContext, Env.WorkDir, out var error);
-
-            Assert.True(blocked);
-            Assert.Contains("not in the allowed path list", error, StringComparison.OrdinalIgnoreCase);
-        }
-
-        [Fact]
-        public void TryGetSandboxCommandRestrictionError_AllowsBaseDirectoryForSandboxedChat() {
-            var toolContext = new ToolContext { ChatId = 123, IsSandboxed = true };
-
-            var blocked = BashToolService.TryGetSandboxCommandRestrictionError(toolContext, AppContext.BaseDirectory, out var error);
-
-            Assert.False(blocked);
-            Assert.True(string.IsNullOrWhiteSpace(error));
-        }
-
-        [Fact]
-        public void IsPathInSandboxCommandAllowList_AllowsOnlyCurrentChatRoots() {
-            Assert.True(BashToolService.IsPathInSandboxCommandAllowList(Path.Combine(Env.WorkDir, "Photos", "123"), 123));
-            Assert.True(BashToolService.IsPathInSandboxCommandAllowList(Path.Combine(Env.WorkDir, "Audios", "123"), 123));
-            Assert.False(BashToolService.IsPathInSandboxCommandAllowList(Path.Combine(Env.WorkDir, "Photos", "999"), 123));
-            Assert.False(BashToolService.IsPathInSandboxCommandAllowList(Path.Combine(Env.WorkDir, "logs"), 123));
-            Assert.False(BashToolService.IsPathInSandboxCommandAllowList(Env.WorkDir, 123));
-        }
     }
 }

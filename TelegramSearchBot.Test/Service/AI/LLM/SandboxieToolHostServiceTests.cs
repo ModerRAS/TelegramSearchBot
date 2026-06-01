@@ -74,6 +74,22 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             }
         }
 
+        [Fact]
+        public void EnsureBoxesDirectory_CreatesMissingDirectory() {
+            var testDir = Path.Combine(Path.GetTempPath(), "TGSB_SandboxieBoxes_" + Guid.NewGuid().ToString("N"));
+            try {
+                Assert.False(Directory.Exists(testDir));
+
+                SandboxieToolHostService.EnsureBoxesDirectory(testDir);
+
+                Assert.True(Directory.Exists(testDir));
+            } finally {
+                if (Directory.Exists(testDir)) {
+                    Directory.Delete(testDir, recursive: true);
+                }
+            }
+        }
+
         private static string BuildIni(long chatId) {
             var instance = new SandboxieInstance(
                 chatId,

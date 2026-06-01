@@ -45,9 +45,6 @@ namespace TelegramSearchBot.Service.Tools {
 
             try {
                 path = ResolvePath(path);
-                if (TryValidateSandboxPath(path, toolContext, out var restrictionError)) {
-                    return restrictionError;
-                }
 
                 if (!File.Exists(path)) {
                     return $"Error: File not found: {path}";
@@ -98,9 +95,6 @@ namespace TelegramSearchBot.Service.Tools {
 
             try {
                 path = ResolvePath(path);
-                if (TryValidateSandboxPath(path, toolContext, out var restrictionError)) {
-                    return restrictionError;
-                }
 
                 var directory = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) {
@@ -129,9 +123,6 @@ namespace TelegramSearchBot.Service.Tools {
 
             try {
                 path = ResolvePath(path);
-                if (TryValidateSandboxPath(path, toolContext, out var restrictionError)) {
-                    return restrictionError;
-                }
 
                 if (!File.Exists(path)) {
                     return $"Error: File not found: {path}";
@@ -181,9 +172,6 @@ namespace TelegramSearchBot.Service.Tools {
 
             try {
                 path = ResolvePath(path ?? Env.WorkDir);
-                if (TryValidateSandboxPath(path, toolContext, out var restrictionError)) {
-                    return restrictionError;
-                }
 
                 if (!Directory.Exists(path)) {
                     return $"Error: Directory not found: {path}";
@@ -255,9 +243,6 @@ namespace TelegramSearchBot.Service.Tools {
 
             try {
                 path = ResolvePath(path ?? Env.WorkDir);
-                if (TryValidateSandboxPath(path, toolContext, out var restrictionError)) {
-                    return restrictionError;
-                }
 
                 if (!Directory.Exists(path)) {
                     return $"Error: Directory not found: {path}";
@@ -292,47 +277,6 @@ namespace TelegramSearchBot.Service.Tools {
             return toolContext != null && ( toolContext.UserId == Env.AdminId || toolContext.IsSandboxed );
         }
 
-        internal static bool TryValidateSandboxPath(string path, ToolContext toolContext, out string error) {
-            error = string.Empty;
-            if (toolContext == null || !toolContext.IsSandboxed) {
-                return false;
-            }
-
-            if (toolContext.ChatId == 0) {
-                error = "Error: Sandboxed file operations require a valid chat context.";
-                return true;
-            }
-
-            if (IsPathInSandboxAllowList(path, toolContext.ChatId)) {
-                return false;
-            }
-
-            error = $"Error: Sandboxed file access to '{path}' is not allowed.";
-            return true;
-        }
-
-        internal static bool IsPathInSandboxAllowList(string path, long chatId) {
-            var normalizedPath = NormalizePath(path);
-            foreach (var allowedRoot in GetSandboxAllowedRoots(chatId)) {
-                if (IsPathUnderRoot(normalizedPath, allowedRoot)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        internal static IEnumerable<string> GetSandboxAllowedRoots(long chatId) {
-            yield return AppContext.BaseDirectory;
-            yield return Path.Combine(Env.WorkDir, "Photos", chatId.ToString());
-            yield return Path.Combine(Env.WorkDir, "Audios", chatId.ToString());
-            yield return Path.Combine(Env.WorkDir, "Videos", chatId.ToString());
-            yield return Path.Combine(Env.WorkDir, "Files", chatId.ToString());
-            if (!string.IsNullOrWhiteSpace(Env.SandboxieGroupFilesRoot)) {
-                yield return Path.Combine(Env.SandboxieGroupFilesRoot, chatId.ToString());
-            }
-        }
-
         private static string ResolvePath(string path) {
             if (string.IsNullOrWhiteSpace(path)) {
                 return Env.WorkDir;
@@ -341,18 +285,6 @@ namespace TelegramSearchBot.Service.Tools {
                 return Path.GetFullPath(Path.Combine(Env.WorkDir, path));
             }
             return Path.GetFullPath(path);
-        }
-
-        private static bool IsPathUnderRoot(string path, string root) {
-            var normalizedPath = NormalizePath(path);
-            var normalizedRoot = NormalizePath(root);
-            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            return normalizedPath.Equals(normalizedRoot, comparison) ||
-                   normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, comparison);
-        }
-
-        private static string NormalizePath(string path) {
-            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
         private static int CountOccurrences(string text, string pattern) {
