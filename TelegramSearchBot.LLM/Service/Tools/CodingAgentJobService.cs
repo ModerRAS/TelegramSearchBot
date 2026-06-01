@@ -10,7 +10,7 @@ namespace TelegramSearchBot.Service.Tools {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
     public sealed class CodingAgentJobService : IService {
         private static readonly TimeSpan StateTtl = TimeSpan.FromDays(7);
-        private const string EnqueueJobScript = @"
+        internal const string EnqueueJobScript = @"
 local activeKey = KEYS[1]
 local stateKey = KEYS[2]
 local queueKey = KEYS[3]

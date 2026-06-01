@@ -225,7 +225,7 @@ namespace TelegramSearchBot.Service.Tools {
         private static readonly int[] AllowedSampleRates = { 16000, 24000, 32000, 44100 };
         private static readonly int[] AllowedBitrates = { 32000, 64000, 128000, 256000 };
         private static readonly string[] AllowedAudioFormats = { "mp3", "wav", "pcm" };
-        private const string AcquireChannelSemaphoreScript = @"
+        internal const string AcquireChannelSemaphoreScript = @"
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
 local current = tonumber(redis.call('GET', key) or '0')

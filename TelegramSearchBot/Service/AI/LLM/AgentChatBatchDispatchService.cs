@@ -20,12 +20,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan LockTtl = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan LockRenewInterval = TimeSpan.FromSeconds(10);
-        private const string ReleaseLockScript = @"
+        internal const string ReleaseLockScript = @"
 if redis.call('GET', KEYS[1]) == ARGV[1] then
   return redis.call('DEL', KEYS[1])
 end
 return 0";
-        private const string RenewLockScript = @"
+        internal const string RenewLockScript = @"
 if redis.call('GET', KEYS[1]) == ARGV[1] then
   redis.call('PEXPIRE', KEYS[1], ARGV[2])
   return 1
