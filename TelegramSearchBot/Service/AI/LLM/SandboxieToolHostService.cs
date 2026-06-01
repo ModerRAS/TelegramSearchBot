@@ -297,7 +297,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             yield return Path.Combine(Env.WorkDir, "Config.json");
             yield return Path.Combine(Env.WorkDir, "Data.sqlite");
-            yield return Path.Combine(Env.WorkDir, "Logs");
+            yield return Path.Combine(Env.WorkDir, "logs");
             yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh");
             yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
         }

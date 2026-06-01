@@ -36,7 +36,6 @@ namespace TelegramSearchBot.Test.Service.Tools {
 
         [Fact]
         public async Task ExecuteCommand_NonAdminUser_ReturnsError() {
-            // Use a userId that is different from the actual AdminId
             var toolContext = new ToolContext { ChatId = 1, UserId = long.MaxValue - 1 };
             var result = await _service.ExecuteCommand("echo test", toolContext);
             Assert.Contains("Error", result);
@@ -51,7 +50,6 @@ namespace TelegramSearchBot.Test.Service.Tools {
 
         [Fact]
         public async Task ExecuteCommand_EmptyCommand_ReturnsError() {
-            // Even with admin user, empty command should fail
             var toolContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
             var result = await _service.ExecuteCommand("", toolContext);
             Assert.Contains("Error", result);
@@ -71,7 +69,6 @@ namespace TelegramSearchBot.Test.Service.Tools {
         public async Task ExecuteCommand_AdminUser_ExecutesSuccessfully() {
             var toolContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
 
-            // Use platform-appropriate command
             string command;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
                 command = "Write-Output 'hello test'";
@@ -89,7 +86,6 @@ namespace TelegramSearchBot.Test.Service.Tools {
         public async Task ExecuteCommand_TimeoutClamped() {
             var toolContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
 
-            // Very short timeout should be clamped to 1000ms minimum
             string command;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
                 command = "Write-Output 'quick'; Start-Sleep -Seconds 2";
@@ -100,6 +96,35 @@ namespace TelegramSearchBot.Test.Service.Tools {
             var result = await _service.ExecuteCommand(command, toolContext,
                 workingDirectory: Path.GetTempPath(), timeoutMs: 100);
             Assert.Contains("Command timed out after 1000ms.", result);
+        }
+
+        [Fact]
+        public void TryGetSandboxCommandRestrictionError_RejectsWorkDirRootForSandboxedChat() {
+            var toolContext = new ToolContext { ChatId = 123, IsSandboxed = true };
+
+            var blocked = BashToolService.TryGetSandboxCommandRestrictionError(toolContext, Env.WorkDir, out var error);
+
+            Assert.True(blocked);
+            Assert.Contains("not in the allowed path list", error, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void TryGetSandboxCommandRestrictionError_AllowsBaseDirectoryForSandboxedChat() {
+            var toolContext = new ToolContext { ChatId = 123, IsSandboxed = true };
+
+            var blocked = BashToolService.TryGetSandboxCommandRestrictionError(toolContext, AppContext.BaseDirectory, out var error);
+
+            Assert.False(blocked);
+            Assert.True(string.IsNullOrWhiteSpace(error));
+        }
+
+        [Fact]
+        public void IsPathInSandboxCommandAllowList_AllowsOnlyCurrentChatRoots() {
+            Assert.True(BashToolService.IsPathInSandboxCommandAllowList(Path.Combine(Env.WorkDir, "Photos", "123"), 123));
+            Assert.True(BashToolService.IsPathInSandboxCommandAllowList(Path.Combine(Env.WorkDir, "Audios", "123"), 123));
+            Assert.False(BashToolService.IsPathInSandboxCommandAllowList(Path.Combine(Env.WorkDir, "Photos", "999"), 123));
+            Assert.False(BashToolService.IsPathInSandboxCommandAllowList(Path.Combine(Env.WorkDir, "logs"), 123));
+            Assert.False(BashToolService.IsPathInSandboxCommandAllowList(Env.WorkDir, 123));
         }
     }
 }

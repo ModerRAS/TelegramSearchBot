@@ -170,5 +170,23 @@ namespace TelegramSearchBot.Test.Service.Tools {
             var result = await _service.ListFiles(_nonAdminContext);
             Assert.Contains("Error", result);
         }
+
+        [Fact]
+        public async Task ListFiles_SandboxedChat_CannotListWorkDirRoot() {
+            var sandboxedContext = new ToolContext { ChatId = 123, UserId = 0, IsSandboxed = true };
+
+            var result = await _service.ListFiles(sandboxedContext);
+
+            Assert.Contains("not allowed", result, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void IsPathInSandboxAllowList_AllowsOnlyCurrentChatRootsAndAppDirectory() {
+            Assert.True(FileToolService.IsPathInSandboxAllowList(AppContext.BaseDirectory, 123));
+            Assert.True(FileToolService.IsPathInSandboxAllowList(Path.Combine(Env.WorkDir, "Files", "123"), 123));
+            Assert.False(FileToolService.IsPathInSandboxAllowList(Path.Combine(Env.WorkDir, "Files", "999"), 123));
+            Assert.False(FileToolService.IsPathInSandboxAllowList(Path.Combine(Env.WorkDir, "logs"), 123));
+            Assert.False(FileToolService.IsPathInSandboxAllowList(Env.WorkDir, 123));
+        }
     }
 }

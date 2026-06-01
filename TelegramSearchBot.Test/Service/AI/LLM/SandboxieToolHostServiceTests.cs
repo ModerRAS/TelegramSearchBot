@@ -17,6 +17,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
 
             try {
                 var chatId = 12345L;
+                Directory.CreateDirectory(Path.Combine(Env.WorkDir, "logs"));
                 var ini = BuildIni(chatId);
 
                 Assert.Contains(ReadPath(Path.Combine(Env.WorkDir, "Photos", chatId.ToString())), ini);
@@ -24,10 +25,11 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 Assert.Contains(ReadPath(Path.Combine(Env.WorkDir, "Videos", chatId.ToString())), ini);
                 Assert.Contains(ReadPath(Path.Combine(Env.WorkDir, "Files", chatId.ToString())), ini);
 
-                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Photos")), ini);
-                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Audios")), ini);
-                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Videos")), ini);
-                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Files")), ini);
+                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "Photos"))}", ini);
+                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "Audios"))}", ini);
+                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "Videos"))}", ini);
+                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "Files"))}", ini);
+                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "logs"))}", ini);
 
                 Assert.DoesNotContain("Index_Data", ini, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("GroupFiles", ini, StringComparison.OrdinalIgnoreCase);

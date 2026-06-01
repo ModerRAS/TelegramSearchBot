@@ -96,6 +96,10 @@ namespace TelegramSearchBot.Service.Tools {
                 return "Error: Command cannot be empty.";
             }
 
+            if (toolContext.IsSandboxed && TryGetSandboxCommandRestrictionError(toolContext, workingDirectory, out var restrictionError)) {
+                return restrictionError;
+            }
+
             // Limit timeout to reasonable bounds
             timeoutMs = Math.Clamp(timeoutMs, 1000, 300000); // 1s to 5min
 
@@ -196,6 +200,71 @@ namespace TelegramSearchBot.Service.Tools {
                 _logger.LogError(ex, "Failed to execute command: {Command}", command);
                 return $"Error executing command: {ex.Message}";
             }
+        }
+
+        internal static bool TryGetSandboxCommandRestrictionError(ToolContext toolContext, string? workingDirectory, out string error) {
+            error = string.Empty;
+            if (toolContext == null || !toolContext.IsSandboxed) {
+                return false;
+            }
+
+            if (toolContext.ChatId == 0) {
+                error = "Error: Sandboxed command execution requires a valid chat context.";
+                return true;
+            }
+
+            var workDir = ResolveFullPath(workingDirectory ?? AppContext.BaseDirectory);
+            if (!IsPathInSandboxCommandAllowList(workDir, toolContext.ChatId)) {
+                error = $"Error: Sandboxed command working directory '{workDir}' is not in the allowed path list.";
+                return true;
+            }
+
+            return false;
+        }
+
+        internal static bool IsPathInSandboxCommandAllowList(string path, long chatId) {
+            var normalizedPath = ResolveFullPath(path);
+            foreach (var allowedRoot in GetSandboxCommandAllowedRoots(chatId)) {
+                if (IsPathUnderRoot(normalizedPath, allowedRoot)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal static IEnumerable<string> GetSandboxCommandAllowedRoots(long chatId) {
+            yield return AppContext.BaseDirectory;
+            yield return Path.Combine(Env.WorkDir, "Photos", chatId.ToString());
+            yield return Path.Combine(Env.WorkDir, "Audios", chatId.ToString());
+            yield return Path.Combine(Env.WorkDir, "Videos", chatId.ToString());
+            yield return Path.Combine(Env.WorkDir, "Files", chatId.ToString());
+            if (!string.IsNullOrWhiteSpace(Env.SandboxieGroupFilesRoot)) {
+                yield return Path.Combine(Env.SandboxieGroupFilesRoot, chatId.ToString());
+            }
+        }
+
+        private static string ResolveFullPath(string path) {
+            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        private static bool IsPathUnderRoot(string path, string root) {
+            var comparer = GetPathComparer();
+            var normalizedPath = ResolveFullPath(path);
+            var normalizedRoot = ResolveFullPath(root);
+            if (comparer.Equals(normalizedPath, normalizedRoot)) {
+                return true;
+            }
+
+            return normalizedPath.StartsWith(
+                normalizedRoot + Path.DirectorySeparatorChar,
+                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+
+        private static StringComparer GetPathComparer() {
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
         }
     }
 }
