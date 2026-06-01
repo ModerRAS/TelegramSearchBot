@@ -10,12 +10,15 @@ using Serilog;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class SchedulerBootstrap : AppBootstrap {
+        internal static string[] BuildGarnetArguments(string port) =>
+            ["--bind", "127.0.0.1", "--port", port, "--lua", "--lua-transaction-mode"];
+
         public static void Startup(string[] args) {
             if (args.Length != 2 || !args[0].Equals("Scheduler")) {
                 return;
             }
             try {
-                using var server = new GarnetServer(["--bind", "127.0.0.1", "--port", args[1]]);
+                using var server = new GarnetServer(BuildGarnetArguments(args[1]));
                 server.Start();
                 Thread.Sleep(Timeout.Infinite);
             } catch (Exception ex) {
