@@ -33,6 +33,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
         private readonly AgentChatExecutionService _executionService;
         private readonly AgentChatBatchQueueService _batchQueueService;
         private readonly IConnectionMultiplexer _redis;
+        private readonly LlmVisibilityService _llmVisibilityService;
         private readonly ILogger<AgentChatModeController> _logger;
 
         public AgentChatModeController(
@@ -44,6 +45,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             AgentChatExecutionService executionService,
             AgentChatBatchQueueService batchQueueService,
             IConnectionMultiplexer redis,
+            LlmVisibilityService llmVisibilityService,
             ILogger<AgentChatModeController> logger) {
             _groupLlmSettingsService = groupLlmSettingsService;
             _botIdentityProvider = botIdentityProvider;
@@ -53,6 +55,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
             _executionService = executionService;
             _batchQueueService = batchQueueService;
             _redis = redis;
+            _llmVisibilityService = llmVisibilityService;
             _logger = logger;
         }
 
@@ -81,6 +84,16 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
             var settings = await _groupLlmSettingsService.GetAgentChatSettingsAsync(telegramMessage.Chat.Id);
             if (!settings.IsEnabled) {
+                return;
+            }
+
+            var senderUserId = telegramMessage.From?.Id ?? 0;
+            if (senderUserId != 0 && await _llmVisibilityService.IsUserInvisibleAsync(telegramMessage.Chat.Id, senderUserId)) {
+                _logger.LogInformation(
+                    "User {UserId} in chat {ChatId} is LLM invisible; skipping agent chat for message {MessageId}.",
+                    senderUserId,
+                    telegramMessage.Chat.Id,
+                    telegramMessage.MessageId);
                 return;
             }
 

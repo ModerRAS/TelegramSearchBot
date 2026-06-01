@@ -30,6 +30,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly Dictionary<long, ChatSession> _chatSessions = new();
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IBotIdentityProvider _botIdentityProvider;
+        private readonly LlmVisibilityService _llmVisibilityService;
         private string _fallbackBotName = string.Empty;
         public string BotName {
             get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
@@ -46,18 +47,20 @@ namespace TelegramSearchBot.Service.AI.LLM {
             DataDbContext context,
             ILogger<GeminiService> logger,
             IHttpClientFactory httpClientFactory)
-            : this(context, logger, httpClientFactory, null) {
+            : this(context, logger, httpClientFactory, null, null) {
         }
 
         public GeminiService(
             DataDbContext context,
             ILogger<GeminiService> logger,
             IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider) {
+            IBotIdentityProvider botIdentityProvider,
+            LlmVisibilityService llmVisibilityService = null) {
             _logger = logger;
             _dbContext = context;
             _httpClientFactory = httpClientFactory;
             _botIdentityProvider = botIdentityProvider;
+            _llmVisibilityService = llmVisibilityService;
             _logger.LogInformation("GeminiService instance created");
         }
 
@@ -120,7 +123,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             .ToListAsync();
             }
 
-            if (inputMessage != null) {
+            if (_llmVisibilityService != null) {
+                messages = await _llmVisibilityService.FilterVisibleMessagesAsync(chatId, messages);
+            }
+
+            if (inputMessage != null &&
+                ( _llmVisibilityService == null ||
+                  !await _llmVisibilityService.IsUserInvisibleAsync(chatId, inputMessage.FromUserId) )) {
                 messages.Add(inputMessage);
             }
 
@@ -389,7 +398,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
             var fullResponse = new StringBuilder();
 
+            if (_llmVisibilityService != null &&
+                message != null &&
+                await _llmVisibilityService.IsUserInvisibleAsync(ChatId, message.FromUserId, cancellationToken)) {
+                _chatSessions.Remove(ChatId);
+                yield break;
+            }
+
             var history = await GetChatHistory(ChatId, message, await CheckVisionSupport(modelName, channel.Id));
+            if (_llmVisibilityService != null &&
+                ( await _llmVisibilityService.GetInvisibleUserIdsAsync(ChatId, cancellationToken) ).Count > 0) {
+                _chatSessions.Remove(ChatId);
+            }
+
             if (!_chatSessions.TryGetValue(ChatId, out var chatSession)) {
                 chatSession = model.StartChat(history: history);
                 _chatSessions[ChatId] = chatSession;

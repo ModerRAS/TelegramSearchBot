@@ -24,11 +24,17 @@ namespace TelegramSearchBot.Service.Tools {
         private readonly LuceneManager _luceneManager;
         private readonly DataDbContext _dbContext;
         private readonly MessageExtensionService _messageExtensionService;
+        private readonly LlmVisibilityService _llmVisibilityService;
 
-        public SearchToolService(LuceneManager luceneManager, DataDbContext dbContext, MessageExtensionService messageExtensionService) {
+        public SearchToolService(
+            LuceneManager luceneManager,
+            DataDbContext dbContext,
+            MessageExtensionService messageExtensionService,
+            LlmVisibilityService llmVisibilityService) {
             _luceneManager = luceneManager;
             _dbContext = dbContext;
             _messageExtensionService = messageExtensionService;
+            _llmVisibilityService = llmVisibilityService ?? throw new ArgumentNullException(nameof(llmVisibilityService));
         }
 
         [BuiltInTool("Searches indexed messages within the current chat using keywords. Supports pagination.")]
@@ -46,9 +52,14 @@ namespace TelegramSearchBot.Service.Tools {
             int skip = ( page - 1 ) * pageSize;
             int take = pageSize;
 
+            var invisibleUserIds = await GetInvisibleUserIdsAsync(chatId);
             (int totalHits, List<TelegramSearchBot.Search.Model.MessageDTO> messageDtos) searchResult;
             try {
-                searchResult = _luceneManager.Search(query, chatId, skip, take);
+                if (invisibleUserIds.Count == 0) {
+                    searchResult = _luceneManager.Search(query, chatId, skip, take);
+                } else {
+                    searchResult = SearchVisibleLuceneMessages(query, chatId, skip, take, invisibleUserIds);
+                }
             } catch (System.IO.DirectoryNotFoundException) {
                 return new SearchToolResult { Query = query, TotalFound = 0, CurrentPage = page, PageSize = pageSize, Results = new List<SearchResultItem>(), Note = $"No search index found for this chat. Messages may not have been indexed yet." };
             } catch (Exception ex) {
@@ -62,14 +73,18 @@ namespace TelegramSearchBot.Service.Tools {
                 // Get context messages
                 var messagesBefore = await _dbContext.Messages
                     .Include(m => m.MessageExtensions)
-                    .Where(m => m.GroupId == chatId && m.DateTime < msg.DateTime)
+                    .Where(m => m.GroupId == chatId &&
+                                m.DateTime < msg.DateTime &&
+                                !invisibleUserIds.Contains(m.FromUserId))
                     .OrderByDescending(m => m.DateTime)
                     .Take(5)
                     .ToListAsync();
 
                 var messagesAfter = await _dbContext.Messages
                     .Include(m => m.MessageExtensions)
-                    .Where(m => m.GroupId == chatId && m.DateTime > msg.DateTime)
+                    .Where(m => m.GroupId == chatId &&
+                                m.DateTime > msg.DateTime &&
+                                !invisibleUserIds.Contains(m.FromUserId))
                     .OrderBy(m => m.DateTime)
                     .Take(5)
                     .ToListAsync();
@@ -158,8 +173,13 @@ namespace TelegramSearchBot.Service.Tools {
             }
 
             try {
+                var invisibleUserIds = await GetInvisibleUserIdsAsync(chatId);
                 var query = _dbContext.Messages.AsNoTracking()
                                      .Where(m => m.GroupId == chatId);
+
+                if (invisibleUserIds.Count > 0) {
+                    query = query.Where(m => !invisibleUserIds.Contains(m.FromUserId));
+                }
 
                 if (!string.IsNullOrWhiteSpace(queryText)) {
                     query = query.Where(m => m.Content != null && m.Content.Contains(queryText));
@@ -217,14 +237,18 @@ namespace TelegramSearchBot.Service.Tools {
                     // Get context messages
                     var messagesBefore = await _dbContext.Messages
                         .Include(m => m.MessageExtensions)
-                        .Where(m => m.GroupId == chatId && m.DateTime < msg.DateTime)
+                        .Where(m => m.GroupId == chatId &&
+                                    m.DateTime < msg.DateTime &&
+                                    !invisibleUserIds.Contains(m.FromUserId))
                         .OrderByDescending(m => m.DateTime)
                         .Take(5)
                         .ToListAsync();
 
                     var messagesAfter = await _dbContext.Messages
                         .Include(m => m.MessageExtensions)
-                        .Where(m => m.GroupId == chatId && m.DateTime > msg.DateTime)
+                        .Where(m => m.GroupId == chatId &&
+                                    m.DateTime > msg.DateTime &&
+                                    !invisibleUserIds.Contains(m.FromUserId))
                         .OrderBy(m => m.DateTime)
                         .Take(5)
                         .ToListAsync();
@@ -295,6 +319,40 @@ namespace TelegramSearchBot.Service.Tools {
                     Results = new List<HistoryMessageItem>(),
                     Note = $"An error occurred while querying history: {ex.Message}"
                 };
+            }
+        }
+
+        private async Task<HashSet<long>> GetInvisibleUserIdsAsync(long chatId) {
+            return await _llmVisibilityService.GetInvisibleUserIdsAsync(chatId);
+        }
+
+        private (int totalHits, List<TelegramSearchBot.Search.Model.MessageDTO> messageDtos) SearchVisibleLuceneMessages(
+            string query,
+            long chatId,
+            int skip,
+            int take,
+            HashSet<long> invisibleUserIds) {
+            var requiredVisibleCount = skip + take;
+            var fetchSize = Math.Max(requiredVisibleCount, 100);
+            const int maxFetchSize = 1000;
+
+            while (true) {
+                var searchResult = _luceneManager.Search(query, chatId, 0, fetchSize);
+                var visibleDtos = searchResult.Item2
+                    .Where(m => !invisibleUserIds.Contains(m.FromUserId))
+                    .ToList();
+
+                if (visibleDtos.Count >= requiredVisibleCount ||
+                    searchResult.Item2.Count >= searchResult.Item1 ||
+                    fetchSize >= maxFetchSize) {
+                    var invisibleHitsInFetchedSet = searchResult.Item2.Count(m => invisibleUserIds.Contains(m.FromUserId));
+                    var totalVisibleFound = searchResult.Item2.Count >= searchResult.Item1
+                        ? visibleDtos.Count
+                        : Math.Max(0, searchResult.Item1 - invisibleHitsInFetchedSet);
+                    return (totalVisibleFound, visibleDtos.Skip(skip).Take(take).ToList());
+                }
+
+                fetchSize = Math.Min(maxFetchSize, fetchSize * 2);
             }
         }
     }

@@ -118,11 +118,23 @@ return 0";
                     return;
                 }
 
-                var last = bufferedMessages[^1];
+                var llmVisibilityService = scope.ServiceProvider.GetRequiredService<LlmVisibilityService>();
+                var visibleBufferedMessages = await FilterVisibleBufferedMessagesAsync(
+                    llmVisibilityService,
+                    chatId,
+                    bufferedMessages,
+                    cancellationToken);
+                if (visibleBufferedMessages.Count == 0) {
+                    _logger.LogInformation("Dropping agent chat batch after LLM invisibility filtering. ChatId={ChatId}", chatId);
+                    await db.KeyDeleteAsync(LlmAgentRedisKeys.AgentChatBatchMeta(chatId));
+                    return;
+                }
+
+                var last = visibleBufferedMessages[^1];
                 var executionService = scope.ServiceProvider.GetRequiredService<AgentChatExecutionService>();
                 await executionService.ExecuteAsync(new AgentChatExecutionRequest {
                     ReplyTarget = last.Message,
-                    InputMessage = BuildBatchInput(bufferedMessages),
+                    InputMessage = BuildBatchInput(visibleBufferedMessages),
                     BotName = last.BotName,
                     BotUserId = last.BotUserId,
                     ModelName = settings.ModelName ?? string.Empty,
@@ -188,6 +200,21 @@ return 0";
             return result
                 .OrderBy(x => x.Message.DateTime)
                 .ThenBy(x => x.Message.MessageId)
+                .ToList();
+        }
+
+        private static async Task<List<AgentChatBufferedMessage>> FilterVisibleBufferedMessagesAsync(
+            LlmVisibilityService llmVisibilityService,
+            long chatId,
+            List<AgentChatBufferedMessage> bufferedMessages,
+            CancellationToken cancellationToken) {
+            var invisibleUserIds = await llmVisibilityService.GetInvisibleUserIdsAsync(chatId, cancellationToken);
+            if (invisibleUserIds.Count == 0) {
+                return bufferedMessages;
+            }
+
+            return bufferedMessages
+                .Where(x => !invisibleUserIds.Contains(x.Message.UserId))
                 .ToList();
         }
 

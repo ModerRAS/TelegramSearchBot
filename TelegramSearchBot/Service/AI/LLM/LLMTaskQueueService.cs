@@ -22,16 +22,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IConnectionMultiplexer _redis;
         private readonly ChunkPollingService _chunkPollingService;
         private readonly AgentRegistryService _agentRegistryService;
+        private readonly LlmVisibilityService _llmVisibilityService;
 
         public LLMTaskQueueService(
             DataDbContext dbContext,
             IConnectionMultiplexer redis,
             ChunkPollingService chunkPollingService,
-            AgentRegistryService agentRegistryService) {
+            AgentRegistryService agentRegistryService,
+            LlmVisibilityService llmVisibilityService = null) {
             _dbContext = dbContext;
             _redis = redis;
             _chunkPollingService = chunkPollingService;
             _agentRegistryService = agentRegistryService;
+            _llmVisibilityService = llmVisibilityService;
         }
 
         public string ServiceName => nameof(LLMTaskQueueService);
@@ -262,6 +265,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     .Take(10)
                     .OrderBy(x => x.DateTime)
                     .ToListAsync(cancellationToken);
+            }
+
+            if (_llmVisibilityService != null) {
+                history = await _llmVisibilityService.FilterVisibleMessagesAsync(chatId, history, cancellationToken);
             }
 
             var userIds = history.Select(x => x.FromUserId).Distinct().ToList();
