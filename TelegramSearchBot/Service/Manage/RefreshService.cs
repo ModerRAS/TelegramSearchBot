@@ -315,6 +315,14 @@ namespace TelegramSearchBot.Service.Manage {
 
             await Send.Log($"开始处理图片Alt信息，共{totalFiles}个文件");
 
+            async Task ReportProgressAsync() {
+                processedFiles++;
+                if (filesPerPercent > 0 && processedFiles >= nextPercent * filesPerPercent) {
+                    await Send.Log($"图片Alt处理进度: {nextPercent}% ({processedFiles}/{totalFiles})");
+                    nextPercent++;
+                }
+            }
+
             foreach (var chatDir in chatDirs) {
                 var chatId = long.Parse(Path.GetFileName(chatDir));
                 var imageFiles = Directory.GetFiles(chatDir);
@@ -329,6 +337,7 @@ namespace TelegramSearchBot.Service.Manage {
                                 .FirstOrDefaultAsync(m => m.Id == messageDataId.Value);
                             if (message != null &&
                                 await _llmVisibilityService.IsUserInvisibleAsync(chatId, message.FromUserId)) {
+                                await ReportProgressAsync();
                                 continue;
                             }
 
@@ -344,11 +353,7 @@ namespace TelegramSearchBot.Service.Manage {
                         }
                     }
 
-                    processedFiles++;
-                    if (filesPerPercent > 0 && processedFiles >= nextPercent * filesPerPercent) {
-                        await Send.Log($"图片Alt处理进度: {nextPercent}% ({processedFiles}/{totalFiles})");
-                        nextPercent++;
-                    }
+                    await ReportProgressAsync();
                 }
             }
             await Send.Log($"图片Alt处理完成: 100% ({totalFiles}/{totalFiles})");

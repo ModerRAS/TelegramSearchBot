@@ -398,7 +398,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
             var fullResponse = new StringBuilder();
 
+            if (_llmVisibilityService != null &&
+                message != null &&
+                await _llmVisibilityService.IsUserInvisibleAsync(ChatId, message.FromUserId, cancellationToken)) {
+                _chatSessions.Remove(ChatId);
+                yield break;
+            }
+
             var history = await GetChatHistory(ChatId, message, await CheckVisionSupport(modelName, channel.Id));
+            if (_llmVisibilityService != null &&
+                ( await _llmVisibilityService.GetInvisibleUserIdsAsync(ChatId, cancellationToken) ).Count > 0) {
+                _chatSessions.Remove(ChatId);
+            }
+
             if (!_chatSessions.TryGetValue(ChatId, out var chatSession)) {
                 chatSession = model.StartChat(history: history);
                 _chatSessions[ChatId] = chatSession;

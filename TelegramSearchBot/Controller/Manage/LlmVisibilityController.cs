@@ -28,7 +28,7 @@ namespace TelegramSearchBot.Controller.Manage {
                 return;
             }
 
-            var command = ( message.Text ?? message.Caption ?? string.Empty ).Trim();
+            var command = NormalizeCommand(message.Text ?? message.Caption ?? string.Empty);
             if (string.IsNullOrWhiteSpace(command)) {
                 return;
             }
@@ -50,6 +50,25 @@ namespace TelegramSearchBot.Controller.Manage {
                 var status = enabled ? "已开启" : "未开启";
                 await _sendMessageService.SendMessage($"LLM 隐身状态：{status}", message.Chat.Id, message.MessageId);
             }
+        }
+
+        private static string NormalizeCommand(string rawCommand) {
+            var command = rawCommand.Trim();
+            if (string.IsNullOrWhiteSpace(command)) {
+                return string.Empty;
+            }
+
+            var tokenEnd = command.IndexOfAny(new[] { ' ', '\r', '\n', '\t' });
+            if (tokenEnd >= 0) {
+                command = command.Substring(0, tokenEnd);
+            }
+
+            var botSuffixStart = command.IndexOf('@');
+            if (botSuffixStart >= 0) {
+                command = command.Substring(0, botSuffixStart);
+            }
+
+            return command.Trim();
         }
 
         private static bool IsEnableCommand(string command) {

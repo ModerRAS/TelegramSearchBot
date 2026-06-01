@@ -10,7 +10,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
-    [Injectable(ServiceLifetime.Transient)]
+    [Injectable(ServiceLifetime.Scoped)]
     public class LlmVisibilityService : IService {
         private readonly DataDbContext _dbContext;
 
@@ -73,7 +73,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 await _dbContext.UsersWithGroup.AddAsync(userWithGroup, cancellationToken);
             } else {
                 userWithGroup.IsLlmInvisible = isInvisible;
-                _dbContext.UsersWithGroup.Update(userWithGroup);
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);

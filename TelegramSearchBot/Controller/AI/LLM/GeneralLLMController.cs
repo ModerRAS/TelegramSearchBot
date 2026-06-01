@@ -248,7 +248,7 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                 if (fromUserId != 0 && await _llmVisibilityService.IsUserInvisibleAsync(telegramMessage.Chat.Id, fromUserId)) {
                     logger.LogInformation("User {UserId} in chat {ChatId} is LLM invisible; skipping LLM execution for message {MessageId}.",
                         fromUserId, telegramMessage.Chat.Id, telegramMessage.MessageId);
-                    await SendMessageService.SendMessage("你已开启 LLM 隐身，这条消息不会发送给 LLM。发送 `取消LLM隐身` 可恢复。", telegramMessage.Chat.Id, telegramMessage.MessageId);
+                    await SendLlmInvisibleNoticeAsync(telegramMessage.Chat.Id, fromUserId, telegramMessage.MessageId);
                     return;
                 }
 
@@ -537,6 +537,14 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
         private static string GetMusicGenerationModelSelectionKey(long chatId, long userId) {
             return LlmAgentRedisKeys.MusicGenerationModelSelection(chatId, userId);
+        }
+
+        private async Task SendLlmInvisibleNoticeAsync(long chatId, long userId, int replyToMessageId) {
+            var db = _connectionMultiplexer.GetDatabase();
+            var key = $"llm_invisible_notice:{chatId}:{userId}";
+            if (await db.StringSetAsync(key, "1", TimeSpan.FromMinutes(10), When.NotExists)) {
+                await SendMessageService.SendMessage("你已开启 LLM 隐身，这条消息不会发送给 LLM。发送 `取消LLM隐身` 可恢复。", chatId, replyToMessageId);
+            }
         }
 
         private sealed record ImageGenerationModelSelectionOption(string ModelName, string ChannelSummary);

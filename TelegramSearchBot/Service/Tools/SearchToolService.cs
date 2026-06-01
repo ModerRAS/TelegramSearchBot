@@ -30,11 +30,11 @@ namespace TelegramSearchBot.Service.Tools {
             LuceneManager luceneManager,
             DataDbContext dbContext,
             MessageExtensionService messageExtensionService,
-            LlmVisibilityService llmVisibilityService = null) {
+            LlmVisibilityService llmVisibilityService) {
             _luceneManager = luceneManager;
             _dbContext = dbContext;
             _messageExtensionService = messageExtensionService;
-            _llmVisibilityService = llmVisibilityService;
+            _llmVisibilityService = llmVisibilityService ?? throw new ArgumentNullException(nameof(llmVisibilityService));
         }
 
         [BuiltInTool("Searches indexed messages within the current chat using keywords. Supports pagination.")]
@@ -323,9 +323,7 @@ namespace TelegramSearchBot.Service.Tools {
         }
 
         private async Task<HashSet<long>> GetInvisibleUserIdsAsync(long chatId) {
-            return _llmVisibilityService == null
-                ? new HashSet<long>()
-                : await _llmVisibilityService.GetInvisibleUserIdsAsync(chatId);
+            return await _llmVisibilityService.GetInvisibleUserIdsAsync(chatId);
         }
 
         private (int totalHits, List<TelegramSearchBot.Search.Model.MessageDTO> messageDtos) SearchVisibleLuceneMessages(
@@ -347,7 +345,11 @@ namespace TelegramSearchBot.Service.Tools {
                 if (visibleDtos.Count >= requiredVisibleCount ||
                     searchResult.Item2.Count >= searchResult.Item1 ||
                     fetchSize >= maxFetchSize) {
-                    return (visibleDtos.Count, visibleDtos.Skip(skip).Take(take).ToList());
+                    var invisibleHitsInFetchedSet = searchResult.Item2.Count(m => invisibleUserIds.Contains(m.FromUserId));
+                    var totalVisibleFound = searchResult.Item2.Count >= searchResult.Item1
+                        ? visibleDtos.Count
+                        : Math.Max(0, searchResult.Item1 - invisibleHitsInFetchedSet);
+                    return (totalVisibleFound, visibleDtos.Skip(skip).Take(take).ToList());
                 }
 
                 fetchSize = Math.Min(maxFetchSize, fetchSize * 2);

@@ -36,6 +36,9 @@ namespace TelegramSearchBot.Model {
                 .HasIndex(uwg => new { uwg.UserId, uwg.GroupId })
                 .IsUnique();
 
+            modelBuilder.Entity<UserWithGroup>()
+                .HasIndex(uwg => new { uwg.GroupId, uwg.IsLlmInvisible });
+
             // 配置对话段模型
             modelBuilder.Entity<ConversationSegment>()
                 .HasIndex(cs => new { cs.GroupId, cs.StartTime, cs.EndTime });
