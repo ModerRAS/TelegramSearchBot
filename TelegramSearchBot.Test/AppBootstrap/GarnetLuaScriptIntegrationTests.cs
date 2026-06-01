@@ -12,18 +12,20 @@ using Xunit;
 
 namespace TelegramSearchBot.Test.AppBootstrap {
     public sealed class GarnetLuaScriptIntegrationTests {
+        private const int MaxGarnetStartAttempts = 5;
+
         [Fact]
         public async Task EmbeddedGarnet_RunsProjectLuaScripts() {
-            var port = GetAvailablePort();
-            using var server = new GarnetServer(SchedulerBootstrap.BuildGarnetArguments(port.ToString()));
-            server.Start();
+            var (server, port) = StartGarnetWithRetry();
 
-            using var redis = await ConnectWithRetryAsync(port);
-            var db = redis.GetDatabase();
+            using (server) {
+                using var redis = await ConnectWithRetryAsync(port);
+                var db = redis.GetDatabase();
 
-            await RunCodingAgentEnqueueScriptAsync(db);
-            await RunAgentChatLockScriptsAsync(db);
-            await RunMusicGenerationSemaphoreScriptAsync(db);
+                await RunCodingAgentEnqueueScriptAsync(db);
+                await RunAgentChatLockScriptsAsync(db);
+                await RunMusicGenerationSemaphoreScriptAsync(db);
+            }
         }
 
         private static async Task RunCodingAgentEnqueueScriptAsync(IDatabase db) {
@@ -145,6 +147,26 @@ namespace TelegramSearchBot.Test.AppBootstrap {
             }
 
             throw new TimeoutException($"Timed out connecting to embedded Garnet on port {port}.", lastException);
+        }
+
+        private static (GarnetServer Server, int Port) StartGarnetWithRetry() {
+            var exceptions = new List<Exception>();
+            for (var attempt = 0; attempt < MaxGarnetStartAttempts; attempt++) {
+                var port = GetAvailablePort();
+                GarnetServer? server = null;
+                try {
+                    server = new GarnetServer(SchedulerBootstrap.BuildGarnetArguments(port.ToString()));
+                    server.Start();
+                    return (server, port);
+                } catch (Exception ex) {
+                    exceptions.Add(ex);
+                    server?.Dispose();
+                }
+            }
+
+            throw new InvalidOperationException(
+                $"Unable to start embedded Garnet after {MaxGarnetStartAttempts} attempts.",
+                new AggregateException(exceptions));
         }
 
         private static int GetAvailablePort() {
