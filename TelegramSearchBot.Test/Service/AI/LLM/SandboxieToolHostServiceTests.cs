@@ -32,11 +32,11 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 Assert.Contains(ReadPath(Path.Combine(Env.WorkDir, "Videos", chatId.ToString())), ini);
                 Assert.Contains(ReadPath(Path.Combine(Env.WorkDir, "Files", chatId.ToString())), ini);
 
-                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "Photos"))}", ini);
-                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "Audios"))}", ini);
-                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "Videos"))}", ini);
-                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "Files"))}", ini);
-                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "logs"))}", ini);
+                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Photos")), ini);
+                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Audios")), ini);
+                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Videos")), ini);
+                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Files")), ini);
+                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "logs")), ini);
                 Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "temp"))}\\*", ini);
 
                 var indexDataDir = Path.Combine(Env.WorkDir, "Index_Data");
