@@ -17,6 +17,72 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
     [Collection("AgentEnvSerial")]
     public class LLMTaskQueueServiceTests {
         [Fact]
+        public async Task EnqueueMessageTaskAsync_WithCustomInput_PersistsInputMessage() {
+            var originalFlag = Env.EnableLLMAgentProcess;
+            Env.EnableLLMAgentProcess = true;
+
+            try {
+                await using var dbContext = CreateDbContext();
+                SeedChannel(dbContext, 322, "gpt-agent-chat");
+                dbContext.GroupSettings.Add(new GroupSettings {
+                    GroupId = -1001,
+                    LLMModelName = "gpt-agent-chat"
+                });
+                await dbContext.SaveChangesAsync();
+
+                var redisMock = new Mock<IConnectionMultiplexer>();
+                var dbMock = new Mock<IDatabase>();
+                redisMock.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(dbMock.Object);
+
+                dbMock.Setup(d => d.HashGetAllAsync(
+                        It.Is<RedisKey>(key => key == LlmAgentRedisKeys.AgentSession(-1001)),
+                        It.IsAny<CommandFlags>()))
+                    .ReturnsAsync([
+                        new HashEntry("chatId", -1001),
+                        new HashEntry("processId", 999),
+                        new HashEntry("port", 0),
+                        new HashEntry("status", "idle"),
+                        new HashEntry("lastHeartbeatUtc", DateTime.UtcNow.ToString("O")),
+                        new HashEntry("lastActiveAtUtc", DateTime.UtcNow.ToString("O"))
+                    ]);
+
+                string pushedPayload = string.Empty;
+                dbMock.Setup(d => d.ListLeftPushAsync(
+                        It.IsAny<RedisKey>(),
+                        It.IsAny<RedisValue>(),
+                        It.IsAny<When>(),
+                        It.IsAny<CommandFlags>()))
+                    .Callback<RedisKey, RedisValue, When, CommandFlags>((_, value, _, _) => pushedPayload = value.ToString())
+                    .ReturnsAsync(1);
+                dbMock.Setup(d => d.HashSetAsync(It.IsAny<RedisKey>(), It.IsAny<HashEntry[]>(), It.IsAny<CommandFlags>()))
+                    .Returns(Task.CompletedTask);
+
+                var registry = new AgentRegistryService(
+                    redisMock.Object,
+                    Mock.Of<IAgentProcessLauncher>(),
+                    Mock.Of<ILogger<AgentRegistryService>>());
+                var polling = new ChunkPollingService(redisMock.Object);
+                var service = new LLMTaskQueueService(dbContext, redisMock.Object, polling, registry);
+
+                var handle = await service.EnqueueMessageTaskAsync(
+                    -1001,
+                    456,
+                    789,
+                    DateTime.UtcNow,
+                    "custom agent chat input",
+                    "bot",
+                    1001);
+
+                Assert.NotNull(handle);
+                Assert.Contains("\"InputMessage\":\"custom agent chat input\"", pushedPayload);
+                Assert.Contains("\"ChatId\":-1001", pushedPayload);
+                Assert.Contains("\"UserId\":456", pushedPayload);
+            } finally {
+                Env.EnableLLMAgentProcess = originalFlag;
+            }
+        }
+
+        [Fact]
         public async Task EnqueueContinuationTaskAsync_PersistsPayloadAndRecoveryMetadata() {
             var originalFlag = Env.EnableLLMAgentProcess;
             Env.EnableLLMAgentProcess = true;
