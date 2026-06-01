@@ -63,28 +63,31 @@ namespace TelegramSearchBot.Controller.Manage {
                 command = command.Substring(0, tokenEnd);
             }
 
-            var botSuffixStart = command.IndexOf('@');
-            if (botSuffixStart >= 0) {
-                command = command.Substring(0, botSuffixStart);
-            }
-
             return command.Trim();
         }
 
         private static bool IsEnableCommand(string command) {
             return command.Equals("LLM隐身", StringComparison.OrdinalIgnoreCase) ||
-                   command.Equals("/llm_invisible_on", StringComparison.OrdinalIgnoreCase);
+                   IsSlashCommand(command, "/llm_invisible_on");
         }
 
         private static bool IsDisableCommand(string command) {
             return command.Equals("取消LLM隐身", StringComparison.OrdinalIgnoreCase) ||
                    command.Equals("LLM显身", StringComparison.OrdinalIgnoreCase) ||
-                   command.Equals("/llm_invisible_off", StringComparison.OrdinalIgnoreCase);
+                   IsSlashCommand(command, "/llm_invisible_off");
         }
 
         private static bool IsStatusCommand(string command) {
             return command.Equals("LLM隐身状态", StringComparison.OrdinalIgnoreCase) ||
-                   command.Equals("/llm_invisible_status", StringComparison.OrdinalIgnoreCase);
+                   IsSlashCommand(command, "/llm_invisible_status");
+        }
+
+        private static bool IsSlashCommand(string command, string expectedCommand) {
+            if (!command.StartsWith(expectedCommand, StringComparison.OrdinalIgnoreCase)) {
+                return false;
+            }
+
+            return command.Length == expectedCommand.Length || command[expectedCommand.Length] == '@';
         }
     }
 }
