@@ -17,8 +17,16 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
 
             try {
                 var chatId = 12345L;
+                Directory.CreateDirectory(AppContext.BaseDirectory);
+                Directory.CreateDirectory(Path.Combine(Env.WorkDir, "Photos"));
+                Directory.CreateDirectory(Path.Combine(Env.WorkDir, "Audios"));
+                Directory.CreateDirectory(Path.Combine(Env.WorkDir, "Videos"));
+                Directory.CreateDirectory(Path.Combine(Env.WorkDir, "Files"));
+                Directory.CreateDirectory(Path.Combine(Env.WorkDir, "logs"));
+                Directory.CreateDirectory(Path.Combine(Env.WorkDir, "temp"));
                 var ini = BuildIni(chatId);
 
+                Assert.Contains(ReadPath(AppContext.BaseDirectory), ini);
                 Assert.Contains(ReadPath(Path.Combine(Env.WorkDir, "Photos", chatId.ToString())), ini);
                 Assert.Contains(ReadPath(Path.Combine(Env.WorkDir, "Audios", chatId.ToString())), ini);
                 Assert.Contains(ReadPath(Path.Combine(Env.WorkDir, "Videos", chatId.ToString())), ini);
@@ -28,8 +36,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Audios")), ini);
                 Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Videos")), ini);
                 Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "Files")), ini);
+                Assert.Contains(ClosedPath(Path.Combine(Env.WorkDir, "logs")), ini);
+                Assert.Contains($"ClosedFilePath={Normalize(Path.Combine(Env.WorkDir, "temp"))}\\*", ini);
 
-                Assert.DoesNotContain("Index_Data", ini, StringComparison.OrdinalIgnoreCase);
+                var indexDataDir = Path.Combine(Env.WorkDir, "Index_Data");
+                if (Directory.Exists(indexDataDir)) {
+                    Assert.Contains($"ClosedFilePath={Normalize(indexDataDir)}", ini, StringComparison.OrdinalIgnoreCase);
+                }
                 Assert.DoesNotContain("GroupFiles", ini, StringComparison.OrdinalIgnoreCase);
             } finally {
                 Env.SandboxieGroupFilesRoot = originalGroupFilesRoot;
@@ -69,6 +82,41 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 }
             } finally {
                 Env.SandboxieDenyHostFileSystem = originalDenyHostFileSystem;
+            }
+        }
+
+        [Fact]
+        public void EnsureBoxesDirectory_CreatesMissingDirectory() {
+            var testDir = Path.Combine(Path.GetTempPath(), "TGSB_SandboxieBoxes_" + Guid.NewGuid().ToString("N"));
+            try {
+                Assert.False(Directory.Exists(testDir));
+
+                SandboxieToolHostService.EnsureBoxesDirectory(testDir);
+
+                Assert.True(Directory.Exists(testDir));
+            } finally {
+                if (Directory.Exists(testDir)) {
+                    Directory.Delete(testDir, recursive: true);
+                }
+            }
+        }
+
+        [Fact]
+        public void GetDefaultWorkDirClosedPaths_DoesNotCloseAllowedAppDirectory() {
+            var appDir = Path.Combine(Env.WorkDir, "app");
+            var otherDir = Path.Combine(Env.WorkDir, "scratch");
+            Directory.CreateDirectory(appDir);
+            Directory.CreateDirectory(otherDir);
+
+            try {
+                var closedPaths = SandboxieToolHostService.GetDefaultWorkDirClosedPaths(new[] { appDir }).ToList();
+
+                Assert.DoesNotContain(Normalize(appDir), closedPaths, StringComparer.OrdinalIgnoreCase);
+                Assert.Contains(Normalize(otherDir), closedPaths, StringComparer.OrdinalIgnoreCase);
+            } finally {
+                if (Directory.Exists(otherDir)) {
+                    Directory.Delete(otherDir, recursive: true);
+                }
             }
         }
 
