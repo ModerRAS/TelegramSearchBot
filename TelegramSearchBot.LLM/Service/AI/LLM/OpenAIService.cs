@@ -113,6 +113,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IBotIdentityProvider _botIdentityProvider;
         private readonly IGroupLlmSettingsService _groupLlmSettingsService;
         private readonly LlmVisibilityService _llmVisibilityService;
+        private readonly PromptCachingSettingsService _promptCachingSettingsService;
         private string _fallbackBotName = string.Empty;
 
         public OpenAIService(
@@ -120,7 +121,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ILogger<OpenAIService> logger,
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory)
-            : this(context, logger, messageExtensionService, httpClientFactory, null, null, null) {
+            : this(context, logger, messageExtensionService, httpClientFactory, null, null, null, null) {
         }
 
         public OpenAIService(
@@ -130,7 +131,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             IHttpClientFactory httpClientFactory,
             IBotIdentityProvider botIdentityProvider,
             IGroupLlmSettingsService groupLlmSettingsService,
-            LlmVisibilityService llmVisibilityService = null) {
+            LlmVisibilityService llmVisibilityService = null,
+            PromptCachingSettingsService promptCachingSettingsService = null) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
@@ -138,6 +140,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _botIdentityProvider = botIdentityProvider;
             _groupLlmSettingsService = groupLlmSettingsService;
             _llmVisibilityService = llmVisibilityService;
+            _promptCachingSettingsService = promptCachingSettingsService;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
         }
 
@@ -159,6 +162,79 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             var identity = await _botIdentityProvider.GetIdentityAsync();
             return identity.UserName ?? string.Empty;
+        }
+
+        private async Task<bool> IsPromptCachingEnabledAsync() {
+            return _promptCachingSettingsService == null || await _promptCachingSettingsService.IsEnabledAsync();
+        }
+
+        private static List<ChatMessage> GetStablePrefixMessages(List<ChatMessage> providerHistory, bool excludeDynamicTail) {
+            if (!excludeDynamicTail || providerHistory.Count <= 1) {
+                return providerHistory.ToList();
+            }
+
+            return providerHistory.Take(providerHistory.Count - 1).ToList();
+        }
+
+        private static (string toolDefinitionHash, string stablePrefixHash, string promptCacheKey) BuildPromptCachingContext(
+            string providerName,
+            string modelName,
+            string mode,
+            List<ChatMessage> providerHistory,
+            bool excludeDynamicTail) {
+            var toolDefinitionHash = PromptCachingHelper.ComputeToolDefinitionHash();
+            var stablePrefixHash = PromptCachingHelper.ComputeStablePrefixHash(new {
+                Mode = mode,
+                StableHistory = SerializeProviderHistory(GetStablePrefixMessages(providerHistory, excludeDynamicTail)),
+            });
+            var promptCacheKey = PromptCachingHelper.BuildOpenAiPromptCacheKey(providerName, modelName, toolDefinitionHash, stablePrefixHash);
+            return (toolDefinitionHash, stablePrefixHash, promptCacheKey);
+        }
+
+        private void LogOpenAiPromptCachingObservation(
+            string providerName,
+            LLMChannel channel,
+            string modelName,
+            bool promptCachingEnabled,
+            string toolDefinitionHash,
+            string stablePrefixHash,
+            string promptCacheKey,
+            ChatTokenUsage usage,
+            bool cacheKeyAttached) {
+            var cachedTokenCount = usage?.InputTokenDetails?.CachedTokenCount;
+            var usageJson = usage == null
+                ? null
+                : JsonConvert.SerializeObject(new {
+                    usage.InputTokenCount,
+                    usage.OutputTokenCount,
+                    usage.TotalTokenCount,
+                    CachedTokenCount = usage.InputTokenDetails?.CachedTokenCount,
+                    ReasoningTokenCount = usage.OutputTokenDetails?.ReasoningTokenCount,
+                    AudioInputTokenCount = usage.InputTokenDetails?.AudioTokenCount,
+                    AudioOutputTokenCount = usage.OutputTokenDetails?.AudioTokenCount,
+                });
+            var outcome = PromptCachingHelper.DetermineOpenAiOutcome(
+                promptCachingEnabled,
+                cacheKeyAttached,
+                promptCacheKey,
+                cachedTokenCount,
+                out var missReason);
+
+            PromptCachingHelper.LogObservation(_logger, new PromptCachingObservation {
+                Provider = providerName,
+                ChannelId = channel.Id,
+                Model = modelName,
+                PromptCachingEnabled = promptCachingEnabled,
+                StablePrefixHash = stablePrefixHash,
+                ToolDefinitionHash = toolDefinitionHash,
+                CacheOutcome = outcome,
+                MissReason = missReason,
+                PromptCacheKey = promptCacheKey,
+                PromptCacheRetention = PromptCachingHelper.OpenAiDefaultPromptCacheRetention,
+                CacheKeyAttached = cacheKeyAttached,
+                CachedTokenCount = cachedTokenCount,
+                ProviderUsageJson = usageJson,
+            });
         }
 
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
@@ -1064,6 +1140,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
             bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
             providerHistory = await GetChatHistory(ChatId, providerHistory, message, supportsVision);
+            var shouldObservePromptCaching = channel.Provider == LLMProvider.OpenAI;
+            var promptCachingEnabled = shouldObservePromptCaching && await IsPromptCachingEnabledAsync();
+            var (toolDefinitionHash, stablePrefixHash, promptCacheKey) = BuildPromptCachingContext(
+                "OpenAI",
+                modelName,
+                "chat-native",
+                providerHistory,
+                excludeDynamicTail: true);
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
@@ -1075,6 +1159,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var completionOptions = new ChatCompletionOptions();
             foreach (var tool in nativeTools) {
                 completionOptions.Tools.Add(tool);
+            }
+
+            var cacheKeyAttached = false;
+            if (promptCachingEnabled) {
+                PromptCachingHelper.ApplyOpenAiPromptCaching(completionOptions, promptCacheKey, PromptCachingHelper.OpenAiDefaultPromptCacheRetention);
+                cacheKeyAttached = true;
             }
             _logger.LogInformation(
                 "{ServiceName}: Starting native tool call cycle. Model={Model}, ToolCount={ToolCount}, ToolNames={ToolNames}",
@@ -1095,6 +1185,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     var reasoningContentBuilder = new StringBuilder();
                     var toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
                     ChatFinishReason? finishReason = null;
+                    ChatTokenUsage latestUsage = null;
 
                     _logger.LogDebug(
                         "{ServiceName}: Native cycle {Cycle} request. HistoryCount={HistoryCount}, ToolCount={ToolCount}",
@@ -1142,6 +1233,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         if (update.FinishReason.HasValue) {
                             finishReason = update.FinishReason.Value;
                         }
+
+                        if (update.Usage != null) {
+                            latestUsage = update.Usage;
+                        }
+                    }
+
+                    if (shouldObservePromptCaching) {
+                        LogOpenAiPromptCachingObservation(
+                            "OpenAI",
+                            channel,
+                            modelName,
+                            promptCachingEnabled,
+                            toolDefinitionHash,
+                            stablePrefixHash,
+                            promptCacheKey,
+                            latestUsage,
+                            cacheKeyAttached);
                     }
 
                     string responseText = contentBuilder.ToString().Trim();
@@ -1294,6 +1402,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 if (executionContext != null) {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                         ChatId = ChatId,
                         OriginalMessageId = message.MessageId,
                         UserId = message.FromUserId,
@@ -1325,6 +1434,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             List<ChatMessage> providerHistory = new List<ChatMessage>() { new SystemChatMessage(systemPrompt) };
             bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
             providerHistory = await GetChatHistory(ChatId, providerHistory, message, supportsVision);
+            var shouldObservePromptCaching = channel.Provider == LLMProvider.OpenAI;
+            var promptCachingEnabled = shouldObservePromptCaching && await IsPromptCachingEnabledAsync();
+            var (toolDefinitionHash, stablePrefixHash, promptCacheKey) = BuildPromptCachingContext(
+                "OpenAI",
+                modelName,
+                "chat-xml",
+                providerHistory,
+                excludeDynamicTail: true);
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
@@ -1332,6 +1449,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 Transport = new HttpClientPipelineTransport(client),
             };
             var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
+            var completionOptions = new ChatCompletionOptions();
+            var cacheKeyAttached = false;
+            if (promptCachingEnabled) {
+                PromptCachingHelper.ApplyOpenAiPromptCaching(completionOptions, promptCacheKey, PromptCachingHelper.OpenAiDefaultPromptCacheRetention);
+                cacheKeyAttached = true;
+            }
 
             try {
                 int maxToolCycles = Env.MaxToolCycles;
@@ -1341,9 +1464,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
                     var llmResponseAccumulatorForToolParsing = new StringBuilder();
+                    ChatTokenUsage latestUsage = null;
 
-                    // --- Call LLM ---
-                    await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, cancellationToken: cancellationToken).WithCancellation(cancellationToken)) {
+                    await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, completionOptions, cancellationToken).WithCancellation(cancellationToken)) {
                         if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                         foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>()) {
                             if (updatePart?.Text != null) {
@@ -1354,7 +1477,25 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                 }
                             }
                         }
+
+                        if (update.Usage != null) {
+                            latestUsage = update.Usage;
+                        }
                     }
+
+                    if (shouldObservePromptCaching) {
+                        LogOpenAiPromptCachingObservation(
+                            "OpenAI",
+                            channel,
+                            modelName,
+                            promptCachingEnabled,
+                            toolDefinitionHash,
+                            stablePrefixHash,
+                            promptCacheKey,
+                            latestUsage,
+                            cacheKeyAttached);
+                    }
+
                     string llmFullResponseText = llmResponseAccumulatorForToolParsing.ToString().Trim();
                     _logger.LogDebug("{ServiceName} raw full response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
 
@@ -1421,6 +1562,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 if (executionContext != null) {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                         ChatId = ChatId,
                         OriginalMessageId = message.MessageId,
                         UserId = message.FromUserId,
@@ -1459,9 +1601,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogInformation("{ServiceName}: Resuming from snapshot {SnapshotId} for ChatId {ChatId}, restoring {HistoryCount} history entries.",
                 ServiceName, snapshot.SnapshotId, snapshot.ChatId, snapshot.ProviderHistory?.Count ?? 0);
 
-            // Restore provider history from snapshot
             var includeEmptyReasoningContent = ShouldIncludeEmptyReasoningContent(channel, modelName);
             List<ChatMessage> providerHistory = DeserializeProviderHistory(snapshot.ProviderHistory, includeEmptyReasoningContent);
+            var shouldObservePromptCaching = channel.Provider == LLMProvider.OpenAI;
+            var promptCachingEnabled = shouldObservePromptCaching && await IsPromptCachingEnabledAsync();
+            var (toolDefinitionHash, stablePrefixHash, promptCacheKey) = BuildPromptCachingContext(
+                "OpenAI",
+                modelName,
+                "chat-resume",
+                providerHistory,
+                excludeDynamicTail: false);
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
@@ -1469,6 +1618,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 Transport = new HttpClientPipelineTransport(client),
             };
             var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
+            var completionOptions = new ChatCompletionOptions();
+            var cacheKeyAttached = false;
+            if (promptCachingEnabled) {
+                PromptCachingHelper.ApplyOpenAiPromptCaching(completionOptions, promptCacheKey, PromptCachingHelper.OpenAiDefaultPromptCacheRetention);
+                cacheKeyAttached = true;
+            }
 
             // Resume: only yield NEW content (the old content was already displayed to the user)
             // We keep a separate builder for full accumulated content (for snapshot) and one for new-only content (for yield)
@@ -1482,8 +1637,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
                     var llmResponseAccumulatorForToolParsing = new StringBuilder();
+                    ChatTokenUsage latestUsage = null;
 
-                    await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, cancellationToken: cancellationToken).WithCancellation(cancellationToken)) {
+                    await foreach (var update in chatClient.CompleteChatStreamingAsync(providerHistory, completionOptions, cancellationToken).WithCancellation(cancellationToken)) {
                         if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                         foreach (ChatMessageContentPart updatePart in update.ContentUpdate ?? Enumerable.Empty<ChatMessageContentPart>()) {
                             if (updatePart?.Text != null) {
@@ -1496,7 +1652,25 @@ namespace TelegramSearchBot.Service.AI.LLM {
                                 }
                             }
                         }
+
+                        if (update.Usage != null) {
+                            latestUsage = update.Usage;
+                        }
                     }
+
+                    if (shouldObservePromptCaching) {
+                        LogOpenAiPromptCachingObservation(
+                            "OpenAI",
+                            channel,
+                            modelName,
+                            promptCachingEnabled,
+                            toolDefinitionHash,
+                            stablePrefixHash,
+                            promptCacheKey,
+                            latestUsage,
+                            cacheKeyAttached);
+                    }
+
                     string llmFullResponseText = llmResponseAccumulatorForToolParsing.ToString().Trim();
                     _logger.LogDebug("{ServiceName} raw full response (Resume Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
 
@@ -1556,6 +1730,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 if (executionContext != null) {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                         ChatId = snapshot.ChatId,
                         OriginalMessageId = snapshot.OriginalMessageId,
                         UserId = snapshot.UserId,

@@ -60,6 +60,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Assert.NotNull(snapshotId);
             Assert.NotEmpty(snapshotId);
             Assert.Equal(snapshotId, snapshot.SnapshotId);
+            Assert.Equal(LlmContinuationSnapshot.CurrentSchemaVersion, snapshot.SchemaVersion);
         }
 
         [Fact]
@@ -120,6 +121,33 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Assert.Equal("user", result.ProviderHistory[1].Role);
             Assert.Equal("assistant", result.ProviderHistory[2].Role);
             Assert.Equal("[Tool 'bash' result: done]", result.ProviderHistory[3].Content);
+        }
+
+        [Fact]
+        public async Task GetSnapshotAsync_LegacySnapshotWithoutSchemaVersion_DefaultsToV1() {
+            var legacyJson = Newtonsoft.Json.JsonConvert.SerializeObject(new {
+                SnapshotId = "legacy123",
+                ChatId = 12345,
+                OriginalMessageId = 100,
+                UserId = 9999,
+                ModelName = "gpt-4o",
+                Provider = "OpenAI",
+                ChannelId = 1,
+                LastAccumulatedContent = "Legacy content",
+                CyclesSoFar = 3,
+                ProviderHistory = new List<SerializedChatMessage> {
+                    new SerializedChatMessage { Role = "user", Content = "Hello" }
+                }
+            });
+            _dbMock.Setup(d => d.StringGetAsync(
+                    It.Is<RedisKey>(k => k.ToString().Contains("legacy123")),
+                    It.IsAny<CommandFlags>()))
+                .ReturnsAsync(new RedisValue(legacyJson));
+
+            var result = await _service.GetSnapshotAsync("legacy123");
+
+            Assert.NotNull(result);
+            Assert.Equal(LlmContinuationSnapshot.SchemaVersionV1, result.SchemaVersion);
         }
 
         [Fact]

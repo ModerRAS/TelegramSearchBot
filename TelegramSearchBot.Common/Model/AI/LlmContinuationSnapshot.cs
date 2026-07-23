@@ -30,6 +30,16 @@ namespace TelegramSearchBot.Model.AI {
     /// Stored in Redis with TTL for automatic expiry.
     /// </summary>
     public class LlmContinuationSnapshot {
+        public const string SchemaVersionV1 = "v1";
+        public const string CurrentSchemaVersion = "v2";
+
+        private string? _schemaVersion;
+
+        public string SchemaVersion {
+            get => string.IsNullOrWhiteSpace(_schemaVersion) ? SchemaVersionV1 : _schemaVersion;
+            set => _schemaVersion = value;
+        }
+
         /// <summary>
         /// Unique identifier for this snapshot
         /// </summary>

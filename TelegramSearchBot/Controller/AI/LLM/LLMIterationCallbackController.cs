@@ -127,9 +127,30 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                     return;
                 }
 
+                if (!LlmContinuationSupport.SupportsResume(snapshot.Provider)) {
+                    await _botClient.AnswerCallbackQuery(e.CallbackQuery.Id, "⚠️ 当前 provider 暂不支持继续迭代恢复");
+                    try {
+                        if (e.CallbackQuery.Message != null) {
+                            await _botClient.EditMessageReplyMarkup(
+                                e.CallbackQuery.Message.Chat.Id,
+                                e.CallbackQuery.Message.MessageId,
+                                replyMarkup: null
+                            );
+                        }
+                    } catch (Exception ex) {
+                        _logger.LogWarning(ex, "Failed to remove inline keyboard after unsupported resume.");
+                    }
+
+                    await _sendMessageService.SendMessage(
+                        LlmContinuationSupport.BuildUnsupportedResumeMessage(snapshot.Provider, snapshot.ModelName),
+                        snapshot.ChatId,
+                        ( int ) snapshot.OriginalMessageId);
+                    await _continuationService.DeleteSnapshotAsync(snapshotId);
+                    return;
+                }
+
                 await _botClient.AnswerCallbackQuery(e.CallbackQuery.Id, "继续迭代中...");
 
-                // Remove the inline keyboard
                 try {
                     if (e.CallbackQuery.Message != null) {
                         await _botClient.EditMessageReplyMarkup(
@@ -206,21 +227,18 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                             terminalChunk.ErrorMessage);
                         await _sendMessageService.SendMessage($"AI Agent 执行失败：{terminalChunk.ErrorMessage}", snapshot.ChatId, ( int ) snapshot.OriginalMessageId);
                     } else if (terminalChunk.Type == AgentChunkType.IterationLimitReached && terminalChunk.ContinuationSnapshot != null) {
-                        var newSnapshotId = await _continuationService.SaveSnapshotAsync(terminalChunk.ContinuationSnapshot);
-
-                        var keyboard = new InlineKeyboardMarkup(new[] {
-                            new[] {
-                                InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{newSnapshotId}"),
-                                InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{newSnapshotId}"),
-                            }
-                        });
-
-                        await _botClient.SendMessage(
-                            snapshot.ChatId,
-                            $"⚠️ AI 再次达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？",
-                            replyMarkup: keyboard,
-                            replyParameters: new ReplyParameters { MessageId = ( int ) snapshot.OriginalMessageId }
-                        );
+                        if (!LlmContinuationSupport.SupportsResume(terminalChunk.ContinuationSnapshot.Provider)) {
+                            await _sendMessageService.SendMessage(
+                                LlmContinuationSupport.BuildUnsupportedResumeMessage(terminalChunk.ContinuationSnapshot.Provider, terminalChunk.ContinuationSnapshot.ModelName),
+                                snapshot.ChatId,
+                                ( int ) snapshot.OriginalMessageId);
+                        } else {
+                            await SendContinuationPromptAsync(
+                                snapshot.ChatId,
+                                ( int ) snapshot.OriginalMessageId,
+                                terminalChunk.ContinuationSnapshot,
+                                $"⚠️ AI 再次达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？");
+                        }
                     }
 
                     return;
@@ -228,28 +246,41 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
                 // If iteration limit reached again, save new snapshot and show prompt
                 if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
-                    _logger.LogInformation("Iteration limit reached again after continuation for ChatId {ChatId}.", snapshot.ChatId);
-
-                    var newSnapshotId = await _continuationService.SaveSnapshotAsync(executionContext.SnapshotData);
-
-                    var keyboard = new InlineKeyboardMarkup(new[] {
-                        new[] {
-                            InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{newSnapshotId}"),
-                            InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{newSnapshotId}"),
-                        }
-                    });
-
-                    await _botClient.SendMessage(
-                        snapshot.ChatId,
-                        $"⚠️ AI 再次达到最大迭代次数限制（{Env.MaxToolCycles} 次），已完成 {executionContext.SnapshotData.CyclesSoFar} 次循环，是否继续迭代？",
-                        replyMarkup: keyboard,
-                        replyParameters: new ReplyParameters { MessageId = ( int ) snapshot.OriginalMessageId }
-                    );
+                    if (!LlmContinuationSupport.SupportsResume(executionContext.SnapshotData.Provider)) {
+                        await _sendMessageService.SendMessage(
+                            LlmContinuationSupport.BuildUnsupportedResumeMessage(executionContext.SnapshotData.Provider, executionContext.SnapshotData.ModelName),
+                            snapshot.ChatId,
+                            ( int ) snapshot.OriginalMessageId);
+                    } else {
+                        _logger.LogInformation("Iteration limit reached again after continuation for ChatId {ChatId}.", snapshot.ChatId);
+                        await SendContinuationPromptAsync(
+                            snapshot.ChatId,
+                            ( int ) snapshot.OriginalMessageId,
+                            executionContext.SnapshotData,
+                            $"⚠️ AI 再次达到最大迭代次数限制（{Env.MaxToolCycles} 次），已完成 {executionContext.SnapshotData.CyclesSoFar} 次循环，是否继续迭代？");
+                    }
                 }
             } finally {
                 // Always release the lock
                 await _continuationService.ReleaseLockAsync(snapshotId);
             }
+        }
+
+        private async Task SendContinuationPromptAsync(long chatId, int messageId, LlmContinuationSnapshot snapshot, string promptText) {
+            var newSnapshotId = await _continuationService.SaveSnapshotAsync(snapshot);
+            var keyboard = new InlineKeyboardMarkup(new[] {
+                new[] {
+                    InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{newSnapshotId}"),
+                    InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{newSnapshotId}"),
+                }
+            });
+
+            await _botClient.SendMessage(
+                chatId,
+                promptText,
+                replyMarkup: keyboard,
+                replyParameters: new ReplyParameters { MessageId = messageId }
+            );
         }
     }
 }

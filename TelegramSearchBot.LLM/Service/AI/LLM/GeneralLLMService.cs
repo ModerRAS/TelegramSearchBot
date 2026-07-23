@@ -125,6 +125,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 yield break;
             }
 
+            if (!LlmContinuationSupport.SupportsResume(snapshot.Provider) || !LlmContinuationSupport.SupportsResume(channel.Provider)) {
+                _logger.LogWarning(
+                    "Cannot resume snapshot {SnapshotId}. SnapshotProvider={SnapshotProvider}, ChannelProvider={ChannelProvider}, ChannelId={ChannelId}, Model={Model}",
+                    snapshot.SnapshotId,
+                    snapshot.Provider,
+                    channel.Provider,
+                    channel.Id,
+                    snapshot.ModelName);
+                yield break;
+            }
+
             var service = _LLMFactory.GetLLMService(channel.Provider);
 
             _logger.LogInformation("Resuming from snapshot {SnapshotId} using provider {Provider}, channel {ChannelId}",

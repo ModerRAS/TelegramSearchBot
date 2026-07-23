@@ -28,7 +28,9 @@ namespace TelegramSearchBot.LLMAgent.Service {
             try {
                 var json = await _redis.GetDatabase().StringGetAsync(LlmAgentRedisKeys.AgentToolDefs);
                 if (!json.HasValue || string.IsNullOrWhiteSpace(json.ToString())) {
-                    _logger.LogWarning("No tool definitions found in Redis. Agent will have limited tools.");
+                    McpToolHelper.ClearProxyTools();
+                    _lastDefinitionsJson = string.Empty;
+                    _logger.LogWarning("No tool definitions found in Redis. Cleared proxy registry and agent will have limited tools.");
                     return false;
                 }
 
@@ -44,9 +46,18 @@ namespace TelegramSearchBot.LLMAgent.Service {
                     }
 
                     var toolDefs = JsonConvert.DeserializeObject<List<ProxyToolDefinition>>(toolDefsJson);
-                    if (toolDefs == null || toolDefs.Count == 0) {
-                        _logger.LogWarning("Empty tool definitions from Redis.");
+                    if (toolDefs == null) {
+                        McpToolHelper.ClearProxyTools();
+                        _lastDefinitionsJson = string.Empty;
+                        _logger.LogWarning("Tool definitions from Redis could not be deserialized. Cleared proxy registry.");
                         return false;
+                    }
+
+                    if (toolDefs.Count == 0) {
+                        McpToolHelper.ClearProxyTools();
+                        _lastDefinitionsJson = toolDefsJson;
+                        _logger.LogInformation("Received empty tool definitions from Redis. Cleared proxy registry.");
+                        return true;
                     }
 
                     McpToolHelper.RegisterProxyTools(toolDefs, ExecuteProxyToolAsync);

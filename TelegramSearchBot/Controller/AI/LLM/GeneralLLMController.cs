@@ -324,21 +324,15 @@ namespace TelegramSearchBot.Controller.AI.LLM {
                             terminalChunk.ErrorMessage);
                         await SendMessageService.SendMessage($"AI Agent 执行失败：{terminalChunk.ErrorMessage}", telegramMessage.Chat.Id, telegramMessage.MessageId);
                     } else if (terminalChunk.Type == AgentChunkType.IterationLimitReached && terminalChunk.ContinuationSnapshot != null) {
-                        var snapshotId = await ContinuationService.SaveSnapshotAsync(terminalChunk.ContinuationSnapshot);
-
-                        var keyboard = new InlineKeyboardMarkup(new[] {
-                            new[] {
-                                InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{snapshotId}"),
-                                InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{snapshotId}"),
-                            }
-                        });
-
-                        await botClient.SendMessage(
-                            telegramMessage.Chat.Id,
-                            $"⚠️ AI 已达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？",
-                            replyMarkup: keyboard,
-                            replyParameters: new ReplyParameters { MessageId = telegramMessage.MessageId }
-                        );
+                        if (!LlmContinuationSupport.SupportsResume(terminalChunk.ContinuationSnapshot.Provider)) {
+                            await SendUnsupportedContinuationMessageAsync(
+                                telegramMessage.Chat.Id,
+                                telegramMessage.MessageId,
+                                terminalChunk.ContinuationSnapshot.Provider,
+                                terminalChunk.ContinuationSnapshot.ModelName);
+                        } else {
+                            await SendContinuationPromptAsync(telegramMessage.Chat.Id, telegramMessage.MessageId, terminalChunk.ContinuationSnapshot);
+                        }
                     }
 
                     return;
@@ -346,29 +340,43 @@ namespace TelegramSearchBot.Controller.AI.LLM {
 
                 // Check if the iteration limit was reached via execution context
                 if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
-                    logger.LogInformation("Iteration limit reached for ChatId {ChatId}, MessageId {MessageId}. Saving snapshot and prompting user.",
-                        telegramMessage.Chat.Id, telegramMessage.MessageId);
-
-                    // Save the snapshot to Redis
-                    var snapshotId = await ContinuationService.SaveSnapshotAsync(executionContext.SnapshotData);
-
-                    var keyboard = new InlineKeyboardMarkup(new[] {
-                        new[] {
-                            InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{snapshotId}"),
-                            InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{snapshotId}"),
-                        }
-                    });
-
-                    await botClient.SendMessage(
-                        telegramMessage.Chat.Id,
-                        $"⚠️ AI 已达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？",
-                        replyMarkup: keyboard,
-                        replyParameters: new ReplyParameters { MessageId = telegramMessage.MessageId }
-                    );
+                    if (!LlmContinuationSupport.SupportsResume(executionContext.SnapshotData.Provider)) {
+                        await SendUnsupportedContinuationMessageAsync(
+                            telegramMessage.Chat.Id,
+                            telegramMessage.MessageId,
+                            executionContext.SnapshotData.Provider,
+                            executionContext.SnapshotData.ModelName);
+                    } else {
+                        logger.LogInformation("Iteration limit reached for ChatId {ChatId}, MessageId {MessageId}. Saving snapshot and prompting user.",
+                            telegramMessage.Chat.Id, telegramMessage.MessageId);
+                        await SendContinuationPromptAsync(telegramMessage.Chat.Id, telegramMessage.MessageId, executionContext.SnapshotData);
+                    }
                 }
 
                 return;
             }
+        }
+
+        private async Task SendContinuationPromptAsync(long chatId, int messageId, LlmContinuationSnapshot snapshot) {
+            var snapshotId = await ContinuationService.SaveSnapshotAsync(snapshot);
+            var keyboard = new InlineKeyboardMarkup(new[] {
+                new[] {
+                    InlineKeyboardButton.WithCallbackData("✅ 继续迭代", $"llm_continue:{snapshotId}"),
+                    InlineKeyboardButton.WithCallbackData("❌ 停止", $"llm_stop:{snapshotId}"),
+                }
+            });
+
+            await botClient.SendMessage(
+                chatId,
+                $"⚠️ AI 已达到最大迭代次数限制（{Env.MaxToolCycles} 次），是否继续迭代？",
+                replyMarkup: keyboard,
+                replyParameters: new ReplyParameters { MessageId = messageId }
+            );
+        }
+
+        private Task SendUnsupportedContinuationMessageAsync(long chatId, int messageId, string provider, string modelName) {
+            var message = LlmContinuationSupport.BuildUnsupportedResumeMessage(provider, modelName);
+            return SendMessageService.SendMessage(message, chatId, messageId);
         }
 
         private async Task<bool> TryHandlePendingImageGenerationModelSelectionAsync(Telegram.Bot.Types.Message telegramMessage, string messageText, long userId) {

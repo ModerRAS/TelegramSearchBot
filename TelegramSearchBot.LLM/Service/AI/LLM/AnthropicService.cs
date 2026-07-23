@@ -34,6 +34,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IBotIdentityProvider _botIdentityProvider;
         private readonly LlmVisibilityService _llmVisibilityService;
+        private readonly PromptCachingSettingsService _promptCachingSettingsService;
         private string _fallbackBotName = string.Empty;
 
         public string BotName {
@@ -62,7 +63,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ILogger<AnthropicService> logger,
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory)
-            : this(context, logger, messageExtensionService, httpClientFactory, null, null) {
+            : this(context, logger, messageExtensionService, httpClientFactory, null, null, null) {
         }
 
         public AnthropicService(
@@ -71,13 +72,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             IMessageExtensionService messageExtensionService,
             IHttpClientFactory httpClientFactory,
             IBotIdentityProvider botIdentityProvider,
-            LlmVisibilityService llmVisibilityService = null) {
+            LlmVisibilityService llmVisibilityService = null,
+            PromptCachingSettingsService promptCachingSettingsService = null) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
             _botIdentityProvider = botIdentityProvider;
             _llmVisibilityService = llmVisibilityService;
+            _promptCachingSettingsService = promptCachingSettingsService;
             _logger.LogInformation("AnthropicService instance created. McpToolHelper should be initialized at application startup.");
         }
 
@@ -98,6 +101,141 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 options.BaseUrl = channel.Gateway.TrimEnd('/');
             }
             return new AnthropicClient(options);
+        }
+
+        private async Task<bool> IsPromptCachingEnabledAsync() {
+            return _promptCachingSettingsService == null || await _promptCachingSettingsService.IsEnabledAsync();
+        }
+
+        private static CacheControlEphemeral CreateCacheControl() {
+            return new CacheControlEphemeral();
+        }
+
+        private static MessageCreateParamsSystem BuildSystemPrompt(string systemPrompt, bool enablePromptCaching) {
+            if (!enablePromptCaching) {
+                return systemPrompt;
+            }
+
+            return new MessageCreateParamsSystem([
+                new TextBlockParam(systemPrompt) {
+                    CacheControl = CreateCacheControl(),
+                }
+            ], null);
+        }
+
+        private static MessageParam CloneMessageForCachePrefix(MessageParam message, bool markCacheControl) {
+            if (message.Content.TryPickString(out var text)) {
+                return new MessageParam {
+                    Role = message.Role,
+                    Content = new List<ContentBlockParam> {
+                        new(new TextBlockParam(text) {
+                            CacheControl = markCacheControl ? CreateCacheControl() : null,
+                        }, null)
+                    }
+                };
+            }
+
+            if (!message.Content.TryPickContentBlockParams(out var blocks)) {
+                return new MessageParam {
+                    Role = message.Role,
+                    Content = message.Content,
+                };
+            }
+
+            var clonedBlocks = new List<ContentBlockParam>();
+            for (int i = 0; i < blocks.Count; i++) {
+                var isLastBlock = markCacheControl && i == blocks.Count - 1;
+                var block = blocks[i];
+                if (block.TryPickText(out var textBlock)) {
+                    clonedBlocks.Add(new ContentBlockParam(new TextBlockParam(textBlock.Text) {
+                        CacheControl = isLastBlock ? CreateCacheControl() : textBlock.CacheControl,
+                        Citations = textBlock.Citations,
+                    }, null));
+                    continue;
+                }
+
+                if (block.TryPickImage(out var imageBlock)) {
+                    clonedBlocks.Add(new ContentBlockParam(new ImageBlockParam {
+                        Source = imageBlock.Source,
+                        CacheControl = isLastBlock ? CreateCacheControl() : imageBlock.CacheControl,
+                    }, null));
+                    continue;
+                }
+
+                clonedBlocks.Add(block);
+            }
+
+            return new MessageParam {
+                Role = message.Role,
+                Content = clonedBlocks,
+            };
+        }
+
+        private static List<MessageParam> PrepareMessagesForPromptCaching(List<MessageParam> providerHistory, bool enablePromptCaching, bool excludeDynamicTail, out bool cacheBreakpointInserted) {
+            cacheBreakpointInserted = enablePromptCaching;
+            if (!enablePromptCaching || providerHistory.Count == 0) {
+                return providerHistory;
+            }
+
+            var stableCount = excludeDynamicTail
+                ? Math.Max(providerHistory.Count - 1, 0)
+                : providerHistory.Count;
+            if (stableCount == 0) {
+                return providerHistory;
+            }
+
+            var clonedMessages = providerHistory
+                .Select((message, index) => CloneMessageForCachePrefix(message, index == stableCount - 1))
+                .ToList();
+            cacheBreakpointInserted = true;
+            return clonedMessages;
+        }
+
+        private static (string toolDefinitionHash, string stablePrefixHash) BuildPromptCachingContext(string mode, string systemPrompt, List<SerializedChatMessage> stableHistory) {
+            var toolDefinitionHash = PromptCachingHelper.ComputeToolDefinitionHash();
+            var stablePrefixHash = PromptCachingHelper.ComputeStablePrefixHash(new {
+                Mode = mode,
+                SystemPrompt = systemPrompt,
+                StableHistory = stableHistory,
+            });
+            return (toolDefinitionHash, stablePrefixHash);
+        }
+
+        private void LogPromptCachingObservation(
+            LLMChannel channel,
+            string providerName,
+            string modelName,
+            bool promptCachingEnabled,
+            string toolDefinitionHash,
+            string stablePrefixHash,
+            bool cacheBreakpointInserted,
+            long? cacheCreationInputTokens,
+            long? cacheReadInputTokens,
+            object usage) {
+            var usageJson = usage == null ? null : JsonConvert.SerializeObject(usage);
+            var observationKey = $"{providerName}:{modelName}:{stablePrefixHash}:{toolDefinitionHash}";
+            var outcome = PromptCachingHelper.DetermineAnthropicOutcome(
+                promptCachingEnabled,
+                cacheBreakpointInserted,
+                observationKey,
+                cacheCreationInputTokens,
+                cacheReadInputTokens,
+                out var missReason);
+
+            PromptCachingHelper.LogObservation(_logger, new PromptCachingObservation {
+                Provider = providerName,
+                ChannelId = channel.Id,
+                Model = modelName,
+                PromptCachingEnabled = promptCachingEnabled,
+                StablePrefixHash = stablePrefixHash,
+                ToolDefinitionHash = toolDefinitionHash,
+                CacheOutcome = outcome,
+                MissReason = missReason,
+                CacheBreakpointInserted = cacheBreakpointInserted,
+                CacheCreationInputTokens = cacheCreationInputTokens,
+                CacheReadInputTokens = cacheReadInputTokens,
+                ProviderUsageJson = usageJson,
+            });
         }
 
         #region Models
@@ -407,9 +545,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// <summary>
         /// Convert OpenAI ChatTool definitions to Anthropic Tool objects.
         /// </summary>
-        private static List<ToolUnion> ConvertToAnthropicTools(List<OpenAI.Chat.ChatTool> openAiTools) {
+        private static List<ToolUnion> ConvertToAnthropicTools(List<OpenAI.Chat.ChatTool> openAiTools, bool enablePromptCaching) {
             var tools = new List<ToolUnion>();
-            foreach (var chatTool in openAiTools) {
+            for (int index = 0; index < openAiTools.Count; index++) {
+                var chatTool = openAiTools[index];
                 try {
                     var toolName = chatTool.FunctionName;
                     var toolDescription = chatTool.FunctionDescription;
@@ -438,17 +577,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         Required = required
                     };
 
-                    var tool = new Tool {
+                    tools.Add(new ToolUnion(new Tool {
                         Name = toolName,
                         Description = toolDescription,
                         InputSchema = inputSchema,
-                    };
-
-                    tools.Add(tool);
+                        CacheControl = enablePromptCaching && index == openAiTools.Count - 1 ? CreateCacheControl() : null,
+                    }, null));
                 } catch (Exception) {
-                    // Skip malformed tool definitions
                 }
             }
+
             return tools;
         }
 
@@ -536,9 +674,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
             string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, ChatId);
             bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
             var (_, providerHistory) = await GetChatHistory(ChatId, systemPrompt, message, supportsVision);
+            var promptCachingEnabled = await IsPromptCachingEnabledAsync();
+            var stableHistory = providerHistory.Count > 0
+                ? providerHistory.Take(providerHistory.Count - 1).ToList()
+                : new List<MessageParam>();
+            var (toolDefinitionHash, stablePrefixHash) = BuildPromptCachingContext(
+                "anthropic-native",
+                systemPrompt,
+                SerializeProviderHistory(systemPrompt, stableHistory));
+            providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
 
             using var client = CreateClient(channel);
-            var anthropicTools = ConvertToAnthropicTools(nativeTools);
+            var anthropicTools = ConvertToAnthropicTools(nativeTools, promptCachingEnabled);
 
             int maxToolCycles = Env.MaxToolCycles;
             var currentMessageContentBuilder = new StringBuilder();
@@ -551,7 +698,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 var parameters = new MessageCreateParams {
                     Model = modelName,
                     MaxTokens = 8192,
-                    System = systemPrompt,
+                    System = BuildSystemPrompt(systemPrompt, promptCachingEnabled),
                     Messages = providerHistory,
                     Tools = anthropicTools,
                 };
@@ -562,9 +709,34 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 string currentToolId = null;
                 string currentToolName = null;
                 bool hasToolUse = false;
+                long? cacheCreationInputTokens = null;
+                long? cacheReadInputTokens = null;
+                object usageObservation = null;
 
                 await foreach (var rawEvent in client.Messages.CreateStreaming(parameters, cancellationToken)) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                    if (rawEvent.TryPickStart(out var messageStartEvent) && messageStartEvent.Message?.Usage != null) {
+                        usageObservation = new {
+                            messageStartEvent.Message.Usage.InputTokens,
+                            messageStartEvent.Message.Usage.OutputTokens,
+                            messageStartEvent.Message.Usage.CacheCreationInputTokens,
+                            messageStartEvent.Message.Usage.CacheReadInputTokens,
+                            RawData = messageStartEvent.Message.Usage.RawData,
+                        };
+                    }
+
+                    if (rawEvent.TryPickDelta(out var messageDeltaEvent) && messageDeltaEvent.Usage != null) {
+                        cacheCreationInputTokens = messageDeltaEvent.Usage.CacheCreationInputTokens ?? cacheCreationInputTokens;
+                        cacheReadInputTokens = messageDeltaEvent.Usage.CacheReadInputTokens ?? cacheReadInputTokens;
+                        usageObservation = new {
+                            messageDeltaEvent.Usage.InputTokens,
+                            messageDeltaEvent.Usage.OutputTokens,
+                            messageDeltaEvent.Usage.CacheCreationInputTokens,
+                            messageDeltaEvent.Usage.CacheReadInputTokens,
+                            RawData = messageDeltaEvent.Usage.RawData,
+                        };
+                    }
 
                     if (rawEvent.TryPickContentBlockStart(out var startEvent)) {
                         if (startEvent.ContentBlock.TryPickToolUse(out var toolUseStart)) {
@@ -591,6 +763,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         }
                     }
                 }
+
+                LogPromptCachingObservation(
+                    channel,
+                    "Anthropic",
+                    modelName,
+                    promptCachingEnabled,
+                    toolDefinitionHash,
+                    stablePrefixHash,
+                    cacheBreakpointInserted,
+                    cacheCreationInputTokens,
+                    cacheReadInputTokens,
+                    usageObservation);
 
                 string responseText = contentBuilder.ToString().Trim();
 
@@ -708,6 +892,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (executionContext != null) {
                 executionContext.IterationLimitReached = true;
                 executionContext.SnapshotData = new LlmContinuationSnapshot {
+                    SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                     ChatId = ChatId,
                     OriginalMessageId = message.MessageId,
                     UserId = message.FromUserId,
@@ -734,6 +919,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             string systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
             bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
             var (_, providerHistory) = await GetChatHistory(ChatId, systemPrompt, message, supportsVision);
+            var promptCachingEnabled = await IsPromptCachingEnabledAsync();
+            var stableHistory = providerHistory.Count > 0
+                ? providerHistory.Take(providerHistory.Count - 1).ToList()
+                : new List<MessageParam>();
+            var (toolDefinitionHash, stablePrefixHash) = BuildPromptCachingContext(
+                "anthropic-xml",
+                systemPrompt,
+                SerializeProviderHistory(systemPrompt, stableHistory));
+            providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
 
             using var client = CreateClient(channel);
 
@@ -748,14 +942,39 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 var parameters = new MessageCreateParams {
                     Model = modelName,
                     MaxTokens = 8192,
-                    System = systemPrompt,
+                    System = BuildSystemPrompt(systemPrompt, promptCachingEnabled),
                     Messages = providerHistory,
                 };
 
                 var llmResponseBuilder = new StringBuilder();
+                long? cacheCreationInputTokens = null;
+                long? cacheReadInputTokens = null;
+                object usageObservation = null;
 
                 await foreach (var rawEvent in client.Messages.CreateStreaming(parameters, cancellationToken)) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                    if (rawEvent.TryPickStart(out var messageStartEvent) && messageStartEvent.Message?.Usage != null) {
+                        usageObservation = new {
+                            messageStartEvent.Message.Usage.InputTokens,
+                            messageStartEvent.Message.Usage.OutputTokens,
+                            messageStartEvent.Message.Usage.CacheCreationInputTokens,
+                            messageStartEvent.Message.Usage.CacheReadInputTokens,
+                            RawData = messageStartEvent.Message.Usage.RawData,
+                        };
+                    }
+
+                    if (rawEvent.TryPickDelta(out var messageDeltaEvent) && messageDeltaEvent.Usage != null) {
+                        cacheCreationInputTokens = messageDeltaEvent.Usage.CacheCreationInputTokens ?? cacheCreationInputTokens;
+                        cacheReadInputTokens = messageDeltaEvent.Usage.CacheReadInputTokens ?? cacheReadInputTokens;
+                        usageObservation = new {
+                            messageDeltaEvent.Usage.InputTokens,
+                            messageDeltaEvent.Usage.OutputTokens,
+                            messageDeltaEvent.Usage.CacheCreationInputTokens,
+                            messageDeltaEvent.Usage.CacheReadInputTokens,
+                            RawData = messageDeltaEvent.Usage.RawData,
+                        };
+                    }
 
                     if (rawEvent.TryPickContentBlockDelta(out var deltaEvent)) {
                         if (deltaEvent.Delta.TryPickText(out var textDelta)) {
@@ -767,6 +986,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         }
                     }
                 }
+
+                LogPromptCachingObservation(
+                    channel,
+                    "Anthropic",
+                    modelName,
+                    promptCachingEnabled,
+                    toolDefinitionHash,
+                    stablePrefixHash,
+                    cacheBreakpointInserted,
+                    cacheCreationInputTokens,
+                    cacheReadInputTokens,
+                    usageObservation);
 
                 string llmFullResponseText = llmResponseBuilder.ToString().Trim();
                 _logger.LogDebug("{ServiceName} raw full response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
@@ -837,6 +1068,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (executionContext != null) {
                 executionContext.IterationLimitReached = true;
                 executionContext.SnapshotData = new LlmContinuationSnapshot {
+                    SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                     ChatId = ChatId,
                     OriginalMessageId = message.MessageId,
                     UserId = message.FromUserId,
@@ -874,8 +1106,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogInformation("{ServiceName}: Resuming from snapshot {SnapshotId} for ChatId {ChatId}, restoring {HistoryCount} history entries.",
                 ServiceName, snapshot.SnapshotId, snapshot.ChatId, snapshot.ProviderHistory?.Count ?? 0);
 
-            // Restore provider history from snapshot
             var (systemPrompt, providerHistory) = DeserializeProviderHistory(snapshot.ProviderHistory);
+            var promptCachingEnabled = await IsPromptCachingEnabledAsync();
+            var (toolDefinitionHash, stablePrefixHash) = BuildPromptCachingContext(
+                "anthropic-resume",
+                systemPrompt ?? string.Empty,
+                snapshot.ProviderHistory ?? []);
+            providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: false, out var cacheBreakpointInserted);
 
             using var client = CreateClient(channel);
 
@@ -891,14 +1128,39 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 var parameters = new MessageCreateParams {
                     Model = modelName,
                     MaxTokens = 8192,
-                    System = systemPrompt ?? "",
+                    System = BuildSystemPrompt(systemPrompt ?? string.Empty, promptCachingEnabled),
                     Messages = providerHistory,
                 };
 
                 var llmResponseBuilder = new StringBuilder();
+                long? cacheCreationInputTokens = null;
+                long? cacheReadInputTokens = null;
+                object usageObservation = null;
 
                 await foreach (var rawEvent in client.Messages.CreateStreaming(parameters, cancellationToken)) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+
+                    if (rawEvent.TryPickStart(out var messageStartEvent) && messageStartEvent.Message?.Usage != null) {
+                        usageObservation = new {
+                            messageStartEvent.Message.Usage.InputTokens,
+                            messageStartEvent.Message.Usage.OutputTokens,
+                            messageStartEvent.Message.Usage.CacheCreationInputTokens,
+                            messageStartEvent.Message.Usage.CacheReadInputTokens,
+                            RawData = messageStartEvent.Message.Usage.RawData,
+                        };
+                    }
+
+                    if (rawEvent.TryPickDelta(out var messageDeltaEvent) && messageDeltaEvent.Usage != null) {
+                        cacheCreationInputTokens = messageDeltaEvent.Usage.CacheCreationInputTokens ?? cacheCreationInputTokens;
+                        cacheReadInputTokens = messageDeltaEvent.Usage.CacheReadInputTokens ?? cacheReadInputTokens;
+                        usageObservation = new {
+                            messageDeltaEvent.Usage.InputTokens,
+                            messageDeltaEvent.Usage.OutputTokens,
+                            messageDeltaEvent.Usage.CacheCreationInputTokens,
+                            messageDeltaEvent.Usage.CacheReadInputTokens,
+                            RawData = messageDeltaEvent.Usage.RawData,
+                        };
+                    }
 
                     if (rawEvent.TryPickContentBlockDelta(out var deltaEvent)) {
                         if (deltaEvent.Delta.TryPickText(out var textDelta)) {
@@ -912,6 +1174,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         }
                     }
                 }
+
+                LogPromptCachingObservation(
+                    channel,
+                    "Anthropic",
+                    modelName,
+                    promptCachingEnabled,
+                    toolDefinitionHash,
+                    stablePrefixHash,
+                    cacheBreakpointInserted,
+                    cacheCreationInputTokens,
+                    cacheReadInputTokens,
+                    usageObservation);
 
                 string llmFullResponseText = llmResponseBuilder.ToString().Trim();
                 _logger.LogDebug("{ServiceName} raw full response (Resume Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
@@ -971,6 +1245,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (executionContext != null) {
                 executionContext.IterationLimitReached = true;
                 executionContext.SnapshotData = new LlmContinuationSnapshot {
+                    SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                     ChatId = snapshot.ChatId,
                     OriginalMessageId = snapshot.OriginalMessageId,
                     UserId = snapshot.UserId,
