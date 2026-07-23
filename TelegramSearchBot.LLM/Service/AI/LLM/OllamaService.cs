@@ -242,6 +242,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 if (executionContext != null) {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                         ChatId = ChatId,
                         OriginalMessageId = message.MessageId,
                         UserId = message.FromUserId,

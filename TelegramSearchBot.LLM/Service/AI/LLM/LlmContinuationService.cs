@@ -36,6 +36,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             var snapshotId = snapshot.SnapshotId ?? Guid.NewGuid().ToString("N");
             snapshot.SnapshotId = snapshotId;
+            snapshot.SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion;
             snapshot.CreatedAtUtc = DateTime.UtcNow;
 
             var key = SnapshotKeyPrefix + snapshotId;
@@ -45,8 +46,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             await db.StringSetAsync(key, json, DefaultSnapshotTtl);
 
             _logger.LogInformation(
-                "Saved LLM continuation snapshot {SnapshotId} for ChatId {ChatId}, UserId {UserId}, CyclesSoFar {CyclesSoFar}",
-                snapshotId, snapshot.ChatId, snapshot.UserId, snapshot.CyclesSoFar);
+                "Saved LLM continuation snapshot {SnapshotId}. SchemaVersion={SchemaVersion}, ChatId={ChatId}, UserId={UserId}, Provider={Provider}, Model={Model}, ChannelId={ChannelId}, CyclesSoFar={CyclesSoFar}",
+                snapshotId,
+                snapshot.SchemaVersion,
+                snapshot.ChatId,
+                snapshot.UserId,
+                snapshot.Provider,
+                snapshot.ModelName,
+                snapshot.ChannelId,
+                snapshot.CyclesSoFar);
 
             return snapshotId;
         }
@@ -65,7 +73,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             try {
                 var snapshot = JsonConvert.DeserializeObject<LlmContinuationSnapshot>(json.ToString());
-                _logger.LogInformation("Retrieved snapshot {SnapshotId} for ChatId {ChatId}", snapshotId, snapshot?.ChatId);
+                _logger.LogInformation(
+                    "Retrieved snapshot {SnapshotId}. SchemaVersion={SchemaVersion}, ChatId={ChatId}, Provider={Provider}, Model={Model}, ChannelId={ChannelId}",
+                    snapshotId,
+                    snapshot?.SchemaVersion,
+                    snapshot?.ChatId,
+                    snapshot?.Provider,
+                    snapshot?.ModelName,
+                    snapshot?.ChannelId);
                 return snapshot;
             } catch (Exception ex) {
                 _logger.LogError(ex, "Failed to deserialize snapshot {SnapshotId}", snapshotId);

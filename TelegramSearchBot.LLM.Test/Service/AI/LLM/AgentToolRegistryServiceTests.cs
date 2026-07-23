@@ -61,6 +61,32 @@ namespace TelegramSearchBot.LLM.Test.Service.AI.LLM {
             Assert.False(refreshed);
         }
 
+        [Fact]
+        public async Task RefreshAsync_WhenDefinitionsBecomeEmpty_ClearsProxyTools() {
+            var toolName = $"proxy_refresh_clear_{Guid.NewGuid():N}";
+            var currentDefinitions = SerializeDefinitions(toolName);
+            var redisMock = new Mock<IConnectionMultiplexer>();
+            var dbMock = new Mock<IDatabase>();
+            redisMock.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(dbMock.Object);
+            dbMock.Setup(d => d.StringGetAsync(
+                    It.Is<RedisKey>(key => key == LlmAgentRedisKeys.AgentToolDefs),
+                    It.IsAny<CommandFlags>()))
+                .ReturnsAsync(() => ( RedisValue ) currentDefinitions);
+
+            var registry = new AgentToolRegistryService(
+                redisMock.Object,
+                new ToolExecutor(null!, null!),
+                Mock.Of<ILogger<AgentToolRegistryService>>());
+
+            Assert.True(await registry.RefreshAsync());
+            Assert.True(McpToolHelper.IsToolRegistered(toolName));
+
+            currentDefinitions = "[]";
+
+            Assert.True(await registry.RefreshAsync());
+            Assert.False(McpToolHelper.IsToolRegistered(toolName));
+        }
+
         private static string SerializeDefinitions(string toolName) {
             return JsonConvert.SerializeObject(new List<ProxyToolDefinition> {
                 new() {
