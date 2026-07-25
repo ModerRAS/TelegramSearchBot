@@ -54,18 +54,39 @@ namespace TelegramSearchBot.Test.Service.AI.OCR {
         }
 
         [Fact]
-        public void MergeResults_RemovesRepeatedBoundaryLines() {
+        public void PlanSlices_SingleBlankRowStillUsesOverlap() {
+            using var image = CreateDenseImage(800, 7000);
+            FillRows(image, LongImageOcrSlicer.TargetSliceHeight, LongImageOcrSlicer.TargetSliceHeight + 1, SKColors.White);
+
+            var slices = LongImageOcrSlicer.PlanSlices(image);
+
+            Assert.True(slices[1].HasOverlap);
+            AssertCompleteCoverage(slices, image.Height);
+        }
+
+        [Fact]
+        public void MergeResults_RemovesRepeatedBoundaryLinesFromOverlappingSlices() {
             var result = LongImageOcrSlicer.MergeResults([
-                "第一段 重叠块一 重叠块二",
-                "重叠块一 重叠块二 第二段",
-                "第三段"
+                (new OcrImageSlice(0, 3072, false), "第一段 重叠块一 重叠块二"),
+                (new OcrImageSlice(2976, 3072, true), "重叠块一 重叠块二 第二段"),
+                (new OcrImageSlice(6048, 952, false), "第三段")
             ]);
 
             Assert.Equal("第一段 重叠块一 重叠块二 第二段 第三段", result);
         }
 
         [Fact]
-        public async Task ExecuteAsync_LongImage_RunsSlicesInOrderAndMergesResults() {
+        public void MergeResults_PreservesRepeatedBoundaryTokensWithoutOverlap() {
+            var result = LongImageOcrSlicer.MergeResults([
+                (new OcrImageSlice(0, 3072, false), "第一段 2026"),
+                (new OcrImageSlice(3072, 3928, false), "2026 第二段")
+            ]);
+
+            Assert.Equal("第一段 2026 2026 第二段", result);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_LongImage_PreservesRepeatedTokensAcrossSafeCut() {
             var calls = new List<(int Width, int Height)>();
             var responses = new Queue<string>(["第一段 重叠块", "重叠块 第二段"]);
             var service = new PaddleOCRService(
@@ -82,6 +103,19 @@ namespace TelegramSearchBot.Test.Service.AI.OCR {
             Assert.Equal(2, calls.Count);
             Assert.All(calls, call => Assert.Equal(1000, call.Width));
             Assert.All(calls, call => Assert.InRange(call.Height, 1, LongImageOcrSlicer.LongImageHeightThreshold));
+            Assert.Equal("第一段 重叠块 重叠块 第二段", result);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_OverlappingSlicesRemoveRepeatedBoundaryTokens() {
+            var responses = new Queue<string>(["第一段 重叠块", "重叠块 第二段"]);
+            var service = new PaddleOCRService(
+                Mock.Of<IConnectionMultiplexer>(),
+                payload => Task.FromResult(responses.Dequeue()));
+            using var stream = Encode(CreateDenseImage(1000, 5000));
+
+            var result = await service.ExecuteAsync(stream);
+
             Assert.Equal("第一段 重叠块 第二段", result);
         }
 
@@ -121,11 +155,11 @@ namespace TelegramSearchBot.Test.Service.AI.OCR {
         }
 
         private static SKBitmap CreateDenseImage(int width, int height) {
-            var image = new SKBitmap(width, height);
-            for (var y = 0; y < height; y++) {
-                for (var x = 0; x < width; x++) {
-                    image.SetPixel(x, y, x % 16 < 8 ? SKColors.Black : SKColors.White);
-                }
+            var image = CreateWhiteImage(width, height);
+            using var canvas = new SKCanvas(image);
+            using var paint = new SKPaint { Color = SKColors.Black };
+            for (var x = 0; x < width; x += 16) {
+                canvas.DrawRect(x, 0, 8, height, paint);
             }
             return image;
         }
@@ -137,11 +171,9 @@ namespace TelegramSearchBot.Test.Service.AI.OCR {
         }
 
         private static void FillRows(SKBitmap image, int start, int end, SKColor color) {
-            for (var y = start; y < end; y++) {
-                for (var x = 0; x < image.Width; x++) {
-                    image.SetPixel(x, y, color);
-                }
-            }
+            using var canvas = new SKCanvas(image);
+            using var paint = new SKPaint { Color = color };
+            canvas.DrawRect(0, start, image.Width, end - start, paint);
         }
 
         private static MemoryStream Encode(SKBitmap image) {

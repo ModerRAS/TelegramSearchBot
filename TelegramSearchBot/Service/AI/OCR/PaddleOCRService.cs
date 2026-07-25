@@ -43,9 +43,9 @@ namespace TelegramSearchBot.Service.AI.OCR {
                 return await ExecuteSliceAsync(image, slices[0]);
             }
 
-            var results = new List<string>(slices.Count);
+            var results = new List<(OcrImageSlice Slice, string Text)>(slices.Count);
             foreach (var slice in slices) {
-                results.Add(await ExecuteSliceAsync(image, slice));
+                results.Add((slice, await ExecuteSliceAsync(image, slice)));
             }
 
             return LongImageOcrSlicer.MergeResults(results);
