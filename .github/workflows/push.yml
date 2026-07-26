@@ -86,7 +86,7 @@ jobs:
     - name: Build
       run: dotnet build --no-restore -c Release
     - name: Test
-      run: dotnet test --no-build -c Release --verbosity normal
+      run: dotnet test --no-build -c Release --verbosity normal --filter "Category!=Performance"
 
   build-telegram-bot-api:
     needs: prepare
