@@ -16,6 +16,7 @@ namespace TelegramSearchBot.Service.AI.OCR {
         private const int AnalysisWidth = 256;
         private const int MinimumSliceHeight = 1024;
         private const int BrightnessDifferenceThreshold = 24;
+        private const int CutDensityRadius = 3;
         private const double SafeRowDensityThreshold = 0.025;
 
         internal static IReadOnlyList<OcrImageSlice> PlanSlices(SKBitmap image) {
@@ -33,7 +34,7 @@ namespace TelegramSearchBot.Service.AI.OCR {
                 var searchStart = Math.Max(top + MinimumSliceHeight, targetBottom - CutSearchRadius);
                 var searchEnd = Math.Min(image.Height - 1, targetBottom + CutSearchRadius);
                 var cut = FindBestCut(rowDensities, searchStart, searchEnd);
-                var safeCut = rowDensities[cut] <= SafeRowDensityThreshold;
+                var safeCut = AverageDensity(rowDensities, cut, CutDensityRadius) <= SafeRowDensityThreshold;
                 var hasOverlap = slices.Count > 0 && slices[^1].Top + slices[^1].Height > top;
 
                 slices.Add(new OcrImageSlice(top, cut - top, hasOverlap));
@@ -44,13 +45,22 @@ namespace TelegramSearchBot.Service.AI.OCR {
             return slices;
         }
 
-        internal static string MergeResults(IEnumerable<string> results) {
+        internal static string MergeResults(IEnumerable<(OcrImageSlice Slice, string Text)> results) {
             var mergedTokens = new List<string>();
+            var previousSliceHadText = false;
 
-            foreach (var result in results.Where(result => !string.IsNullOrWhiteSpace(result))) {
-                var nextTokens = SplitTokens(result);
-                var duplicateTokenCount = FindDuplicateBoundary(mergedTokens, nextTokens);
+            foreach (var (slice, text) in results) {
+                if (string.IsNullOrWhiteSpace(text)) {
+                    previousSliceHadText = false;
+                    continue;
+                }
+
+                var nextTokens = SplitTokens(text);
+                var duplicateTokenCount = slice.HasOverlap && previousSliceHadText
+                    ? FindDuplicateBoundary(mergedTokens, nextTokens)
+                    : 0;
                 mergedTokens.AddRange(nextTokens.Skip(duplicateTokenCount));
+                previousSliceHadText = true;
             }
 
             return string.Join(' ', mergedTokens);
@@ -97,7 +107,7 @@ namespace TelegramSearchBot.Service.AI.OCR {
             var bestScore = double.MaxValue;
 
             for (var y = searchStart; y <= searchEnd; y++) {
-                var density = AverageDensity(rowDensities, y, 3);
+                var density = AverageDensity(rowDensities, y, CutDensityRadius);
                 var distancePenalty = Math.Abs(y - target) / ( double ) Math.Max(1, searchEnd - searchStart) * 0.01;
                 var score = density + distancePenalty;
                 if (score < bestScore) {
