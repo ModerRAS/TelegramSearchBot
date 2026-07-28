@@ -26,8 +26,8 @@
 - 新任务若需要跨进程通信，请复用 `StackExchange.Redis` 连接（Garnet）实现分布式锁或队列。
 
 ## AI 与工具集成
-- LLM 通道由 `Service/AI/LLM/*` 管理；`McpToolHelper.EnsureInitialized` 会扫描 `[McpTool]` 标记的方法生成工具 XML。
-- 新增工具需放在同一程序集，配合 `[McpParameter]` 描述参数；`GeneralBootstrap` 启动时会自动注册并缓存 Prompt 片段。
+- LLM 通道由 `Service/AI/LLM/*` 管理；`McpToolHelper.EnsureInitialized` 会扫描 `[BuiltInTool]` 标记的方法生成工具 XML。
+- 新增工具需放在同一程序集，配合 `[BuiltInParameter]` 描述参数；`GeneralBootstrap` 启动时会自动注册并缓存 Prompt 片段。
 - OCR/ASR/QR 相关控制器依赖独立进程服务（参见 `AppBootstrap/OCRBootstrap.cs` 等），调试时可单独以 `dotnet run --project TelegramSearchBot -- OCR` 启动。
 
 ## 构建与测试

@@ -13,7 +13,9 @@ namespace TelegramSearchBot.Model {
         public DataDbContext(DbContextOptions<DataDbContext> options) : base(options) { }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {
             // 日志配置
-            optionsBuilder.LogTo(Log.Logger.Information, LogLevel.Information);
+            optionsBuilder.LogTo(
+                (TelegramSearchBot.Common.LoggerHolders.EfCoreLogger ?? Log.Logger).Information, 
+                LogLevel.Information);
 
             // 数据库配置应该由外部通过DbContextOptions提供
             // 不要在这里配置默认数据库
@@ -33,6 +35,9 @@ namespace TelegramSearchBot.Model {
             modelBuilder.Entity<UserWithGroup>()
                 .HasIndex(uwg => new { uwg.UserId, uwg.GroupId })
                 .IsUnique();
+
+            modelBuilder.Entity<UserWithGroup>()
+                .HasIndex(uwg => new { uwg.GroupId, uwg.IsLlmInvisible });
 
             // 配置对话段模型
             modelBuilder.Entity<ConversationSegment>()

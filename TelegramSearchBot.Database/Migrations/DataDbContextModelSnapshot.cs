@@ -15,7 +15,7 @@ namespace TelegramSearchBot.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
 
             modelBuilder.Entity("TelegramSearchBot.Model.Data.AccountBook", b =>
                 {
@@ -300,13 +300,28 @@ namespace TelegramSearchBot.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("AgentChatBatchWindowSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AgentChatMode")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImageGenerationModelName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsAgentChatEnabled")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsManagerGroup")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("LLMModelName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MusicGenerationModelName")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -715,10 +730,15 @@ namespace TelegramSearchBot.Migrations
                     b.Property<long>("GroupId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsLlmInvisible")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("UserId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "IsLlmInvisible");
 
                     b.HasIndex("UserId", "GroupId")
                         .IsUnique();

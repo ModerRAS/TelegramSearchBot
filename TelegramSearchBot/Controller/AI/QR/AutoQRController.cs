@@ -20,6 +20,7 @@ using TelegramSearchBot.Model; // Added for MessageOption
 using TelegramSearchBot.Model.Notifications; // Added for TextMessageReceivedNotification
 using TelegramSearchBot.Service.AI.QR; // Added for AutoQRService
 using TelegramSearchBot.Service.BotAPI;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Service.Common;
 using TelegramSearchBot.Service.Storage; // Added for MessageService
 
@@ -58,6 +59,9 @@ namespace TelegramSearchBot.Controller.AI.QR {
             if (p.BotMessageType != BotMessageType.Message) {
                 return;
             }
+            _logger.LogInformation("AutoQR processing started for {ChatId}/{MessageId}",
+                e.Message.Chat.Id, e.Message.MessageId);
+
             try {
                 var filePath = IProcessPhoto.GetPhotoPath(e);
                 if (filePath == null) {
@@ -67,10 +71,15 @@ namespace TelegramSearchBot.Controller.AI.QR {
                 var qrStr = await _autoQRService.ExecuteAsync(filePath);
 
                 if (string.IsNullOrWhiteSpace(qrStr)) {
+                    _logger.LogInformation("No QR code detected for {ChatId}/{MessageId}",
+                        e.Message.Chat.Id, e.Message.MessageId);
                     return;
                 }
 
-                _logger.LogInformation("QR Code recognized for {ChatId}/{MessageId}. Content: {QrStr}", e.Message.Chat.Id, e.Message.MessageId, qrStr);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogInformation("QR Code recognized for {ChatId}/{MessageId}. Content: {QrStr}, Length: {QrStrLen}",
+                        e.Message.Chat.Id, e.Message.MessageId, qrStr, qrStr.Length);
+                }
 
                 // Add QR result to processing results
                 p.ProcessingResults.Add($"[QR识别结果] {qrStr}");
