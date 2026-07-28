@@ -2,7 +2,6 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using StackExchange.Redis;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
@@ -17,10 +16,15 @@ namespace TelegramSearchBot.LLMAgent {
     public static class LLMAgentProgram {
         public static async Task RunAsync(string[] args) {
             var effectiveArgs = NormalizeArgs(args);
+            if (effectiveArgs.Length > 0 && effectiveArgs[0].Equals("SandboxToolHost", StringComparison.OrdinalIgnoreCase)) {
+                await RunSandboxToolHostAsync(effectiveArgs.Skip(1).ToArray());
+                return;
+            }
+
             if (effectiveArgs.Length != 2 ||
                 !long.TryParse(effectiveArgs[0], out var chatId) ||
                 !int.TryParse(effectiveArgs[1], out var port)) {
-                Console.Error.WriteLine("Usage: LLMAgent <chatId> <port>");
+                Console.Error.WriteLine("Usage: LLMAgent <chatId> <port> | SandboxToolHost <chatId> <port> <boxName> <parentPid> <parentStartTicksUtc>");
                 Environment.ExitCode = 1;
                 return;
             }
@@ -29,57 +33,45 @@ namespace TelegramSearchBot.LLMAgent {
             var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("LLMAgent");
             McpToolHelper.EnsureInitialized(
                 typeof(Service.AgentToolService).Assembly,
+                services, logger);
+
+            var loop = services.GetRequiredService<Service.AgentLoopService>();
+            using var shutdownCts = CreateShutdownTokenSource();
+
+            await loop.RunAsync(chatId, port, shutdownCts.Token);
+        }
+
+        private static async Task RunSandboxToolHostAsync(string[] args) {
+            if (args.Length != 5 ||
+                !long.TryParse(args[0], out var chatId) ||
+                !int.TryParse(args[1], out var port) ||
+                !int.TryParse(args[3], out var parentProcessId) ||
+                !long.TryParse(args[4], out var parentStartTicksUtc)) {
+                Console.Error.WriteLine("Usage: SandboxToolHost <chatId> <port> <boxName> <parentPid> <parentStartTicksUtc>");
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var boxName = args[2];
+            using var services = BuildServices(port);
+            var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("SandboxToolHost");
+            McpToolHelper.EnsureInitialized(
                 typeof(FileToolService).Assembly,
                 services, logger);
 
-            // Import tool definitions from Redis and register as proxy tools
-            await RegisterProxyToolsFromRedisAsync(services, logger);
+            using var shutdownCts = CreateShutdownTokenSource();
+            var consumer = services.GetRequiredService<Service.SandboxToolConsumer>();
+            await consumer.RunAsync(chatId, boxName, parentProcessId, parentStartTicksUtc, shutdownCts.Token);
+        }
 
-            var loop = services.GetRequiredService<Service.AgentLoopService>();
-            using var shutdownCts = new CancellationTokenSource();
+        private static CancellationTokenSource CreateShutdownTokenSource() {
+            var shutdownCts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, eventArgs) => {
                 eventArgs.Cancel = true;
                 shutdownCts.Cancel();
             };
             AppDomain.CurrentDomain.ProcessExit += (_, _) => shutdownCts.Cancel();
-
-            await loop.RunAsync(chatId, port, shutdownCts.Token);
-        }
-
-        private static async Task RegisterProxyToolsFromRedisAsync(ServiceProvider services, ILogger logger) {
-            try {
-                var redis = services.GetRequiredService<IConnectionMultiplexer>();
-                var json = await redis.GetDatabase().StringGetAsync(LlmAgentRedisKeys.AgentToolDefs);
-                if (!json.HasValue || string.IsNullOrWhiteSpace(json.ToString())) {
-                    logger.LogWarning("No tool definitions found in Redis. Agent will have limited tools.");
-                    return;
-                }
-
-                var toolDefs = JsonConvert.DeserializeObject<List<ProxyToolDefinition>>(json.ToString());
-                if (toolDefs == null || toolDefs.Count == 0) {
-                    logger.LogWarning("Empty tool definitions from Redis.");
-                    return;
-                }
-
-                var toolExecutor = services.GetRequiredService<Service.ToolExecutor>();
-
-                // Register proxy tools with an executor that routes to the main process via Redis IPC
-                McpToolHelper.RegisterProxyTools(toolDefs, async (toolName, arguments) => {
-                    // Resolve chatId/userId/messageId from ToolContext if needed
-                    // These will be set by the calling code in McpToolHelper before invoking
-                    long remoteChatId = 0, remoteUserId = 0, remoteMessageId = 0;
-                    if (arguments.TryGetValue("__chatId", out var cid)) { long.TryParse(cid, out remoteChatId); arguments.Remove("__chatId"); }
-                    if (arguments.TryGetValue("__userId", out var uid)) { long.TryParse(uid, out remoteUserId); arguments.Remove("__userId"); }
-                    if (arguments.TryGetValue("__messageId", out var mid)) { long.TryParse(mid, out remoteMessageId); arguments.Remove("__messageId"); }
-
-                    return await toolExecutor.ExecuteRemoteToolAsync(
-                        toolName, arguments, remoteChatId, remoteUserId, remoteMessageId, CancellationToken.None);
-                });
-
-                logger.LogInformation("Imported {Count} tool definitions from Redis.", toolDefs.Count);
-            } catch (Exception ex) {
-                logger.LogWarning(ex, "Failed to import tool definitions from Redis. Agent will have limited tools.");
-            }
+            return shutdownCts;
         }
 
         private static string[] NormalizeArgs(string[] args) {
@@ -92,10 +84,13 @@ namespace TelegramSearchBot.LLMAgent {
 
         private static ServiceProvider BuildServices(int port) {
             var services = new ServiceCollection();
-            services.AddLogging(builder => builder.AddSimpleConsole(options => {
-                options.SingleLine = true;
-                options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss] ";
-            }));
+            services.AddLogging(builder => {
+                builder.SetMinimumLevel(LogLevel.Trace);
+                builder.AddSimpleConsole(options => {
+                    options.SingleLine = true;
+                    options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss] ";
+                });
+            });
             services.AddHttpClient();
             services.AddHttpClient("OllamaClient");
             services.AddDbContext<DataDbContext>(options => {
@@ -103,11 +98,14 @@ namespace TelegramSearchBot.LLMAgent {
             }, contextLifetime: ServiceLifetime.Scoped, optionsLifetime: ServiceLifetime.Singleton);
             services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect($"localhost:{port},abortConnect=false,connectTimeout=5000,connectRetry=5"));
             services.AddScoped<IMessageExtensionService, Service.InMemoryMessageExtensionService>();
+            services.AddSingleton<IBotIdentityProvider, BotIdentityProvider>();
+            services.AddScoped<IGroupLlmSettingsService, GroupLlmSettingsService>();
             services.AddScoped<OpenAIService>();
+            services.AddScoped<OpenAIResponsesService>();
             services.AddScoped<OllamaService>();
             services.AddScoped<GeminiService>();
             services.AddScoped<AnthropicService>();
-            services.AddScoped<Service.ToolExecutor>();
+            services.AddSingleton<Service.ToolExecutor>();
             services.AddScoped<Service.AgentToolService>();
             services.AddScoped<IFileToolService, FileToolService>();
             services.AddScoped<IBashToolService, BashToolService>();
@@ -115,7 +113,9 @@ namespace TelegramSearchBot.LLMAgent {
             services.AddScoped<Service.LlmServiceProxy>();
             services.AddSingleton<Service.GarnetClient>();
             services.AddSingleton<Service.GarnetRpcClient>();
+            services.AddSingleton<Service.AgentToolRegistryService>();
             services.AddSingleton<Service.AgentLoopService>();
+            services.AddSingleton<Service.SandboxToolConsumer>();
             return services.BuildServiceProvider();
         }
     }

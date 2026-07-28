@@ -405,11 +405,8 @@ namespace TelegramSearchBot.Test.Service.Vector {
         }
 
         private int GetUniqueId() {
-            // 使用更安全的ID生成策略：基于时间戳和随机数
-            var timestamp = ( int ) ( DateTime.UtcNow.Ticks % int.MaxValue );
-            var random = new Random().Next(1000, 9999);
-            var increment = Interlocked.Increment(ref _testCounter);
-            return Math.Abs(( timestamp + random + increment ) % int.MaxValue) + 1; // 确保不会是0
+            // 使用原子递增确保线程安全和全局唯一性，避免 Random 实例在快速连续调用时产生相同种子的ID冲突
+            return Interlocked.Increment(ref _testCounter);
         }
 
         private long GetUniqueGroupId() {
