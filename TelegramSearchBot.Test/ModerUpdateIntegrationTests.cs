@@ -4,6 +4,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Xml.Linq;
 using Xunit;
 
 namespace TelegramSearchBot.Test {
@@ -133,6 +134,31 @@ namespace TelegramSearchBot.Test {
             } else {
                 Assert.Fail("Failed to start cargo build process - is cargo installed?");
             }
+        }
+
+        [Fact]
+        public void RustUpdater_WindowsManifest_DisablesInstallerElevationHeuristic() {
+            var updaterRoot = Path.Combine(SolutionRoot, "external", "moder-update", "src", "updater");
+            var buildScriptPath = Path.Combine(updaterRoot, "build.rs");
+            var manifestPath = Path.Combine(updaterRoot, "updater.exe.manifest");
+
+            Assert.True(File.Exists(buildScriptPath), "Rust updater should have a build script to embed its manifest.");
+            Assert.True(File.Exists(manifestPath), "Rust updater should ship an explicit Windows app manifest.");
+
+            var manifest = XDocument.Load(manifestPath);
+            XNamespace asmV3 = "urn:schemas-microsoft-com:asm.v3";
+            var requestedExecutionLevel = manifest
+                .Descendants(asmV3 + "requestedExecutionLevel")
+                .SingleOrDefault();
+
+            Assert.NotNull(requestedExecutionLevel);
+            Assert.Equal("asInvoker", requestedExecutionLevel.Attribute("level")?.Value);
+            Assert.Equal("false", requestedExecutionLevel.Attribute("uiAccess")?.Value);
+
+            var buildScript = File.ReadAllText(buildScriptPath);
+            Assert.Contains("/MANIFEST:EMBED", buildScript);
+            Assert.Contains("/MANIFESTINPUT:", buildScript);
+            Assert.Contains("updater.exe.manifest", buildScript);
         }
 
         [Fact]
@@ -303,6 +329,53 @@ namespace TelegramSearchBot.Test {
             // Verify artifact name matches upload path
             Assert.True(pushYmlContent.Contains("name: moder-update-updater"),
                 "CI workflow should define 'moder-update-updater' artifact");
+        }
+
+        [Fact]
+        public void CI_UpdateFeed_GeneratesCumulativeDeltaFromAnchor() {
+            var pushYmlPath = Path.Combine(SolutionRoot, ".github", "workflows", "push.yml");
+            Assert.True(File.Exists(pushYmlPath), "push.yml workflow file should exist");
+
+            var pushYmlContent = File.ReadAllText(pushYmlPath);
+
+            Assert.Contains("CUMULATIVE_UPDATE_ANCHOR_VERSION", pushYmlContent);
+            Assert.Contains("2026.05.05.570", pushYmlContent);
+            Assert.Contains("UPDATE_BASE_URL", pushYmlContent);
+            Assert.Contains("Fetch existing update catalog from CDN", pushYmlContent);
+            Assert.Contains("Fetch cumulative update anchor standalone", pushYmlContent);
+            Assert.Contains("Fetch previous cumulative update package", pushYmlContent);
+            Assert.Contains("Fetch cumulative source packages from CDN", pushYmlContent);
+            Assert.Contains("ANCHOR_VERSION=", pushYmlContent);
+            Assert.Contains("ANCHOR_STANDALONE_DIR=", pushYmlContent);
+            Assert.Contains("BASE_CUMULATIVE_PACKAGE=", pushYmlContent);
+            Assert.Contains("CUMULATIVE_SOURCE_PACKAGE_DIR=", pushYmlContent);
+            Assert.Contains("'--anchor-source-dir'", pushYmlContent);
+            Assert.Contains("'--anchor-version'", pushYmlContent);
+            Assert.Contains("'--base-cumulative-package'", pushYmlContent);
+            Assert.Contains("'--cumulative-source-package-dir'", pushYmlContent);
+            Assert.Contains("'--full-package-url'", pushYmlContent);
+            Assert.Contains("'--full-package-checksum'", pushYmlContent);
+            Assert.Contains("'--updater-url'", pushYmlContent);
+            Assert.Contains("'--package-base-url'", pushYmlContent);
+            Assert.Contains("Downloaded existing catalog.json from CDN", pushYmlContent);
+            Assert.Contains("Downloaded base cumulative package from CDN", pushYmlContent);
+            Assert.Contains("Downloaded cumulative source package from CDN", pushYmlContent);
+            Assert.Contains("Passing cumulative update anchor", pushYmlContent);
+            Assert.Contains("Passing GitHub full package URL", pushYmlContent);
+            Assert.Contains("Update feed catalog entries", pushYmlContent);
+            Assert.Contains("Cumulative update package missing", pushYmlContent);
+            Assert.Contains("Failed to download cumulative update anchor", pushYmlContent);
+            Assert.Contains("refusing to publish without cumulative package from anchor", pushYmlContent);
+            Assert.Contains("PackageUrl", pushYmlContent);
+            Assert.Contains("PackageFormat", pushYmlContent);
+            Assert.Contains("PackagePath -notlike '*-cumulative.zst'", pushYmlContent);
+            Assert.DoesNotContain("-or $entry.PackageUrl", pushYmlContent);
+            Assert.DoesNotContain("step package generation", pushYmlContent);
+            Assert.DoesNotContain("PackagePath -notlike '*-full.zst'", pushYmlContent);
+            Assert.DoesNotContain("Fetch existing update catalog from B2", pushYmlContent);
+            Assert.DoesNotContain("b2 download-file-by-name", pushYmlContent);
+            Assert.DoesNotContain("Write-Host \"PREV_VERSION=$prevVersion\" | Out-File", pushYmlContent);
+            Assert.DoesNotContain("Write-Host \"PREV_STANDALONE_DIR=artifacts\\prev-standalone\" | Out-File", pushYmlContent);
         }
 
         private static IEnumerable<string> GetCsFilesRecursively(string root) {

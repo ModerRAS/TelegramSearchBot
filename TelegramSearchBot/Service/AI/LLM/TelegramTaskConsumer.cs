@@ -89,6 +89,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             };
 
             try {
+                _logger.LogInformation(
+                    "Executing Telegram tool task. RequestId={RequestId}, Tool={ToolName}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, ArgumentKeys={ArgumentKeys}",
+                    task.RequestId,
+                    task.ToolName,
+                    task.ChatId,
+                    task.UserId,
+                    task.MessageId,
+                    string.Join(",", task.Arguments.Keys));
                 if (task.ToolName.Equals("send_message", StringComparison.OrdinalIgnoreCase)) {
                     // Special handling for send_message (needs ITelegramBotClient directly)
                     await ExecuteSendMessageAsync(task, response, stoppingToken);
@@ -97,8 +105,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     await ExecuteGenericToolAsync(task, response);
                 }
             } catch (Exception ex) when (ex is not OperationCanceledException) {
-                _logger.LogError(ex, "Failed to execute tool task {ToolName} (RequestId={RequestId})", task.ToolName, task.RequestId);
-                response.ErrorMessage = ex.Message;
+                _logger.LogError(
+                    ex,
+                    "Failed to execute tool task {ToolName} (RequestId={RequestId}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId})",
+                    task.ToolName,
+                    task.RequestId,
+                    task.ChatId,
+                    task.UserId,
+                    task.MessageId);
+                response.ErrorMessage = ex.GetLogSummary();
             }
 
             try {
@@ -106,6 +121,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     LlmAgentRedisKeys.TelegramResult(task.RequestId),
                     JsonConvert.SerializeObject(response),
                     TimeSpan.FromMinutes(5));
+                _logger.LogInformation(
+                    "Wrote Telegram tool task result. RequestId={RequestId}, Tool={ToolName}, Success={Success}, ResultLength={ResultLength}, Error={ErrorMessage}",
+                    task.RequestId,
+                    task.ToolName,
+                    response.Success,
+                    response.Result?.Length ?? 0,
+                    response.ErrorMessage);
             } catch (Exception ex) {
                 _logger.LogError(ex, "Failed to write tool result for {RequestId}", task.RequestId);
             }
@@ -124,6 +146,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             response.Success = true;
             response.TelegramMessageId = sent.MessageId;
             response.Result = sent.MessageId.ToString();
+            _logger.LogInformation(
+                "send_message tool task completed. RequestId={RequestId}, ChatId={ChatId}, TelegramMessageId={TelegramMessageId}",
+                task.RequestId,
+                chatId,
+                sent.MessageId);
         }
 
         private async Task ExecuteGenericToolAsync(TelegramAgentToolTask task, TelegramAgentToolResult response) {
@@ -138,6 +165,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 task.ToolName, task.Arguments, scope.ServiceProvider, toolContext);
             response.Success = true;
             response.Result = McpToolHelper.ConvertToolResultToString(resultObj);
+            _logger.LogInformation(
+                "Generic Telegram tool task completed. RequestId={RequestId}, Tool={ToolName}, ResultLength={ResultLength}",
+                task.RequestId,
+                task.ToolName,
+                response.Result?.Length ?? 0);
         }
     }
 }

@@ -36,7 +36,6 @@ namespace TelegramSearchBot.Test.Service.Tools {
 
         [Fact]
         public async Task ExecuteCommand_NonAdminUser_ReturnsError() {
-            // Use a userId that is different from the actual AdminId
             var toolContext = new ToolContext { ChatId = 1, UserId = long.MaxValue - 1 };
             var result = await _service.ExecuteCommand("echo test", toolContext);
             Assert.Contains("Error", result);
@@ -51,7 +50,6 @@ namespace TelegramSearchBot.Test.Service.Tools {
 
         [Fact]
         public async Task ExecuteCommand_EmptyCommand_ReturnsError() {
-            // Even with admin user, empty command should fail
             var toolContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
             var result = await _service.ExecuteCommand("", toolContext);
             Assert.Contains("Error", result);
@@ -71,7 +69,6 @@ namespace TelegramSearchBot.Test.Service.Tools {
         public async Task ExecuteCommand_AdminUser_ExecutesSuccessfully() {
             var toolContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
 
-            // Use platform-appropriate command
             string command;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
                 command = "Write-Output 'hello test'";
@@ -89,7 +86,6 @@ namespace TelegramSearchBot.Test.Service.Tools {
         public async Task ExecuteCommand_TimeoutClamped() {
             var toolContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
 
-            // Very short timeout should be clamped to 1000ms minimum
             string command;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
                 command = "Write-Output 'quick'; Start-Sleep -Seconds 2";

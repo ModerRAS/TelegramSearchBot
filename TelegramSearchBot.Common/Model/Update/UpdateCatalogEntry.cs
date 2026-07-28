@@ -3,6 +3,8 @@ namespace TelegramSearchBot.Common.Model.Update;
 public sealed class UpdateCatalogEntry
 {
     public required string PackagePath { get; init; }
+    public string? PackageUrl { get; init; }
+    public string PackageFormat { get; init; } = UpdatePackageFormats.ModerUpdateZstd;
     public required string TargetVersion { get; init; }
     public required string MinSourceVersion { get; init; }
     public string? MaxSourceVersion { get; init; }
