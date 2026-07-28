@@ -34,19 +34,49 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpClientFactory _httpClientFactory;
-        public string BotName { get; set; }
+        private readonly IBotIdentityProvider _botIdentityProvider;
+        private string _fallbackBotName = string.Empty;
+        public string BotName {
+            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            set {
+                if (_botIdentityProvider != null) {
+                    _botIdentityProvider.SetIdentity(Env.BotId, value);
+                } else {
+                    _fallbackBotName = value ?? string.Empty;
+                }
+            }
+        }
+
+        public OllamaService(
+            DataDbContext context,
+            ILogger<OllamaService> logger,
+            IServiceProvider serviceProvider,
+            IHttpClientFactory httpClientFactory)
+            : this(context, logger, serviceProvider, httpClientFactory, null) {
+        }
 
         // Constructor requires dependencies needed directly by this class
         public OllamaService(
             DataDbContext context,
             ILogger<OllamaService> logger,
             IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory) {
+            IHttpClientFactory httpClientFactory,
+            IBotIdentityProvider botIdentityProvider) {
             _logger = logger;
             _dbContext = context;
             _serviceProvider = serviceProvider;
             _httpClientFactory = httpClientFactory;
+            _botIdentityProvider = botIdentityProvider;
             _logger.LogInformation("OllamaService instance created. McpToolHelper should be initialized at application startup.");
+        }
+
+        private async Task<string> GetBotNameAsync() {
+            if (_botIdentityProvider == null) {
+                return _fallbackBotName;
+            }
+
+            var identity = await _botIdentityProvider.GetIdentityAsync();
+            return identity.UserName ?? string.Empty;
         }
 
         // --- Helper methods specific to this service ---
@@ -97,6 +127,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
                                                         LlmExecutionContext executionContext,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
             modelName = modelName ?? Env.OllamaModelName;
             if (string.IsNullOrWhiteSpace(modelName)) {
                 _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
@@ -122,7 +153,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // --- History and Prompt Setup ---
             // NOTE: History context is limited as OllamaSharp.Chat manages it.
-            var systemPrompt = McpToolHelper.FormatSystemPrompt(BotName, ChatId);
+            var botName = await GetBotNameAsync();
+            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
 
             var chat = new OllamaSharp.Chat(ollama, systemPrompt);
 
@@ -183,8 +215,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
                         } catch (Exception ex) {
                             isError = true;
-                            _logger.LogError(ex, "{ServiceName}: Error executing tool {ToolName}.", ServiceName, parsedToolName);
-                            toolResultString = $"Error executing tool {parsedToolName}: {ex.Message}.";
+                            _logger.LogError(
+                                ex,
+                                "{ServiceName}: Error executing Ollama XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                                ServiceName,
+                                parsedToolName,
+                                JsonConvert.SerializeObject(toolArguments),
+                                ex.GetLogSummary());
+                            toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
                         }
 
                         string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
@@ -204,6 +242,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 if (executionContext != null) {
                     executionContext.IterationLimitReached = true;
                     executionContext.SnapshotData = new LlmContinuationSnapshot {
+                        SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                         ChatId = ChatId,
                         OriginalMessageId = message.MessageId,
                         UserId = message.FromUserId,

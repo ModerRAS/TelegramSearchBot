@@ -9,6 +9,7 @@ public sealed class UpdateManifest
     public bool IsCumulative { get; init; }
     public int ChainDepth { get; init; }
     public required List<UpdateFile> Files { get; init; }
+    public List<UpdateFile>? SnapshotFiles { get; init; }
     public required string Checksum { get; init; }
     public DateTime CreatedAt { get; init; }
 }

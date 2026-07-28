@@ -18,8 +18,8 @@ namespace TelegramSearchBot.Model.AI {
         public string Content { get; set; } = null!;
 
         /// <summary>
-        /// The reasoning content for thinking mode models (e.g., Kimi-thinking-preview, QwQ).
-        /// This field must be passed back to the API in subsequent requests to avoid HTTP 400 errors.
+        /// The reasoning content for thinking mode models (e.g., Kimi-thinking-preview, QwQ, DeepSeek reasoning models).
+        /// Preserve the value as returned by the provider when resuming conversation state.
         /// </summary>
         public string? ReasoningContent { get; set; }
     }
@@ -30,6 +30,16 @@ namespace TelegramSearchBot.Model.AI {
     /// Stored in Redis with TTL for automatic expiry.
     /// </summary>
     public class LlmContinuationSnapshot {
+        public const string SchemaVersionV1 = "v1";
+        public const string CurrentSchemaVersion = "v2";
+
+        private string? _schemaVersion;
+
+        public string SchemaVersion {
+            get => string.IsNullOrWhiteSpace(_schemaVersion) ? SchemaVersionV1 : _schemaVersion;
+            set => _schemaVersion = value;
+        }
+
         /// <summary>
         /// Unique identifier for this snapshot
         /// </summary>
