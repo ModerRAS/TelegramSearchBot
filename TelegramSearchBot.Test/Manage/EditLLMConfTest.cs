@@ -15,6 +15,7 @@ using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.Manage;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Service.Tools;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Manage {
@@ -114,7 +115,15 @@ namespace TelegramSearchBot.Test.Manage {
             _service = new EditLLMConfService(
                 helperMock.Object,
                 _context,
-                _redisMock.Object);
+                _redisMock.Object,
+                new ImageGenerationToolSettingsService(
+                    _context,
+                    _redisMock.Object,
+                    Mock.Of<ILogger<ImageGenerationToolSettingsService>>()),
+                new MusicGenerationToolSettingsService(
+                    _context,
+                    _redisMock.Object,
+                    Mock.Of<ILogger<MusicGenerationToolSettingsService>>()));
         }
 
         [Fact]

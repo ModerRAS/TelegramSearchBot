@@ -4,8 +4,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -22,6 +25,9 @@ namespace TelegramSearchBot.Service.AppUpdate;
 public static partial class SelfUpdateBootstrap
 {
     private const string UpdaterFileName = "moder_update_updater.exe";
+    private const long MultipartDownloadThresholdBytes = 32L * 1024 * 1024;
+    private const long MultipartDownloadMinimumPartSizeBytes = 8L * 1024 * 1024;
+    private const int MultipartDownloadMaxParallelism = 8;
     private static readonly JsonSerializerOptions JsonOptions = new() {
         PropertyNameCaseInsensitive = true
     };
@@ -270,24 +276,24 @@ public static partial class SelfUpdateBootstrap
             $"{SanitizeVersion(currentVersion)}-to-{SanitizeVersion(finalTarget)}");
         var stagingDir = Path.Combine(updateRoot, "staging");
         var backupDir = Path.Combine(updateRoot, "backup");
+        var packageCacheDir = Path.Combine(updateRoot, "packages");
 
         ResetDirectory(stagingDir);
         ResetDirectory(backupDir);
+        ResetDirectory(packageCacheDir);
 
         foreach (var entry in updatePath)
         {
             Log.Information("下载更新包: {PackagePath} (from {MinVersion})",
-                entry.PackagePath, entry.MinSourceVersion);
+                entry.PackageUrl ?? entry.PackagePath, entry.MinSourceVersion);
 
-            await using var packageStream = await DownloadStreamAsync(
-                httpClient, entry.PackagePath, cancellationToken);
-            await using var packageBuffer = new MemoryStream();
-            await packageStream.CopyToAsync(packageBuffer, cancellationToken);
-            packageBuffer.Position = 0;
+            var packagePath = Path.Combine(packageCacheDir, GetPackageCacheFileName(entry));
+            await DownloadPackageAsync(httpClient, entry, packagePath, cancellationToken);
 
-            VerifyPackageChecksum(packageBuffer, entry);
-            packageBuffer.Position = 0;
-            ExtractPackageToDirectory(packageBuffer, stagingDir);
+            await using var packageStream = File.OpenRead(packagePath);
+            VerifyPackageChecksum(packageStream, entry);
+            packageStream.Position = 0;
+            ExtractPackageToDirectory(packageStream, stagingDir, entry);
         }
 
         var updaterPath = await DownloadUpdaterAsync(httpClient, cancellationToken);
@@ -308,6 +314,7 @@ public static partial class SelfUpdateBootstrap
         var catalog = await JsonSerializer.DeserializeAsync<UpdateCatalog>(stream, JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("Failed to deserialize update catalog.");
         UpdateCatalogCache.UpdaterChecksum = catalog.UpdaterChecksum;
+        UpdateCatalogCache.UpdaterUrl = catalog.UpdaterUrl;
         return catalog;
     }
 
@@ -328,28 +335,358 @@ public static partial class SelfUpdateBootstrap
     private static async Task<string> DownloadUpdaterAsync(HttpClient httpClient, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(UpdaterCachePath)!);
-        await using var updaterStream = await DownloadStreamAsync(httpClient, UpdaterFileName, cancellationToken);
-        await using var updaterBuffer = new MemoryStream();
-        await updaterStream.CopyToAsync(updaterBuffer, cancellationToken);
-        VerifyUpdaterChecksum(updaterBuffer);
-        updaterBuffer.Position = 0;
-        await using var fileStream = File.Create(UpdaterCachePath);
-        await updaterBuffer.CopyToAsync(fileStream, cancellationToken);
+        var downloadPath = UpdaterCachePath + ".download";
+        await DownloadFileAsync(httpClient, UpdateCatalogCache.UpdaterUrl ?? UpdaterFileName, downloadPath, cancellationToken);
+
+        try {
+            await using var updaterStream = File.OpenRead(downloadPath);
+            VerifyUpdaterChecksum(updaterStream);
+        } catch {
+            File.Delete(downloadPath);
+            throw;
+        }
+
+        File.Move(downloadPath, UpdaterCachePath, overwrite: true);
         return UpdaterCachePath;
     }
 
-    private static async Task<Stream> DownloadStreamAsync(HttpClient httpClient, string relativePath, CancellationToken cancellationToken)
+    private static async Task DownloadFileAsync(
+        HttpClient httpClient,
+        string pathOrUrl,
+        string targetPath,
+        CancellationToken cancellationToken)
     {
-        using var response = await httpClient.GetAsync($"{Env.UpdateBaseUrl.TrimEnd('/')}/{relativePath.TrimStart('/')}", cancellationToken);
-        response.EnsureSuccessStatusCode();
-        await using var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var buffer = new MemoryStream();
-        await sourceStream.CopyToAsync(buffer, cancellationToken);
-        buffer.Position = 0;
-        return buffer;
+        var requestUri = ResolveDownloadUri(pathOrUrl);
+        await DownloadFileFromUriAsync(httpClient, requestUri, targetPath, cancellationToken);
     }
 
-    private static void ExtractPackageToDirectory(Stream packageStream, string targetDirectory)
+    private static Task DownloadPackageAsync(
+        HttpClient httpClient,
+        UpdateCatalogEntry entry,
+        string targetPath,
+        CancellationToken cancellationToken)
+    {
+        var pathOrUrl = string.IsNullOrWhiteSpace(entry.PackageUrl)
+            ? entry.PackagePath
+            : entry.PackageUrl;
+        return DownloadFileAsync(httpClient, pathOrUrl, targetPath, cancellationToken);
+    }
+
+    private static string ResolveDownloadUri(string pathOrUrl)
+    {
+        if (Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var absoluteUri)) {
+            return absoluteUri.ToString();
+        }
+
+        return $"{Env.UpdateBaseUrl.TrimEnd('/')}/{pathOrUrl.TrimStart('/')}";
+    }
+
+    private static async Task DownloadFileFromUriAsync(
+        HttpClient httpClient,
+        string requestUri,
+        string targetPath,
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        var partialPath = targetPath + ".partial";
+
+        try {
+            var probe = await ProbeDownloadAsync(httpClient, requestUri, cancellationToken);
+            if (probe.SupportsRanges
+                && probe.ContentLength is >= MultipartDownloadThresholdBytes) {
+                try {
+                    await DownloadFileInPartsAsync(
+                        httpClient,
+                        requestUri,
+                        partialPath,
+                        probe.ContentLength.Value,
+                        cancellationToken);
+                    File.Move(partialPath, targetPath, overwrite: true);
+                    return;
+                } catch (Exception ex) when (ex is not OperationCanceledException) {
+                    DeleteFileIfExists(partialPath);
+                    Log.Warning(ex, "分片下载失败，回退到单连接下载: {RequestUri}", requestUri);
+                }
+            }
+
+            await DownloadFileSingleStreamAsync(
+                httpClient,
+                requestUri,
+                partialPath,
+                probe.ContentLength,
+                cancellationToken);
+            File.Move(partialPath, targetPath, overwrite: true);
+        } catch {
+            DeleteFileIfExists(partialPath);
+            throw;
+        }
+    }
+
+    private static async Task<DownloadProbe> ProbeDownloadAsync(
+        HttpClient httpClient,
+        string requestUri,
+        CancellationToken cancellationToken)
+    {
+        try {
+            using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            request.Headers.Range = new RangeHeaderValue(0, 0);
+            using var response = await httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            var contentRange = response.Content.Headers.ContentRange;
+            if (response.StatusCode == HttpStatusCode.PartialContent
+                && contentRange?.From == 0
+                && contentRange.To == 0
+                && contentRange.Length is { } rangeLength) {
+                return new DownloadProbe(true, rangeLength);
+            }
+
+            if (response.IsSuccessStatusCode) {
+                return new DownloadProbe(false, response.Content.Headers.ContentLength);
+            }
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            Log.Debug(ex, "探测分片下载能力失败，将使用单连接下载: {RequestUri}", requestUri);
+        }
+
+        return new DownloadProbe(false, null);
+    }
+
+    private static async Task DownloadFileSingleStreamAsync(
+        HttpClient httpClient,
+        string requestUri,
+        string partialPath,
+        long? expectedLength,
+        CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.GetAsync(
+            requestUri,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        try {
+            await using (var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+            await using (var fileStream = new FileStream(
+                partialPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan)) {
+                await sourceStream.CopyToAsync(fileStream, cancellationToken);
+            }
+
+            VerifyDownloadedLength(partialPath, expectedLength);
+        } catch {
+            DeleteFileIfExists(partialPath);
+            throw;
+        }
+    }
+
+    private static async Task DownloadFileInPartsAsync(
+        HttpClient httpClient,
+        string requestUri,
+        string partialPath,
+        long contentLength,
+        CancellationToken cancellationToken)
+    {
+        var ranges = CreateDownloadRanges(contentLength);
+        if (ranges.Count == 0) {
+            throw new InvalidDataException("远端文件长度无效，无法分片下载。");
+        }
+
+        var partPaths = ranges
+            .Select((_, index) => $"{partialPath}.part{index:D4}")
+            .ToArray();
+
+        try {
+            var downloadTasks = ranges
+                .Select((range, index) => DownloadFilePartAsync(
+                    httpClient,
+                    requestUri,
+                    partPaths[index],
+                    range,
+                    cancellationToken))
+                .ToArray();
+
+            await Task.WhenAll(downloadTasks);
+            await MergeDownloadPartsAsync(partialPath, partPaths, cancellationToken);
+            VerifyDownloadedLength(partialPath, contentLength);
+        } finally {
+            foreach (var partPath in partPaths) {
+                DeleteFileIfExists(partPath);
+            }
+        }
+    }
+
+    private static async Task DownloadFilePartAsync(
+        HttpClient httpClient,
+        string requestUri,
+        string partPath,
+        DownloadRange range,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Range = new RangeHeaderValue(range.Start, range.End);
+        using var response = await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+
+        if (response.StatusCode != HttpStatusCode.PartialContent) {
+            throw new InvalidDataException(
+                $"服务器未返回分片内容，状态码: {(int)response.StatusCode} {response.StatusCode}。");
+        }
+
+        var contentRange = response.Content.Headers.ContentRange;
+        if (contentRange?.From != range.Start || contentRange.To != range.End) {
+            throw new InvalidDataException(
+                $"分片范围不匹配，期望 {range.Start}-{range.End}，实际 {contentRange?.From}-{contentRange?.To}。");
+        }
+
+        if (response.Content.Headers.ContentLength is { } contentLength
+            && contentLength != range.Length) {
+            throw new InvalidDataException(
+                $"分片长度不匹配，期望 {range.Length}，实际 {contentLength}。");
+        }
+
+        await using (var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+        await using (var fileStream = new FileStream(
+            partPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan)) {
+            await sourceStream.CopyToAsync(fileStream, cancellationToken);
+        }
+
+        VerifyDownloadedLength(partPath, range.Length);
+    }
+
+    private static async Task MergeDownloadPartsAsync(
+        string partialPath,
+        IReadOnlyList<string> partPaths,
+        CancellationToken cancellationToken)
+    {
+        await using var output = new FileStream(
+            partialPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        foreach (var partPath in partPaths) {
+            await using var input = new FileStream(
+                partPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await input.CopyToAsync(output, cancellationToken);
+        }
+    }
+
+    private static List<DownloadRange> CreateDownloadRanges(long contentLength)
+    {
+        if (contentLength <= 0) {
+            return [];
+        }
+
+        var partCount = (int)Math.Min(
+            MultipartDownloadMaxParallelism,
+            Math.Ceiling(contentLength / (double)MultipartDownloadMinimumPartSizeBytes));
+        if (contentLength > 1 && partCount < 2) {
+            partCount = 2;
+        }
+
+        var partSize = (long)Math.Ceiling(contentLength / (double)partCount);
+        var ranges = new List<DownloadRange>(partCount);
+        for (var index = 0; index < partCount; index++) {
+            var start = index * partSize;
+            if (start >= contentLength) {
+                break;
+            }
+
+            var end = Math.Min(contentLength - 1, start + partSize - 1);
+            ranges.Add(new DownloadRange(start, end));
+        }
+
+        return ranges;
+    }
+
+    private static void VerifyDownloadedLength(string path, long? expectedLength)
+    {
+        if (expectedLength is null) {
+            return;
+        }
+
+        var actualLength = new FileInfo(path).Length;
+        if (actualLength != expectedLength.Value) {
+            throw new InvalidDataException(
+                $"下载文件长度不匹配，期望 {expectedLength.Value}，实际 {actualLength}。");
+        }
+    }
+
+    private static void ExtractPackageToDirectory(
+        Stream packageStream,
+        string targetDirectory,
+        UpdateCatalogEntry updateEntry)
+    {
+        if (IsZipPackage(updateEntry)) {
+            ExtractZipPackageToDirectory(packageStream, targetDirectory);
+            return;
+        }
+
+        ExtractModerPackageToDirectory(packageStream, targetDirectory);
+    }
+
+    private static bool IsZipPackage(UpdateCatalogEntry updateEntry)
+    {
+        return string.Equals(updateEntry.PackageFormat, UpdatePackageFormats.Zip, StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(updateEntry.PackagePath)
+                && updateEntry.PackagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(updateEntry.PackageUrl)
+                && updateEntry.PackageUrl.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void ExtractZipPackageToDirectory(Stream packageStream, string targetDirectory)
+    {
+        Directory.CreateDirectory(targetDirectory);
+        var targetDirectoryPath = Path.GetFullPath(targetDirectory);
+        var directoryPrefix = targetDirectoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+
+        using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
+        foreach (var entry in archive.Entries) {
+            if (string.IsNullOrWhiteSpace(entry.Name)) {
+                var directoryPath = Path.GetFullPath(Path.Combine(targetDirectoryPath, NormalizeArchivePath(entry.FullName)));
+                EnsurePathWithinDirectory(directoryPath, directoryPrefix, entry.FullName);
+                Directory.CreateDirectory(directoryPath);
+                continue;
+            }
+
+            var normalizedPath = NormalizeArchivePath(entry.FullName);
+            if (Path.IsPathRooted(normalizedPath)) {
+                throw new InvalidDataException($"Package entry '{entry.FullName}' is rooted and cannot be extracted.");
+            }
+
+            var targetPath = Path.GetFullPath(Path.Combine(targetDirectoryPath, normalizedPath));
+            EnsurePathWithinDirectory(targetPath, directoryPrefix, entry.FullName);
+            var directory = Path.GetDirectoryName(targetPath);
+            if (directory is not null) {
+                Directory.CreateDirectory(directory);
+            }
+
+            entry.ExtractToFile(targetPath, overwrite: true);
+        }
+    }
+
+    private static void ExtractModerPackageToDirectory(Stream packageStream, string targetDirectory)
     {
         Directory.CreateDirectory(targetDirectory);
         var targetDirectoryPath = Path.GetFullPath(targetDirectory);
@@ -395,13 +732,7 @@ public static partial class SelfUpdateBootstrap
 
     private static Stream DecompressPackage(Stream packageStream)
     {
-        var output = new MemoryStream();
-        using (var decompressionStream = new DecompressionStream(packageStream, leaveOpen: true)) {
-            decompressionStream.CopyTo(output);
-        }
-
-        output.Position = 0;
-        return output;
+        return new DecompressionStream(packageStream, leaveOpen: true);
     }
 
     private static bool ValidatePackageMagic(Stream packageStream)
@@ -534,7 +865,53 @@ public static partial class SelfUpdateBootstrap
         return path.Replace('/', Path.DirectorySeparatorChar);
     }
 
+    private static string NormalizeArchivePath(string path)
+    {
+        if (path.StartsWith("./", StringComparison.Ordinal)) {
+            path = path[2..];
+        }
+
+        return path.Replace('/', Path.DirectorySeparatorChar);
+    }
+
     private static string SanitizeVersion(string version) => version.Replace('.', '_');
+
+    private static string GetPackageCacheFileName(UpdateCatalogEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.PackageUrl) && string.IsNullOrWhiteSpace(entry.PackagePath)) {
+            throw new ArgumentException("Catalog entry must have either PackageUrl or PackagePath.", nameof(entry));
+        }
+
+        var pathOrUrl = string.IsNullOrWhiteSpace(entry.PackageUrl)
+            ? entry.PackagePath
+            : entry.PackageUrl;
+        var path = Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var absoluteUri)
+            ? absoluteUri.AbsolutePath
+            : pathOrUrl;
+        var fileName = Path.GetFileName(path.Replace('/', Path.DirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(fileName)) {
+            fileName = IsZipPackage(entry) ? "package.zip" : "package.zst";
+        }
+
+        foreach (var invalidChar in Path.GetInvalidFileNameChars()) {
+            fileName = fileName.Replace(invalidChar, '_');
+        }
+
+        return fileName;
+    }
+
+    private static void DeleteFileIfExists(string path)
+    {
+        try {
+            if (File.Exists(path)) {
+                File.Delete(path);
+            }
+        } catch (IOException ex) {
+            Log.Warning(ex, "清理临时下载文件失败: {Path}", path);
+        } catch (UnauthorizedAccessException ex) {
+            Log.Warning(ex, "清理临时下载文件失败: {Path}", path);
+        }
+    }
 
     private static void EnsurePathWithinDirectory(string targetPath, string directoryPrefix, string entryName)
     {
@@ -564,6 +941,13 @@ public static partial class SelfUpdateBootstrap
                 && (MaxVersion is null || currentVersion <= MaxVersion)
                 && currentVersion < TargetVersion;
         }
+    }
+
+    private readonly record struct DownloadProbe(bool SupportsRanges, long? ContentLength);
+
+    private readonly record struct DownloadRange(long Start, long End)
+    {
+        public long Length => End - Start + 1;
     }
 
     private sealed class UpdatePlanNode
@@ -629,6 +1013,7 @@ public static partial class SelfUpdateBootstrap
     private static class UpdateCatalogCache
     {
         public static string? UpdaterChecksum { get; set; }
+        public static string? UpdaterUrl { get; set; }
     }
 }
 #endif

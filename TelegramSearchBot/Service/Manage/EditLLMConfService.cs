@@ -15,6 +15,7 @@ using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
+using TelegramSearchBot.Service.Tools;
 
 namespace TelegramSearchBot.Service.Manage {
     [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)]
@@ -22,6 +23,8 @@ namespace TelegramSearchBot.Service.Manage {
         public string ServiceName => "EditLLMConfService";
         protected readonly DataDbContext DataContext;
         protected readonly IEditLLMConfHelper Helper;
+        private readonly ImageGenerationToolSettingsService _imageGenerationToolSettingsService;
+        private readonly MusicGenerationToolSettingsService _musicGenerationToolSettingsService;
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
 
         // 状态处理器映射字典
@@ -33,11 +36,15 @@ namespace TelegramSearchBot.Service.Manage {
         public EditLLMConfService(
             IEditLLMConfHelper helper,
             DataDbContext context,
-            IConnectionMultiplexer connectionMultiplexer
+            IConnectionMultiplexer connectionMultiplexer,
+            ImageGenerationToolSettingsService imageGenerationToolSettingsService,
+            MusicGenerationToolSettingsService musicGenerationToolSettingsService
             ) {
             this.connectionMultiplexer = connectionMultiplexer;
             DataContext = context;
             Helper = helper ?? throw new ArgumentNullException(nameof(helper));
+            _imageGenerationToolSettingsService = imageGenerationToolSettingsService ?? throw new ArgumentNullException(nameof(imageGenerationToolSettingsService));
+            _musicGenerationToolSettingsService = musicGenerationToolSettingsService ?? throw new ArgumentNullException(nameof(musicGenerationToolSettingsService));
 
             // 初始化状态处理器映射
             _stateHandlers = new Dictionary<string, Func<EditLLMConfRedisHelper, string, Task<(bool, string)>>>
@@ -58,7 +65,9 @@ namespace TelegramSearchBot.Service.Manage {
                 { LLMConfState.ViewingModelSelectChannel.GetDescription(), HandleViewingModelSelectChannelAsync },
                 { LLMConfState.EditingInputValue.GetDescription(), HandleEditingInputValueAsync },
                 { LLMConfState.SettingMaxRetry.GetDescription(), HandleSettingMaxRetryAsync },
-                { LLMConfState.SettingMaxImageRetry.GetDescription(), HandleSettingMaxImageRetryAsync }
+                { LLMConfState.SettingMaxImageRetry.GetDescription(), HandleSettingMaxImageRetryAsync },
+                { LLMConfState.SettingImageGenerationModel.GetDescription(), HandleSettingImageGenerationModelAsync },
+                { LLMConfState.SettingMusicGenerationModel.GetDescription(), HandleSettingMusicGenerationModelAsync }
             };
 
             // 初始化字段更新处理器映射
@@ -183,6 +192,28 @@ namespace TelegramSearchBot.Service.Manage {
                 return (true, $"图片分析模型已设置为: {command}");
             } catch {
                 return (false, "设置图片分析模型失败");
+            }
+        }
+
+        private async Task<(bool, string)> HandleSettingImageGenerationModelAsync(EditLLMConfRedisHelper redis, string command) {
+            try {
+                await _imageGenerationToolSettingsService.SetDefaultModelNameAsync(command);
+                await redis.DeleteKeysAsync();
+                return (true, $"默认生图模型已设置为: {command.Trim()}。群内没有单独配置生图模型时会使用该默认值；请确保该模型已通过 `添加模型` 关联到一个 OpenAI-compatible 或 MiniMax 渠道。");
+            } catch {
+                await redis.DeleteKeysAsync();
+                return (false, "设置默认生图模型失败");
+            }
+        }
+
+        private async Task<(bool, string)> HandleSettingMusicGenerationModelAsync(EditLLMConfRedisHelper redis, string command) {
+            try {
+                await _musicGenerationToolSettingsService.SetDefaultModelNameAsync(command);
+                await redis.DeleteKeysAsync();
+                return (true, $"默认音乐模型已设置为: {command.Trim()}。群内没有单独配置音乐模型时会使用该默认值；请确保该模型已通过 `添加模型` 关联到一个 MiniMax 渠道。");
+            } catch {
+                await redis.DeleteKeysAsync();
+                return (false, "设置默认音乐模型失败");
             }
         }
 
@@ -481,6 +512,58 @@ namespace TelegramSearchBot.Service.Manage {
             if (cmd.Equals("设置图片模型", StringComparison.OrdinalIgnoreCase)) {
                 await redis.SetStateAsync(LLMConfState.SettingAltPhotoModel.GetDescription());
                 return (true, "请输入图片分析使用的模型名称:");
+            }
+
+            if (cmd.Equals("开启生图工具", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("启用生图工具", StringComparison.OrdinalIgnoreCase)) {
+                await _imageGenerationToolSettingsService.SetToolEnabledAsync(true);
+                var modelName = await _imageGenerationToolSettingsService.GetDefaultModelNameAsync();
+                return (true, $"生图工具已开启，会注入到 LLM 工具提示词中。默认生图模型: {modelName}");
+            }
+
+            if (cmd.Equals("关闭生图工具", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("禁用生图工具", StringComparison.OrdinalIgnoreCase)) {
+                await _imageGenerationToolSettingsService.SetToolEnabledAsync(false);
+                return (true, "生图工具已关闭，并会从 LLM 工具提示词中隐藏。");
+            }
+
+            if (cmd.Equals("生图工具状态", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("查看生图工具", StringComparison.OrdinalIgnoreCase)) {
+                var enabled = await _imageGenerationToolSettingsService.IsToolEnabledAsync();
+                var modelName = await _imageGenerationToolSettingsService.GetDefaultModelNameAsync();
+                return (true, $"生图工具: {( enabled ? "已开启" : "已关闭" )}\n默认生图模型: {modelName}\n群内可用 `选择生图模型` 或 `设置生图模型 <模型名>` 设置当前群的生图模型；未配置时使用默认值。\nAPI 地址与 API Key 来自对应模型关联的 LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址，支持 OpenAI-compatible 和 MiniMax。");
+            }
+
+            if (cmd.Equals("设置默认生图模型", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("设置生图默认模型", StringComparison.OrdinalIgnoreCase)) {
+                await redis.SetStateAsync(LLMConfState.SettingImageGenerationModel.GetDescription());
+                return (true, $"请输入没有群级配置时使用的默认生图模型名称(内置默认 {ImageGenerationToolSettingsService.DefaultModelName}，MiniMax 可用 image-01 或 image-01-live):");
+            }
+
+            if (cmd.Equals("开启音乐工具", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("启用音乐工具", StringComparison.OrdinalIgnoreCase)) {
+                await _musicGenerationToolSettingsService.SetToolEnabledAsync(true);
+                var modelName = await _musicGenerationToolSettingsService.GetDefaultModelNameAsync();
+                return (true, $"音乐工具已开启，会注入到 LLM 工具提示词中。默认音乐模型: {modelName}");
+            }
+
+            if (cmd.Equals("关闭音乐工具", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("禁用音乐工具", StringComparison.OrdinalIgnoreCase)) {
+                await _musicGenerationToolSettingsService.SetToolEnabledAsync(false);
+                return (true, "音乐工具已关闭，并会从 LLM 工具提示词中隐藏。");
+            }
+
+            if (cmd.Equals("音乐工具状态", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("查看音乐工具", StringComparison.OrdinalIgnoreCase)) {
+                var enabled = await _musicGenerationToolSettingsService.IsToolEnabledAsync();
+                var modelName = await _musicGenerationToolSettingsService.GetDefaultModelNameAsync();
+                return (true, $"音乐工具: {( enabled ? "已开启" : "已关闭" )}\n默认音乐模型: {modelName}\n群内可用 `选择音乐模型` 或 `设置音乐模型 <模型名>` 设置当前群的音乐模型；未配置时使用默认值。\nAPI 地址与 API Key 来自对应模型关联的 MiniMax LLM 渠道，可通过 `新建渠道` / `编辑渠道` 自定义渠道地址。");
+            }
+
+            if (cmd.Equals("设置默认音乐模型", StringComparison.OrdinalIgnoreCase) ||
+                cmd.Equals("设置音乐默认模型", StringComparison.OrdinalIgnoreCase)) {
+                await redis.SetStateAsync(LLMConfState.SettingMusicGenerationModel.GetDescription());
+                return (true, $"请输入没有群级配置时使用的默认音乐模型名称(内置默认 {MusicGenerationToolSettingsService.DefaultModelName}，MiniMax 可用 music-2.6、music-2.6-free、music-cover 或 music-cover-free):");
             }
 
             return null;

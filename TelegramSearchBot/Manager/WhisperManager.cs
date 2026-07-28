@@ -83,7 +83,9 @@ namespace TelegramSearchBot.Manager {
             try {
                 await foreach (var result in processor.ProcessAsync(wavStream, token)) {
                     timeTaken = DateTime.UtcNow - startTime;
-                    logger.LogInformation($"{result.Start.ToLongString()}-->{result.End.ToLongString()}: {result.Text,-150} [{timeTaken.ToLongString()}]");
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        logger.LogInformation($"{result.Start.ToLongString()}-->{result.End.ToLongString()}: {result.Text,-150} [{timeTaken.ToLongString()}]");
+                    }
                     ToReturn.Add($"{startId}");
                     ToReturn.Add($"{result.Start.ToString(@"hh\:mm\:ss\,fff")} --> {result.End.ToString(@"hh\:mm\:ss\,fff")}");
                     ToReturn.Add($"{result.Text}\n");

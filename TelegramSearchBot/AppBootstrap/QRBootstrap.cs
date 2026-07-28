@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using StackExchange.Redis;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Manager;
 
 namespace TelegramSearchBot.AppBootstrap {
@@ -37,7 +38,9 @@ namespace TelegramSearchBot.AppBootstrap {
                 Log.Logger.Information("QR processing started: task={task}, path={path}", task, photoPath);
                 try {
                     response = await qr.ExecuteAsync(photoPath);
-                    Log.Logger.Information("QR result: task={task}, len={len}, content={preview}", task, response?.Length ?? -1, response?.Length > 100 ? response.Substring(0, 100) + "..." : response);
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        Log.Logger.Information("QR result: task={task}, len={len}, content={preview}", task, response?.Length ?? -1, response?.Length > 100 ? response.Substring(0, 100) + "..." : response);
+                    }
                 } catch (Exception ex) {
                     Log.Logger.Warning(ex, "QR processing failed for task {task}", task);
                 }
