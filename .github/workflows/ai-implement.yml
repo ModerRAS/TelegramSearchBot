@@ -99,15 +99,20 @@ jobs:
                 per_page: 10
               });
               
+              if (issues.length === 0) {
+                console.log('No issues with ai-task label found.');
+                return JSON.stringify({ issueNumber: null, branchName: null });
+              }
+              
               const { data: comments } = await github.rest.issues.listComments({
-                issue_number: issues[0]?.number,
+                issue_number: issues[0].number,
                 owner: context.repo.owner,
                 repo: context.repo.repo
               });
               
               const hasPlan = comments.some(c => c.body.includes('## AI Implementation Plan'));
               
-              if (issues.length > 0 && hasPlan) {
+              if (hasPlan) {
                 issueNumber = issues[0].number;
                 branchName = 'ai/issue-' + issueNumber;
               }

@@ -12,6 +12,7 @@ using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Model;
+using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Service.Common; // Added for IAppConfigurationService
 using TelegramSearchBot.Service.Scheduler; // Added for ISchedulerService
 
@@ -78,13 +79,10 @@ namespace TelegramSearchBot.Service.Manage {
 
         public async Task<(bool, string)> ExecuteAsync(long UserId, long ChatId, string Command) {
 
-            string modelSelectStateKey = $"modelselect:{ChatId}:state";
-            string modelSelectDataKey = $"modelselect:{ChatId}:models";
+            string modelSelectStateKey = LlmAgentRedisKeys.ModelSelectState(ChatId);
+            string modelSelectDataKey = LlmAgentRedisKeys.ModelSelectModels(ChatId);
 
             if (Command.Equals("选择模型", StringComparison.OrdinalIgnoreCase)) {
-                string stateKey = $"modelselect:{ChatId}:state";
-                string dataKey = $"modelselect:{ChatId}:models";
-
                 var models = await GetDistinctModelsAsync();
                 if (models.Count == 0) {
                     return (true, "当前没有可用的模型");

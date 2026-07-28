@@ -227,6 +227,8 @@
     *   **`SendPhotoToolService.cs`**: 发送图片工具（send_photo_base64, send_photo_file）。
     *   **`SendVideoToolService.cs`**: 发送视频工具（send_video_file）。
     *   **`SendDocumentToolService.cs`**: 发送文件工具（send_document_file）。
+    *   **`ImageGenerationToolService.cs`**: 图片生成工具（generate_image），支持 OpenAI-compatible 和 MiniMax 图片接口。
+    *   **`MusicGenerationToolService.cs`**: MiniMax 音乐生成工具（generate_music），生成完成后保存音频并可自动回复到当前聊天。
 
 ### 17. `Sink/`
 

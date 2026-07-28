@@ -6,35 +6,25 @@ using Moq;
 using Telegram.Bot;
 using Telegram.Bot.Requests.Abstractions;
 using Telegram.Bot.Types;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Controller.Manage;
 using TelegramSearchBot.Model;
-using TelegramSearchBot.Service.Common;
-using TelegramSearchBot.Service.Manage;
-using TelegramSearchBot.Service.Scheduler;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Controller.Manage;
 
 /// <summary>
-/// RED-phase tests for UpdateController bot command handling.
+/// Tests for UpdateController bot command handling.
 ///
 /// These tests validate the command routing logic, null-safety guards,
-/// admin permission checks, and the full ExecuteAsync flow.
+/// admin permission checks (global admin via Env.AdminId), and the full ExecuteAsync flow.
 ///
-/// NOTE: Many integration-style tests are EXPECTED to fail at runtime
-/// in the RED phase because:
-///   1. AdminService.IsNormalAdmin is non-virtual and cannot be mocked.
-///   2. SelfUpdateBootstrap is a static class with platform-dependent partial methods.
-///   3. Telegram.Bot v22 API methods are extension methods (not interface methods)
-///      and cannot be mocked by Moq.
-///
-/// The test structure is correct and compiles; the GREEN phase (Task 10)
-/// will make the system-under-test fully mockable.
+/// NOTE: Some integration-style tests call SelfUpdateBootstrap static methods
+/// which depend on network access and platform-specific functionality.
 /// </summary>
 public class UpdateControllerTests
 {
     private readonly Mock<ITelegramBotClient> _mockBotClient;
-    private readonly Mock<AdminService> _mockAdminService;
     private readonly Mock<IHostApplicationLifetime> _mockAppLifetime;
     private readonly UpdateController _controller;
 
@@ -42,19 +32,6 @@ public class UpdateControllerTests
     {
         _mockBotClient = new Mock<ITelegramBotClient>();
         _mockAppLifetime = new Mock<IHostApplicationLifetime>();
-
-        // AdminService constructor requires several dependencies.
-        // IsNormalAdmin is now virtual — mock returns true for admin permission.
-        _mockAdminService = new Mock<AdminService>(
-            Mock.Of<Microsoft.Extensions.Logging.ILogger<AdminService>>(),
-            null!, // DataDbContext — not needed when IsNormalAdmin is mocked
-            Mock.Of<IAppConfigurationService>(),
-            Mock.Of<StackExchange.Redis.IConnectionMultiplexer>(),
-            Mock.Of<ISchedulerService>());
-
-        _mockAdminService
-            .Setup(x => x.IsNormalAdmin(It.IsAny<long>()))
-            .ReturnsAsync(true);
 
         // SendMessage in Telegram.Bot v22 is an extension method that calls
         // ITelegramBotClient.SendRequest<T>() internally. Mock the underlying
@@ -67,7 +44,6 @@ public class UpdateControllerTests
 
         _controller = new UpdateController(
             _mockBotClient.Object,
-            _mockAdminService.Object,
             _mockAppLifetime.Object);
     }
 

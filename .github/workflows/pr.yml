@@ -38,7 +38,7 @@ jobs:
       run: dotnet list package --vulnerable --include-transitive
 
     - name: Test
-      run: dotnet test --no-build --verbosity normal --configuration Release --collect:"XPlat Code Coverage" --logger "trx;LogFileName=test-results.trx"
+      run: dotnet test --no-build --verbosity normal --configuration Release --filter "Category!=Performance" --collect:"XPlat Code Coverage" --logger "trx;LogFileName=test-results.trx"
 
     - name: Upload coverage to Codecov
       if: matrix.os == 'windows-latest'

@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 using Nito.AsyncEx;
 using Serilog;
+using TelegramSearchBot.Common;
 
 namespace TelegramSearchBot.AppBootstrap {
     public class AppBootstrap {
@@ -251,12 +252,24 @@ namespace TelegramSearchBot.AppBootstrap {
 
             process.OutputDataReceived += (_, e) => {
                 if (!string.IsNullOrWhiteSpace(e.Data)) {
-                    Log.Logger.Information("[{Process}] {Message}", processDisplayName, e.Data);
+                    if (ShouldRouteChildOutputToChatContentLog(processDisplayName)) {
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            Log.Logger.Information("[{Process}] {Message}", processDisplayName, e.Data);
+                        }
+                    } else {
+                        Log.Logger.Information("[{Process}] {Message}", processDisplayName, e.Data);
+                    }
                 }
             };
             process.ErrorDataReceived += (_, e) => {
                 if (!string.IsNullOrWhiteSpace(e.Data)) {
-                    Log.Logger.Warning("[{Process}] {Message}", processDisplayName, e.Data);
+                    if (ShouldRouteChildOutputToChatContentLog(processDisplayName)) {
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            Log.Logger.Warning("[{Process}] {Message}", processDisplayName, e.Data);
+                        }
+                    } else {
+                        Log.Logger.Warning("[{Process}] {Message}", processDisplayName, e.Data);
+                    }
                 }
             };
             process.Exited += (_, _) => {
@@ -276,6 +289,11 @@ namespace TelegramSearchBot.AppBootstrap {
             childProcessManager.AddProcess(process, processMemoryLimitBytes);
             Log.Logger.Information("{Process}已启动", processDisplayName);
             return process;
+        }
+
+        private static bool ShouldRouteChildOutputToChatContentLog(string processDisplayName) {
+            return processDisplayName.Contains("LLMAgent", StringComparison.OrdinalIgnoreCase) ||
+                   processDisplayName.Contains("SubAgent", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -329,12 +347,11 @@ namespace TelegramSearchBot.AppBootstrap {
                 }
             } catch (TargetInvocationException ex) {
                 // 被调用的 Startup 方法内部抛出了异常
-                Log.Error($"错误：启动过程 '{startupKey}' 中发生异常: {ex.InnerException?.Message ?? ex.Message}");
-                // 可以考虑记录更详细的堆栈信息 ex.InnerException.StackTrace
+                Log.Error(ex, "错误：启动过程 '{StartupKey}' 中发生异常", startupKey);
                 return false; // 目标方法执行失败
             } catch (Exception ex) {
                 // 其他反射或运行时错误
-                Log.Error($"处理启动类型 '{startupKey}' 时发生意外错误: {ex.Message}");
+                Log.Error(ex, "处理启动类型 '{StartupKey}' 时发生意外错误", startupKey);
                 return false; // 反射或其他错误
             }
         }
@@ -364,7 +381,7 @@ namespace TelegramSearchBot.AppBootstrap {
                 }
 
             } catch (Exception ex) {
-                Log.Error($"  (无法自动列出类型: {ex.Message})");
+                Log.Error(ex, "  (无法自动列出类型)");
             }
         }
     }
