@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
+using Serilog.Events;
 
 namespace TelegramSearchBot.Common {
     public static class Env {
@@ -42,6 +44,7 @@ namespace TelegramSearchBot.Common {
             OLTPAuth = config.OLTPAuth;
             OLTPAuthUrl = config.OLTPAuthUrl;
             OLTPName = config.OLTPName;
+            SerilogMinimumLevel = ResolveSerilogMinimumLevel(config.LogLevel);
             BraveApiKey = config.BraveApiKey;
             EnableAccounting = config.EnableAccounting;
             EnableAutoUpdate = config.EnableAutoUpdate;
@@ -58,6 +61,37 @@ namespace TelegramSearchBot.Common {
             AgentMaxRecoveryAttempts = config.AgentMaxRecoveryAttempts;
             AgentQueueBacklogWarningThreshold = config.AgentQueueBacklogWarningThreshold;
             AgentProcessMemoryLimitMb = config.AgentProcessMemoryLimitMb;
+            EnableLlmSandboxie = config.EnableLlmSandboxie;
+            SandboxieStartExe = string.IsNullOrWhiteSpace(config.SandboxieStartExe)
+                ? @"C:\Program Files\Sandboxie-Plus\Start.exe"
+                : config.SandboxieStartExe.Trim();
+            SandboxieIniPath = string.IsNullOrWhiteSpace(config.SandboxieIniPath)
+                ? @"C:\Windows\Sandboxie.ini"
+                : config.SandboxieIniPath.Trim();
+            SandboxieAutoRegisterImportBox = config.SandboxieAutoRegisterImportBox;
+            SandboxieDenyHostFileSystem = config.SandboxieDenyHostFileSystem;
+            SandboxieBoxImportDirectory = string.IsNullOrWhiteSpace(config.SandboxieBoxImportDirectory)
+                ? Path.Combine(WorkDir, "Sandboxie", "Boxes")
+                : config.SandboxieBoxImportDirectory;
+            SandboxieBoxPrefix = string.IsNullOrWhiteSpace(config.SandboxieBoxPrefix) ? "TGSB_G_" : config.SandboxieBoxPrefix;
+            SandboxieGroupFilesRoot = string.IsNullOrWhiteSpace(config.SandboxieGroupFilesRoot)
+                ? string.Empty
+                : config.SandboxieGroupFilesRoot.Trim();
+            SandboxieGlobalReadPaths = config.SandboxieGlobalReadPaths ?? new List<string>();
+            SandboxieGlobalClosedPaths = config.SandboxieGlobalClosedPaths ?? new List<string>();
+            SandboxieToolTimeoutSeconds = Math.Clamp(config.SandboxieToolTimeoutSeconds, 5, 3600);
+            EnableCodingAgentTool = config.EnableCodingAgentTool;
+            CodingAgentAllowedGroupIds = config.CodingAgentAllowedGroupIds ?? new List<long>();
+            CodingAgentDeniedPathPrefixes = ResolveCodingAgentDeniedPathPrefixes(config.CodingAgentDeniedPathPrefixes);
+            CodingAgentDefaultTimeoutMinutes = Math.Clamp(config.CodingAgentDefaultTimeoutMinutes, 1, 1440);
+            CodingAgentMaxConcurrentJobs = Math.Clamp(config.CodingAgentMaxConcurrentJobs, 1, 64);
+            CodingAgentMaxAutoResumeContinuations = Math.Clamp(config.CodingAgentMaxAutoResumeContinuations, 0, 16);
+            CodingAgentPiCommand = string.IsNullOrWhiteSpace(config.CodingAgentPiCommand)
+                ? "pi"
+                : config.CodingAgentPiCommand.Trim();
+            CodingAgentSidecarCommand = string.IsNullOrWhiteSpace(config.CodingAgentSidecarCommand)
+                ? "telegramsearchbot-coding-agent-sidecar"
+                : config.CodingAgentSidecarCommand.Trim();
         }
 
         public static BotApiEndpointSettings ResolveBotApiEndpoint(Config config) {
@@ -120,6 +154,7 @@ namespace TelegramSearchBot.Common {
         public static string OLTPAuth { get; set; } = null!;
         public static string OLTPAuthUrl { get; set; } = null!;
         public static string OLTPName { get; set; } = null!;
+        public static readonly LogEventLevel SerilogMinimumLevel;
         public static string BraveApiKey { get; set; } = null!;
         public static bool EnableAccounting { get; set; } = false;
         public static int MaxToolCycles { get; set; }
@@ -134,6 +169,25 @@ namespace TelegramSearchBot.Common {
         public static int AgentMaxRecoveryAttempts { get; set; } = 2;
         public static int AgentQueueBacklogWarningThreshold { get; set; } = 20;
         public static int AgentProcessMemoryLimitMb { get; set; } = 256;
+        public static bool EnableLlmSandboxie { get; set; } = false;
+        public static string SandboxieStartExe { get; set; } = @"C:\Program Files\Sandboxie-Plus\Start.exe";
+        public static string SandboxieIniPath { get; set; } = @"C:\Windows\Sandboxie.ini";
+        public static bool SandboxieAutoRegisterImportBox { get; set; } = true;
+        public static bool SandboxieDenyHostFileSystem { get; set; } = false;
+        public static string SandboxieBoxImportDirectory { get; set; } = null!;
+        public static string SandboxieBoxPrefix { get; set; } = "TGSB_G_";
+        public static string SandboxieGroupFilesRoot { get; set; } = null!;
+        public static List<string> SandboxieGlobalReadPaths { get; set; } = new List<string>();
+        public static List<string> SandboxieGlobalClosedPaths { get; set; } = new List<string>();
+        public static int SandboxieToolTimeoutSeconds { get; set; } = 120;
+        public static bool EnableCodingAgentTool { get; set; } = false;
+        public static List<long> CodingAgentAllowedGroupIds { get; set; } = new List<long>();
+        public static List<string> CodingAgentDeniedPathPrefixes { get; set; } = new List<string>();
+        public static int CodingAgentDefaultTimeoutMinutes { get; set; } = 60;
+        public static int CodingAgentMaxConcurrentJobs { get; set; } = 2;
+        public static int CodingAgentMaxAutoResumeContinuations { get; set; } = 4;
+        public static string CodingAgentPiCommand { get; set; } = "pi";
+        public static string CodingAgentSidecarCommand { get; set; } = "telegramsearchbot-coding-agent-sidecar";
 
         public static Dictionary<string, string> Configuration { get; set; } = new Dictionary<string, string>();
 
@@ -152,6 +206,95 @@ namespace TelegramSearchBot.Common {
             }
 
             return NormalizeBaseUrl(uri.ToString(), DefaultUpdateBaseUrl);
+        }
+
+        public static LogEventLevel ResolveSerilogMinimumLevel(string? logLevel) {
+            if (Enum.TryParse<LogEventLevel>(logLevel, ignoreCase: true, out var parsed) &&
+                Enum.IsDefined(typeof(LogEventLevel), parsed)) {
+                return parsed;
+            }
+
+            return LogEventLevel.Verbose;
+        }
+
+        private static List<string> ResolveCodingAgentDeniedPathPrefixes(List<string>? configuredPrefixes) {
+            return GetDefaultCodingAgentDeniedPathPrefixes()
+                .Concat(configuredPrefixes ?? new List<string>())
+                .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
+                .Select(prefix => NormalizeDeniedPathPrefix(prefix))
+                .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
+                .Distinct(GetCodingAgentPathComparer())
+                .ToList();
+        }
+
+        private static StringComparer GetCodingAgentPathComparer() {
+            return OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        }
+
+        private static IEnumerable<string> GetDefaultCodingAgentDeniedPathPrefixes() {
+            yield return WorkDir;
+
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrWhiteSpace(userProfile)) {
+                yield return Path.Combine(userProfile, ".ssh");
+                yield return Path.Combine(userProfile, ".gnupg");
+            }
+
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (!string.IsNullOrWhiteSpace(appData)) {
+                yield return appData;
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(localAppData)) {
+                yield return Path.Combine(localAppData, "TelegramSearchBot");
+            }
+
+            if (OperatingSystem.IsWindows()) {
+                var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                if (!string.IsNullOrWhiteSpace(windows)) {
+                    yield return windows;
+                }
+
+                var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (!string.IsNullOrWhiteSpace(programFiles)) {
+                    yield return programFiles;
+                }
+
+                var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                if (!string.IsNullOrWhiteSpace(programFilesX86)) {
+                    yield return programFilesX86;
+                }
+            } else {
+                yield return "/bin";
+                yield return "/boot";
+                yield return "/dev";
+                yield return "/etc";
+                yield return "/proc";
+                yield return "/root";
+                yield return "/sbin";
+                yield return "/sys";
+                yield return "/usr/bin";
+                yield return "/usr/sbin";
+                yield return "/var";
+            }
+        }
+
+        private static string NormalizeDeniedPathPrefix(string prefix) {
+            try {
+                var expanded = prefix.Trim();
+                if (expanded == "~") {
+                    expanded = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                } else if (expanded.StartsWith("~/", StringComparison.Ordinal) || expanded.StartsWith("~\\", StringComparison.Ordinal)) {
+                    expanded = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        expanded[2..]);
+                }
+
+                return Path.GetFullPath(expanded).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            } catch {
+                return string.Empty;
+            }
         }
     }
     public class Config {
@@ -178,6 +321,7 @@ namespace TelegramSearchBot.Common {
         public string OLTPAuth { get; set; } = null!;
         public string OLTPAuthUrl { get; set; } = null!;
         public string OLTPName { get; set; } = null!;
+        public string LogLevel { get; set; } = "Verbose";
         public string BraveApiKey { get; set; } = null!;
         public bool EnableAccounting { get; set; } = false;
         public int MaxToolCycles { get; set; } = 25;
@@ -192,6 +336,25 @@ namespace TelegramSearchBot.Common {
         public int AgentMaxRecoveryAttempts { get; set; } = 2;
         public int AgentQueueBacklogWarningThreshold { get; set; } = 20;
         public int AgentProcessMemoryLimitMb { get; set; } = 256;
+        public bool EnableLlmSandboxie { get; set; } = false;
+        public string SandboxieStartExe { get; set; } = @"C:\Program Files\Sandboxie-Plus\Start.exe";
+        public string SandboxieIniPath { get; set; } = @"C:\Windows\Sandboxie.ini";
+        public bool SandboxieAutoRegisterImportBox { get; set; } = true;
+        public bool SandboxieDenyHostFileSystem { get; set; } = false;
+        public string SandboxieBoxImportDirectory { get; set; } = string.Empty;
+        public string SandboxieBoxPrefix { get; set; } = "TGSB_G_";
+        public string SandboxieGroupFilesRoot { get; set; } = string.Empty;
+        public List<string> SandboxieGlobalReadPaths { get; set; } = new List<string>();
+        public List<string> SandboxieGlobalClosedPaths { get; set; } = new List<string>();
+        public int SandboxieToolTimeoutSeconds { get; set; } = 120;
+        public bool EnableCodingAgentTool { get; set; } = false;
+        public List<long> CodingAgentAllowedGroupIds { get; set; } = new List<long>();
+        public List<string> CodingAgentDeniedPathPrefixes { get; set; } = new List<string>();
+        public int CodingAgentDefaultTimeoutMinutes { get; set; } = 60;
+        public int CodingAgentMaxConcurrentJobs { get; set; } = 2;
+        public int CodingAgentMaxAutoResumeContinuations { get; set; } = 4;
+        public string CodingAgentPiCommand { get; set; } = "pi";
+        public string CodingAgentSidecarCommand { get; set; } = "telegramsearchbot-coding-agent-sidecar";
     }
 
     public sealed record BotApiEndpointSettings(string BaseUrl, bool IsLocalApi, string ExternalLocalBotApiBaseUrl);

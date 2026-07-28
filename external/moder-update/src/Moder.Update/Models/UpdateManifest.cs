@@ -29,6 +29,9 @@ public class UpdateManifest
     /// <summary>List of files to replace (full files, not diffs).</summary>
     public required List<UpdateFile> Files { get; init; }
 
+    /// <summary>Optional full target-version file snapshot for cumulative package planning.</summary>
+    public List<UpdateFile>? SnapshotFiles { get; init; }
+
     /// <summary>SHA512 checksum of the entire package for integrity verification.</summary>
     public required string Checksum { get; init; }
 

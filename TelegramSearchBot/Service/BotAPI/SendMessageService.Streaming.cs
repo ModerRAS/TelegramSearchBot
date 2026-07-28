@@ -10,6 +10,7 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Model;
 
@@ -371,22 +372,33 @@ namespace TelegramSearchBot.Service.BotAPI {
             }
 
             // Generate a unique draftId to avoid collisions for concurrent requests to the same message
-            int draftId = unchecked(( int ) ( chatId ^ replyTo ^ DateTime.UtcNow.Ticks ));
+            int draftId = CreateDraftId(chatId, replyTo);
             string latestContent = null;
-            bool draftStarted = false;
+
+            logger.LogDebug(
+                "SendDraftStream: Starting draft stream. ChatId {ChatId}, ReplyTo {ReplyTo}, DraftId {DraftId}",
+                chatId,
+                replyTo,
+                draftId);
 
             try {
                 // Send initial placeholder as draft
                 try {
                     await botClient.SendMessageDraft(chatId, draftId, initialPlaceholderContent, parseMode: ParseMode.None, cancellationToken: cancellationToken);
-                    draftStarted = true;
                 } catch (Exception ex) {
                     // Remember chats that don't support draft messages to avoid repeated failures
                     if (ex.Message != null && ex.Message.Contains("TEXTDRAFT_PEER_INVALID", StringComparison.OrdinalIgnoreCase)) {
                         _draftUnsupportedChats.TryAdd(chatId, true);
                         logger.LogInformation("SendDraftStream: Chat {ChatId} does not support draft messages. Will use SendFullMessageStream for future requests.", chatId);
                     } else {
-                        logger.LogWarning(ex, "SendDraftStream: Failed to send initial draft placeholder, falling back to SendFullMessageStream.");
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            logger.LogWarning(ex,
+                                "SendDraftStream: Failed to send initial draft placeholder. ChatId {ChatId}, DraftId {DraftId}, PlaceholderLength {PlaceholderLength}, PlaceholderPreview {PlaceholderPreview}. Falling back to SendFullMessageStream.",
+                                chatId,
+                                draftId,
+                                initialPlaceholderContent?.Length ?? 0,
+                                GetContentPreview(initialPlaceholderContent));
+                        }
                     }
                     // Fall back to the old method if sendMessageDraft is not supported
                     return await SendFullMessageStream(fullMessagesStream, chatId, replyTo, initialPlaceholderContent, cancellationToken);
@@ -404,9 +416,25 @@ namespace TelegramSearchBot.Service.BotAPI {
                         var html = MessageFormatHelper.ConvertMarkdownToTelegramHtml(displayMarkdown);
                         if (!string.IsNullOrWhiteSpace(html)) {
                             await botClient.SendMessageDraft(chatId, draftId, html, parseMode: ParseMode.Html, cancellationToken: cancellationToken);
+                        } else if (!string.IsNullOrWhiteSpace(displayMarkdown)) {
+                            using (LoggerHolders.PushChatContentLogScope()) {
+                                logger.LogDebug(
+                                    "SendDraftStream: Markdown collapsed to empty HTML. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
+                                    chatId,
+                                    draftId,
+                                    displayMarkdown.Length,
+                                    GetContentPreview(displayMarkdown));
+                            }
                         }
                     } catch (Exception ex) {
-                        logger.LogTrace(ex, "SendDraftStream: Error sending draft update, will retry on next chunk.");
+                        using (LoggerHolders.PushChatContentLogScope()) {
+                            logger.LogWarning(ex,
+                                "SendDraftStream: Error sending draft update. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
+                                chatId,
+                                draftId,
+                                latestContent?.Length ?? 0,
+                                GetContentPreview(latestContent));
+                        }
                     }
                 }
             } catch (OperationCanceledException) {
@@ -424,7 +452,14 @@ namespace TelegramSearchBot.Service.BotAPI {
                         await botClient.SendMessageDraft(chatId, draftId, finalHtml, parseMode: ParseMode.Html, cancellationToken: CancellationToken.None);
                     }
                 } catch (Exception ex) {
-                    logger.LogWarning(ex, "SendDraftStream: Error sending final draft content.");
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        logger.LogWarning(ex,
+                            "SendDraftStream: Error sending final draft content. ChatId {ChatId}, DraftId {DraftId}, MarkdownLength {MarkdownLength}, MarkdownPreview {MarkdownPreview}.",
+                            chatId,
+                            draftId,
+                            latestContent.Length,
+                            GetContentPreview(latestContent));
+                    }
                 }
             }
 
@@ -598,6 +633,31 @@ namespace TelegramSearchBot.Service.BotAPI {
             }
 
             return sentMessages;
+        }
+
+        private static int CreateDraftId(long chatId, int replyTo) {
+            var draftId = HashCode.Combine(chatId, replyTo, Environment.TickCount, Guid.NewGuid());
+            return draftId == 0 ? 1 : draftId;
+        }
+
+        private static string GetContentPreview(string? content, int maxLength = 240) {
+            if (string.IsNullOrEmpty(content)) {
+                return "<empty>";
+            }
+
+            var normalized = content
+                .Replace("\r", "\\r", StringComparison.Ordinal)
+                .Replace("\n", "\\n", StringComparison.Ordinal);
+
+            if (normalized.Length <= maxLength) {
+                return normalized;
+            }
+
+            var headLength = Math.Max(1, maxLength / 2);
+            var tailLength = Math.Max(1, maxLength - headLength);
+            var head = normalized[..headLength];
+            var tail = normalized[^tailLength..];
+            return $"{head}...{tail}";
         }
         #endregion
     }

@@ -29,16 +29,48 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly Dictionary<long, ChatSession> _chatSessions = new();
         private readonly IHttpClientFactory _httpClientFactory;
-        public string BotName { get; set; }
+        private readonly IBotIdentityProvider _botIdentityProvider;
+        private readonly LlmVisibilityService _llmVisibilityService;
+        private string _fallbackBotName = string.Empty;
+        public string BotName {
+            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            set {
+                if (_botIdentityProvider != null) {
+                    _botIdentityProvider.SetIdentity(Env.BotId, value);
+                } else {
+                    _fallbackBotName = value ?? string.Empty;
+                }
+            }
+        }
 
         public GeminiService(
             DataDbContext context,
             ILogger<GeminiService> logger,
-            IHttpClientFactory httpClientFactory) {
+            IHttpClientFactory httpClientFactory)
+            : this(context, logger, httpClientFactory, null, null) {
+        }
+
+        public GeminiService(
+            DataDbContext context,
+            ILogger<GeminiService> logger,
+            IHttpClientFactory httpClientFactory,
+            IBotIdentityProvider botIdentityProvider,
+            LlmVisibilityService llmVisibilityService = null) {
             _logger = logger;
             _dbContext = context;
             _httpClientFactory = httpClientFactory;
+            _botIdentityProvider = botIdentityProvider;
+            _llmVisibilityService = llmVisibilityService;
             _logger.LogInformation("GeminiService instance created");
+        }
+
+        private async Task<string> GetBotNameAsync() {
+            if (_botIdentityProvider == null) {
+                return _fallbackBotName;
+            }
+
+            var identity = await _botIdentityProvider.GetIdentityAsync();
+            return identity.UserName ?? string.Empty;
         }
 
         private void AddMessageToHistory(List<GenerativeAI.Types.Content> chatHistory, long fromUserId, string content) {
@@ -91,7 +123,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             .ToListAsync();
             }
 
-            if (inputMessage != null) {
+            if (_llmVisibilityService != null) {
+                messages = await _llmVisibilityService.FilterVisibleMessagesAsync(chatId, messages);
+            }
+
+            if (inputMessage != null &&
+                ( _llmVisibilityService == null ||
+                  !await _llmVisibilityService.IsUserInvisibleAsync(chatId, inputMessage.FromUserId) )) {
                 messages.Add(inputMessage);
             }
 
@@ -353,13 +391,26 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LLMChannel channel,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
 
             var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
             var fullResponse = new StringBuilder();
 
+            if (_llmVisibilityService != null &&
+                message != null &&
+                await _llmVisibilityService.IsUserInvisibleAsync(ChatId, message.FromUserId, cancellationToken)) {
+                _chatSessions.Remove(ChatId);
+                yield break;
+            }
+
             var history = await GetChatHistory(ChatId, message, await CheckVisionSupport(modelName, channel.Id));
+            if (_llmVisibilityService != null &&
+                ( await _llmVisibilityService.GetInvisibleUserIdsAsync(ChatId, cancellationToken) ).Count > 0) {
+                _chatSessions.Remove(ChatId);
+            }
+
             if (!_chatSessions.TryGetValue(ChatId, out var chatSession)) {
                 chatSession = model.StartChat(history: history);
                 _chatSessions[ChatId] = chatSession;
@@ -369,7 +420,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var currentMessageBuilder = new StringBuilder();
             // Track history for snapshot
             var trackedHistory = new List<SerializedChatMessage>();
-            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = McpToolHelper.FormatSystemPrompt(null, ChatId) });
+            var botName = await GetBotNameAsync();
+            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = McpToolHelper.FormatSystemPrompt(botName, ChatId) });
 
             for (int cycle = 0; cycle < maxToolCycles; cycle++) {
                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
@@ -407,8 +459,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         toolResult = McpToolHelper.ConvertToolResultToString(result);
                     } catch (Exception ex) {
                         isError = true;
-                        _logger.LogError(ex, "Error executing tool {ToolName}", firstToolCall.toolName);
-                        toolResult = $"Error executing tool {firstToolCall.toolName}: {ex.Message}";
+                        _logger.LogError(
+                            ex,
+                            "{ServiceName}: Error executing Gemini XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
+                            ServiceName,
+                            firstToolCall.toolName,
+                            JsonConvert.SerializeObject(firstToolCall.arguments),
+                            ex.GetLogSummary());
+                        toolResult = $"Error executing tool {firstToolCall.toolName}: {ex.GetLogSummary()}";
                     }
 
                     string feedback = isError
@@ -426,6 +484,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (executionContext != null) {
                 executionContext.IterationLimitReached = true;
                 executionContext.SnapshotData = new LlmContinuationSnapshot {
+                    SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
                     ChatId = ChatId,
                     OriginalMessageId = message.MessageId,
                     UserId = message.FromUserId,

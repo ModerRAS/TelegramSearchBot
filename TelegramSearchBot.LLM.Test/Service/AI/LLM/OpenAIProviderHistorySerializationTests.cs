@@ -1,6 +1,14 @@
 using System.Collections.Generic;
+using System.ClientModel;
+using System.ClientModel.Primitives;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using OpenAI;
 using OpenAI.Chat;
 using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 using TelegramSearchBot.Service.AI.LLM;
 using Xunit;
 
@@ -186,7 +194,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         [Fact]
-        public void DeserializeProviderHistory_AlwaysCallsSetReasoningContent_EvenWithNull() {
+        public void DeserializeProviderHistory_WithNullReasoningContent_Succeeds() {
             // Arrange - serialized message with null ReasoningContent (old snapshot format)
             var serialized = new List<SerializedChatMessage> {
                 new SerializedChatMessage { Role = "system", Content = "System" },
@@ -194,7 +202,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 new SerializedChatMessage { Role = "assistant", Content = "Hi", ReasoningContent = null },
             };
 
-            // Act - deserialize (DeserializeProviderHistory now always calls SetAssistantReasoningContent)
+            // Act - deserialize without adding an empty reasoning_content patch.
             var deserialized = OpenAIService.DeserializeProviderHistory(serialized);
 
             // Assert - deserialization succeeds even with null reasoning content
@@ -203,6 +211,42 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Assert.IsType<UserChatMessage>(deserialized[1]);
             Assert.IsType<AssistantChatMessage>(deserialized[2]);
             // The key thing: NO exception thrown, deserialization succeeds
+        }
+
+        [Fact]
+        public void ShouldIncludeEmptyReasoningContent_UsesDeepSeekGatewayOrModel() {
+            Assert.True(OpenAIService.ShouldIncludeEmptyReasoningContent(
+                new LLMChannel { Gateway = "https://api.deepseek.com/v1" },
+                "deepseek-chat"));
+
+            Assert.False(OpenAIService.ShouldIncludeEmptyReasoningContent(
+                new LLMChannel { Gateway = "https://api.minimaxi.com/v1" },
+                "abab6.5s"));
+        }
+
+        [Fact]
+        public async Task DeserializeProviderHistory_WithEmptyReasoningContent_ForDeepSeekSerializesOpenAIRequest() {
+            var serialized = new List<SerializedChatMessage> {
+                new SerializedChatMessage { Role = "user", Content = "Hi" },
+                new SerializedChatMessage { Role = "assistant", Content = "Hello", ReasoningContent = "" },
+                new SerializedChatMessage { Role = "user", Content = "Use the available context." },
+            };
+            var history = OpenAIService.DeserializeProviderHistory(serialized, includeEmptyReasoningContent: true);
+            var handler = new CapturingHandler();
+            var httpClient = new HttpClient(handler);
+            var options = new OpenAIClientOptions {
+                Endpoint = new System.Uri("https://example.test/v1"),
+                Transport = new HttpClientPipelineTransport(httpClient)
+            };
+            var chatClient = new ChatClient("test-model", new ApiKeyCredential("test-key"), options);
+
+            await chatClient.CompleteChatAsync(history, new ChatCompletionOptions());
+
+            Assert.True(handler.RequestSent);
+            Assert.Contains("\"reasoning_content\":\"\"", handler.RequestBody);
+
+            var reserialized = OpenAIService.SerializeProviderHistory(history);
+            Assert.Equal("", reserialized[1].ReasoningContent);
         }
 
         [Fact]
@@ -221,6 +265,44 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Assert.Equal(5, deserialized.Count);
             Assert.IsType<AssistantChatMessage>(deserialized[2]);
             Assert.IsType<AssistantChatMessage>(deserialized[4]);
+        }
+
+        private sealed class CapturingHandler : HttpMessageHandler {
+            public bool RequestSent { get; private set; }
+            public string RequestBody { get; private set; } = string.Empty;
+
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+                RequestSent = true;
+                RequestBody = request.Content is null
+                    ? string.Empty
+                    : await request.Content.ReadAsStringAsync(cancellationToken);
+                var response = new HttpResponseMessage(HttpStatusCode.OK) {
+                    Content = new StringContent("""
+                    {
+                      "id": "chatcmpl-test",
+                      "object": "chat.completion",
+                      "created": 1710000000,
+                      "model": "test-model",
+                      "choices": [
+                        {
+                          "index": 0,
+                          "message": {
+                            "role": "assistant",
+                            "content": "ok"
+                          },
+                          "finish_reason": "stop"
+                        }
+                      ],
+                      "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2
+                      }
+                    }
+                    """)
+                };
+                return response;
+            }
         }
     }
 }

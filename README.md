@@ -18,6 +18,7 @@
    - Anthropic Claude API
    - 可配置多模型通道管理
    - **MCP (Model Context Protocol) 工具支持**
+   - **生图工具**: 内置 `generate_image`，按当前群配置选择生图模型，未配置时默认 `gpt-image-2`，支持 OpenAI-compatible Image API 与 MiniMax `image-01` / `image-01-live`，API 地址可通过 LLM 渠道自定义，默认同时发送图片预览和原图文件
 5. 高级功能:
    - 短链接映射服务
    - 消息扩展存储
@@ -70,9 +71,21 @@
   "AgentQueueBacklogWarningThreshold": 20,
   "AgentProcessMemoryLimitMb": 256,
   "MaxToolCycles": 25,
+  "EnableLlmSandboxie": false,
+  "SandboxieStartExe": "C:\\Program Files\\Sandboxie-Plus\\Start.exe",
+  "SandboxieIniPath": "C:\\Windows\\Sandboxie.ini",
+  "SandboxieAutoRegisterImportBox": true,
+  "SandboxieDenyHostFileSystem": false,
+  "SandboxieBoxImportDirectory": "",
+  "SandboxieBoxPrefix": "TGSB_G_",
+  "SandboxieGroupFilesRoot": "",
+  "SandboxieGlobalReadPaths": [],
+  "SandboxieGlobalClosedPaths": [],
+  "SandboxieToolTimeoutSeconds": 120,
   "OLTPAuth": "",
   "OLTPAuthUrl": "",
   "OLTPName": "",
+  "LogLevel": "Verbose",
   "BraveApiKey": "",
   "EnableAccounting": false
 }
@@ -95,7 +108,7 @@
 - **自动更新**:
   - `EnableAutoUpdate`: 是否启用内置自更新流程(默认true)
   - `UpdateBaseUrl`: 更新目录根地址，默认使用 `https://clickonce.miaostay.com/TelegramSearchBot`
-  - **说明**: 首次安装仍通过 `Publish.html` 分发桥接版；之后程序会从 `catalog.json`、`packages/` 和 `moder_update_updater.exe` 拉取更新并升级独立安装目录。每次主分支发布也会同步上传一份 `TelegramSearchBot-win-x64-full-*.zip` 到 GitHub Releases，便于手动全量更新或回滚。
+  - **说明**: 首次安装仍通过 `Publish.html` 分发桥接版；之后程序会从 `catalog.json`、累计更新包和 `moder_update_updater.exe` 拉取更新并升级独立安装目录。每次主分支发布也会同步上传一份普通 `TelegramSearchBot-win-x64-full-*.zip` 到 GitHub Releases，便于新用户手动部署、全量更新或回滚。
 
 - **AI相关**:
   - `OllamaModelName`: 本地模型名称(默认"qwen2.5:72b-instruct-q2_K")
@@ -113,6 +126,16 @@
   - `AgentQueueBacklogWarningThreshold`: Agent 任务队列告警阈值(默认20)
   - `AgentProcessMemoryLimitMb`: Agent 进程工作集上限(默认256MB)
   - `MaxToolCycles`: LLM工具调用最大迭代次数(默认25)，防止无限循环
+  - `EnableLlmSandboxie`: 是否启用 Sandboxie Plus LLM 工具沙箱(默认false)。启用后 `ReadFile`/`WriteFile`/`EditFile`/`SearchText`/`ListFiles`/`ExecuteCommand` 会通过每群一个 Sandboxie portable box 的 ToolHost 执行。
+  - `SandboxieStartExe`: Sandboxie Plus `Start.exe` 路径。
+  - `SandboxieIniPath`: Sandboxie 主配置路径。仅在 `SandboxieAutoRegisterImportBox=true` 时用于自动加入 `ImportBox=<SandboxieBoxImportDirectory>\\*`。
+  - `SandboxieAutoRegisterImportBox`: 是否由程序自动把 portable box 目录注册到 Sandboxie 主配置(默认true)。如希望自行在 Sandboxie Plus 中添加便携容器目录，可设为 false。
+  - `SandboxieDenyHostFileSystem`: 是否默认关闭宿主机盘符根目录访问(默认false)。保持 false 时更适合运行 bash/npm/python 等工具链；写入仍由 Sandboxie 虚拟化，敏感项目数据仍会通过 `ClosedFilePath` 阻断。需要极严格白名单模式时可设为 true。
+  - `SandboxieBoxImportDirectory`: portable box ini 目录；为空时默认 `%LOCALAPPDATA%/TelegramSearchBot/Sandboxie/Boxes`。每个群聊的 box ini 和虚拟文件根都生成在这里。
+  - `SandboxieGroupFilesRoot`: 可选的额外每群文件根目录；为空时不开放。配置后，每个群只读开放 `<root>/<chatId>`。
+  - 程序默认会关闭聊天资源父目录 `Photos`、`Audios`、`Videos`、`Files`，再仅为当前群的既有聊天媒体/文件目录生成只读授权：`Photos/<chatId>`、`Audios/<chatId>`、`Videos/<chatId>`、`Files/<chatId>`。其他群的资源目录默认不可读。Lucene `Index_Data` 不开放给 ToolHost；搜索仍由主进程侧服务完成。
+  - `SandboxieGlobalReadPaths` / `SandboxieGlobalClosedPaths`: 额外全局只读开放/禁止访问路径。
+  - `SandboxieToolTimeoutSeconds`: 沙箱工具调用等待超时(默认120秒)。
 
 启用 `EnableLLMAgentProcess=true` 后，主进程会负责任务排队、Telegram 发消息和流式转发；独立 Agent 进程负责执行 LLM 循环、本地工具和故障恢复。主进程会在 Agent 心跳超时、任务超时或配置切换时执行恢复、重试、死信投递和优雅停机。
 
@@ -120,6 +143,7 @@
   - `OLTPAuth`: OLTP日志推送认证密钥
   - `OLTPAuthUrl`: OLTP日志推送URL
   - `OLTPName`: OLTP日志推送名称
+  - `LogLevel`: Serilog 最小日志级别，支持 `Verbose`/`Debug`/`Information`/`Warning`/`Error`/`Fatal`，默认 `Verbose`
 
 完整配置参考: [Env.cs](TelegramSearchBot.Common/Env.cs)
 
@@ -136,6 +160,7 @@
 ## MCP (Model Context Protocol) 支持
 通过MCP协议扩展机器人能力，支持外部工具服务器：
 - ✅ **内置工具**: 发送文件、搜索、URL处理等24+内置工具
+- ✅ **内置生图**: 管理员可用 `开启生图工具` / `关闭生图工具` 控制是否向 LLM 注入 `generate_image`，群内可用 `选择生图模型` 或 `设置生图模型 <模型名>` 配置当前群生图模型，未配置时使用全局默认 `gpt-image-2`；默认同时发送图片预览和原图文件
 - ✅ **外部MCP服务器**: 可动态添加第三方MCP服务器
 - ✅ **管理员管理**: 通过指令管理MCP服务器（`新建渠道`等）
 
@@ -155,6 +180,9 @@
 
 ### AI交互
 - @机器人 + 问题: 使用配置的LLM回复
+- 管理员发送 `开启Agent聊天` / `开启Agent引导聊天`: 当前群进入引导模式，普通文本、Caption 以及 OCR/QR/ASR 提取内容会短窗口合并后自动触发 Agent 回复
+- 管理员发送 `开启Agent队列聊天`: 当前群进入逐条队列模式，每条触发消息按顺序进入 Agent 队列
+- 管理员发送 `关闭Agent聊天` / `Agent聊天状态` / `查看Agent聊天`: 关闭或查看当前群 Agent 聊天模式
 
 完整命令列表: [Docs/Bot_Commands_User_Guide.md](Docs/Bot_Commands_User_Guide.md)
 

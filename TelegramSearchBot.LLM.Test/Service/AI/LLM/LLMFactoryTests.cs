@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using StackExchange.Redis;
@@ -55,15 +56,17 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             var responsesService = new OpenAIResponsesService(
                 _dbContext, responsesLogger.Object, messageExtensionServiceMock.Object, httpClientFactoryMock.Object);
 
+            var services = new ServiceCollection()
+                .AddSingleton(_openAIServiceMock.Object)
+                .AddSingleton(_ollamaServiceMock.Object)
+                .AddSingleton(_geminiServiceMock.Object)
+                .AddSingleton(anthropicServiceMock.Object)
+                .AddSingleton(responsesService)
+                .BuildServiceProvider();
+
             _factory = new LLMFactory(
-                _redisMock.Object,
-                _dbContext,
-                _loggerMock.Object,
-                _ollamaServiceMock.Object,
-                _openAIServiceMock.Object,
-                _geminiServiceMock.Object,
-                anthropicServiceMock.Object,
-                responsesService);
+                services,
+                _loggerMock.Object);
         }
 
         [Fact]
