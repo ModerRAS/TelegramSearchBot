@@ -22,6 +22,7 @@ namespace TelegramSearchBot.Test.Service.Vector {
     /// <summary>
     /// 向量服务性能测试
     /// </summary>
+    [Trait("Category", "Performance")]
     public class VectorPerformanceTests : IDisposable {
         private readonly Mock<ILogger<FaissVectorService>> _mockLogger;
         private readonly Mock<IGeneralLLMService> _mockLLMService;
@@ -150,6 +151,10 @@ namespace TelegramSearchBot.Test.Service.Vector {
                 Take = 5,
                 SearchType = SearchType.Vector
             };
+
+            // Warm up FAISS/index loading so the measured loop tracks steady-state search performance.
+            var warmupResult = await _faissVectorService.Search(searchOption);
+            Assert.NotNull(warmupResult);
 
             // Act - 执行多次搜索
             for (int i = 0; i < searchCount; i++) {

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Attributes;
+using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.Tools;
 using TelegramSearchBot.Model;
@@ -225,8 +226,10 @@ For delete_relations: {relations: [{from: string, to: string, relationType: stri
 ")] string arguments,
             ToolContext toolContext) {
             try {
-                _logger.LogDebug("ProcessMemoryCommandAsync called with command: {Command}, arguments: {Arguments}, chatId: {ChatId}",
-                    command, arguments, toolContext.ChatId);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogDebug("ProcessMemoryCommandAsync called with command: {Command}, arguments: {Arguments}, chatId: {ChatId}",
+                        command, arguments, toolContext.ChatId);
+                }
 
                 switch (command.ToLower()) {
                     case "create_entities":
@@ -265,14 +268,20 @@ For delete_relations: {relations: [{from: string, to: string, relationType: stri
                         throw new ArgumentException($"Unknown command: {command}");
                 }
             } catch (JsonException ex) {
-                _logger.LogError(ex, "JSON deserialization failed for command: {Command}, arguments: {Arguments}", command, arguments);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogError(ex, "JSON deserialization failed for command: {Command}, arguments: {Arguments}", command, arguments);
+                }
                 throw new Exception($"Memory command failed - Invalid JSON format: {ex.Message}", ex);
             } catch (ArgumentException ex) {
-                _logger.LogError(ex, "Invalid argument for command: {Command}, arguments: {Arguments}", command, arguments);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogError(ex, "Invalid argument for command: {Command}, arguments: {Arguments}", command, arguments);
+                }
                 throw new Exception($"Memory command failed - {ex.Message}", ex);
             } catch (Exception ex) {
-                _logger.LogError(ex, "Memory command failed for command: {Command}, arguments: {Arguments}, chatId: {ChatId}",
-                    command, arguments, toolContext.ChatId);
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogError(ex, "Memory command failed for command: {Command}, arguments: {Arguments}, chatId: {ChatId}",
+                        command, arguments, toolContext.ChatId);
+                }
                 throw new Exception($"Memory command failed: {ex.Message}", ex);
             }
         }

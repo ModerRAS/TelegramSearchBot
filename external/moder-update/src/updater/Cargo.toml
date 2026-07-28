@@ -1,0 +1,18 @@
+[package]
+name = "moder-update-updater"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone updater process for Moder.Update - replaces application files and restarts the main application"
+license = "MIT"
+
+[[bin]]
+name = "moder_update_updater"
+path = "src/main.rs"
+
+[dependencies]
+sha2 = "0.10"
+base64 = "0.22"
+walkdir = "2.5"
+
+[dev-dependencies]
+tempfile = "3"

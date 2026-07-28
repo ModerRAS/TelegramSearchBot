@@ -124,7 +124,7 @@ namespace TelegramSearchBot.Test.Service.Todo {
                 listName: "生活",
                 description: "修正后的描述",
                 priority: "",
-                dueAt: "2026-04-26T21:30:00+08:00",
+                dueAt: DateTimeOffset.UtcNow.AddDays(7).ToString("O"),
                 remindAt: DateTimeOffset.UtcNow.AddMinutes(30).ToString("O"));
 
             Assert.True(updated.Success);

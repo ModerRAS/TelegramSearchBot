@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework Condition="'$(OS)' == 'Windows_NT'">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(OS)' != 'Windows_NT'">net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Moder.Update</RootNamespace>
+    <PackageId>Moder.Update</PackageId>
+    <Version>0.3.6</Version>
+    <Authors>ModerRAS</Authors>
+    <Description>Dual-process self-update library for .NET applications</Description>
+    <PackageTags>update;self-update;dual-process</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.5" />
+  </ItemGroup>
+
+</Project>

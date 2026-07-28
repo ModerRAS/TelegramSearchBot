@@ -23,6 +23,16 @@ namespace TelegramSearchBot.Model.AI {
         IterationLimitReached = 3
     }
 
+    public enum CodingAgentJobStatus {
+        Pending = 0,
+        Running = 1,
+        Completed = 2,
+        Failed = 3,
+        Cancelling = 4,
+        Cancelled = 5,
+        TimedOut = 6
+    }
+
     public sealed class AgentUserSnapshot {
         public long UserId { get; set; }
         public string FirstName { get; set; } = string.Empty;
@@ -86,6 +96,44 @@ namespace TelegramSearchBot.Model.AI {
         public int RecoveryAttempt { get; set; }
     }
 
+    public sealed class CodingAgentJobRequest {
+        public string JobId { get; set; } = Guid.NewGuid().ToString("N");
+        public long ChatId { get; set; }
+        public long UserId { get; set; }
+        public long MessageId { get; set; }
+        public string Prompt { get; set; } = string.Empty;
+        public string WorkingDirectory { get; set; } = string.Empty;
+        public string AgentsJson { get; set; } = string.Empty;
+        public int TimeoutMinutes { get; set; }
+        public string Provider { get; set; } = string.Empty;
+        public string Model { get; set; } = string.Empty;
+        public string Tools { get; set; } = string.Empty;
+        public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public sealed class CodingAgentJobReport {
+        public string JobId { get; set; } = string.Empty;
+        public CodingAgentJobStatus Status { get; set; } = CodingAgentJobStatus.Pending;
+        public long ChatId { get; set; }
+        public long UserId { get; set; }
+        public long MessageId { get; set; }
+        public string Prompt { get; set; } = string.Empty;
+        public string WorkingDirectory { get; set; } = string.Empty;
+        public string Summary { get; set; } = string.Empty;
+        public string Output { get; set; } = string.Empty;
+        public string ErrorMessage { get; set; } = string.Empty;
+        public string LogPath { get; set; } = string.Empty;
+        public DateTime StartedAtUtc { get; set; } = DateTime.MinValue;
+        public DateTime CompletedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public sealed class CodingAgentControlCommand {
+        public string JobId { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public DateTime RequestedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
     public sealed class AgentStreamChunk {
         public string TaskId { get; set; } = string.Empty;
         public AgentChunkType Type { get; set; } = AgentChunkType.Snapshot;
@@ -112,6 +160,25 @@ namespace TelegramSearchBot.Model.AI {
         public string Result { get; set; } = string.Empty;
         public string ErrorMessage { get; set; } = string.Empty;
         public long TelegramMessageId { get; set; }
+        public DateTime CompletedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public sealed class SandboxToolTask {
+        public string RequestId { get; set; } = Guid.NewGuid().ToString("N");
+        public string ToolName { get; set; } = string.Empty;
+        public Dictionary<string, string> Arguments { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public long ChatId { get; set; }
+        public long UserId { get; set; }
+        public long MessageId { get; set; }
+        public string BoxName { get; set; } = string.Empty;
+        public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public sealed class SandboxToolResult {
+        public string RequestId { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string Result { get; set; } = string.Empty;
+        public string ErrorMessage { get; set; } = string.Empty;
         public DateTime CompletedAtUtc { get; set; } = DateTime.UtcNow;
     }
 
@@ -205,6 +272,10 @@ namespace TelegramSearchBot.Model.AI {
         public const string ActiveTaskSet = "AGENT_ACTIVE_TASKS";
         public const string SubAgentTaskQueue = "SUBAGENT_TASKS";
         public const string AgentToolDefs = "AGENT_TOOL_DEFS";
+        public const string AgentChatBatchDueSet = "AGENT_CHAT_BATCH_DUE";
+        public const string CodingAgentJobQueue = "CODING_AGENT_JOBS";
+        public const string CodingAgentReportQueue = "CODING_AGENT_REPORTS";
+        public const string CodingAgentActiveJobSet = "CODING_AGENT_ACTIVE_JOBS";
 
         public static string AgentTaskState(string taskId) => $"AGENT_TASK:{taskId}";
         public static string AgentSnapshot(string taskId) => $"AGENT_SNAPSHOT:{taskId}";
@@ -217,5 +288,18 @@ namespace TelegramSearchBot.Model.AI {
         public static string AgentControl(long chatId) => $"AGENT_CONTROL:{chatId}";
         public static string TelegramResult(string requestId) => $"TELEGRAM_RESULT:{requestId}";
         public static string SubAgentResult(string requestId) => $"SUBAGENT_RESULT:{requestId}";
+        public static string SandboxToolQueue(long chatId) => $"SANDBOX_TOOL_TASKS:{chatId}";
+        public static string SandboxToolHeartbeat(long chatId) => $"SANDBOX_TOOL_HEARTBEAT:{chatId}";
+        public static string SandboxToolResult(string requestId) => $"SANDBOX_TOOL_RESULT:{requestId}";
+        public static string ModelSelectState(long chatId) => $"modelselect:{chatId}:state";
+        public static string ModelSelectModels(long chatId) => $"modelselect:{chatId}:models";
+        public static string ImageGenerationModelSelection(long chatId, long userId) => $"image_generation:model_select:{chatId}:{userId}";
+        public static string MusicGenerationModelSelection(long chatId, long userId) => $"music_generation:model_select:{chatId}:{userId}";
+        public static string AgentChatBatchList(long chatId) => $"AGENT_CHAT_BATCH:{chatId}:MESSAGES";
+        public static string AgentChatBatchMeta(long chatId) => $"AGENT_CHAT_BATCH:{chatId}:META";
+        public static string AgentChatBatchLock(long chatId) => $"AGENT_CHAT_BATCH:{chatId}:LOCK";
+        public static string AgentChatConfigWarning(long chatId, string warningType) => $"AGENT_CHAT_WARNING:{chatId}:{warningType}";
+        public static string CodingAgentJobState(string jobId) => $"CODING_AGENT_JOB:{jobId}";
+        public static string CodingAgentControl(string jobId) => $"CODING_AGENT_CONTROL:{jobId}";
     }
 }

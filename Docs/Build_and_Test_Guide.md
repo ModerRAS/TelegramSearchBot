@@ -41,6 +41,28 @@ dotnet run --project TelegramSearchBot.UpdateBuilder/TelegramSearchBot.UpdateBui
   --min-source-version 2026.04.23.553
 ```
 
+### Moder.Update 更新系统
+
+项目已整合 Moder.Update (https://github.com/ModerRAS/Moder.Update) 作为子模块，位于 `external/moder-update/`。
+
+#### 构建 Rust Updater
+```bash
+cargo build --manifest-path external/moder-update/src/updater/Cargo.toml --release
+```
+输出: `external/moder-update/src/updater/target/release/moder_update_updater.exe`
+
+#### Moder.Update 项目
+- `external/moder-update/src/Moder.Update/` - 核心 C# 库
+- `external/moder-update/src/updater/` - Rust updater 进程
+- `external/moder-update/tests/Moder.Update.Tests/` - 单元测试
+
+#### 与 TelegramSearchBot.UpdateBuilder 的关系
+- `SelfUpdateBootstrap.Windows.cs` 负责下载/解压/spawn updater
+- Rust `moder_update_updater.exe` 负责文件替换和进程重启
+- `TelegramSearchBot.UpdateBuilder` 负责生成 .zst 更新包
+
+> 注意：后期如有 Moder.Update 的重大更新，可手动将 `external/moder-update/` 目录中的改动同步回 Moder.Update 原仓库。
+
 **Linux 平台**
 ```bash
 # 发布 Linux 版本
@@ -236,20 +258,17 @@ jobs:
 
 仓库内实际的 `push.yml` 现在维护两条发布线：
 - 保留根目录中的最终 ClickOnce bridge，供旧安装版本过渡到新更新链路。
-- 每次主分支发布都会生成 `catalog.json`、`packages/` 和 `moder_update_updater.exe`，供 `%LOCALAPPDATA%\TelegramSearchBot\app` 中的独立安装目录继续使用 Moder.Update 协议升级。
+- 每次主分支发布都会生成 `catalog.json`、必要的累计更新包和 `moder_update_updater.exe`，供 `%LOCALAPPDATA%\TelegramSearchBot\app` 中的独立安装目录继续使用 Moder.Update 协议升级。
 - `push.yml` 会把校验、`telegram-bot-api` 构建、Moder.Update updater 构建、独立包构建和桥接包构建尽量拆成并行 job，最后再统一上传到 Backblaze B2 与 GitHub Releases。
 - 同一分支上的发布运行会通过 workflow `concurrency` 串行化，避免并发发布互相覆盖 B2 包或 Release 产物。
-- 同一条发布流水线会在新文件上传成功后裁剪 Backblaze B2 上重复或过期的更新包版本，并把 `TelegramSearchBot-win-x64-full-<version>.zip` 全量包上传到 GitHub Releases，便于手动分发和回滚。
+- 同一条发布流水线会在新文件上传成功后裁剪 Backblaze B2 上重复或过期的更新包版本。普通 `TelegramSearchBot-win-x64-full-<version>.zip` 全量包只上传到 GitHub Releases，并以绝对 URL 写入 `catalog.json` 作为完整包 fallback；B2 不再保存 step 包或自定义 MUP full `.zst` 包。
 
 ### 监控与日志
 
 #### 本地调试日志
 ```bash
-# 启用详细日志
-dotnet run --project TelegramSearchBot --verbosity detailed
-
-# 使用 Serilog 配置
-export SERILOG__MINIMUMLEVEL__DEFAULT=Debug
+# Config.json 中默认 LogLevel=Verbose；需要降低噪声时可改为 Information/Warning
+dotnet run --project TelegramSearchBot
 ```
 
 #### 性能分析

@@ -11,23 +11,44 @@ using TelegramSearchBot.Service.AppUpdate;
 namespace TelegramSearchBot {
     class Program {
         static async Task Main(string[] args) {
+            // Separate logger for EF Core - writes only to logs/efcore-.txt
+            LoggerHolders.EfCoreLogger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .WriteTo.File(
+                    $"{Env.WorkDir}/logs/efcore-.txt",
+                    rollingInterval: RollingInterval.Day,
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] [EF] {Message:lj}{NewLine}{Exception}")
+                .CreateLogger();
+
             Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information() // 设置最低日志级别
+            .MinimumLevel.Is(Env.SerilogMinimumLevel) // 默认打开完整日志，便于追踪 LLM/Agent 级异常
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Debug) // SQL 语句只在 Debug 级别输出
-            .WriteTo.Console(
-                restrictedToMinimumLevel: LogEventLevel.Information,
-                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
-              rollingInterval: RollingInterval.Day,
-              outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.OpenTelemetry(options => {
-                options.Endpoint = Env.OLTPAuthUrl;
-                options.Headers = new Dictionary<string, string>() {
-                    { "Authorization", $"Basic {Env.OLTPAuth}" },
-                    { "stream-name", Env.OLTPName }
-                };
-                options.Protocol = OtlpProtocol.HttpProtobuf;
-            })
+            .Enrich.FromLogContext()
+            .WriteTo.Logger(logger => logger
+                .Filter.ByExcluding(LoggerHolders.IsChatContentLogEvent)
+                .WriteTo.Console(
+                    restrictedToMinimumLevel: Env.SerilogMinimumLevel,
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+                .WriteTo.File($"{Env.WorkDir}/logs/log-.txt",
+                  restrictedToMinimumLevel: Env.SerilogMinimumLevel,
+                  rollingInterval: RollingInterval.Day,
+                  outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+                .WriteTo.OpenTelemetry(
+                    endpoint: Env.OLTPAuthUrl,
+                    protocol: OtlpProtocol.HttpProtobuf,
+                    headers: new Dictionary<string, string>() {
+                        { "Authorization", $"Basic {Env.OLTPAuth}" },
+                        { "stream-name", Env.OLTPName }
+                    },
+                    resourceAttributes: null,
+                    includedData: null,
+                    restrictedToMinimumLevel: Env.SerilogMinimumLevel))
+            .WriteTo.Logger(logger => logger
+                .Filter.ByIncludingOnly(LoggerHolders.IsChatContentLogEvent)
+                .WriteTo.File($"{Env.WorkDir}/logs/chat-content-.txt",
+                  restrictedToMinimumLevel: Env.SerilogMinimumLevel,
+                  rollingInterval: RollingInterval.Day,
+                  outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"))
             .CreateLogger();
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
             if (args.Length == 0) {

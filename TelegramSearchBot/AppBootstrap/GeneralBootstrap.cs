@@ -34,6 +34,7 @@ using TelegramSearchBot.Service.AI.LLM;
 using TelegramSearchBot.Service.BotAPI;
 using TelegramSearchBot.Service.Scheduler;
 using TelegramSearchBot.Service.Storage;
+using TelegramSearchBot.Service.Tools;
 using TelegramSearchBot.Service.Vector;
 using TelegramSearchBot.View;
 
@@ -209,12 +210,32 @@ namespace TelegramSearchBot.AppBootstrap {
             using CancellationTokenSource cts = new();
             service = host.Services;
 
+            // SQLite 数据库初始化
+            using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
+                var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
+                var searchCacheContext = serviceScope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
+                //context.Database.EnsureCreated();
+                context.Database.Migrate();
+                await searchCacheContext.Database.MigrateAsync();
+
+                var imageGenerationSettings = serviceScope.ServiceProvider.GetRequiredService<ImageGenerationToolSettingsService>();
+                await imageGenerationSettings.InitializeToolVisibilityAsync();
+
+                var musicGenerationSettings = serviceScope.ServiceProvider.GetRequiredService<MusicGenerationToolSettingsService>();
+                await musicGenerationSettings.InitializeToolVisibilityAsync();
+            }
+
             var loggerFactory = service.GetRequiredService<ILoggerFactory>();
             var mcpLogger = loggerFactory.CreateLogger("McpToolHelperInitialization");
             var mainAssembly = typeof(GeneralBootstrap).Assembly;
             var llmAssembly = typeof(McpToolHelper).Assembly;
             McpToolHelper.EnsureInitialized(mainAssembly, llmAssembly, service, mcpLogger);
             Log.Information("McpToolHelper has been initialized with built-in tools.");
+
+            if (Env.EnableLlmSandboxie) {
+                RegisterSandboxieTools(service);
+                Log.Information("Sandboxie LLM tool sandbox is enabled.");
+            }
 
             // Initialize external MCP tool servers
             try {
@@ -237,15 +258,6 @@ namespace TelegramSearchBot.AppBootstrap {
                 Log.Warning(ex, "Failed to export tool definitions to Redis. Agent processes may have limited tools.");
             }
 
-            // SQLite 数据库初始化
-            using (var serviceScope = service.GetService<IServiceScopeFactory>().CreateScope()) {
-                var context = serviceScope.ServiceProvider.GetRequiredService<DataDbContext>();
-                var searchCacheContext = serviceScope.ServiceProvider.GetRequiredService<SearchCacheDbContext>();
-                //context.Database.EnsureCreated();
-                context.Database.Migrate();
-                await searchCacheContext.Database.MigrateAsync();
-            }
-
             // 启动Host，SchedulerService作为HostedService会自动启动
             await host.StartAsync();
             Log.Information("Host已启动，定时任务调度器已作为后台服务启动");
@@ -263,6 +275,34 @@ namespace TelegramSearchBot.AppBootstrap {
         /// </summary>
         private static void RegisterExternalMcpTools(IMcpServerManager mcpServerManager) {
             McpToolHelper.RegisterExternalMcpTools(mcpServerManager);
+        }
+
+        private static void RegisterSandboxieTools(IServiceProvider services) {
+            var sandboxService = services.GetRequiredService<SandboxieToolHostService>();
+            McpToolHelper.RegisterProxyTools(
+                SandboxieToolHostService.GetToolDefinitions(),
+                async (toolName, arguments) => {
+                    long chatId = 0, userId = 0, messageId = 0;
+                    if (arguments.TryGetValue("__chatId", out var cid)) {
+                        long.TryParse(cid, out chatId);
+                        arguments.Remove("__chatId");
+                    }
+                    if (arguments.TryGetValue("__userId", out var uid)) {
+                        long.TryParse(uid, out userId);
+                        arguments.Remove("__userId");
+                    }
+                    if (arguments.TryGetValue("__messageId", out var mid)) {
+                        long.TryParse(mid, out messageId);
+                        arguments.Remove("__messageId");
+                    }
+
+                    if (chatId == 0) {
+                        throw new InvalidOperationException("Sandboxed tool execution requires a valid __chatId context value.");
+                    }
+
+                    return await sandboxService.ExecuteToolAsync(toolName, arguments, chatId, userId, messageId);
+                },
+                allowLocalOverride: true);
         }
     }
 }
