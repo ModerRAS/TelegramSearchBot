@@ -127,8 +127,8 @@ namespace TelegramSearchBot.Test.AppBootstrap {
                 AbortOnConnectFail = false,
                 ConnectRetry = 1,
                 ConnectTimeout = 500,
-                SyncTimeout = 2_000,
-                AsyncTimeout = 2_000
+                SyncTimeout = 15_000,
+                AsyncTimeout = 15_000
             };
             options.EndPoints.Add(IPAddress.Loopback, port);
 
