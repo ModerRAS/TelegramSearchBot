@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Newtonsoft.Json;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Service.AI.LLM;
@@ -710,6 +711,26 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         [Fact]
+        public void SetBuiltInToolEnabled_WhenDisabled_HidesToolFromPromptAndNativeDefinitions() {
+            const string toolName = "StaticTool";
+
+            try {
+                McpToolHelper.SetBuiltInToolEnabled(toolName, false);
+
+                var prompt = McpToolHelper.FormatSystemPrompt("TestBot", 12345);
+                var tools = McpToolHelper.GetNativeToolDefinitions();
+                var parsed = McpToolHelper.TryParseToolCalls("<StaticTool><arg1>hidden</arg1></StaticTool>", out var parsedToolCalls);
+
+                Assert.DoesNotContain(toolName, prompt);
+                Assert.DoesNotContain(tools, tool => tool.FunctionName == toolName);
+                Assert.False(parsed);
+                Assert.Empty(parsedToolCalls);
+            } finally {
+                McpToolHelper.SetBuiltInToolEnabled(toolName, true);
+            }
+        }
+
+        [Fact]
         public void GetNativeToolDefinitions_IncludesExternalMcpTools() {
             // Register some external tools
             var externalTools = new List<(string serverName, McpToolHelper.ExternalToolInfo tool)> {
@@ -739,6 +760,70 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                     new List<(string, McpToolHelper.ExternalToolInfo)>(),
                     null);
             }
+        }
+
+        [Fact]
+        public void ExportToolDefinitions_RepeatedCallsRemainStable() {
+            var first = JsonConvert.SerializeObject(McpToolHelper.ExportToolDefinitions());
+            var second = JsonConvert.SerializeObject(McpToolHelper.ExportToolDefinitions());
+
+            Assert.Equal(first, second);
+        }
+
+        [Fact]
+        public void ExportToolDefinitions_SortsExternalToolsAndParameters() {
+            var externalTools = new List<(string serverName, McpToolHelper.ExternalToolInfo tool)> {
+                ("zeta", new McpToolHelper.ExternalToolInfo {
+                    ServerName = "zeta",
+                    ToolName = "beta",
+                    Description = "Second external tool",
+                    Parameters = new List<McpToolHelper.ExternalToolParameter> {
+                        new() { Name = "zzz", Type = "string", Description = "Z parameter", Required = false },
+                        new() { Name = "aaa", Type = "string", Description = "A parameter", Required = true }
+                    }
+                }),
+                ("alpha", new McpToolHelper.ExternalToolInfo {
+                    ServerName = "alpha",
+                    ToolName = "alpha",
+                    Description = "First external tool",
+                    Parameters = new List<McpToolHelper.ExternalToolParameter> {
+                        new() { Name = "ddd", Type = "string", Description = "D parameter", Required = false },
+                        new() { Name = "bbb", Type = "string", Description = "B parameter", Required = true }
+                    }
+                })
+            };
+
+            try {
+                McpToolHelper.RegisterExternalTools(
+                    externalTools,
+                    async (server, tool, args) => { await Task.CompletedTask; return "ok"; });
+
+                var exportedExternalTools = McpToolHelper.ExportToolDefinitions()
+                    .Where(tool => tool.Name.StartsWith("mcp_", StringComparison.Ordinal))
+                    .ToList();
+
+                Assert.Equal(new[] {
+                    "mcp_alpha_alpha",
+                    "mcp_zeta_beta"
+                }, exportedExternalTools.Select(tool => tool.Name));
+                Assert.Equal(new[] { "bbb", "ddd" }, exportedExternalTools[0].Parameters.Select(parameter => parameter.Name));
+                Assert.Equal(new[] { "aaa", "zzz" }, exportedExternalTools[1].Parameters.Select(parameter => parameter.Name));
+            } finally {
+                McpToolHelper.RegisterExternalTools(
+                    new List<(string, McpToolHelper.ExternalToolInfo)>(),
+                    null);
+            }
+        }
+
+        [Fact]
+        public void FormatSystemPrompt_RemainsStableForSameInputs() {
+            var first = McpToolHelper.FormatSystemPrompt("TestBot", 12345);
+            var second = McpToolHelper.FormatSystemPrompt("TestBot", 12345);
+            var nativeFirst = McpToolHelper.FormatSystemPromptForNativeToolCalling("TestBot", 12345);
+            var nativeSecond = McpToolHelper.FormatSystemPromptForNativeToolCalling("TestBot", 12345);
+
+            Assert.Equal(first, second);
+            Assert.Equal(nativeFirst, nativeSecond);
         }
 
         [Fact]

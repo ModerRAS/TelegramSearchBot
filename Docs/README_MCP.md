@@ -23,7 +23,7 @@ MCP (Model Context Protocol) 是一种让LLM与外部工具和服务交互的协
     ▼                   ▼
 ┌─────────┐      ┌─────────────────┐
 │ 内置工具 │      │  外部MCP服务器   │
-│ (24+)   │      │  (可动态添加)    │
+│ (30+)   │      │  (可动态添加)    │
 └─────────┘      └─────────────────┘
 ```
 
@@ -37,9 +37,8 @@ TelegramSearchBot 内置了以下工具，通过 `BuiltInToolAttribute` 标记�
 |---------|------|------|
 | `ReadFile` | 读取文件内容，支持指定行范围 | `path`, `start_line?`, `end_line?` |
 | `WriteFile` | 写入内容到文件，文件不存在则创建 | `path`, `content` |
-| `EditFile` | 编辑文件，替换指定文本 | `path`, `old_text`, `new_text` |
-| `SearchText` | 使用正则表达式搜索文件 | `path`, `pattern`, `file_pattern?` |
-| `ListFiles` | 列出目录下的文件和子目录 | `path`, `pattern?` |
+| `SearchText` | 使用正则表达式搜索文件 | `pattern`, `path?`, `file_glob?`, `ignore_case?` |
+| `ListFiles` | 列出目录下的文件和子目录 | `path?`, `pattern?` |
 
 ### 2.2 Telegram 发送工具
 
@@ -49,24 +48,73 @@ TelegramSearchBot 内置了以下工具，通过 `BuiltInToolAttribute` 标记�
 | `send_photo_file` | 发送图片（使用文件路径） | `file_path`, `caption?`, `reply_to_message_id?` |
 | `send_video_file` | 发送视频（使用文件路径） | `file_path`, `caption?`, `reply_to_message_id?` |
 | `send_document_file` | 发送文件（使用文件路径） | `file_path`, `caption?`, `reply_to_message_id?` |
+| `send_message` | 发送文本消息 | `chat_id`, `text` |
+
+### 2.2.1 图片生成工具
+
+| 工具名称 | 描述 | 参数 |
+|---------|------|------|
+| `generate_image` | 通过配置的图片 API 生成图片，默认使用当前群的生图模型；未配置时使用全局默认 `gpt-image-2`；OpenAI-compatible 模型走 `/v1/images/generations`，MiniMax `image-01` / `image-01-live` 走 `/v1/image_generation`；图片保存到本地并可直接发送到当前聊天，默认同时发送 Telegram photo 预览和原图 document 文件 | `prompt`, `model?`, `size?`, `quality?`, `output_format?`, `background?`, `moderation?`, `aspect_ratio?`, `minimax_response_format?`, `seed?`, `prompt_optimizer?`, `aigc_watermark?`, `style_type?`, `style_weight?`, `count?`, `send_to_chat?`, `send_original_file?`, `caption?`, `reply_to_message_id?`, `timeout_seconds?` |
+
+管理员命令：
+- `开启生图工具`：允许 `generate_image` 注入到 LLM 工具提示词和 native tool definitions。
+- `关闭生图工具`：隐藏 `generate_image`，关闭后 LLM 不会看到该工具。
+- `生图工具状态`：查看开关状态和默认生图模型。
+- `设置默认生图模型`：设置无群级配置时使用的全局默认生图模型，内置默认 `gpt-image-2`；MiniMax 可设置为 `image-01` 或 `image-01-live`。
+- 群内普通管理员可发送 `选择生图模型` 从已识别的图片生成模型里按编号选择，也可用 `设置生图模型 <模型名>` 直接设置当前群的生图模型，或用 `清除生图模型` 恢复使用全局默认。
+
+生图模型识别优先使用模型能力 `image_generation` / `text_to_image`；没有能力数据时，会按常见模型名兜底识别 `gpt-image-*`、`dall-e*`、MiniMax `image-01` / `image-01-live`、`imagen`、`flux`、`stable-diffusion`、`sdxl` 等名称。
+
+API 地址和 API Key 来自该模型关联的 LLM 渠道，因此可通过 `新建渠道` / `编辑渠道` 自定义网关地址，例如 `https://api.openai.com/v1` 或 `https://api.minimaxi.com`。配置 MiniMax 时，渠道类型建议选择 `MiniMax`，再通过 `添加模型` 关联 `image-01` / `image-01-live`。
+
+MiniMax 不支持选择输出文件格式；`output_format` 仅用于 OpenAI-compatible 图片接口。MiniMax 的 URL 响应会按实际 Content-Type 或 URL 扩展名保存，base64 响应默认按 PNG 保存。
+
+### 2.2.2 音乐生成工具
+
+| 工具名称 | 描述 | 参数 |
+|---------|------|------|
+| `generate_music` | 通过配置的 MiniMax 音乐 API 生成歌曲或翻唱，默认使用当前群的音乐模型；未配置时使用全局默认 `music-2.6`；接口走 `/v1/music_generation`；音频保存到本地并默认自动回复到当前聊天 | `prompt?`, `lyrics?`, `model?`, `isInstrumental?`, `lyricsOptimizer?`, `outputFormat?`, `sampleRate?`, `bitrate?`, `format?`, `aigcWatermark?`, `audioUrl?`, `audioBase64?`, `coverFeatureId?`, `sendToChat?`, `caption?`, `title?`, `performer?`, `replyToMessageId?`, `timeoutSeconds?` |
+
+管理员命令：
+- `开启音乐工具`：允许 `generate_music` 注入到 LLM 工具提示词和 native tool definitions。
+- `关闭音乐工具`：隐藏 `generate_music`，关闭后 LLM 不会看到该工具。
+- `音乐工具状态`：查看开关状态和默认音乐模型。
+- `设置默认音乐模型`：设置无群级配置时使用的全局默认音乐模型，内置默认 `music-2.6`；MiniMax 可设置为 `music-2.6`、`music-2.6-free`、`music-cover` 或 `music-cover-free`。
+- 群内普通管理员可发送 `选择音乐模型` 从已识别的音乐生成模型里按编号选择，也可用 `设置音乐模型 <模型名>` 直接设置当前群的音乐模型，或用 `清除音乐模型` 恢复使用全局默认。
+
+音乐模型识别优先使用模型能力 `music_generation` / `text_to_music`；没有能力数据时，会按 MiniMax `music-2.6` / `music-2.6-free` / `music-cover` / `music-cover-free` 兜底识别。
+
+API 地址和 API Key 来自该模型关联的 LLM 渠道，因此可通过 `新建渠道` / `编辑渠道` 自定义网关地址，例如 `https://api.minimaxi.com`。配置 MiniMax 时，渠道类型建议选择 `MiniMax`，再通过 `添加模型` 关联音乐模型。
+
+`music-2.6` / `music-2.6-free` 支持文生音乐和纯音乐；非纯音乐默认需要传 `lyrics`，除非 `lyricsOptimizer` 为 true。`music-cover` / `music-cover-free` 支持基于 `audioUrl`、`audioBase64` 或预处理得到的 `coverFeatureId` 生成翻唱。
 
 **文件大小限制**:
 - 本地 Bot API（内置或外部）: 最大 2GB
 - 云端API: 最大 50MB
 
+### 2.2.3 Coding Agent 工具 / Coding Agent Tools
+
+| 工具名称 | 描述 | 参数 |
+|---------|------|------|
+| `run_coding_agent` | 启动后台 `pi --mode rpc` 编码任务，任务由 coding-agent sidecar 管理；工具立即返回 job id，任务完成后会发回报告并自动续跑 LLM。 / Starts a background `pi --mode rpc` coding job managed by the coding-agent sidecar; returns a job id immediately, then posts a report and resumes the LLM loop when done. | `prompt`, `workingDirectory`, `agents?`, `timeoutMinutes?`, `provider?`, `model?`, `tools?` |
+| `get_coding_agent_job` | 查询后台编码任务状态。 / Gets background coding job status. | `jobId` |
+| `cancel_coding_agent_job` | 请求取消后台编码任务。 / Requests cancellation for a background coding job. | `jobId`, `reason?` |
+
+详细配置见 [README_CodingAgentTool.md](README_CodingAgentTool.md)。
+
 ### 2.3 搜索工具
 
 | 工具名称 | 描述 | 参数 |
 |---------|------|------|
-| `search_messages` | 在当前聊天的索引消息中搜索关键词 | `query`, `chat_id?`, `limit?`, `offset?` |
-| `query_messages` | 在消息历史数据库中查询，支持多种过滤条件 | `chat_id?`, `sender_id?`, `keyword?`, `start_date?`, `end_date?`, `limit?`, `offset?` |
+| `search_messages` | 在当前聊天的索引消息中搜索关键词 | `query`, `page?`, `page_size?` |
+| `query_messages` | 在消息历史数据库中查询，支持多种过滤条件 | `query_text?`, `sender_user_id?`, `sender_name_hint?`, `start_date?`, `end_date?`, `page?`, `page_size?` |
 
 ### 2.4 短链接工具
 
 | 工具名称 | 描述 | 参数 |
 |---------|------|------|
 | `expand_short_url` | 获取短链接的完整URL | `short_url` |
-| `list_short_urls` | 列出所有短链接映射 | `filter?`, `limit?`, `offset?` |
+| `list_short_urls` | 列出所有短链接映射 | `original_url_query?`, `expanded_url_query?`, `page?`, `page_size?` |
 | `expand_short_urls_batch` | 批量获取短链接的完整URL | `short_urls` |
 
 ### 2.5 MCP 服务器管理工具（仅管理员）
@@ -74,20 +122,27 @@ TelegramSearchBot 内置了以下工具，通过 `BuiltInToolAttribute` 标记�
 | 工具名称 | 描述 | 参数 |
 |---------|------|------|
 | `ListMcpServers` | 列出所有已配置的MCP服务器 | - |
-| `AddMcpServer` | 添加新的MCP服务器 | `name`, `command`, `args?`, `env?` |
+| `AddMcpServer` | 添加新的MCP服务器 | `name`, `command`, `args`, `env?` |
 | `RemoveMcpServer` | 移除指定的MCP服务器 | `name` |
-| `UpdateMcpServer` | 更新MCP服务器配置 | `name`, `command?`, `args?`, `env?` |
+| `UpdateMcpServer` | 更新MCP服务器配置 | `name`, `timeout?`, `enabled?`, `env?`, `command?`, `args?` |
 | `RestartMcpServers` | 重启所有MCP服务器 | - |
 
 ### 2.6 其他工具
 
 | 工具名称 | 描述 | 参数 |
 |---------|------|------|
-| `memory_search` | 在记忆图谱中搜索 | `query` |
-| `brave_web_search` | 使用 Brave Search API 进行网页搜索 | `query`, `count?` |
+| `process_memory_command` | 在记忆图谱中执行操作 | `command`, `arguments` |
+| `search_web` | 使用 Brave Search API 进行网页搜索 | `query`, `page?`, `count?`, `country?`, `search_lang?` |
 | `extract_article` | 使用 Puppeteer 提取网页文章内容 | `url` |
-| `sequential_thinking` | 动态问题解决思考工具 | `thought`, `next_thought_needed?` |
-| `bash` | 执行 Shell 命令 | `command`, `timeout?` |
+| `sequential_thinking` | 动态问题解决思考工具 | `input`, `next_thought_needed?`, `thought_number?`, `total_thoughts?`, ... |
+| `bash` | 执行 Shell 命令 | `command`, `working_directory?`, `timeout_ms?` |
+| `execute_js` | 使用 Deno 执行 JavaScript 代码 | `js_code`, `timeout_ms?` |
+| `echo` | 回显文本（测试用） | `text` |
+| `calculator` | 计算算术表达式 | `expression` |
+| `create_todo_item` | 创建待办事项 | `title`, `list_name?`, `description?`, `priority?`, `due_at?`, `remind_at?` |
+| `query_todo_items` | 查询待办事项 | `list_name?`, `status?`, `page?`, `page_size?` |
+| `update_todo_item` | 更新待办事项 | `todo_id`, `title?`, `list_name?`, `description?`, `priority?`, ... |
+| `complete_todo_item` | 标记待办事项完成 | `todo_id` |
 
 ## 三、外部 MCP 服务器
 

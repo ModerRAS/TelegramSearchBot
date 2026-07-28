@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using StackExchange.Redis;
 using TelegramSearchBot.Common;
@@ -34,20 +35,31 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
     public sealed class ChunkPollingService : BackgroundService {
         private readonly IConnectionMultiplexer _redis;
+        private readonly ILogger<ChunkPollingService> _logger;
         private readonly ConcurrentDictionary<string, TrackedTask> _trackedTasks = new(StringComparer.OrdinalIgnoreCase);
 
-        public ChunkPollingService(IConnectionMultiplexer redis) {
+        public ChunkPollingService(IConnectionMultiplexer redis, ILogger<ChunkPollingService>? logger = null) {
             _redis = redis;
+            _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ChunkPollingService>.Instance;
         }
 
         public AgentTaskStreamHandle TrackTask(string taskId) {
             var tracked = _trackedTasks.GetOrAdd(taskId, _ => new TrackedTask());
+            _logger.LogDebug("ChunkPollingService: tracking task {TaskId}. TrackedTaskCount={TrackedTaskCount}", taskId, _trackedTasks.Count);
             return tracked.Handle;
         }
 
         public async Task RunPollCycleAsync(CancellationToken cancellationToken = default) {
             foreach (var entry in _trackedTasks.ToArray()) {
-                await PollTaskAsync(entry.Key, entry.Value, cancellationToken);
+                try {
+                    await PollTaskAsync(entry.Key, entry.Value, cancellationToken);
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (RedisException ex) {
+                    _logger.LogWarning(ex, "ChunkPollingService: redis error while polling task {TaskId}", entry.Key);
+                } catch (Exception ex) {
+                    _logger.LogError(ex, "ChunkPollingService: failed to poll task {TaskId}", entry.Key);
+                }
             }
         }
 
@@ -61,8 +73,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     await RunPollCycleAsync(stoppingToken);
                 } catch (OperationCanceledException) {
                     break;
-                } catch (RedisException) {
-                    // Transient Redis failure – wait before retrying
+                } catch (RedisException ex) {
+                    _logger.LogWarning(
+                        ex,
+                        "Redis error in ChunkPollingService poll loop, retrying after delay. TrackedTaskCount={TrackedTaskCount}, PollIntervalMs={PollIntervalMs}",
+                        _trackedTasks.Count,
+                        Env.AgentChunkPollingIntervalMilliseconds);
+                } catch (Exception ex) {
+                    _logger.LogError(
+                        ex,
+                        "Unexpected error in ChunkPollingService poll loop. TrackedTaskCount={TrackedTaskCount}, PollIntervalMs={PollIntervalMs}",
+                        _trackedTasks.Count,
+                        Env.AgentChunkPollingIntervalMilliseconds);
                 }
 
                 try {
@@ -79,7 +101,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
             // Check for terminal chunk first (Done/Error/IterationLimitReached)
             var terminalJson = await db.StringGetAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
             if (terminalJson.HasValue) {
-                var terminal = JsonConvert.DeserializeObject<AgentStreamChunk>(terminalJson.ToString());
+                var terminalPayload = terminalJson.ToString();
+                _logger.LogInformation(
+                    "ChunkPollingService: terminal chunk found. TaskId={TaskId}, PayloadLength={PayloadLength}",
+                    taskId,
+                    terminalPayload.Length);
+                var terminal = JsonConvert.DeserializeObject<AgentStreamChunk>(terminalPayload);
                 if (terminal != null) {
                     // Before completing, read the final snapshot from Redis and deliver it
                     // so the consumer (SendDraftStream/SendFullMessageStream) sees the last content.
@@ -96,10 +123,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     tracked.Completion.TrySetResult(terminal);
                     tracked.Channel.Writer.TryComplete();
                     _trackedTasks.TryRemove(taskId, out _);
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        _logger.LogInformation(
+                            "ChunkPollingService: task completed from terminal chunk. TaskId={TaskId}, TerminalType={TerminalType}, Error={Error}",
+                            taskId,
+                            terminal.Type,
+                            terminal.ErrorMessage);
+                    }
                     // Cleanup keys (use TTL as safety net, no race condition)
                     _ = db.KeyDeleteAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
                     _ = db.KeyDeleteAsync(LlmAgentRedisKeys.AgentTerminal(taskId));
                     return;
+                }
+
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogWarning("ChunkPollingService: terminal chunk payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(terminalPayload));
                 }
             }
 
@@ -121,6 +159,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (chunk != null && chunk.Content != tracked.LastContent) {
                 tracked.LastContent = chunk.Content;
                 await tracked.Channel.Writer.WriteAsync(chunk, cancellationToken);
+                _logger.LogDebug(
+                    "ChunkPollingService: delivered snapshot. TaskId={TaskId}, Sequence={Sequence}, ContentLength={ContentLength}",
+                    taskId,
+                    chunk.Sequence,
+                    chunk.Content?.Length ?? 0);
+            } else if (chunk == null) {
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogWarning("ChunkPollingService: snapshot payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(snapshotStr));
+                }
             }
         }
 
@@ -132,12 +179,25 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             var statusEntry = entries.FirstOrDefault(x => x.Name == "status").Value.ToString();
+            if (string.IsNullOrWhiteSpace(statusEntry)) {
+                _logger.LogWarning("ChunkPollingService: task state missing status. TaskId={TaskId}, FieldCount={FieldCount}", taskId, entries.Length);
+                return;
+            }
+
             if (!Enum.TryParse<AgentTaskStatus>(statusEntry, ignoreCase: true, out var status)) {
+                _logger.LogWarning("ChunkPollingService: task state has unknown status. TaskId={TaskId}, Status={Status}", taskId, statusEntry);
                 return;
             }
 
             if (status == AgentTaskStatus.Failed || status == AgentTaskStatus.Cancelled) {
                 var error = entries.FirstOrDefault(x => x.Name == "error").Value.ToString();
+                using (LoggerHolders.PushChatContentLogScope()) {
+                    _logger.LogWarning(
+                        "ChunkPollingService: completing task from failed task state. TaskId={TaskId}, Status={Status}, Error={Error}",
+                        taskId,
+                        status,
+                        error);
+                }
                 await CompleteTrackedTaskAsync(taskId, tracked, new AgentStreamChunk {
                     TaskId = taskId,
                     Type = AgentChunkType.Error,
@@ -161,6 +221,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             Content = lastContent
                         }, cancellationToken);
                         tracked.LastContent = lastContent;
+                        _logger.LogInformation(
+                            "ChunkPollingService: delivered lastContent from completed task state. TaskId={TaskId}, ContentLength={ContentLength}",
+                            taskId,
+                            lastContent.Length);
                     }
                 }
 
@@ -188,14 +252,32 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 var snapshotJson = await db.StringGetAsync(LlmAgentRedisKeys.AgentSnapshot(taskId));
                 if (!snapshotJson.HasValue) return;
 
-                var snapshot = JsonConvert.DeserializeObject<AgentStreamChunk>(snapshotJson.ToString());
+                var snapshotPayload = snapshotJson.ToString();
+                var snapshot = JsonConvert.DeserializeObject<AgentStreamChunk>(snapshotPayload);
                 if (snapshot != null && !string.IsNullOrEmpty(snapshot.Content) && snapshot.Content != tracked.LastContent) {
                     tracked.LastContent = snapshot.Content;
                     await tracked.Channel.Writer.WriteAsync(snapshot, cancellationToken);
+                    _logger.LogInformation(
+                        "ChunkPollingService: delivered final snapshot. TaskId={TaskId}, Sequence={Sequence}, ContentLength={ContentLength}",
+                        taskId,
+                        snapshot.Sequence,
+                        snapshot.Content.Length);
+                } else if (snapshot == null) {
+                    using (LoggerHolders.PushChatContentLogScope()) {
+                        _logger.LogWarning("ChunkPollingService: final snapshot payload could not be deserialized. TaskId={TaskId}, PayloadPreview={PayloadPreview}", taskId, TruncateForLog(snapshotPayload));
+                    }
                 }
-            } catch (Exception) {
-                // Best-effort: don't let snapshot read failure prevent task completion
+            } catch (Exception ex) {
+                _logger.LogWarning(ex, "ChunkPollingService: failed to deliver final snapshot for task {TaskId}", taskId);
             }
+        }
+
+        private static string TruncateForLog(string value, int maxLength = 512) {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxLength) {
+                return value ?? string.Empty;
+            }
+
+            return value.Substring(0, maxLength) + $"...<truncated {value.Length - maxLength} chars>";
         }
 
         private sealed class TrackedTask {

@@ -8,7 +8,9 @@ namespace TelegramSearchBot.Model {
         public SearchCacheDbContext(DbContextOptions<SearchCacheDbContext> options) : base(options) { }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) {
-            optionsBuilder.LogTo(Log.Logger.Information, LogLevel.Information);
+            optionsBuilder.LogTo(
+                (TelegramSearchBot.Common.LoggerHolders.EfCoreLogger ?? Log.Logger).Information, 
+                LogLevel.Information);
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) {

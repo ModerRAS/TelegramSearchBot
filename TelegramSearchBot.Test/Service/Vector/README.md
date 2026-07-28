@@ -190,4 +190,4 @@ _mockServiceScope.Setup(x => x.ServiceProvider.GetRequiredService<DataDbContext>
 
 **维护者**: TelegramSearchBot团队  
 **最后更新**: 2024年12月  
-**测试框架版本**: xUnit 2.9.3, .NET 8.0 
+**测试框架版本**: xUnit 2.9.3, .NET 10.0 

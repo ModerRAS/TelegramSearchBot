@@ -52,7 +52,13 @@ namespace TelegramSearchBot.Manager {
         }
         public string DecodeByOpenCV(Mat img) {
 
-            if (img == null) {
+            if (img == null || img.Empty()) {
+                return string.Empty;
+            }
+
+            // WeChatQRCode 要求图像最小尺寸，避免 inv_scale_x > 0 异常
+            if (img.Width < 20 || img.Height < 20) {
+                logger.LogWarning("Image too small for QR detection: {width}x{height}", img.Width, img.Height);
                 return string.Empty;
             }
 
@@ -61,8 +67,11 @@ namespace TelegramSearchBot.Manager {
             try {
                 opencvDecoder.DetectAndDecode(img, out rects, out texts);
                 img.Dispose();
+            } catch (OpenCVException ex) {
+                logger.LogWarning(ex, "OpenCV QR decode failed: {message}", ex.Message);
+                return string.Empty;
             } catch (ZXing.ReaderException ex) {
-                logger.LogWarning(ex, "OpenCV decode failed");
+                logger.LogWarning(ex, "OpenCV ZXing decode failed");
                 return string.Empty;
             }
 
@@ -79,7 +88,16 @@ namespace TelegramSearchBot.Manager {
         /// <returns></returns>
 #pragma warning disable CS1998 // 异步方法缺少 "await" 运算符，将以同步方式运行
         public async Task<string> ExecuteAsync(string filePath) {
-            using (var src = Cv2.ImRead(filePath, ImreadModes.Unchanged)) {
+            if (!File.Exists(filePath)) {
+                logger.LogWarning("QR file not found: {path}", filePath);
+                return string.Empty;
+            }
+
+            using (var src = Cv2.ImRead(filePath, ImreadModes.Color)) {
+                if (src.Empty()) {
+                    logger.LogWarning("Failed to load image for QR: {path}", filePath);
+                    return string.Empty;
+                }
                 // 然后用opencv来解析
                 string result = DecodeByOpenCV(src);
                 return result;

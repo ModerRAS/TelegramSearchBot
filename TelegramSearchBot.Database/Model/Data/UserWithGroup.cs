@@ -11,5 +11,6 @@ namespace TelegramSearchBot.Model.Data {
         public long Id { get; set; }
         public long GroupId { get; set; }
         public long UserId { get; set; }
+        public bool IsLlmInvisible { get; set; }
     }
 }
