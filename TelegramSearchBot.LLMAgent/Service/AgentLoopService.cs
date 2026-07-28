@@ -16,18 +16,21 @@ namespace TelegramSearchBot.LLMAgent.Service {
         private readonly GarnetRpcClient _rpcClient;
         private readonly ILogger<AgentLoopService> _logger;
         private readonly Func<int, TimeSpan> _transientRetryDelayFactory;
+        private readonly AgentToolRegistryService? _toolRegistryService;
 
         public AgentLoopService(
             IServiceProvider serviceProvider,
             GarnetClient garnetClient,
             GarnetRpcClient rpcClient,
             ILogger<AgentLoopService> logger,
-            Func<int, TimeSpan>? transientRetryDelayFactory = null) {
+            Func<int, TimeSpan>? transientRetryDelayFactory = null,
+            AgentToolRegistryService? toolRegistryService = null) {
             _serviceProvider = serviceProvider;
             _garnetClient = garnetClient;
             _rpcClient = rpcClient;
             _logger = logger;
             _transientRetryDelayFactory = transientRetryDelayFactory ?? GetDefaultTransientRetryDelay;
+            _toolRegistryService = toolRegistryService;
         }
 
         public async Task RunAsync(long chatId, int port, CancellationToken cancellationToken) {
@@ -43,6 +46,10 @@ namespace TelegramSearchBot.LLMAgent.Service {
             await _rpcClient.SaveSessionAsync(session);
 
             try {
+                if (_toolRegistryService != null) {
+                    await _toolRegistryService.RefreshUntilAvailableAsync(cancellationToken);
+                }
+
                 while (!cancellationToken.IsCancellationRequested) {
                     if (await IsShutdownRequestedAsync(chatId)) {
                         session.Status = "shutting_down";
@@ -104,7 +111,21 @@ namespace TelegramSearchBot.LLMAgent.Service {
 
                     var shouldStopAfterTask = false;
                     try {
-                        await ProcessTaskAsync(task, payload, chatId, recoveredContent, cancellationToken);
+                        if (_toolRegistryService != null) {
+                            await _toolRegistryService.RefreshAsync(cancellationToken);
+                        }
+
+                        _logger.LogInformation(
+                            "Agent loop starting task. TaskId={TaskId}, Kind={Kind}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Model={Model}, RecoveryAttempt={RecoveryAttempt}, RecoveredContentLength={RecoveredContentLength}",
+                            task.TaskId,
+                            task.Kind,
+                            task.ChatId,
+                            task.UserId,
+                            task.MessageId,
+                            task.ModelName,
+                            task.RecoveryAttempt,
+                            recoveredContent?.Length ?? 0);
+                        await ProcessTaskAsync(task, payload, chatId, recoveredContent ?? string.Empty, cancellationToken);
                     } finally {
                         session.Status = await IsShutdownRequestedAsync(chatId) ? "shutting_down" : "idle";
                         session.CurrentTaskId = string.Empty;
@@ -134,8 +155,8 @@ namespace TelegramSearchBot.LLMAgent.Service {
             string recoveredContent,
             CancellationToken cancellationToken) {
             var sequence = 0;
-            var currentRecoveredContent = recoveredContent;
-            var latestSnapshot = recoveredContent;
+            var currentRecoveredContent = recoveredContent ?? string.Empty;
+            var latestSnapshot = currentRecoveredContent;
             var retryAttempt = 0;
 
             while (true) {
@@ -146,13 +167,19 @@ namespace TelegramSearchBot.LLMAgent.Service {
 
                 try {
                     await foreach (var snapshot in executor.CallAsync(task, executionContext, cancellationToken).WithCancellation(cancellationToken)) {
-                        latestSnapshot = snapshot;
+                        var snapshotContent = snapshot ?? string.Empty;
+                        latestSnapshot = snapshotContent;
+                        _logger.LogDebug(
+                            "Agent task produced snapshot. TaskId={TaskId}, Sequence={Sequence}, SnapshotLength={SnapshotLength}",
+                            task.TaskId,
+                            sequence,
+                            snapshotContent.Length);
                         await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Running, null, new Dictionary<string, string> {
-                            ["lastContent"] = snapshot,
+                            ["lastContent"] = snapshotContent,
                             ["lastSequence"] = sequence.ToString()
                         });
 
-                        if (!ShouldPublishSnapshot(snapshot, currentRecoveredContent, ref suppressUntilRecoveryCatchup)) {
+                        if (!ShouldPublishSnapshot(snapshotContent, currentRecoveredContent, ref suppressUntilRecoveryCatchup)) {
                             continue;
                         }
 
@@ -160,11 +187,21 @@ namespace TelegramSearchBot.LLMAgent.Service {
                             TaskId = task.TaskId,
                             Type = AgentChunkType.Snapshot,
                             Sequence = sequence++,
-                            Content = snapshot
+                            Content = snapshotContent
                         });
+                        _logger.LogDebug(
+                            "Agent task snapshot published. TaskId={TaskId}, Sequence={Sequence}, SnapshotLength={SnapshotLength}",
+                            task.TaskId,
+                            sequence - 1,
+                            snapshotContent.Length);
                     }
 
                     if (executionContext.IterationLimitReached && executionContext.SnapshotData != null) {
+                        _logger.LogWarning(
+                            "Agent task reached iteration limit. TaskId={TaskId}, Sequence={Sequence}, LastContentLength={LastContentLength}",
+                            task.TaskId,
+                            sequence,
+                            executionContext.SnapshotData.LastAccumulatedContent?.Length ?? 0);
                         await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
                             TaskId = task.TaskId,
                             Type = AgentChunkType.IterationLimitReached,
@@ -180,6 +217,11 @@ namespace TelegramSearchBot.LLMAgent.Service {
                             ["transientRetryCount"] = retryAttempt.ToString()
                         });
                     } else {
+                        _logger.LogInformation(
+                            "Agent task completed. TaskId={TaskId}, FinalSequence={Sequence}, LastContentLength={LastContentLength}",
+                            task.TaskId,
+                            sequence,
+                            latestSnapshot.Length);
                         await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
                             TaskId = task.TaskId,
                             Type = AgentChunkType.Done,
@@ -198,11 +240,14 @@ namespace TelegramSearchBot.LLMAgent.Service {
                     retryAttempt++;
                     var delay = _transientRetryDelayFactory(retryAttempt);
                     currentRecoveredContent = latestSnapshot;
+                    var retryReason = ex.GetLogSummary();
+                    var primaryException = ex.GetPrimaryException();
 
                     _logger.LogWarning(
                         ex,
-                        "Agent task {TaskId} hit transient LLM overload. Retrying in {DelaySeconds}s (attempt {RetryAttempt}/{MaxRetries})",
+                        "Agent task {TaskId} hit transient LLM overload ({RetryReason}). Retrying in {DelaySeconds}s (attempt {RetryAttempt}/{MaxRetries})",
                         task.TaskId,
+                        retryReason,
                         delay.TotalSeconds,
                         retryAttempt,
                         MaxTransientOverloadRetries);
@@ -214,27 +259,33 @@ namespace TelegramSearchBot.LLMAgent.Service {
                         ["lastSequence"] = sequence.ToString(),
                         ["transientRetryCount"] = retryAttempt.ToString(),
                         ["lastRetryAtUtc"] = DateTime.UtcNow.ToString("O"),
-                        ["lastRetryReason"] = ex.Message
+                        ["lastRetryReason"] = retryReason,
+                        ["lastRetryDetails"] = ex.ToString(),
+                        ["lastRetryExceptionType"] = primaryException.GetType().FullName ?? primaryException.GetType().Name
                     });
 
                     if (delay > TimeSpan.Zero) {
                         await Task.Delay(delay, cancellationToken);
                     }
                 } catch (Exception ex) {
-                    _logger.LogError(ex, "Agent task {TaskId} failed", task.TaskId);
+                    var errorSummary = ex.GetLogSummary();
+                    _logger.LogError(ex, "Agent task {TaskId} failed ({ErrorSummary})", task.TaskId, errorSummary);
                     await _garnetClient.PublishTerminalAsync(new AgentStreamChunk {
                         TaskId = task.TaskId,
                         Type = AgentChunkType.Error,
                         Sequence = sequence,
-                        ErrorMessage = ex.Message
+                        ErrorMessage = errorSummary
                     });
-                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Failed, ex.Message, new Dictionary<string, string> {
+                    var primaryException = ex.GetPrimaryException();
+                    await _rpcClient.SaveTaskStateAsync(task.TaskId, AgentTaskStatus.Failed, errorSummary, new Dictionary<string, string> {
                         ["payload"] = payload,
                         ["workerChatId"] = workerChatId.ToString(),
                         ["failedAtUtc"] = DateTime.UtcNow.ToString("O"),
                         ["lastContent"] = latestSnapshot,
                         ["lastSequence"] = sequence.ToString(),
-                        ["transientRetryCount"] = retryAttempt.ToString()
+                        ["transientRetryCount"] = retryAttempt.ToString(),
+                        ["errorType"] = primaryException.GetType().FullName ?? primaryException.GetType().Name,
+                        ["errorDetails"] = ex.ToString()
                     });
                     return;
                 }

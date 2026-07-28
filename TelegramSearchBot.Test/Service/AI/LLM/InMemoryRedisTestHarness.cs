@@ -8,6 +8,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         private readonly ConcurrentDictionary<string, List<string>> _lists = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, Dictionary<string, string>> _hashes = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, string> _strings = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, HashSet<string>> _sets = new(StringComparer.OrdinalIgnoreCase);
 
         public InMemoryRedisTestHarness() {
             Database = new Mock<IDatabase>(MockBehavior.Strict);
@@ -87,6 +88,28 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                     }
                 });
 
+            Database.Setup(d => d.SetAddAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync((RedisKey key, RedisValue value, CommandFlags _) => {
+                    lock (_gate) {
+                        var set = _sets.GetOrAdd(key.ToString(), _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                        return set.Add(value.ToString());
+                    }
+                });
+
+            Database.Setup(d => d.SetRemoveAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync((RedisKey key, RedisValue value, CommandFlags _) => {
+                    lock (_gate) {
+                        return _sets.TryGetValue(key.ToString(), out var set) && set.Remove(value.ToString());
+                    }
+                });
+
+            Database.Setup(d => d.SetLengthAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync((RedisKey key, CommandFlags _) => {
+                    lock (_gate) {
+                        return _sets.TryGetValue(key.ToString(), out var set) ? set.Count : 0;
+                    }
+                });
+
             Database.Setup(d => d.StringSetAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<When>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync((RedisKey key, RedisValue value, TimeSpan? _, When _, CommandFlags _) => {
                     _strings[key.ToString()] = value.ToString();
@@ -115,12 +138,46 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Database.Setup(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync((RedisKey key, CommandFlags _) => _strings.TryGetValue(key.ToString(), out var value) ? ( RedisValue ) value : RedisValue.Null);
 
+            Database.Setup(d => d.ScriptEvaluateAsync(It.IsAny<string>(), It.IsAny<RedisKey[]>(), It.IsAny<RedisValue[]>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync((string _, RedisKey[] keys, RedisValue[] values, CommandFlags _) => {
+                    lock (_gate) {
+                        var activeKey = keys[0].ToString();
+                        var stateKey = keys[1].ToString();
+                        var queueKey = keys[2].ToString();
+                        var jobId = values[0].ToString();
+                        var maxActive = ( int ) values[1];
+                        var activeSet = _sets.GetOrAdd(activeKey, _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                        if (activeSet.Count >= maxActive) {
+                            return RedisResult.Create(( RedisValue ) 0);
+                        }
+
+                        activeSet.Add(jobId);
+                        var hash = _hashes.GetOrAdd(stateKey, _ => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+                        hash["status"] = values[4].ToString();
+                        hash["chatId"] = values[5].ToString();
+                        hash["userId"] = values[6].ToString();
+                        hash["messageId"] = values[7].ToString();
+                        hash["workingDirectory"] = values[8].ToString();
+                        hash["createdAtUtc"] = values[9].ToString();
+                        hash["updatedAtUtc"] = values[10].ToString();
+                        hash["payload"] = values[3].ToString();
+                        hash["summary"] = string.Empty;
+                        hash["error"] = string.Empty;
+                        hash["logPath"] = string.Empty;
+
+                        var list = _lists.GetOrAdd(queueKey, _ => []);
+                        list.Insert(0, values[3].ToString());
+                        return RedisResult.Create(( RedisValue ) 1);
+                    }
+                });
+
             Database.Setup(d => d.KeyDeleteAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync((RedisKey key, CommandFlags flags) => {
                     var removed = false;
                     removed |= _strings.TryRemove(key.ToString(), out _);
                     removed |= _lists.TryRemove(key.ToString(), out _);
                     removed |= _hashes.TryRemove(key.ToString(), out _);
+                    removed |= _sets.TryRemove(key.ToString(), out _);
                     return removed;
                 });
 
@@ -160,6 +217,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 return _hashes.TryGetValue(key, out var hash)
                     ? new Dictionary<string, string>(hash, StringComparer.OrdinalIgnoreCase)
                     : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        public IReadOnlyCollection<string> GetSetValues(string key) {
+            lock (_gate) {
+                return _sets.TryGetValue(key, out var set) ? set.ToList() : [];
             }
         }
 

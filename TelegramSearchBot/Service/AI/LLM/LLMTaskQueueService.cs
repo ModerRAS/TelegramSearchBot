@@ -22,16 +22,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IConnectionMultiplexer _redis;
         private readonly ChunkPollingService _chunkPollingService;
         private readonly AgentRegistryService _agentRegistryService;
+        private readonly LlmVisibilityService _llmVisibilityService;
 
         public LLMTaskQueueService(
             DataDbContext dbContext,
             IConnectionMultiplexer redis,
             ChunkPollingService chunkPollingService,
-            AgentRegistryService agentRegistryService) {
+            AgentRegistryService agentRegistryService,
+            LlmVisibilityService llmVisibilityService = null) {
             _dbContext = dbContext;
             _redis = redis;
             _chunkPollingService = chunkPollingService;
             _agentRegistryService = agentRegistryService;
+            _llmVisibilityService = llmVisibilityService;
         }
 
         public string ServiceName => nameof(LLMTaskQueueService);
@@ -43,7 +46,44 @@ namespace TelegramSearchBot.Service.AI.LLM {
             CancellationToken cancellationToken = default) {
             ArgumentNullException.ThrowIfNull(telegramMessage);
 
-            var task = await BuildMessageTaskAsync(telegramMessage, botName, botUserId, cancellationToken);
+            var inputMessage = string.IsNullOrWhiteSpace(telegramMessage.Text)
+                ? telegramMessage.Caption ?? string.Empty
+                : telegramMessage.Text;
+            var task = await BuildMessageTaskAsync(
+                telegramMessage.Chat.Id,
+                telegramMessage.From?.Id ?? 0,
+                telegramMessage.MessageId,
+                telegramMessage.Date,
+                inputMessage,
+                botName,
+                botUserId,
+                cancellationToken);
+            await _agentRegistryService.EnsureAgentAsync(task.ChatId, cancellationToken);
+            return await EnqueueTaskAsync(task);
+        }
+
+        public async Task<AgentTaskStreamHandle> EnqueueMessageTaskAsync(
+            long chatId,
+            long userId,
+            long messageId,
+            DateTime messageDate,
+            string inputMessage,
+            string botName,
+            long botUserId,
+            CancellationToken cancellationToken = default) {
+            if (string.IsNullOrWhiteSpace(inputMessage)) {
+                throw new ArgumentException("Input message cannot be empty.", nameof(inputMessage));
+            }
+
+            var task = await BuildMessageTaskAsync(
+                chatId,
+                userId,
+                messageId,
+                messageDate,
+                inputMessage,
+                botName,
+                botUserId,
+                cancellationToken);
             await _agentRegistryService.EnsureAgentAsync(task.ChatId, cancellationToken);
             return await EnqueueTaskAsync(task);
         }
@@ -74,6 +114,50 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return await EnqueueTaskAsync(task);
         }
 
+        public async Task<AgentTaskStreamHandle> EnqueueSyntheticMessageTaskAsync(
+            long chatId,
+            long userId,
+            long messageId,
+            string inputMessage,
+            string botName,
+            long botUserId,
+            DateTime createdAtUtc,
+            CancellationToken cancellationToken = default) {
+            if (string.IsNullOrWhiteSpace(inputMessage)) {
+                throw new ArgumentException("Synthetic LLM input cannot be empty.", nameof(inputMessage));
+            }
+
+            var modelName = await _dbContext.GroupSettings.AsNoTracking()
+                .Where(x => x.GroupId == chatId)
+                .Select(x => x.LLMModelName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(modelName)) {
+                throw new InvalidOperationException("请先为当前群组设置模型。");
+            }
+
+            var channelInfo = await LoadChannelAsync(modelName, null, cancellationToken);
+            var history = await LoadHistoryAsync(chatId, cancellationToken);
+            var task = new AgentExecutionTask {
+                TaskId = Guid.NewGuid().ToString("N"),
+                Kind = AgentTaskKind.Message,
+                ChatId = chatId,
+                UserId = userId,
+                MessageId = messageId,
+                BotName = botName,
+                BotUserId = botUserId,
+                ModelName = modelName,
+                InputMessage = inputMessage,
+                MaxToolCycles = Env.MaxToolCycles,
+                Channel = channelInfo,
+                History = history,
+                CreatedAtUtc = createdAtUtc
+            };
+
+            await _agentRegistryService.EnsureAgentAsync(task.ChatId, cancellationToken);
+            return await EnqueueTaskAsync(task);
+        }
+
         private async Task<AgentTaskStreamHandle> EnqueueTaskAsync(AgentExecutionTask task) {
             var db = _redis.GetDatabase();
             var payload = JsonConvert.SerializeObject(task);
@@ -95,12 +179,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private async Task<AgentExecutionTask> BuildMessageTaskAsync(
-            TelegramMessage telegramMessage,
+            long chatId,
+            long userId,
+            long messageId,
+            DateTime messageDate,
+            string inputMessage,
             string botName,
             long botUserId,
             CancellationToken cancellationToken) {
             var modelName = await _dbContext.GroupSettings.AsNoTracking()
-                .Where(x => x.GroupId == telegramMessage.Chat.Id)
+                .Where(x => x.GroupId == chatId)
                 .Select(x => x.LLMModelName)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -109,21 +197,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             var channelInfo = await LoadChannelAsync(modelName, null, cancellationToken);
-            var history = await LoadHistoryAsync(telegramMessage.Chat.Id, cancellationToken);
+            var history = await LoadHistoryAsync(chatId, cancellationToken);
             return new AgentExecutionTask {
                 TaskId = Guid.NewGuid().ToString("N"),
                 Kind = AgentTaskKind.Message,
-                ChatId = telegramMessage.Chat.Id,
-                UserId = telegramMessage.From?.Id ?? 0,
-                MessageId = telegramMessage.MessageId,
+                ChatId = chatId,
+                UserId = userId,
+                MessageId = messageId,
                 BotName = botName,
                 BotUserId = botUserId,
                 ModelName = modelName,
-                InputMessage = string.IsNullOrWhiteSpace(telegramMessage.Text) ? telegramMessage.Caption ?? string.Empty : telegramMessage.Text,
+                InputMessage = inputMessage,
                 MaxToolCycles = Env.MaxToolCycles,
                 Channel = channelInfo,
                 History = history,
-                CreatedAtUtc = telegramMessage.Date.ToUniversalTime()
+                CreatedAtUtc = messageDate.ToUniversalTime()
             };
         }
 
@@ -177,6 +265,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     .Take(10)
                     .OrderBy(x => x.DateTime)
                     .ToListAsync(cancellationToken);
+            }
+
+            if (_llmVisibilityService != null) {
+                history = await _llmVisibilityService.FilterVisibleMessagesAsync(chatId, history, cancellationToken);
             }
 
             var userIds = history.Select(x => x.FromUserId).Distinct().ToList();

@@ -139,6 +139,7 @@ Telegram 更新 → 命令解析 → 控制器分发 → 业务处理 → 结果
 - LLM 提供商配置
 - 搜索功能开关
 - AI 工具启用状态
+- Prompt caching 隐藏总开关：`LLM:PromptCachingEnabled` 存于 `AppConfigurationItems`，默认开启，用于紧急旁路 OpenAI / Anthropic 主动缓存逻辑
 
 ## 部署架构
 
