@@ -9,6 +9,29 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
     [Collection("AgentEnvSerial")]
     public class SandboxieToolHostServiceTests {
         [Fact]
+        public void BuildBoxName_PreservesUnderscores() {
+            var boxName = SandboxieToolHostService.BuildBoxName(12345L, "TGSB_G_");
+
+            Assert.StartsWith("TGSB_G_", boxName, StringComparison.Ordinal);
+            Assert.Equal(19, boxName.Length);
+        }
+
+        [Theory]
+        [InlineData("TGSB-G-")]
+        [InlineData("TGSB G ")]
+        [InlineData("沙箱_")]
+        public void BuildBoxName_RejectsInvalidPrefixes(string prefix) {
+            Assert.Throws<InvalidOperationException>(() => SandboxieToolHostService.BuildBoxName(12345L, prefix));
+        }
+
+        [Fact]
+        public void BuildBoxName_EnforcesSandboxieLengthLimit() {
+            Assert.Equal(38, SandboxieToolHostService.BuildBoxName(12345L, new string('A', 26)).Length);
+            Assert.Throws<InvalidOperationException>(() =>
+                SandboxieToolHostService.BuildBoxName(12345L, new string('A', 27)));
+        }
+
+        [Fact]
         public void BuildPortableBoxIni_AllowsOnlyCurrentChatResourceDirectories() {
             var originalGroupFilesRoot = Env.SandboxieGroupFilesRoot;
             var originalDenyHostFileSystem = Env.SandboxieDenyHostFileSystem;

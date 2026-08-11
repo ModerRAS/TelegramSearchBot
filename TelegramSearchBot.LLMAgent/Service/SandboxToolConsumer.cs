@@ -35,7 +35,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
 
             _redis.ConnectionFailed += OnConnectionFailed;
             var watchdogTask = RunParentWatchdogAsync(parentProcessId, parentStartTicksUtc, linkedCts);
-            var heartbeatTask = RunHeartbeatAsync(chatId, boxName, linkedCts.Token);
+            var heartbeatTask = RunHeartbeatAsync(chatId, boxName, parentProcessId, linkedCts.Token);
             var db = _redis.GetDatabase();
             var queueKey = LlmAgentRedisKeys.SandboxToolQueue(chatId);
             _logger.LogInformation(
@@ -92,13 +92,19 @@ namespace TelegramSearchBot.LLMAgent.Service {
             }
         }
 
-        private async Task RunHeartbeatAsync(long chatId, string boxName, CancellationToken cancellationToken) {
+        private async Task RunHeartbeatAsync(long chatId, string boxName, int parentProcessId, CancellationToken cancellationToken) {
             var db = _redis.GetDatabase();
             var key = LlmAgentRedisKeys.SandboxToolHeartbeat(chatId);
             while (!cancellationToken.IsCancellationRequested) {
                 await db.StringSetAsync(
                     key,
-                    JsonConvert.SerializeObject(new { chatId, boxName, processId = Environment.ProcessId, updatedAtUtc = DateTime.UtcNow }),
+                    JsonConvert.SerializeObject(new {
+                        chatId,
+                        boxName,
+                        processId = Environment.ProcessId,
+                        parentProcessId,
+                        updatedAtUtc = DateTime.UtcNow
+                    }),
                     TimeSpan.FromSeconds(15));
                 await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
