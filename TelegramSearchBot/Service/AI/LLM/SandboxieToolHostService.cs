@@ -26,9 +26,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             "ReadFile", "WriteFile", "EditFile", "SearchText", "ListFiles", "ExecuteCommand"
         };
 
-        private const int SandboxieCommandTimeoutMilliseconds = 10_000;
-        private const int ToolHostStartupTimeoutSeconds = 15;
-
         private readonly IConnectionMultiplexer _redis;
         private readonly ILogger<SandboxieToolHostService> _logger;
         private readonly SemaphoreSlim _lock = new(1, 1);
@@ -120,15 +117,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 EnsureBoxesDirectory(instance.BoxesDirectory);
                 EnsurePortableBoxDefinition(instance);
                 if (Env.SandboxieAutoRegisterImportBox) {
-                    EnsureImportBoxDirective(instance.BoxesDirectory);
+                    await EnsureImportBoxDirectiveAsync(instance.BoxesDirectory, cancellationToken);
                 }
 
                 if (await IsToolHostAliveAsync(instance)) {
                     return instance;
                 }
 
-                ReloadSandboxieConfiguration();
-                EnsureSandboxieBoxLoaded(instance);
+                await ReloadSandboxieConfigurationAsync(cancellationToken);
+                await EnsureSandboxieBoxLoadedAsync(instance, cancellationToken);
                 using var launcher = StartToolHost(instance);
                 await WaitForToolHostStartupAsync(instance, launcher, cancellationToken);
                 return instance;
@@ -137,16 +134,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        private void EnsureImportBoxDirective(string boxesDirectory) {
+        private async Task EnsureImportBoxDirectiveAsync(string boxesDirectory, CancellationToken cancellationToken) {
             var importPath = $"{NormalizeSandboxiePath(boxesDirectory)}\\*";
             var directive = $"ImportBox={importPath}";
             var sbieIniExe = Path.Combine(Path.GetDirectoryName(Env.SandboxieStartExe) ?? string.Empty, "SbieIni.exe");
 
             if (File.Exists(sbieIniExe)) {
-                var query = RunSandboxieCommand(
+                var query = await RunSandboxieCommandAsync(
                     sbieIniExe,
                     new[] { "query", "GlobalSettings", "ImportBox" },
-                    SandboxieCommandTimeoutMilliseconds);
+                    Env.SandboxieCommandTimeoutSeconds,
+                    cancellationToken);
                 if (query.ExitCode == 0 && query.StandardOutput
                         .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .Any(line => string.Equals(line, importPath, StringComparison.OrdinalIgnoreCase) ||
@@ -154,14 +152,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return;
                 }
 
-                var append = RunSandboxieCommand(
+                var append = await RunSandboxieCommandAsync(
                     sbieIniExe,
                     new[] { "append", "/drv", "GlobalSettings", "ImportBox", importPath },
-                    SandboxieCommandTimeoutMilliseconds);
-                var verify = RunSandboxieCommand(
+                    Env.SandboxieCommandTimeoutSeconds,
+                    cancellationToken);
+                var verify = await RunSandboxieCommandAsync(
                     sbieIniExe,
                     new[] { "query", "GlobalSettings", "ImportBox" },
-                    SandboxieCommandTimeoutMilliseconds);
+                    Env.SandboxieCommandTimeoutSeconds,
+                    cancellationToken);
                 if (append.ExitCode != 0 || verify.ExitCode != 0 || !verify.StandardOutput
                         .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .Any(line => string.Equals(line, importPath, StringComparison.OrdinalIgnoreCase) ||
@@ -181,7 +181,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     iniPath);
             }
 
-            var text = File.ReadAllText(iniPath, Encoding.Unicode);
+            var text = await File.ReadAllTextAsync(iniPath, Encoding.Unicode, cancellationToken);
             if (text.IndexOf(directive, StringComparison.OrdinalIgnoreCase) >= 0) {
                 return;
             }
@@ -201,8 +201,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     }
                 }
 
-                File.WriteAllText(iniPath, text, Encoding.Unicode);
+                await File.WriteAllTextAsync(iniPath, text, Encoding.Unicode, cancellationToken);
                 _logger.LogInformation("Added Sandboxie ImportBox directive. Ini={IniPath}, Directive={Directive}", iniPath, directive);
+            } catch (OperationCanceledException) {
+                throw;
             } catch (Exception ex) {
                 throw new InvalidOperationException(
                     $"Failed to register the portable box directory. Add '{directive}' under [GlobalSettings] or grant Sandboxie configuration access.",
@@ -302,32 +304,34 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return string.Join(Environment.NewLine, lines);
         }
 
-        private void ReloadSandboxieConfiguration() {
+        private async Task ReloadSandboxieConfigurationAsync(CancellationToken cancellationToken) {
             var startExe = Env.SandboxieStartExe;
             if (!File.Exists(startExe)) {
                 throw new FileNotFoundException("Sandboxie Start.exe was not found. Configure SandboxieStartExe in Config.json.", startExe);
             }
 
-            var result = RunSandboxieCommand(
+            var result = await RunSandboxieCommandAsync(
                 startExe,
                 new[] { "/silent", "/reload" },
-                SandboxieCommandTimeoutMilliseconds);
+                Env.SandboxieCommandTimeoutSeconds,
+                cancellationToken);
             if (result.ExitCode != 0) {
                 throw new InvalidOperationException(
                     $"Sandboxie configuration reload failed. ExitCode={result.ExitCode}, Error={result.StandardError.Trim()}");
             }
         }
 
-        private void EnsureSandboxieBoxLoaded(SandboxieInstance instance) {
+        private async Task EnsureSandboxieBoxLoadedAsync(SandboxieInstance instance, CancellationToken cancellationToken) {
             var sbieIniExe = Path.Combine(Path.GetDirectoryName(Env.SandboxieStartExe) ?? string.Empty, "SbieIni.exe");
             if (!File.Exists(sbieIniExe)) {
                 return;
             }
 
-            var result = RunSandboxieCommand(
+            var result = await RunSandboxieCommandAsync(
                 sbieIniExe,
                 new[] { "query", "/boxes", "*" },
-                SandboxieCommandTimeoutMilliseconds);
+                Env.SandboxieCommandTimeoutSeconds,
+                cancellationToken);
             var isLoaded = result.ExitCode == 0 && result.StandardOutput
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Any(line => string.Equals(line, instance.BoxName, StringComparison.OrdinalIgnoreCase));
@@ -370,7 +374,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         private async Task WaitForToolHostStartupAsync(SandboxieInstance instance, Process launcher, CancellationToken cancellationToken) {
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(ToolHostStartupTimeoutSeconds);
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(Env.SandboxieToolHostStartupTimeoutSeconds);
             while (DateTime.UtcNow < deadline) {
                 if (await IsToolHostAliveAsync(instance)) {
                     return;
@@ -392,13 +396,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             throw new TimeoutException(
-                $"Sandboxie started box '{instance.BoxName}', but its tool host did not report a heartbeat within {ToolHostStartupTimeoutSeconds} seconds.");
+                $"Sandboxie started box '{instance.BoxName}', but its tool host did not report a heartbeat within {Env.SandboxieToolHostStartupTimeoutSeconds} seconds.");
         }
 
-        private static (int ExitCode, string StandardOutput, string StandardError) RunSandboxieCommand(
+        private static async Task<(int ExitCode, string StandardOutput, string StandardError)> RunSandboxieCommandAsync(
             string executable,
             IEnumerable<string> arguments,
-            int timeoutMilliseconds) {
+            int timeoutSeconds,
+            CancellationToken cancellationToken) {
             var startInfo = new ProcessStartInfo {
                 FileName = executable,
                 UseShellExecute = false,
@@ -412,21 +417,31 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             using var process = Process.Start(startInfo) ??
                                 throw new InvalidOperationException($"Failed to start Sandboxie command '{executable}'.");
-            var standardOutput = process.StandardOutput.ReadToEndAsync();
-            var standardError = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(timeoutMilliseconds)) {
+            var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+            try {
+                await process.WaitForExitAsync(timeoutCts.Token);
+            } catch (OperationCanceledException) {
                 try {
                     process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None);
                 } catch {
                 }
 
-                throw new TimeoutException($"Sandboxie command '{Path.GetFileName(executable)}' timed out.");
+                if (cancellationToken.IsCancellationRequested) {
+                    throw;
+                }
+
+                throw new TimeoutException(
+                    $"Sandboxie command '{Path.GetFileName(executable)}' timed out after {timeoutSeconds} seconds.");
             }
 
             return (
                 process.ExitCode,
-                standardOutput.GetAwaiter().GetResult(),
-                standardError.GetAwaiter().GetResult());
+                await standardOutput,
+                await standardError);
         }
 
         private async Task<bool> IsToolHostAliveAsync(SandboxieInstance instance) {

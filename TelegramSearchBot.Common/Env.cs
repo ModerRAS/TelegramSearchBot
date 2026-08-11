@@ -79,6 +79,8 @@ namespace TelegramSearchBot.Common {
                 : config.SandboxieGroupFilesRoot.Trim();
             SandboxieGlobalReadPaths = config.SandboxieGlobalReadPaths ?? new List<string>();
             SandboxieGlobalClosedPaths = config.SandboxieGlobalClosedPaths ?? new List<string>();
+            SandboxieCommandTimeoutSeconds = Math.Clamp(config.SandboxieCommandTimeoutSeconds, 1, 3600);
+            SandboxieToolHostStartupTimeoutSeconds = Math.Clamp(config.SandboxieToolHostStartupTimeoutSeconds, 1, 3600);
             SandboxieToolTimeoutSeconds = Math.Clamp(config.SandboxieToolTimeoutSeconds, 5, 3600);
             EnableCodingAgentTool = config.EnableCodingAgentTool;
             CodingAgentAllowedGroupIds = config.CodingAgentAllowedGroupIds ?? new List<long>();
@@ -179,6 +181,8 @@ namespace TelegramSearchBot.Common {
         public static string SandboxieGroupFilesRoot { get; set; } = null!;
         public static List<string> SandboxieGlobalReadPaths { get; set; } = new List<string>();
         public static List<string> SandboxieGlobalClosedPaths { get; set; } = new List<string>();
+        public static int SandboxieCommandTimeoutSeconds { get; set; } = 10;
+        public static int SandboxieToolHostStartupTimeoutSeconds { get; set; } = 15;
         public static int SandboxieToolTimeoutSeconds { get; set; } = 120;
         public static bool EnableCodingAgentTool { get; set; } = false;
         public static List<long> CodingAgentAllowedGroupIds { get; set; } = new List<long>();
@@ -346,6 +350,8 @@ namespace TelegramSearchBot.Common {
         public string SandboxieGroupFilesRoot { get; set; } = string.Empty;
         public List<string> SandboxieGlobalReadPaths { get; set; } = new List<string>();
         public List<string> SandboxieGlobalClosedPaths { get; set; } = new List<string>();
+        public int SandboxieCommandTimeoutSeconds { get; set; } = 10;
+        public int SandboxieToolHostStartupTimeoutSeconds { get; set; } = 15;
         public int SandboxieToolTimeoutSeconds { get; set; } = 120;
         public bool EnableCodingAgentTool { get; set; } = false;
         public List<long> CodingAgentAllowedGroupIds { get; set; } = new List<long>();

@@ -81,6 +81,8 @@
   "SandboxieGroupFilesRoot": "",
   "SandboxieGlobalReadPaths": [],
   "SandboxieGlobalClosedPaths": [],
+  "SandboxieCommandTimeoutSeconds": 10,
+  "SandboxieToolHostStartupTimeoutSeconds": 15,
   "SandboxieToolTimeoutSeconds": 120,
   "OLTPAuth": "",
   "OLTPAuthUrl": "",
@@ -136,6 +138,8 @@
   - `SandboxieGroupFilesRoot`: 可选的额外每群文件根目录；为空时不开放。配置后，每个群只读开放 `<root>/<chatId>`。
   - 程序默认会关闭聊天资源父目录 `Photos`、`Audios`、`Videos`、`Files`，再仅为当前群的既有聊天媒体/文件目录生成只读授权：`Photos/<chatId>`、`Audios/<chatId>`、`Videos/<chatId>`、`Files/<chatId>`。其他群的资源目录默认不可读。Lucene `Index_Data` 不开放给 ToolHost；搜索仍由主进程侧服务完成。
   - `SandboxieGlobalReadPaths` / `SandboxieGlobalClosedPaths`: 额外全局只读开放/禁止访问路径。
+  - `SandboxieCommandTimeoutSeconds`: `SbieIni.exe` 和 `Start.exe /reload` 等 Sandboxie 配置命令的等待超时(默认10秒)。
+  - `SandboxieToolHostStartupTimeoutSeconds`: 启动 box 后等待 ToolHost 心跳的超时(默认15秒)。宿主负载较高时可适当增大。
   - `SandboxieToolTimeoutSeconds`: 沙箱工具调用等待超时(默认120秒)。
 
 启用 `EnableLLMAgentProcess=true` 后，主进程会负责任务排队、Telegram 发消息和流式转发；独立 Agent 进程负责执行 LLM 循环、本地工具和故障恢复。主进程会在 Agent 心跳超时、任务超时或配置切换时执行恢复、重试、死信投递和优雅停机。
