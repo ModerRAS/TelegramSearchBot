@@ -24,7 +24,7 @@ namespace TelegramSearchBot.LLMAgent {
             if (effectiveArgs.Length != 2 ||
                 !long.TryParse(effectiveArgs[0], out var chatId) ||
                 !int.TryParse(effectiveArgs[1], out var port)) {
-                Console.Error.WriteLine("Usage: LLMAgent <chatId> <port> | SandboxToolHost <chatId> <port> <profileName> <parentPid> <parentStartTicksUtc> <workingDirectory>");
+                Console.Error.WriteLine("Usage: LLMAgent <chatId> <port> | SandboxToolHost <chatId> <port> <profileName> <parentPid> <workingDirectory> <toolTimeoutSeconds>");
                 Environment.ExitCode = 1;
                 return;
             }

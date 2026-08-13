@@ -162,7 +162,7 @@ namespace TelegramSearchBot.Service.Tools {
         public async Task<string> SearchText(
             [BuiltInParameter("Regex pattern to search for")] string pattern,
             ToolContext toolContext,
-            [BuiltInParameter("Directory to search in. Defaults to bot work directory.", IsRequired = false)] string path = null,
+            [BuiltInParameter("Directory to search in. Defaults to the sandbox working directory for sandboxed calls, otherwise the bot work directory.", IsRequired = false)] string path = null,
             [BuiltInParameter("File glob pattern to filter files (e.g., '*.cs', '*.json'). Defaults to all files.", IsRequired = false)] string fileGlob = null,
             [BuiltInParameter("Whether to ignore case. Defaults to true.", IsRequired = false)] bool ignoreCase = true) {
 
@@ -234,7 +234,7 @@ namespace TelegramSearchBot.Service.Tools {
         [BuiltInTool("List files and directories at a given path. Supports glob patterns.")]
         public async Task<string> ListFiles(
             ToolContext toolContext,
-            [BuiltInParameter("Directory path to list. Defaults to bot work directory.", IsRequired = false)] string path = null,
+            [BuiltInParameter("Directory path to list. Defaults to the sandbox working directory for sandboxed calls, otherwise the bot work directory.", IsRequired = false)] string path = null,
             [BuiltInParameter("Glob pattern to filter files (e.g., '*.cs'). If omitted, lists all.", IsRequired = false)] string pattern = null) {
 
             if (!IsFileToolAllowed(toolContext)) {

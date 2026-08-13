@@ -107,6 +107,27 @@ namespace TelegramSearchBot.Test.Service.Tools {
         }
 
         [Fact]
+        public async Task ExecuteCommand_SandboxCancellation_StopsCommand() {
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+            var context = new ToolContext {
+                ChatId = 1,
+                UserId = long.MaxValue - 1,
+                IsSandboxed = true,
+                SandboxWorkingDirectory = Path.GetTempPath(),
+                CancellationToken = cts.Token
+            };
+            var command = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? "Start-Sleep -Seconds 30"
+                : "sleep 30";
+
+            var started = DateTime.UtcNow;
+            var result = await _service.ExecuteCommand(command, context, timeoutMs: 300000);
+
+            Assert.Contains("cancelled", result, StringComparison.OrdinalIgnoreCase);
+            Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(10));
+        }
+
+        [Fact]
         public async Task ExecuteCommand_TimeoutClamped() {
             var toolContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
 

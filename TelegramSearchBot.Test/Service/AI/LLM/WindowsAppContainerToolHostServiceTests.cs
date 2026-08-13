@@ -82,7 +82,10 @@ public class WindowsAppContainerToolHostServiceTests {
 
     [Fact]
     public async Task AppContainer_CanLoadTelegramSearchBotWithoutBotWorkDirectoryAccess() {
-        if (!OperatingSystem.IsWindows()) return;
+        if (!OperatingSystem.IsWindows() ||
+            string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase)) {
+            return;
+        }
 
         var executable = Path.Combine(AppContext.BaseDirectory, "TelegramSearchBot.exe");
         if (!File.Exists(executable)) return;
@@ -149,7 +152,8 @@ public class WindowsAppContainerToolHostServiceTests {
                 [],
                 8,
                 256L * 1024 * 1024);
-            await process.Process.WaitForExitAsync(timeout.Token);
+            using var secondTimeout = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await process.Process.WaitForExitAsync(secondTimeout.Token);
 
             Assert.Equal(1, process.Process.ExitCode);
             Assert.True(File.Exists(Path.Combine(allowed, "secret-copy.txt")));

@@ -4,7 +4,7 @@
 >
 > 研究日期：2026-08-11。目标平台应明确限定为受支持的 Windows 11 x64/NTFS；不要把结论外推到 FAT/exFAT、旧版 Windows 或 Wine。
 
-### 1.0 第一阶段目标
+## 1.0 第一阶段目标
 
 第一阶段只解决一个核心问题：**限制 Sandbox 内程序访问宿主文件目录。**
 
@@ -166,7 +166,7 @@ PoC 还确认了 `lpCurrentDirectory` 必须显式设置为授权 workspace。�
 
 ### 3.4 只访问指定 workspace
 
-为每个 Task 创建唯一 AppContainer profile/SID，例如：
+第一阶段实现按 chat 创建长期 AppContainer profile/SID，而不是按 Task 创建。`Photos/Audios/Videos/Files/<chatId>` 和可选的 `SandboxieGroupFilesRoot/<chatId>` 属于该 chat 的共享可写目录；同一 chat 内的多个任务属于同一信任边界，不提供相互隔离。最终若需要不互信 Task 隔离，再升级为：
 
 ```text
 TelegramSearchBot.Task.<random-128-bit-id>
@@ -203,7 +203,7 @@ Windows ACL/AppContainer 可以阻止直接资源访问，但不能修复一个�
 - Bot 的 `%LOCALAPPDATA%\TelegramSearchBot\Config.json`、`Data.sqlite`、日志、向量索引和其他 Task 根目录不授予 Task package SID。
 - 不把完整 TelegramSearchBot 进程作为 sandbox ToolHost。创建独立最小 runner 项目，不引用 `Env`；当前 `Env` 静态初始化会直接读取 `Config.json`。
 - `CreateProcessAsUserW(lpEnvironment = NULL)` 会继承调用方环境。必须构造 allowlist 环境块，只保留 `SystemRoot`、`ComSpec`、受控 `PATH`、locale 和 Task 自己的 `TEMP/TMP/HOME/USERPROFILE`。
-- API key、Bot token、数据库连接、Scheduler port、代理凭据和 CI secrets 一律不进入环境、命令行或可继承 handle。
+- API key、Bot token、数据库连接和代理凭据一律不进入环境、命令行或可继承 handle。第一阶段的 Scheduler port/localhost endpoint 不属于凭据，会通过命令行传入 ToolHost。
 - 不共享 Bot 内存映射、日志 sink、credential handle、token handle 或数据库连接。
 - 每 Task 使用不同 AppContainer SID、Job、workspace、temp、IPC 名称；同一 SID 的两个 Task 不能视为隔离。
 
@@ -237,7 +237,7 @@ Job Object 非常适合这部分，但它不是文件/网络 sandbox。
 - UI restrictions（若兼容）
 - I/O completion port 监听创建、退出、limit violation
 
-结束 Task 时调用 `TerminateJobObject`，等待 active process 为 0，再关闭 Job handle。当前项目的 Job 仅在进程已经启动后分配，并只配置 kill-on-close 和 per-process memory；对于敌对代码需要改成 suspended launch、aggregate job memory、active-process 和 CPU 限额。
+结束 chat sandbox 时关闭 Job handle；`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 会终止 ToolHost 及正常派生的整个进程树。当前原生实现已经使用 `CREATE_SUSPENDED -> AssignProcessToJobObject -> ResumeThread` 消除启动竞态，并配置 aggregate `JobMemoryLimit` 与 `ActiveProcessLimit`。CPU rate、I/O completion port 和 wall-clock supervisor 仍是后续硬化项。
 
 Job 没有可靠的每 Task 磁盘容量限制。可选方案是专用受配额 volume/VHDX、按账户 NTFS quota，或由 broker 监控并在超限时终止；监控不是严格的瞬时配额安全边界。
 
@@ -276,13 +276,13 @@ WFP policy 安装通常需要提升权限，应放在极小的系统 broker 中�
 
 ### 3.10 长期运行基础设施与大量 Task
 
-可以长期运行一个 broker/supervisor；不需要一个 Task 一个 VM。但安全隔离单元仍应是：
+第一阶段使用 per-chat AppContainer SID、共享 chat workspace 和长期 ToolHost，因此同一 chat 内任务属于同一信任边界。最终目标若需要不互信 Task 隔离，隔离单元才升级为：
 
 ```text
 Task = unique AppContainer SID + workspace + temp + Job + IPC + optional WFP filters
 ```
 
-可以复用只读 runtime 安装和 broker 进程，不能让不互信 Task 共享 AppContainer SID、可写目录、Job 或 worker 进程。每 Task 至少需要一个进程树；这是原生进程开销，不是 VM 开销。
+可以复用只读 runtime 安装和 broker 进程；第一阶段不能让不互信 chat 共享 AppContainer SID、可写目录、Job 或 worker 进程。最终 per-Task 模式则不允许不互信 Task 共享这些资源。每个隔离单元至少需要一个进程树；这是原生进程开销，不是 VM 开销。
 
 大量 profile 的创建/删除、ACL 和 WFP 更新需要队列化、幂等和崩溃恢复。启动时扫描 orphan profile/workspace/filter/job metadata；profile 名使用不可猜随机 ID，不使用 chat ID 作为唯一安全边界。
 

@@ -23,5 +23,10 @@ namespace TelegramSearchBot.Model {
         /// Default directory for relative file paths and shell commands inside the sandbox.
         /// </summary>
         public string SandboxWorkingDirectory { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Cancels work when the sandbox host stops or the current tool call times out.
+        /// </summary>
+        public System.Threading.CancellationToken CancellationToken { get; set; }
     }
 }

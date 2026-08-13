@@ -66,7 +66,12 @@ namespace TelegramSearchBot.LLMAgent.Service {
                         continue;
                     }
 
-                    var response = await ExecuteAsync(task, profileName, workingDirectory, linkedCts.Token);
+                    var response = await ExecuteWithTimeoutAsync(
+                        task,
+                        profileName,
+                        workingDirectory,
+                        toolTimeoutSeconds,
+                        linkedCts.Token);
                     await db.StringSetAsync(
                         LlmAgentRedisKeys.SandboxToolResult(task.RequestId),
                         JsonConvert.SerializeObject(response),
@@ -109,6 +114,31 @@ namespace TelegramSearchBot.LLMAgent.Service {
             }
         }
 
+        private async Task<SandboxToolResult> ExecuteWithTimeoutAsync(
+            SandboxToolTask task,
+            string profileName,
+            string workingDirectory,
+            int toolTimeoutSeconds,
+            CancellationToken hostCancellationToken) {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(hostCancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, toolTimeoutSeconds)));
+            try {
+                return await ExecuteAsync(task, profileName, workingDirectory, timeoutCts.Token)
+                    .WaitAsync(timeoutCts.Token);
+            } catch (OperationCanceledException) when (!hostCancellationToken.IsCancellationRequested) {
+                _logger.LogWarning(
+                    "Sandbox tool timed out. Tool={ToolName}, RequestId={RequestId}, TimeoutSeconds={TimeoutSeconds}",
+                    task.ToolName,
+                    task.RequestId,
+                    toolTimeoutSeconds);
+                return new SandboxToolResult {
+                    RequestId = task.RequestId,
+                    Success = false,
+                    ErrorMessage = $"Sandbox tool timed out after {Math.Max(5, toolTimeoutSeconds)} seconds."
+                };
+            }
+        }
+
         private async Task<SandboxToolResult> ExecuteAsync(SandboxToolTask task, string profileName, string workingDirectory, CancellationToken cancellationToken) {
             var response = new SandboxToolResult { RequestId = task.RequestId };
             try {
@@ -123,7 +153,8 @@ namespace TelegramSearchBot.LLMAgent.Service {
                     MessageId = task.MessageId,
                     IsSandboxed = true,
                     SandboxBoxName = profileName,
-                    SandboxWorkingDirectory = workingDirectory
+                    SandboxWorkingDirectory = workingDirectory,
+                    CancellationToken = cancellationToken
                 };
 
                 var result = await McpToolHelper.ExecuteRegisteredToolAsync(
