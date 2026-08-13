@@ -44,7 +44,7 @@ namespace TelegramSearchBot.Service.Tools {
             }
 
             try {
-                path = ResolvePath(path);
+                path = ResolvePath(path, toolContext);
 
                 if (!File.Exists(path)) {
                     return $"Error: File not found: {path}";
@@ -94,7 +94,7 @@ namespace TelegramSearchBot.Service.Tools {
             }
 
             try {
-                path = ResolvePath(path);
+                path = ResolvePath(path, toolContext);
 
                 var directory = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) {
@@ -122,7 +122,7 @@ namespace TelegramSearchBot.Service.Tools {
             }
 
             try {
-                path = ResolvePath(path);
+                path = ResolvePath(path, toolContext);
 
                 if (!File.Exists(path)) {
                     return $"Error: File not found: {path}";
@@ -162,7 +162,7 @@ namespace TelegramSearchBot.Service.Tools {
         public async Task<string> SearchText(
             [BuiltInParameter("Regex pattern to search for")] string pattern,
             ToolContext toolContext,
-            [BuiltInParameter("Directory to search in. Defaults to bot work directory.", IsRequired = false)] string path = null,
+            [BuiltInParameter("Directory to search in. Defaults to the sandbox working directory for sandboxed calls, otherwise the bot work directory.", IsRequired = false)] string path = null,
             [BuiltInParameter("File glob pattern to filter files (e.g., '*.cs', '*.json'). Defaults to all files.", IsRequired = false)] string fileGlob = null,
             [BuiltInParameter("Whether to ignore case. Defaults to true.", IsRequired = false)] bool ignoreCase = true) {
 
@@ -171,7 +171,7 @@ namespace TelegramSearchBot.Service.Tools {
             }
 
             try {
-                path = ResolvePath(path ?? Env.WorkDir);
+                path = ResolvePath(path, toolContext);
 
                 if (!Directory.Exists(path)) {
                     return $"Error: Directory not found: {path}";
@@ -234,7 +234,7 @@ namespace TelegramSearchBot.Service.Tools {
         [BuiltInTool("List files and directories at a given path. Supports glob patterns.")]
         public async Task<string> ListFiles(
             ToolContext toolContext,
-            [BuiltInParameter("Directory path to list. Defaults to bot work directory.", IsRequired = false)] string path = null,
+            [BuiltInParameter("Directory path to list. Defaults to the sandbox working directory for sandboxed calls, otherwise the bot work directory.", IsRequired = false)] string path = null,
             [BuiltInParameter("Glob pattern to filter files (e.g., '*.cs'). If omitted, lists all.", IsRequired = false)] string pattern = null) {
 
             if (!IsFileToolAllowed(toolContext)) {
@@ -242,7 +242,7 @@ namespace TelegramSearchBot.Service.Tools {
             }
 
             try {
-                path = ResolvePath(path ?? Env.WorkDir);
+                path = ResolvePath(path, toolContext);
 
                 if (!Directory.Exists(path)) {
                     return $"Error: Directory not found: {path}";
@@ -274,15 +274,18 @@ namespace TelegramSearchBot.Service.Tools {
         }
 
         private static bool IsFileToolAllowed(ToolContext toolContext) {
-            return toolContext != null && ( toolContext.UserId == Env.AdminId || toolContext.IsSandboxed );
+            return toolContext != null && ( toolContext.IsSandboxed || toolContext.UserId == Env.AdminId );
         }
 
-        private static string ResolvePath(string path) {
+        private static string ResolvePath(string? path, ToolContext toolContext) {
+            var basePath = toolContext is { IsSandboxed: true } && !string.IsNullOrWhiteSpace(toolContext.SandboxWorkingDirectory)
+                ? toolContext.SandboxWorkingDirectory
+                : Env.WorkDir;
             if (string.IsNullOrWhiteSpace(path)) {
-                return Env.WorkDir;
+                return basePath;
             }
             if (!Path.IsPathRooted(path)) {
-                return Path.GetFullPath(Path.Combine(Env.WorkDir, path));
+                return Path.GetFullPath(Path.Combine(basePath, path));
             }
             return Path.GetFullPath(path);
         }

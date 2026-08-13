@@ -84,11 +84,11 @@ namespace TelegramSearchBot.Service.Tools {
         public async Task<string> ExecuteCommand(
             [BuiltInParameter("The shell command to execute")] string command,
             ToolContext toolContext,
-            [BuiltInParameter("Working directory for command execution. Defaults to the bot's work directory.", IsRequired = false)] string workingDirectory = null,
+            [BuiltInParameter("Working directory for command execution. Defaults to the sandbox working directory for sandboxed calls, otherwise the bot work directory.", IsRequired = false)] string workingDirectory = null,
             [BuiltInParameter("Timeout in milliseconds. Defaults to 30000 (30 seconds).", IsRequired = false)] int timeoutMs = 30000) {
 
             // Security check: only allow admin users or OS-sandboxed tool hosts.
-            if (toolContext == null || ( toolContext.UserId != Env.AdminId && !toolContext.IsSandboxed )) {
+            if (toolContext == null || ( !toolContext.IsSandboxed && toolContext.UserId != Env.AdminId )) {
                 return "Error: Command execution is only available to admin users or sandboxed tool hosts.";
             }
 
@@ -99,7 +99,10 @@ namespace TelegramSearchBot.Service.Tools {
             // Limit timeout to reasonable bounds
             timeoutMs = Math.Clamp(timeoutMs, 1000, 300000); // 1s to 5min
 
-            var workDir = workingDirectory ?? Env.WorkDir;
+            var workDir = workingDirectory ??
+                (toolContext is { IsSandboxed: true } && !string.IsNullOrWhiteSpace(toolContext.SandboxWorkingDirectory)
+                    ? toolContext.SandboxWorkingDirectory
+                    : Env.WorkDir);
             if (!Directory.Exists(workDir)) {
                 return $"Error: Working directory '{workDir}' does not exist.";
             }
@@ -150,7 +153,8 @@ namespace TelegramSearchBot.Service.Tools {
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
-                using var cts = new CancellationTokenSource(timeoutMs);
+                using var timeoutCts = new CancellationTokenSource(timeoutMs);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, toolContext.CancellationToken);
                 try {
                     await process.WaitForExitAsync(cts.Token);
                 } catch (OperationCanceledException) {
@@ -159,6 +163,10 @@ namespace TelegramSearchBot.Service.Tools {
                             process.Kill(true);
                         }
                     } catch { }
+
+                    if (toolContext.CancellationToken.IsCancellationRequested && !timeoutCts.IsCancellationRequested) {
+                        return "Command cancelled by the sandbox host.";
+                    }
 
                     var partialOutput = outputBuilder.ToString();
                     if (partialOutput.Length > MaxOutputLength) {

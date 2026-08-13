@@ -74,6 +74,37 @@ namespace TelegramSearchBot.Test.Service.Tools {
         }
 
         [Fact]
+        public async Task WriteFile_SandboxedRelativePath_UsesSandboxWorkingDirectory() {
+            var context = new ToolContext {
+                ChatId = 1,
+                UserId = long.MaxValue - 1,
+                IsSandboxed = true,
+                SandboxWorkingDirectory = _testDir
+            };
+
+            var result = await _service.WriteFile("sandbox.txt", "sandbox content", context);
+
+            Assert.Contains("Successfully", result);
+            Assert.Equal("sandbox content", await File.ReadAllTextAsync(Path.Combine(_testDir, "sandbox.txt")));
+        }
+
+        [Fact]
+        public async Task ListFiles_SandboxedMissingPath_UsesSandboxWorkingDirectory() {
+            await File.WriteAllTextAsync(Path.Combine(_testDir, "sandbox-list.txt"), "content");
+            var context = new ToolContext {
+                ChatId = 1,
+                UserId = long.MaxValue - 1,
+                IsSandboxed = true,
+                SandboxWorkingDirectory = _testDir
+            };
+
+            var result = await _service.ListFiles(context);
+
+            Assert.Contains("sandbox-list.txt", result);
+            Assert.Contains(_testDir, result);
+        }
+
+        [Fact]
         public async Task WriteFile_CreatesNewFile() {
             var filePath = Path.Combine(_testDir, "new.txt");
             var result = await _service.WriteFile(filePath, "hello world", _adminContext);

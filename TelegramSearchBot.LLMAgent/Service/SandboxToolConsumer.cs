@@ -9,8 +9,8 @@ using TelegramSearchBot.Service.AI.LLM;
 
 namespace TelegramSearchBot.LLMAgent.Service {
     /// <summary>
-    /// Runs inside a Sandboxie box and executes dangerous local tools on behalf of the main process.
-    /// File/process isolation is provided by Sandboxie; this consumer only handles IPC and ToolContext wiring.
+    /// Runs inside a Windows AppContainer and executes dangerous local tools on behalf of the main process.
+    /// File/process access is enforced by the AppContainer token and NTFS ACLs; Redis remains the phase-one IPC.
     /// </summary>
     public sealed class SandboxToolConsumer {
         private readonly IConnectionMultiplexer _redis;
@@ -23,7 +23,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
             _logger = logger;
         }
 
-        public async Task RunAsync(long chatId, string boxName, int parentProcessId, long parentStartTicksUtc, CancellationToken cancellationToken) {
+        public async Task RunAsync(long chatId, string profileName, int parentProcessId, string workingDirectory, int toolTimeoutSeconds, CancellationToken cancellationToken) {
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             void OnConnectionFailed(object? sender, ConnectionFailedEventArgs args) {
                 _logger.LogWarning(
@@ -34,14 +34,13 @@ namespace TelegramSearchBot.LLMAgent.Service {
             }
 
             _redis.ConnectionFailed += OnConnectionFailed;
-            var watchdogTask = RunParentWatchdogAsync(parentProcessId, parentStartTicksUtc, linkedCts);
-            var heartbeatTask = RunHeartbeatAsync(chatId, boxName, parentProcessId, linkedCts.Token);
+            var heartbeatTask = RunHeartbeatAsync(chatId, profileName, parentProcessId, linkedCts.Token);
             var db = _redis.GetDatabase();
             var queueKey = LlmAgentRedisKeys.SandboxToolQueue(chatId);
             _logger.LogInformation(
                 "Sandbox tool consumer started. ChatId={ChatId}, Box={BoxName}, Queue={Queue}, ParentPid={ParentPid}",
                 chatId,
-                boxName,
+                profileName,
                 queueKey,
                 parentProcessId);
 
@@ -67,11 +66,16 @@ namespace TelegramSearchBot.LLMAgent.Service {
                         continue;
                     }
 
-                    var response = await ExecuteAsync(task, boxName, linkedCts.Token);
+                    var response = await ExecuteWithTimeoutAsync(
+                        task,
+                        profileName,
+                        workingDirectory,
+                        toolTimeoutSeconds,
+                        linkedCts.Token);
                     await db.StringSetAsync(
                         LlmAgentRedisKeys.SandboxToolResult(task.RequestId),
                         JsonConvert.SerializeObject(response),
-                        TimeSpan.FromSeconds(Math.Max(Env.SandboxieToolTimeoutSeconds * 2, 60)));
+                        TimeSpan.FromSeconds(Math.Max(toolTimeoutSeconds * 2, 60)));
                     } catch (OperationCanceledException) {
                         break;
                     } catch (RedisConnectionException ex) {
@@ -84,7 +88,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 }
 
                 try {
-                    await Task.WhenAll(watchdogTask, heartbeatTask);
+                    await heartbeatTask;
                 } catch (OperationCanceledException) {
                 }
             } finally {
@@ -110,34 +114,32 @@ namespace TelegramSearchBot.LLMAgent.Service {
             }
         }
 
-        private async Task RunParentWatchdogAsync(int parentProcessId, long parentStartTicksUtc, CancellationTokenSource shutdownCts) {
-            while (!shutdownCts.IsCancellationRequested) {
-                if (!IsExpectedParentAlive(parentProcessId, parentStartTicksUtc)) {
-                    _logger.LogWarning(
-                        "Parent process is gone or PID was reused; sandbox ToolHost will exit. ParentPid={ParentPid}",
-                        parentProcessId);
-                    shutdownCts.Cancel();
-                    return;
-                }
-
-                await Task.Delay(TimeSpan.FromSeconds(5), shutdownCts.Token);
-            }
-        }
-
-        private static bool IsExpectedParentAlive(int parentProcessId, long parentStartTicksUtc) {
+        private async Task<SandboxToolResult> ExecuteWithTimeoutAsync(
+            SandboxToolTask task,
+            string profileName,
+            string workingDirectory,
+            int toolTimeoutSeconds,
+            CancellationToken hostCancellationToken) {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(hostCancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, toolTimeoutSeconds)));
             try {
-                using var process = System.Diagnostics.Process.GetProcessById(parentProcessId);
-                if (process.HasExited) {
-                    return false;
-                }
-
-                return process.StartTime.ToUniversalTime().Ticks == parentStartTicksUtc;
-            } catch {
-                return false;
+                return await ExecuteAsync(task, profileName, workingDirectory, timeoutCts.Token)
+                    .WaitAsync(timeoutCts.Token);
+            } catch (OperationCanceledException) when (!hostCancellationToken.IsCancellationRequested) {
+                _logger.LogWarning(
+                    "Sandbox tool timed out. Tool={ToolName}, RequestId={RequestId}, TimeoutSeconds={TimeoutSeconds}",
+                    task.ToolName,
+                    task.RequestId,
+                    toolTimeoutSeconds);
+                return new SandboxToolResult {
+                    RequestId = task.RequestId,
+                    Success = false,
+                    ErrorMessage = $"Sandbox tool timed out after {Math.Max(5, toolTimeoutSeconds)} seconds."
+                };
             }
         }
 
-        private async Task<SandboxToolResult> ExecuteAsync(SandboxToolTask task, string boxName, CancellationToken cancellationToken) {
+        private async Task<SandboxToolResult> ExecuteAsync(SandboxToolTask task, string profileName, string workingDirectory, CancellationToken cancellationToken) {
             var response = new SandboxToolResult { RequestId = task.RequestId };
             try {
                 if (task.ChatId == 0) {
@@ -150,7 +152,9 @@ namespace TelegramSearchBot.LLMAgent.Service {
                     UserId = task.UserId,
                     MessageId = task.MessageId,
                     IsSandboxed = true,
-                    SandboxBoxName = boxName
+                    SandboxBoxName = profileName,
+                    SandboxWorkingDirectory = workingDirectory,
+                    CancellationToken = cancellationToken
                 };
 
                 var result = await McpToolHelper.ExecuteRegisteredToolAsync(
