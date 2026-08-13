@@ -71,17 +71,12 @@
   "AgentQueueBacklogWarningThreshold": 20,
   "AgentProcessMemoryLimitMb": 256,
   "MaxToolCycles": 25,
-  "EnableLlmSandboxie": false,
-  "SandboxieStartExe": "C:\\Program Files\\Sandboxie-Plus\\Start.exe",
-  "SandboxieIniPath": "C:\\Windows\\Sandboxie.ini",
-  "SandboxieAutoRegisterImportBox": true,
-  "SandboxieDenyHostFileSystem": false,
-  "SandboxieBoxImportDirectory": "",
-  "SandboxieBoxPrefix": "TGSB_G_",
+  "EnableLlmWindowsSandbox": false,
+  "WindowsSandboxProfilePrefix": "TelegramSearchBot.Chat.",
+  "WindowsSandboxActiveProcessLimit": 32,
+  "WindowsSandboxJobMemoryLimitMb": 1024,
   "SandboxieGroupFilesRoot": "",
   "SandboxieGlobalReadPaths": [],
-  "SandboxieGlobalClosedPaths": [],
-  "SandboxieCommandTimeoutSeconds": 10,
   "SandboxieToolHostStartupTimeoutSeconds": 15,
   "SandboxieToolTimeoutSeconds": 120,
   "OLTPAuth": "",
@@ -128,19 +123,16 @@
   - `AgentQueueBacklogWarningThreshold`: Agent 任务队列告警阈值(默认20)
   - `AgentProcessMemoryLimitMb`: Agent 进程工作集上限(默认256MB)
   - `MaxToolCycles`: LLM工具调用最大迭代次数(默认25)，防止无限循环
-  - `EnableLlmSandboxie`: 是否启用 Sandboxie Plus LLM 工具沙箱(默认false)。启用后 `ReadFile`/`WriteFile`/`EditFile`/`SearchText`/`ListFiles`/`ExecuteCommand` 会通过每群一个 Sandboxie portable box 的 ToolHost 执行。
-  - `SandboxieStartExe`: Sandboxie Plus `Start.exe` 路径。程序会使用同目录的 `SbieIni.exe` 注册 portable box 目录，并用 `Start.exe /reload` 重新加载配置和启动 ToolHost。
-  - `SandboxieIniPath`: Sandboxie 主配置路径。仅当 `SandboxieAutoRegisterImportBox=true` 且 `Start.exe` 同目录不存在 `SbieIni.exe` 时，作为直接写入 `ImportBox` 的回退路径。
-  - `SandboxieAutoRegisterImportBox`: 是否由程序自动把 portable box 目录注册到 Sandboxie 主配置(默认true)。程序先写 box INI，再注册目录、重载配置并启动 box；自动注册失败会立即报告具体错误。如希望自行在 Sandboxie Plus 中添加便携容器目录，可设为 false。
-  - `SandboxieDenyHostFileSystem`: 是否默认关闭宿主机盘符根目录访问(默认false)。保持 false 时更适合运行 bash/npm/python 等工具链；写入仍由 Sandboxie 虚拟化，敏感项目数据仍会通过 `ClosedFilePath` 阻断。需要极严格白名单模式时可设为 true。
-  - `SandboxieBoxImportDirectory`: portable box ini 目录；为空时默认 `%LOCALAPPDATA%/TelegramSearchBot/Sandboxie/Boxes`。每个群聊的 box ini 和虚拟文件根都生成在这里。
-  - `SandboxieBoxPrefix`: 每群 box 名称前缀。Sandboxie 名称只允许 1-38 个 ASCII 字母、数字和下划线；下划线是合法字符，程序会原样保留。前缀与 12 位稳定哈希拼接后的总长度不能超过 38。
-  - `SandboxieGroupFilesRoot`: 可选的额外每群文件根目录；为空时不开放。配置后，每个群只读开放 `<root>/<chatId>`。
-  - 程序默认会关闭聊天资源父目录 `Photos`、`Audios`、`Videos`、`Files`，再仅为当前群的既有聊天媒体/文件目录生成只读授权：`Photos/<chatId>`、`Audios/<chatId>`、`Videos/<chatId>`、`Files/<chatId>`。其他群的资源目录默认不可读。Lucene `Index_Data` 不开放给 ToolHost；搜索仍由主进程侧服务完成。
-  - `SandboxieGlobalReadPaths` / `SandboxieGlobalClosedPaths`: 额外全局只读开放/禁止访问路径。
-  - `SandboxieCommandTimeoutSeconds`: `SbieIni.exe` 和 `Start.exe /reload` 等 Sandboxie 配置命令的等待超时(默认10秒)。
-  - `SandboxieToolHostStartupTimeoutSeconds`: 启动 box 后等待 ToolHost 心跳的超时(默认15秒)。宿主负载较高时可适当增大。
-  - `SandboxieToolTimeoutSeconds`: 沙箱工具调用等待超时(默认120秒)。
+  - `EnableLlmWindowsSandbox`: 是否启用 Windows 原生 AppContainer LLM 工具沙箱(默认false)。仅支持 Windows；不再需要安装 Sandboxie Plus。启用后 `ReadFile`/`WriteFile`/`EditFile`/`SearchText`/`ListFiles`/`ExecuteCommand` 会通过每群一个 AppContainer ToolHost 执行。
+  - `WindowsSandboxProfilePrefix`: 每群 AppContainer profile 名称前缀，默认 `TelegramSearchBot.Chat.`。
+  - `WindowsSandboxActiveProcessLimit`: ToolHost Job Object 中允许的最大进程数，默认32。
+  - `WindowsSandboxJobMemoryLimitMb`: ToolHost 及所有子进程的 Job 总提交内存上限，默认1024MB。
+  - `SandboxieGroupFilesRoot`: 为兼容旧配置保留。配置后 `<root>/<chatId>` 会授予当前群 AppContainer SID 真实读写权限，并作为相对路径和 shell 的默认工作目录。
+  - 默认读写授权当前群的 `Photos/<chatId>`、`Audios/<chatId>`、`Videos/<chatId>`、`Files/<chatId>`；其他群目录及 `Config.json`、`Data.sqlite`、日志和索引不授权。与 Sandboxie 虚拟化不同，写入授权目录会直接修改真实文件。
+  - `SandboxieGlobalReadPaths`: 为兼容旧配置保留的额外全局只读路径。程序安装目录也只授予读取/执行权限。
+  - `SandboxieToolHostStartupTimeoutSeconds`: 启动 AppContainer ToolHost 后等待 Redis 心跳的超时，默认15秒。
+  - `SandboxieToolTimeoutSeconds`: 沙箱工具调用等待超时，默认120秒。
+  - 第一阶段保留 localhost Redis IPC。AppContainer profile 首次使用前需要管理员执行日志提示的 `CheckNetIsolation.exe LoopbackExempt -a -p=<SID>`；未配置时程序会 fail closed，不会回退到非沙箱执行。网络暂不属于本阶段安全边界。旧 `EnableLlmSandboxie=true` 仍会启用原生沙箱，便于平滑升级，但其他 Sandboxie Plus 配置已不再使用。
 
 启用 `EnableLLMAgentProcess=true` 后，主进程会负责任务排队、Telegram 发消息和流式转发；独立 Agent 进程负责执行 LLM 循环、本地工具和故障恢复。主进程会在 Agent 心跳超时、任务超时或配置切换时执行恢复、重试、死信投递和优雅停机。
 

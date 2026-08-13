@@ -24,7 +24,7 @@ namespace TelegramSearchBot.LLMAgent {
             if (effectiveArgs.Length != 2 ||
                 !long.TryParse(effectiveArgs[0], out var chatId) ||
                 !int.TryParse(effectiveArgs[1], out var port)) {
-                Console.Error.WriteLine("Usage: LLMAgent <chatId> <port> | SandboxToolHost <chatId> <port> <boxName> <parentPid> <parentStartTicksUtc>");
+                Console.Error.WriteLine("Usage: LLMAgent <chatId> <port> | SandboxToolHost <chatId> <port> <profileName> <parentPid> <parentStartTicksUtc> <workingDirectory>");
                 Environment.ExitCode = 1;
                 return;
             }
@@ -42,17 +42,18 @@ namespace TelegramSearchBot.LLMAgent {
         }
 
         private static async Task RunSandboxToolHostAsync(string[] args) {
-            if (args.Length != 5 ||
+            if (args.Length != 6 ||
                 !long.TryParse(args[0], out var chatId) ||
                 !int.TryParse(args[1], out var port) ||
                 !int.TryParse(args[3], out var parentProcessId) ||
-                !long.TryParse(args[4], out var parentStartTicksUtc)) {
-                Console.Error.WriteLine("Usage: SandboxToolHost <chatId> <port> <boxName> <parentPid> <parentStartTicksUtc>");
+                !int.TryParse(args[5], out var toolTimeoutSeconds)) {
+                Console.Error.WriteLine("Usage: SandboxToolHost <chatId> <port> <profileName> <parentPid> <workingDirectory> <toolTimeoutSeconds>");
                 Environment.ExitCode = 1;
                 return;
             }
 
-            var boxName = args[2];
+            var profileName = args[2];
+            var workingDirectory = args[4];
             using var services = BuildServices(port);
             var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("SandboxToolHost");
             McpToolHelper.EnsureInitialized(
@@ -61,7 +62,7 @@ namespace TelegramSearchBot.LLMAgent {
 
             using var shutdownCts = CreateShutdownTokenSource();
             var consumer = services.GetRequiredService<Service.SandboxToolConsumer>();
-            await consumer.RunAsync(chatId, boxName, parentProcessId, parentStartTicksUtc, shutdownCts.Token);
+            await consumer.RunAsync(chatId, profileName, parentProcessId, workingDirectory, toolTimeoutSeconds, shutdownCts.Token);
         }
 
         private static CancellationTokenSource CreateShutdownTokenSource() {

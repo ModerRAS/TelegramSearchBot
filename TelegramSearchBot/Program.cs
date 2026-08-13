@@ -11,6 +11,11 @@ using TelegramSearchBot.Service.AppUpdate;
 namespace TelegramSearchBot {
     class Program {
         static async Task Main(string[] args) {
+            if (args.Length > 0 && args[0].Equals("SandboxToolHost", StringComparison.OrdinalIgnoreCase)) {
+                SandboxToolHostBootstrap.Startup(args);
+                return;
+            }
+
             // Separate logger for EF Core - writes only to logs/efcore-.txt
             LoggerHolders.EfCoreLogger = new LoggerConfiguration()
                 .MinimumLevel.Information()

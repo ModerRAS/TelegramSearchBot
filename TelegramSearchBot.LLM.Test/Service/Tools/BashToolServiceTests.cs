@@ -83,6 +83,30 @@ namespace TelegramSearchBot.Test.Service.Tools {
         }
 
         [Fact]
+        public async Task ExecuteCommand_SandboxedMissingWorkingDirectory_UsesSandboxDirectory() {
+            var testDir = Path.Combine(Path.GetTempPath(), "BashToolSandbox_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(testDir);
+            try {
+                var context = new ToolContext {
+                    ChatId = 1,
+                    UserId = long.MaxValue - 1,
+                    IsSandboxed = true,
+                    SandboxWorkingDirectory = testDir
+                };
+                var command = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? "[Environment]::CurrentDirectory; (Get-Location).Path"
+                    : "pwd";
+
+                var result = await _service.ExecuteCommand(command, context);
+
+                Assert.Contains("Exit code: 0", result);
+                Assert.Contains(testDir, result, StringComparison.OrdinalIgnoreCase);
+            } finally {
+                Directory.Delete(testDir, recursive: true);
+            }
+        }
+
+        [Fact]
         public async Task ExecuteCommand_TimeoutClamped() {
             var toolContext = new ToolContext { ChatId = 1, UserId = Env.AdminId };
 

@@ -88,7 +88,7 @@ namespace TelegramSearchBot.Service.Tools {
             [BuiltInParameter("Timeout in milliseconds. Defaults to 30000 (30 seconds).", IsRequired = false)] int timeoutMs = 30000) {
 
             // Security check: only allow admin users or OS-sandboxed tool hosts.
-            if (toolContext == null || ( toolContext.UserId != Env.AdminId && !toolContext.IsSandboxed )) {
+            if (toolContext == null || ( !toolContext.IsSandboxed && toolContext.UserId != Env.AdminId )) {
                 return "Error: Command execution is only available to admin users or sandboxed tool hosts.";
             }
 
@@ -99,7 +99,10 @@ namespace TelegramSearchBot.Service.Tools {
             // Limit timeout to reasonable bounds
             timeoutMs = Math.Clamp(timeoutMs, 1000, 300000); // 1s to 5min
 
-            var workDir = workingDirectory ?? Env.WorkDir;
+            var workDir = workingDirectory ??
+                (toolContext is { IsSandboxed: true } && !string.IsNullOrWhiteSpace(toolContext.SandboxWorkingDirectory)
+                    ? toolContext.SandboxWorkingDirectory
+                    : Env.WorkDir);
             if (!Directory.Exists(workDir)) {
                 return $"Error: Working directory '{workDir}' does not exist.";
             }

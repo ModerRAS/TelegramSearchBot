@@ -61,27 +61,19 @@ namespace TelegramSearchBot.Common {
             AgentMaxRecoveryAttempts = config.AgentMaxRecoveryAttempts;
             AgentQueueBacklogWarningThreshold = config.AgentQueueBacklogWarningThreshold;
             AgentProcessMemoryLimitMb = config.AgentProcessMemoryLimitMb;
+            EnableLlmWindowsSandbox = config.EnableLlmWindowsSandbox || config.EnableLlmSandboxie;
             EnableLlmSandboxie = config.EnableLlmSandboxie;
-            SandboxieStartExe = string.IsNullOrWhiteSpace(config.SandboxieStartExe)
-                ? @"C:\Program Files\Sandboxie-Plus\Start.exe"
-                : config.SandboxieStartExe.Trim();
-            SandboxieIniPath = string.IsNullOrWhiteSpace(config.SandboxieIniPath)
-                ? @"C:\Windows\Sandboxie.ini"
-                : config.SandboxieIniPath.Trim();
-            SandboxieAutoRegisterImportBox = config.SandboxieAutoRegisterImportBox;
-            SandboxieDenyHostFileSystem = config.SandboxieDenyHostFileSystem;
-            SandboxieBoxImportDirectory = string.IsNullOrWhiteSpace(config.SandboxieBoxImportDirectory)
-                ? Path.Combine(WorkDir, "Sandboxie", "Boxes")
-                : config.SandboxieBoxImportDirectory;
-            SandboxieBoxPrefix = string.IsNullOrWhiteSpace(config.SandboxieBoxPrefix) ? "TGSB_G_" : config.SandboxieBoxPrefix;
             SandboxieGroupFilesRoot = string.IsNullOrWhiteSpace(config.SandboxieGroupFilesRoot)
                 ? string.Empty
                 : config.SandboxieGroupFilesRoot.Trim();
             SandboxieGlobalReadPaths = config.SandboxieGlobalReadPaths ?? new List<string>();
-            SandboxieGlobalClosedPaths = config.SandboxieGlobalClosedPaths ?? new List<string>();
-            SandboxieCommandTimeoutSeconds = Math.Clamp(config.SandboxieCommandTimeoutSeconds, 1, 3600);
             SandboxieToolHostStartupTimeoutSeconds = Math.Clamp(config.SandboxieToolHostStartupTimeoutSeconds, 1, 3600);
             SandboxieToolTimeoutSeconds = Math.Clamp(config.SandboxieToolTimeoutSeconds, 5, 3600);
+            WindowsSandboxProfilePrefix = string.IsNullOrWhiteSpace(config.WindowsSandboxProfilePrefix)
+                ? "TelegramSearchBot.Chat."
+                : config.WindowsSandboxProfilePrefix.Trim();
+            WindowsSandboxActiveProcessLimit = Math.Clamp(config.WindowsSandboxActiveProcessLimit, 1, 256);
+            WindowsSandboxJobMemoryLimitMb = Math.Clamp(config.WindowsSandboxJobMemoryLimitMb, 64, 32768);
             EnableCodingAgentTool = config.EnableCodingAgentTool;
             CodingAgentAllowedGroupIds = config.CodingAgentAllowedGroupIds ?? new List<long>();
             CodingAgentDeniedPathPrefixes = ResolveCodingAgentDeniedPathPrefixes(config.CodingAgentDeniedPathPrefixes);
@@ -171,19 +163,15 @@ namespace TelegramSearchBot.Common {
         public static int AgentMaxRecoveryAttempts { get; set; } = 2;
         public static int AgentQueueBacklogWarningThreshold { get; set; } = 20;
         public static int AgentProcessMemoryLimitMb { get; set; } = 256;
+        public static bool EnableLlmWindowsSandbox { get; set; } = false;
         public static bool EnableLlmSandboxie { get; set; } = false;
-        public static string SandboxieStartExe { get; set; } = @"C:\Program Files\Sandboxie-Plus\Start.exe";
-        public static string SandboxieIniPath { get; set; } = @"C:\Windows\Sandboxie.ini";
-        public static bool SandboxieAutoRegisterImportBox { get; set; } = true;
-        public static bool SandboxieDenyHostFileSystem { get; set; } = false;
-        public static string SandboxieBoxImportDirectory { get; set; } = null!;
-        public static string SandboxieBoxPrefix { get; set; } = "TGSB_G_";
         public static string SandboxieGroupFilesRoot { get; set; } = null!;
         public static List<string> SandboxieGlobalReadPaths { get; set; } = new List<string>();
-        public static List<string> SandboxieGlobalClosedPaths { get; set; } = new List<string>();
-        public static int SandboxieCommandTimeoutSeconds { get; set; } = 10;
         public static int SandboxieToolHostStartupTimeoutSeconds { get; set; } = 15;
         public static int SandboxieToolTimeoutSeconds { get; set; } = 120;
+        public static string WindowsSandboxProfilePrefix { get; set; } = "TelegramSearchBot.Chat.";
+        public static int WindowsSandboxActiveProcessLimit { get; set; } = 32;
+        public static int WindowsSandboxJobMemoryLimitMb { get; set; } = 1024;
         public static bool EnableCodingAgentTool { get; set; } = false;
         public static List<long> CodingAgentAllowedGroupIds { get; set; } = new List<long>();
         public static List<string> CodingAgentDeniedPathPrefixes { get; set; } = new List<string>();
@@ -340,19 +328,15 @@ namespace TelegramSearchBot.Common {
         public int AgentMaxRecoveryAttempts { get; set; } = 2;
         public int AgentQueueBacklogWarningThreshold { get; set; } = 20;
         public int AgentProcessMemoryLimitMb { get; set; } = 256;
+        public bool EnableLlmWindowsSandbox { get; set; } = false;
         public bool EnableLlmSandboxie { get; set; } = false;
-        public string SandboxieStartExe { get; set; } = @"C:\Program Files\Sandboxie-Plus\Start.exe";
-        public string SandboxieIniPath { get; set; } = @"C:\Windows\Sandboxie.ini";
-        public bool SandboxieAutoRegisterImportBox { get; set; } = true;
-        public bool SandboxieDenyHostFileSystem { get; set; } = false;
-        public string SandboxieBoxImportDirectory { get; set; } = string.Empty;
-        public string SandboxieBoxPrefix { get; set; } = "TGSB_G_";
         public string SandboxieGroupFilesRoot { get; set; } = string.Empty;
         public List<string> SandboxieGlobalReadPaths { get; set; } = new List<string>();
-        public List<string> SandboxieGlobalClosedPaths { get; set; } = new List<string>();
-        public int SandboxieCommandTimeoutSeconds { get; set; } = 10;
         public int SandboxieToolHostStartupTimeoutSeconds { get; set; } = 15;
         public int SandboxieToolTimeoutSeconds { get; set; } = 120;
+        public string WindowsSandboxProfilePrefix { get; set; } = "TelegramSearchBot.Chat.";
+        public int WindowsSandboxActiveProcessLimit { get; set; } = 32;
+        public int WindowsSandboxJobMemoryLimitMb { get; set; } = 1024;
         public bool EnableCodingAgentTool { get; set; } = false;
         public List<long> CodingAgentAllowedGroupIds { get; set; } = new List<long>();
         public List<string> CodingAgentDeniedPathPrefixes { get; set; } = new List<string>();

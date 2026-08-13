@@ -232,9 +232,12 @@ namespace TelegramSearchBot.AppBootstrap {
             McpToolHelper.EnsureInitialized(mainAssembly, llmAssembly, service, mcpLogger);
             Log.Information("McpToolHelper has been initialized with built-in tools.");
 
-            if (Env.EnableLlmSandboxie) {
-                RegisterSandboxieTools(service);
-                Log.Information("Sandboxie LLM tool sandbox is enabled.");
+            if (Env.EnableLlmWindowsSandbox) {
+                if (!OperatingSystem.IsWindows()) {
+                    throw new PlatformNotSupportedException("EnableLlmWindowsSandbox requires Windows.");
+                }
+                RegisterWindowsSandboxTools(service);
+                Log.Information("Windows AppContainer LLM tool sandbox is enabled.");
             }
 
             // Initialize external MCP tool servers
@@ -277,10 +280,11 @@ namespace TelegramSearchBot.AppBootstrap {
             McpToolHelper.RegisterExternalMcpTools(mcpServerManager);
         }
 
-        private static void RegisterSandboxieTools(IServiceProvider services) {
-            var sandboxService = services.GetRequiredService<SandboxieToolHostService>();
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static void RegisterWindowsSandboxTools(IServiceProvider services) {
+            var sandboxService = services.GetRequiredService<WindowsAppContainerToolHostService>();
             McpToolHelper.RegisterProxyTools(
-                SandboxieToolHostService.GetToolDefinitions(),
+                WindowsAppContainerToolHostService.GetToolDefinitions(),
                 async (toolName, arguments) => {
                     long chatId = 0, userId = 0, messageId = 0;
                     if (arguments.TryGetValue("__chatId", out var cid)) {
