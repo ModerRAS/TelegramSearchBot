@@ -13,7 +13,7 @@ namespace TelegramSearchBot.Interface.AI.LLM {
         IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, CancellationToken cancellationToken = default);
         IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, LlmExecutionContext executionContext, CancellationToken cancellationToken = default);
         IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellation);
-        IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(Func<ILLMService, LLMChannel, CancellationToken, IAsyncEnumerable<TResult>> operation, string modelName, CancellationToken cancellationToken = default);
+        IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(Func<ILLMService, LLMChannel, LLMApiBinding, CancellationToken, IAsyncEnumerable<TResult>> operation, string modelName, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Resume LLM execution from a previously saved continuation snapshot.

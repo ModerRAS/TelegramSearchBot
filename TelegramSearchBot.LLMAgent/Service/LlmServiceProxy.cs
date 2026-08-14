@@ -24,12 +24,13 @@ namespace TelegramSearchBot.LLMAgent.Service {
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken) {
             await SeedTaskDataAsync(task, cancellationToken);
 
-            var service = ResolveService(task.Channel.Provider);
+            var binding = ToBinding(task.Channel);
+            var service = binding != null ? ResolveService(binding.Protocol) : ResolveService(task.Channel.Provider);
             ApplyBotIdentity(task.BotName, task.BotUserId);
             var channel = ToEntity(task.Channel);
 
             if (task.Kind == AgentTaskKind.Continuation && task.ContinuationSnapshot != null) {
-                await foreach (var chunk in service.ResumeFromSnapshotAsync(task.ContinuationSnapshot, channel, executionContext, cancellationToken)
+                await foreach (var chunk in service.ResumeFromSnapshotAsync(task.ContinuationSnapshot, channel, binding, executionContext, cancellationToken)
                                    .WithCancellation(cancellationToken)) {
                     yield return chunk;
                 }
@@ -47,10 +48,28 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 DateTime = task.CreatedAtUtc
             };
 
-            await foreach (var chunk in service.ExecAsync(message, task.ChatId, task.ModelName, channel, executionContext, cancellationToken)
+            await foreach (var chunk in service.ExecAsync(message, task.ChatId, task.ModelName, channel, binding, executionContext, cancellationToken)
                                .WithCancellation(cancellationToken)) {
                 yield return chunk;
             }
+        }
+
+        /// <summary>
+        /// 从 config 还原 binding（Agent 进程内 transient 实体，不入库）。
+        /// 旧 config / legacy 路由无 binding 字段时返回 null，严格走 Provider/Gateway 路径。
+        /// </summary>
+        private static LLMApiBinding? ToBinding(AgentChannelConfig config) {
+            if (!config.BindingId.HasValue || !config.BindingProtocol.HasValue || !config.BindingAuthProfile.HasValue) {
+                return null;
+            }
+            return new LLMApiBinding {
+                Id = config.BindingId.Value,
+                LLMChannelId = config.ChannelId,
+                Endpoint = config.BindingEndpoint,
+                Protocol = config.BindingProtocol.Value,
+                AuthProfile = config.BindingAuthProfile.Value,
+                IsDefault = false
+            };
         }
 
         private ILLMService ResolveService(LLMProvider provider) {
@@ -59,6 +78,18 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 LLMProvider.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
                 LLMProvider.Anthropic => _serviceProvider.GetRequiredService<AnthropicService>(),
                 LLMProvider.ResponsesAPI => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
+                _ => _serviceProvider.GetRequiredService<OpenAIService>()
+            };
+        }
+
+        /// <summary>按 binding 线协议解析 client（与 ILLMFactory.GetLLMService(LlmProtocol) 同构）。</summary>
+        private ILLMService ResolveService(LlmProtocol protocol) {
+            return protocol switch {
+                LlmProtocol.OpenAIChat => _serviceProvider.GetRequiredService<OpenAIService>(),
+                LlmProtocol.OpenAIResponses => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
+                LlmProtocol.AnthropicMessages => _serviceProvider.GetRequiredService<AnthropicService>(),
+                LlmProtocol.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
+                LlmProtocol.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
                 _ => _serviceProvider.GetRequiredService<OpenAIService>()
             };
         }

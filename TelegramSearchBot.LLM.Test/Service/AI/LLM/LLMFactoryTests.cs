@@ -102,6 +102,152 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             Assert.Throws<KeyNotFoundException>(() => _factory.GetLLMService(LLMProvider.None));
         }
 
+        // ====================================================================
+        // Phase 2：按 binding 协议选择 client（LlmProtocol）
+        // ====================================================================
+
+        [Fact]
+        public void GetLLMService_Protocol_OpenAIChat_ReturnsOpenAIService() {
+            var service = _factory.GetLLMService(LlmProtocol.OpenAIChat);
+            Assert.NotNull(service);
+            Assert.IsAssignableFrom<OpenAIService>(service);
+        }
+
+        [Fact]
+        public void GetLLMService_Protocol_OpenAIResponses_ReturnsOpenAIResponsesService() {
+            var service = _factory.GetLLMService(LlmProtocol.OpenAIResponses);
+            Assert.NotNull(service);
+            Assert.IsAssignableFrom<OpenAIResponsesService>(service);
+        }
+
+        [Fact]
+        public void GetLLMService_Protocol_AnthropicMessages_ReturnsAnthropicService() {
+            var service = _factory.GetLLMService(LlmProtocol.AnthropicMessages);
+            Assert.NotNull(service);
+            Assert.IsAssignableFrom<AnthropicService>(service);
+        }
+
+        [Fact]
+        public void GetLLMService_Protocol_Ollama_ReturnsOllamaService() {
+            var service = _factory.GetLLMService(LlmProtocol.Ollama);
+            Assert.NotNull(service);
+            Assert.IsAssignableFrom<OllamaService>(service);
+        }
+
+        [Fact]
+        public void GetLLMService_Protocol_Gemini_ReturnsGeminiService() {
+            var service = _factory.GetLLMService(LlmProtocol.Gemini);
+            Assert.NotNull(service);
+            Assert.IsAssignableFrom<GeminiService>(service);
+        }
+
+        [Fact]
+        public void GetLLMService_Route_BindingNull_FallsBackToProvider() {
+            var channel = new LLMChannel {
+                Name = "legacy",
+                Gateway = "https://legacy.example",
+                ApiKey = "k",
+                Provider = LLMProvider.Anthropic,
+                Parallel = 1,
+                Priority = 1
+            };
+            var route = new ResolvedLlmRoute(channel, null, new ChannelWithModel { ModelName = "m" });
+            var service = _factory.GetLLMService(route);
+            Assert.IsAssignableFrom<AnthropicService>(service);
+        }
+
+        [Fact]
+        public void GetLLMService_Route_BindingNonNull_UsesBindingProtocol() {
+            var channel = new LLMChannel {
+                Name = "oc",
+                Gateway = "https://legacy.example",
+                ApiKey = "k",
+                Provider = LLMProvider.Anthropic,
+                Parallel = 1,
+                Priority = 1
+            };
+            var binding = new LLMApiBinding {
+                Id = 7,
+                LLMChannelId = channel.Id,
+                Endpoint = "https://opencode.ai/zen/v1",
+                Protocol = LlmProtocol.OpenAIChat,
+                AuthProfile = LlmAuthProfile.Bearer,
+                IsDefault = true
+            };
+            var route = new ResolvedLlmRoute(channel, binding, new ChannelWithModel { ModelName = "m" });
+            // 渠道 provider 是 Anthropic，但 binding 协议是 OpenAIChat → 必须选 OpenAIService（绝不按品牌猜）
+            var service = _factory.GetLLMService(route);
+            Assert.IsAssignableFrom<OpenAIService>(service);
+        }
+
+        [Fact]
+        public void GeneralAndAgentPaths_ResolveSameRoute_AndSelectSameClient() {
+            // 同一模型、同一 channel、双 binding：General 路径（Resolve）与 Agent 路径（ResolveFirst）
+            // 必须解析出相同的 binding（IsPreferred 优先于 channel 默认），且 factory 选同一 client。
+            var channel = new LLMChannel {
+                Name = "oc",
+                Gateway = "https://legacy.example",
+                ApiKey = "shared-secret",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 2,
+                Priority = 10
+            };
+            var chatBinding = new LLMApiBinding {
+                Id = 1,
+                LLMChannelId = channel.Id,
+                Endpoint = "https://opencode.ai/zen/v1",
+                Protocol = LlmProtocol.OpenAIChat,
+                AuthProfile = LlmAuthProfile.Bearer,
+                IsDefault = true
+            };
+            var responsesBinding = new LLMApiBinding {
+                Id = 2,
+                LLMChannelId = channel.Id,
+                Endpoint = "https://opencode.ai/zen/go/v1",
+                Protocol = LlmProtocol.OpenAIResponses,
+                AuthProfile = LlmAuthProfile.Bearer,
+                IsDefault = false
+            };
+            channel.Bindings.Add(chatBinding);
+            channel.Bindings.Add(responsesBinding);
+            var chatRow = new ChannelWithModel {
+                Id = 1,
+                ModelName = "gpt-x",
+                LLMChannelId = channel.Id,
+                LLMChannel = channel,
+                ApiBindingId = chatBinding.Id,
+                ApiBinding = chatBinding
+            };
+            var preferredRow = new ChannelWithModel {
+                Id = 2,
+                ModelName = "gpt-x",
+                LLMChannelId = channel.Id,
+                LLMChannel = channel,
+                ApiBindingId = responsesBinding.Id,
+                ApiBinding = responsesBinding,
+                IsPreferred = true
+            };
+            var rows = new List<ChannelWithModel> { chatRow, preferredRow };
+
+            var generalRoute = LlmRouteResolver.Resolve(channel, "gpt-x", rows, _loggerMock.Object);
+            var agentRoute = LlmRouteResolver.ResolveFirst(
+                new[] { (channel, rows) }, "gpt-x", _loggerMock.Object);
+
+            Assert.NotNull(generalRoute);
+            Assert.NotNull(agentRoute);
+            Assert.Equal(generalRoute!.Binding!.Id, agentRoute!.Binding!.Id);
+            Assert.Equal(responsesBinding.Id, generalRoute.Binding.Id);
+            Assert.Equal(responsesBinding.Endpoint, generalRoute.Binding.Endpoint);
+            Assert.Equal(responsesBinding.Protocol, generalRoute.Binding.Protocol);
+            Assert.Equal(responsesBinding.AuthProfile, generalRoute.Binding.AuthProfile);
+            Assert.Equal("gpt-x", generalRoute.Model.ModelName);
+
+            var generalService = _factory.GetLLMService(generalRoute);
+            var agentService = _factory.GetLLMService(agentRoute);
+            Assert.Same(generalService, agentService);
+            Assert.IsAssignableFrom<OpenAIResponsesService>(generalService);
+        }
+
         [Fact]
         public void ServiceName_ReturnsLLMFactory() {
             Assert.Equal("LLMFactory", _factory.ServiceName);
