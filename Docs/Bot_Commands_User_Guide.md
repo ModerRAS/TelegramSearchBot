@@ -199,6 +199,7 @@
         *   **`刷新所有渠道` 指令的交互流程示例：**
             1.  管理员发送: `刷新所有渠道`
             2.  机器人回复: `已添加{n}个模型` (刷新并返回添加的模型数量)
+        *   **MiniMax 模型目录说明**: `MiniMax` 渠道使用 OpenAI-compatible `GET /v1/models` 动态发现账户可见模型；中国区网关为 `https://api.minimaxi.com`，国际区为 `https://api.minimax.io`，系统会自动补齐且不会重复追加 `/v1`。目录请求失败或返回空集合时，回退到官方文本模型快照 `MiniMax-M3`、`MiniMax-M2.7` / `MiniMax-M2.7-highspeed`、`MiniMax-M2.5` / `MiniMax-M2.5-highspeed`、`MiniMax-M2.1` / `MiniMax-M2.1-highspeed`、`MiniMax-M2`；刷新不会删除手工添加的旧版或账户专属模型 ID。官方依据（访问于 2026-08-14）：[中国区模型列表](https://platform.minimaxi.com/docs/api-reference/models/openai/list-models)、[国际区模型列表](https://platform.minimax.io/docs/api-reference/models/openai/list-models)、[中国区 OpenAI API](https://platform.minimaxi.com/docs/api-reference/text-openai-api)、[国际区 OpenAI API](https://platform.minimax.io/docs/api-reference/text-openai-api)。
         *   **`设置重试次数` 指令的交互流程示例：**
             1.  管理员发送: `设置重试次数`
             2.  机器人回复: `请输入最大重试次数(默认100):`

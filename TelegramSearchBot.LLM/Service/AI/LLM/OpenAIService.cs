@@ -85,6 +85,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
                    model.Contains("minimax", StringComparison.OrdinalIgnoreCase);
         }
 
+        internal static string NormalizeOpenAIEndpoint(LLMChannel channel) {
+            var gateway = channel?.Gateway ?? string.Empty;
+            if (channel?.Provider != LLMProvider.MiniMax) {
+                return gateway;
+            }
+
+            gateway = gateway.TrimEnd('/');
+            return !string.IsNullOrEmpty(gateway) &&
+                   !gateway.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
+                ? $"{gateway}/v1"
+                : gateway;
+        }
+
         private static string SanitizeAndTruncateArguments(string arguments, int maxChars = 2048) {
             if (string.IsNullOrWhiteSpace(arguments)) {
                 return string.Empty;
@@ -242,9 +255,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return new List<string>();
             }
 
-            // MiniMax 使用预定义模型列表
             if (channel.Provider == LLMProvider.MiniMax) {
-                return _miniMaxModels;
+                var models = await GetGenericOpenAICompatibleModels(channel);
+                return models.Any() ? models : _miniMaxModels;
             }
 
             // 检查是否为OpenRouter
@@ -269,7 +282,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                 // --- Client Setup ---
                 var clientOptions = new OpenAIClientOptions {
-                    Endpoint = new Uri(channel.Gateway),
+                    Endpoint = new Uri(NormalizeOpenAIEndpoint(channel)),
                     Transport = new HttpClientPipelineTransport(httpClient),
                 };
 
@@ -297,13 +310,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 // 构建模型列表 URL，确保路径正确
-                var gatewayBase = channel.Gateway.TrimEnd('/');
+                var gatewayBase = NormalizeOpenAIEndpoint(channel);
                 var modelsUrl = gatewayBase.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
                     ? $"{gatewayBase}/models"
                     : $"{gatewayBase}/v1/models";
 
                 var response = await httpClient.GetAsync(modelsUrl);
-                if (!response.IsSuccessStatusCode) {
+                if (!response.IsSuccessStatusCode && channel.Provider != LLMProvider.MiniMax) {
                     // 尝试不带 /v1 的路径
                     var altUrl = $"{gatewayBase}/models";
                     if (altUrl != modelsUrl) {
@@ -348,16 +361,17 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
-        /// MiniMax预定义模型列表
+        /// MiniMax OpenAI-compatible text model fallback snapshot.
         /// </summary>
         private static readonly string[] _miniMaxModels = {
+            "MiniMax-M3",
+            "MiniMax-M2.7",
+            "MiniMax-M2.7-highspeed",
             "MiniMax-M2.5",
             "MiniMax-M2.5-highspeed",
             "MiniMax-M2.1",
             "MiniMax-M2.1-highspeed",
-            "MiniMax-M2",
-            "image-01",
-            "image-01-live"
+            "MiniMax-M2"
         };
 
         /// <summary>
@@ -404,7 +418,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             if (channel.Provider == LLMProvider.MiniMax) {
-                return _miniMaxModels.Select(InferOpenAIModelCapabilities);
+                var models = await GetAllModels(channel);
+                return models.Select(InferOpenAIModelCapabilities);
             }
 
             // 检查是否为OpenRouter
@@ -439,7 +454,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                 // 如果内部API失败，使用标准API并根据模型名称推断能力
                 var clientOptions = new OpenAIClientOptions {
-                    Endpoint = new Uri(channel.Gateway),
+                    Endpoint = new Uri(NormalizeOpenAIEndpoint(channel)),
                     Transport = new HttpClientPipelineTransport(httpClient),
                 };
 
@@ -1151,7 +1166,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(NormalizeOpenAIEndpoint(channel)),
                 Transport = new HttpClientPipelineTransport(client),
             };
             var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
@@ -1445,7 +1460,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(NormalizeOpenAIEndpoint(channel)),
                 Transport = new HttpClientPipelineTransport(client),
             };
             var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
@@ -1614,7 +1629,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             using var client = _httpClientFactory.CreateClient();
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(NormalizeOpenAIEndpoint(channel)),
                 Transport = new HttpClientPipelineTransport(client),
             };
             var chatClient = new ChatClient(model: modelName, credential: new(channel.ApiKey), clientOptions);
@@ -1915,7 +1930,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             using var httpClient = _httpClientFactory.CreateClient();
 
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(NormalizeOpenAIEndpoint(channel)),
                 Transport = new HttpClientPipelineTransport(httpClient),
             };
 
@@ -2022,7 +2037,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             using var httpClient = _httpClientFactory.CreateClient();
 
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(channel.Gateway),
+                Endpoint = new Uri(NormalizeOpenAIEndpoint(channel)),
                 Transport = new HttpClientPipelineTransport(httpClient),
             };
 
