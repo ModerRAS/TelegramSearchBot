@@ -101,10 +101,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (!string.IsNullOrWhiteSpace(endpoint)) {
                 // Binding URL 已含 /v1（如 https://opencode.ai/zen/v1），SDK 会再追加 /v1/messages；
                 // 剥离尾部 /v1 使 SDK 追加后命中精确 binding 路径。legacy channel.Gateway 保持字节一致。
-                if (binding != null && endpoint.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) {
-                    endpoint = endpoint.Substring(0, endpoint.Length - 3);
+                var trimmed = endpoint.TrimEnd('/');
+                if (binding != null && trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) {
+                    trimmed = trimmed.Substring(0, trimmed.Length - 3);
                 }
-                options.BaseUrl = endpoint.TrimEnd('/');
+                options.BaseUrl = trimmed;
             }
             return new AnthropicClient(options);
         }

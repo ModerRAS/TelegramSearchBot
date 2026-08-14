@@ -1997,16 +1997,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel, LLMApiBinding binding) {
-
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
+                _logger.LogError("{ServiceName}: Channel, Gateway, or ApiKey is not configured.", ServiceName);
+                throw new InvalidOperationException($"Error: {ServiceName} channel/gateway/apikey is not configured.");
+            }
 
             using var httpClient = _httpClientFactory.CreateClient();
 
             var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding))),
+                Endpoint = new Uri(NormalizeOpenAIEndpoint(channel, endpoint)),
                 Transport = new HttpClientPipelineTransport(httpClient),
             };
 
-            var apikey = new ApiKeyCredential(LlmBindingSupport.ResolveApiKey(channel, binding));
+            var apikey = new ApiKeyCredential(apiKey);
             OpenAIClient client = new(apikey, clientOptions);
 
             try {

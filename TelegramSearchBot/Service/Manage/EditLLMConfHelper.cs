@@ -161,9 +161,13 @@ namespace TelegramSearchBot.Service.Manage {
                         _logger.LogInformation("通道 {ChannelName} 标记删除消失的模型 {ModelName}", channel.Name, record.ModelName);
                     }
 
-                    // 添加全新的模型（同 binding 内忽略大小写去重，blueprint §七.6）
+                    // 添加全新的模型（同 binding 内忽略大小写去重，blueprint §七.6）；
+                    // 去重覆盖同 binding 的全部行（任意 AuthorizationSource，含 Manual）；
+                    // null-FK 旧库行按 §六.8 也解释为默认 binding 路由。
+                    // 防止手工行与刷新插入的 Discovered 行重复。
                     var toAdd = modelSet
-                        .Where(m => !scopedRecords.Any(r => r.ModelName.Equals(m, StringComparison.OrdinalIgnoreCase)))
+                        .Where(m => !existingRecords.Any(r => (r.ApiBindingId ?? defaultBinding?.Id) == defaultBinding?.Id
+                                                            && r.ModelName.Equals(m, StringComparison.OrdinalIgnoreCase)))
                         .Select(m => new ChannelWithModel {
                             LLMChannelId = channel.Id,
                             ModelName = m,
@@ -322,6 +326,9 @@ namespace TelegramSearchBot.Service.Manage {
             if (modelNames == null || modelNames.Count == 0) {
                 return false;
             }
+
+            // 忽略大小写去重，批内同名（如 "gpt-4o"+"GPT-4O"）只建一行（blueprint §七.6）
+            modelNames = modelNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
             // 管理员手工添加 = Manual 授权（blueprint §四.5）；新行关联默认 binding
             var defaultBinding = await DataContext.LLMApiBindings
@@ -523,6 +530,7 @@ namespace TelegramSearchBot.Service.Manage {
                 foreach (var other in defaults.Skip(1)) {
                     other.IsDefault = false;
                 }
+                await DataContext.SaveChangesAsync();
             }
             if (defaults.Count >= 1) {
                 return defaults[0];
@@ -643,7 +651,8 @@ namespace TelegramSearchBot.Service.Manage {
             return binding != null
                 && Uri.TryCreate(binding.Endpoint, UriKind.Absolute, out var uri)
                 && string.Equals(uri.Host, "opencode.ai", StringComparison.OrdinalIgnoreCase)
-                && uri.AbsolutePath.StartsWith("/zen/", StringComparison.OrdinalIgnoreCase);
+                && (string.Equals(uri.AbsolutePath, "/zen", StringComparison.OrdinalIgnoreCase)
+                    || uri.AbsolutePath.StartsWith("/zen/", StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>

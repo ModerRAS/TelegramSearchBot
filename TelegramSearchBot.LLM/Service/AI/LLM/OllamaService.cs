@@ -446,8 +446,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 modelName = "bge-m3";
             }
 
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
+                _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
+                throw new InvalidOperationException($"Error: {ServiceName} channel/gateway is not configured.");
+            }
+
             var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(LlmBindingSupport.ResolveEndpoint(channel, binding));
+            httpClient.BaseAddress = new Uri(endpoint);
             var ollama = new OllamaApiClient(httpClient, modelName);
 
             if (!await CheckAndPullModelAsync(ollama, modelName)) {
@@ -479,8 +485,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             prompt = string.IsNullOrWhiteSpace(prompt) ? GeneralLLMService.DefaultAltPhotoPrompt : prompt;
 
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
+                _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
+                return $"Error: {ServiceName} channel/gateway is not configured.";
+            }
+
             var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(LlmBindingSupport.ResolveEndpoint(channel, binding));
+            httpClient.BaseAddress = new Uri(endpoint);
             var ollama = new OllamaApiClient(httpClient, modelName);
             ollama.SelectedModel = modelName;
             var chat = new Chat(ollama);
