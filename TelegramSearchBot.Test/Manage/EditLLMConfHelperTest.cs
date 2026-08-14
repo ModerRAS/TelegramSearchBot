@@ -79,6 +79,7 @@ namespace TelegramSearchBot.Test.Manage {
             // 新增 ILLMFactory mock
             var llmFactoryMock = new Mock<ILLMFactory>();
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.MiniMax)).Returns(_openAIServiceMock.Object);
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(_ollamaServiceMock.Object);
             llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(_geminiServiceMock.Object);
 
@@ -158,6 +159,26 @@ namespace TelegramSearchBot.Test.Manage {
 
             // count reflects restored + added
             Assert.Equal(2, count);  // 1 restored + 1 added
+        }
+
+        [Fact]
+        public async Task RefreshAllChannel_MiniMax_ShouldPreserveMissingManualModel() {
+            var channel = new LLMChannel { Id = 14, Name = "MiniMax", Provider = LLMProvider.MiniMax };
+            await _context.LLMChannels.AddAsync(channel);
+            await _context.ChannelsWithModel.AddAsync(new ChannelWithModel {
+                LLMChannelId = 14,
+                ModelName = "legacy-or-account-specific-model",
+                IsDeleted = false
+            });
+            await _context.SaveChangesAsync();
+
+            await _helper.RefreshAllChannel();
+
+            var manualModel = await _context.ChannelsWithModel
+                .FirstAsync(m => m.LLMChannelId == 14 && m.ModelName == "legacy-or-account-specific-model");
+            Assert.False(manualModel.IsDeleted);
+            Assert.Contains(await _context.ChannelsWithModel.Where(m => m.LLMChannelId == 14).ToListAsync(),
+                m => m.ModelName == "openai-model1" && !m.IsDeleted);
         }
 
         [Fact]

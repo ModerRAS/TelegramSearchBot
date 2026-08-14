@@ -133,9 +133,11 @@ namespace TelegramSearchBot.Service.Manage {
                         .Where(x => !x.IsDeleted)
                         .Select(x => x.ModelName)
                         .ToHashSet();
-                    var toDelete = existingRecords
-                        .Where(x => !x.IsDeleted && !modelSet.Contains(x.ModelName))
-                        .ToList();
+                    var toDelete = channel.Provider == LLMProvider.MiniMax
+                        ? new List<ChannelWithModel>()
+                        : existingRecords
+                            .Where(x => !x.IsDeleted && !modelSet.Contains(x.ModelName))
+                            .ToList();
                     foreach (var record in toDelete) {
                         record.IsDeleted = true;
                         _logger.LogInformation("通道 {ChannelName} 标记删除消失的模型 {ModelName}", channel.Name, record.ModelName);

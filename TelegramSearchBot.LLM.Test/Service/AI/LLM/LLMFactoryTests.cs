@@ -91,6 +91,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         }
 
         [Fact]
+        public void GetLLMService_MiniMax_ReturnsOpenAIService() {
+            var service = _factory.GetLLMService(LLMProvider.MiniMax);
+
+            Assert.Same(_openAIServiceMock.Object, service);
+        }
+
+        [Fact]
         public void GetLLMService_None_ThrowsKeyNotFound() {
             Assert.Throws<KeyNotFoundException>(() => _factory.GetLLMService(LLMProvider.None));
         }
