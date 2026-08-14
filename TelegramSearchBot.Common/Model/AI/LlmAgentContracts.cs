@@ -76,6 +76,12 @@ namespace TelegramSearchBot.Model.AI {
         public int Priority { get; set; }
         public string ModelName { get; set; } = string.Empty;
         public List<AgentModelCapability> Capabilities { get; set; } = [];
+
+        // Phase 2：解析出的 binding 快照（旧二进制/legacy 行全部为 null，走 Provider/Gateway）。
+        public int? BindingId { get; set; }
+        public string BindingEndpoint { get; set; } = string.Empty;
+        public LlmProtocol? BindingProtocol { get; set; }
+        public LlmAuthProfile? BindingAuthProfile { get; set; }
     }
 
     public sealed class AgentExecutionTask {

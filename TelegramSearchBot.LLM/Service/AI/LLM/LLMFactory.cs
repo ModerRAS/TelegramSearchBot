@@ -36,5 +36,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
             };
         }
 
+        public ILLMService GetLLMService(LlmProtocol protocol) {
+            return protocol switch {
+                LlmProtocol.OpenAIChat => _serviceProvider.GetRequiredService<OpenAIService>(),
+                LlmProtocol.OpenAIResponses => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
+                LlmProtocol.AnthropicMessages => _serviceProvider.GetRequiredService<AnthropicService>(),
+                LlmProtocol.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
+                LlmProtocol.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
+                _ => throw new KeyNotFoundException($"No LLM service registered for protocol {protocol}.")
+            };
+        }
+
+        public ILLMService GetLLMService(ResolvedLlmRoute route) {
+            return route.Binding != null
+                ? GetLLMService(route.Binding.Protocol)
+                : GetLLMService(route.Channel.Provider);
+        }
+
     }
 }

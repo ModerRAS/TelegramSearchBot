@@ -44,5 +44,34 @@ namespace TelegramSearchBot.Interface.AI.LLM {
 
         public Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt = null);
         public virtual async Task<bool> IsHealthyAsync(LLMChannel channel) => ( await GetAllModels(channel) ).Any();
+
+        // ====================================================================
+        // Binding-aware overloads (Phase 2): carry the resolved LLMApiBinding so
+        // endpoint/auth come from the binding. Default implementations delegate to
+        // the existing channel-only methods, preserving legacy behavior when the
+        // binding is null (or when a service does not override them).
+        // ====================================================================
+
+        public IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, LLMChannel channel,
+                                                  LLMApiBinding binding,
+                                                  LlmExecutionContext executionContext,
+                                                  [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            return ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken);
+        }
+
+        public IAsyncEnumerable<string> ResumeFromSnapshotAsync(LlmContinuationSnapshot snapshot, LLMChannel channel,
+                                                                 LLMApiBinding binding,
+                                                                 LlmExecutionContext executionContext,
+                                                                 [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            return ResumeFromSnapshotAsync(snapshot, channel, executionContext, cancellationToken);
+        }
+
+        public Task<bool> IsHealthyAsync(LLMChannel channel, LLMApiBinding binding) => IsHealthyAsync(channel);
+
+        public Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, LLMApiBinding binding, string prompt = null)
+            => AnalyzeImageAsync(photoPath, modelName, channel, prompt);
+
+        public Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel, LLMApiBinding binding)
+            => GenerateEmbeddingsAsync(text, modelName, channel);
     }
 }

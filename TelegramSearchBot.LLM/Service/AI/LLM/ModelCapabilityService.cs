@@ -57,7 +57,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 var modelsWithCapabilities = await service.GetAllModelsWithCapabilities(channel);
 
                 foreach (var modelWithCaps in modelsWithCapabilities) {
-                    await UpdateOrCreateModelWithCapabilities(channel, modelWithCaps);
+                    await UpdateExistingModelWithCapabilities(channel, modelWithCaps);
                 }
 
                 await _dbContext.SaveChangesAsync();
@@ -214,42 +214,42 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
-        /// 更新或创建模型及其能力信息
+        /// 将 metadata 合并到已存在的非删除授权行上（blueprint §四.6）：
+        /// 绝不创建新行、绝不复活（IsDeleted=false）。无匹配行时跳过并记录 debug。
+        /// 模型名按 OrdinalIgnoreCase 匹配（blueprint §七.6）。
         /// </summary>
-        private async Task UpdateOrCreateModelWithCapabilities(LLMChannel channel, ModelWithCapabilities modelWithCaps) {
-            var existingModel = await _dbContext.ChannelsWithModel
+        private async Task UpdateExistingModelWithCapabilities(LLMChannel channel, ModelWithCapabilities modelWithCaps) {
+            var existingModels = await _dbContext.ChannelsWithModel
                 .Include(c => c.Capabilities)
-                .FirstOrDefaultAsync(c => c.ModelName == modelWithCaps.ModelName && c.LLMChannelId == channel.Id);
+                .Where(c => !c.IsDeleted && c.LLMChannelId == channel.Id)
+                .ToListAsync();
 
-            if (existingModel == null) {
-                // 创建新模型记录
-                existingModel = new ChannelWithModel {
-                    ModelName = modelWithCaps.ModelName,
-                    LLMChannelId = channel.Id,
-                    IsDeleted = false,
-                    Capabilities = new List<ModelCapability>()
-                };
-                _dbContext.ChannelsWithModel.Add(existingModel);
-                await _dbContext.SaveChangesAsync(); // 保存以获取ID
-            } else {
-                // 确保软删除标记被清除（能力更新说明模型依然存在）
-                existingModel.IsDeleted = false;
+            var targets = existingModels
+                .Where(c => c.ModelName.Equals(modelWithCaps.ModelName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (targets.Count == 0) {
+                // Catalog/metadata 不得扩大授权集合：无已授权行时不创建、不复活
+                _logger.LogDebug("模型 {ModelName} 渠道 {ChannelId} 无已存在的非删除授权行，跳过 metadata 合并", modelWithCaps.ModelName, channel.Id);
+                return;
             }
 
-            // 删除现有能力信息
-            var existingCapabilities = existingModel.Capabilities.ToList();
-            _dbContext.ModelCapabilities.RemoveRange(existingCapabilities);
+            foreach (var existingModel in targets) {
+                // 删除现有能力信息
+                var existingCapabilities = existingModel.Capabilities.ToList();
+                _dbContext.ModelCapabilities.RemoveRange(existingCapabilities);
 
-            // 添加新的能力信息
-            foreach (var capability in modelWithCaps.Capabilities) {
-                var modelCapability = new ModelCapability {
-                    ChannelWithModelId = existingModel.Id,
-                    CapabilityName = capability.Key,
-                    CapabilityValue = capability.Value,
-                    Description = GetCapabilityDescription(capability.Key),
-                    LastUpdated = DateTime.UtcNow
-                };
-                _dbContext.ModelCapabilities.Add(modelCapability);
+                // 添加新的能力信息
+                foreach (var capability in modelWithCaps.Capabilities) {
+                    var modelCapability = new ModelCapability {
+                        ChannelWithModelId = existingModel.Id,
+                        CapabilityName = capability.Key,
+                        CapabilityValue = capability.Value,
+                        Description = GetCapabilityDescription(capability.Key),
+                        LastUpdated = DateTime.UtcNow
+                    };
+                    _dbContext.ModelCapabilities.Add(modelCapability);
+                }
             }
         }
 

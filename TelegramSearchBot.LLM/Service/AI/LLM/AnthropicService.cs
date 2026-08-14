@@ -93,12 +93,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return identity.UserName ?? string.Empty;
         }
 
-        private AnthropicClient CreateClient(LLMChannel channel) {
+        private AnthropicClient CreateClient(LLMChannel channel, LLMApiBinding? binding = null) {
             var options = new Anthropic.Core.ClientOptions {
-                ApiKey = channel.ApiKey,
+                ApiKey = LlmBindingSupport.ResolveApiKey(channel, binding),
             };
-            if (!string.IsNullOrWhiteSpace(channel.Gateway)) {
-                options.BaseUrl = channel.Gateway.TrimEnd('/');
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (!string.IsNullOrWhiteSpace(endpoint)) {
+                // Binding URL 已含 /v1（如 https://opencode.ai/zen/v1），SDK 会再追加 /v1/messages；
+                // 剥离尾部 /v1 使 SDK 追加后命中精确 binding 路径。legacy channel.Gateway 保持字节一致。
+                if (binding != null && endpoint.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) {
+                    endpoint = endpoint.Substring(0, endpoint.Length - 3);
+                }
+                options.BaseUrl = endpoint.TrimEnd('/');
             }
             return new AnthropicClient(options);
         }
@@ -607,9 +613,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
             DataMessage message, long ChatId, string modelName, LLMChannel channel,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, null, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(
+            DataMessage message, long ChatId, string modelName, LLMChannel channel,
+            LLMApiBinding binding,
+            LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "claude-sonnet-4-20250514";
 
-            if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey)) {
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
                 _logger.LogError("{ServiceName}: Channel or ApiKey is not configured.", ServiceName);
                 yield return $"Error: {ServiceName} channel/apikey is not configured.";
                 yield break;
@@ -625,7 +643,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             if (useNativeToolCalling) {
                 bool nativeFailed = false;
-                var nativeEnumerator = ExecWithNativeToolCallingAsync(message, ChatId, modelName, channel, executionContext, nativeTools, cancellationToken);
+                var nativeEnumerator = ExecWithNativeToolCallingAsync(message, ChatId, modelName, channel, binding, executionContext, nativeTools, cancellationToken);
                 await using var enumerator = nativeEnumerator.GetAsyncEnumerator(cancellationToken);
                 bool hasFirst = false;
                 try {
@@ -647,7 +665,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             // Fallback: XML prompt-based tool calling
-            await foreach (var item in ExecWithXmlToolCallingAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
+            await foreach (var item in ExecWithXmlToolCallingAsync(message, ChatId, modelName, channel, binding, executionContext, cancellationToken)) {
                 yield return item;
             }
         }
@@ -665,6 +683,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// </summary>
         private async IAsyncEnumerable<string> ExecWithNativeToolCallingAsync(
             DataMessage message, long ChatId, string modelName, LLMChannel channel,
+            LLMApiBinding binding,
             LlmExecutionContext executionContext,
             List<OpenAI.Chat.ChatTool> nativeTools,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
@@ -684,7 +703,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 SerializeProviderHistory(systemPrompt, stableHistory));
             providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
 
-            using var client = CreateClient(channel);
+            using var client = CreateClient(channel, binding);
             var anthropicTools = ConvertToAnthropicTools(nativeTools, promptCachingEnabled);
 
             int maxToolCycles = Env.MaxToolCycles;
@@ -911,6 +930,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// </summary>
         private async IAsyncEnumerable<string> ExecWithXmlToolCallingAsync(
             DataMessage message, long ChatId, string modelName, LLMChannel channel,
+            LLMApiBinding binding,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
@@ -929,7 +949,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 SerializeProviderHistory(systemPrompt, stableHistory));
             providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
 
-            using var client = CreateClient(channel);
+            using var client = CreateClient(channel, binding);
 
             int maxToolCycles = Env.MaxToolCycles;
             var currentMessageContentBuilder = new StringBuilder();
@@ -1090,12 +1110,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LlmContinuationSnapshot snapshot, LLMChannel channel,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            await foreach (var item in ResumeFromSnapshotAsync(snapshot, channel, null, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        public async IAsyncEnumerable<string> ResumeFromSnapshotAsync(
+            LlmContinuationSnapshot snapshot, LLMChannel channel,
+            LLMApiBinding binding,
+            LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
             if (snapshot == null) {
                 _logger.LogError("{ServiceName}: Cannot resume from null snapshot.", ServiceName);
                 yield break;
             }
-            if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey)) {
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
                 _logger.LogError("{ServiceName}: Channel or ApiKey is not configured for resume.", ServiceName);
                 yield break;
             }
@@ -1114,7 +1146,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 snapshot.ProviderHistory ?? []);
             providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: false, out var cacheBreakpointInserted);
 
-            using var client = CreateClient(channel);
+            using var client = CreateClient(channel, binding);
 
             var fullContentBuilder = new StringBuilder(snapshot.LastAccumulatedContent ?? "");
             var newContentBuilder = new StringBuilder();
@@ -1329,18 +1361,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
         #region Image Analysis
 
         public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt = null) {
+            return await AnalyzeImageAsync(photoPath, modelName, channel, null, prompt);
+        }
+
+        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, LLMApiBinding binding, string prompt = null) {
             if (string.IsNullOrWhiteSpace(modelName)) {
                 modelName = "claude-sonnet-4-20250514";
             }
 
             prompt = string.IsNullOrWhiteSpace(prompt) ? GeneralLLMService.DefaultAltPhotoPrompt : prompt;
 
-            if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey)) {
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
                 _logger.LogError("{ServiceName}: Channel or ApiKey is not configured.", ServiceName);
                 return $"Error: {ServiceName} channel/apikey is not configured.";
             }
 
-            using var client = CreateClient(channel);
+            using var client = CreateClient(channel, binding);
 
             try {
                 using var fileStream = File.OpenRead(photoPath);
