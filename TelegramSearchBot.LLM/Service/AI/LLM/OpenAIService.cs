@@ -280,6 +280,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 };
 
                 using var httpClient = new HttpClient(handler);
+                OpencodeSessionHeaders.Apply(httpClient, channel.Gateway);
 
                 // --- Client Setup ---
                 var clientOptions = new OpenAIClientOptions {
@@ -352,6 +353,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 if (!string.IsNullOrEmpty(apiKey)) {
                     httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
                 }
+                OpencodeSessionHeaders.Apply(httpClient, channel, binding);
 
                 // 构建模型列表 URL，确保路径正确
                 var gatewayBase = NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding)).TrimEnd('/');
@@ -483,6 +485,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 // 尝试使用OpenAI内部API获取模型能力信息
                 var internalApiUrl = channel.Gateway.TrimEnd('/') + "/dashboard/onboarding/models";
                 httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {channel.ApiKey}");
+                OpencodeSessionHeaders.Apply(httpClient, channel.Gateway);
 
                 var response = await httpClient.GetAsync(internalApiUrl);
                 if (response.IsSuccessStatusCode) {
@@ -1221,6 +1224,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 excludeDynamicTail: true);
 
             using var client = _httpClientFactory.CreateClient();
+            OpencodeSessionHeaders.Apply(client, channel, binding, $"tsb-{ChatId}");
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding))),
                 Transport = new HttpClientPipelineTransport(client),
@@ -1516,6 +1520,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 excludeDynamicTail: true);
 
             using var client = _httpClientFactory.CreateClient();
+            OpencodeSessionHeaders.Apply(client, channel, binding, $"tsb-{ChatId}");
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding))),
                 Transport = new HttpClientPipelineTransport(client),
@@ -1696,6 +1701,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 excludeDynamicTail: false);
 
             using var client = _httpClientFactory.CreateClient();
+            OpencodeSessionHeaders.Apply(client, channel, binding, $"tsb-{snapshot.ChatId}");
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding))),
                 Transport = new HttpClientPipelineTransport(client),
@@ -2005,6 +2011,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             using var httpClient = _httpClientFactory.CreateClient();
+            OpencodeSessionHeaders.Apply(httpClient, channel, binding);
 
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(NormalizeOpenAIEndpoint(channel, endpoint)),
@@ -2118,6 +2125,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             using var httpClient = _httpClientFactory.CreateClient();
+            OpencodeSessionHeaders.Apply(httpClient, channel, binding);
 
             var clientOptions = new OpenAIClientOptions {
                 Endpoint = new Uri(NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding))),
