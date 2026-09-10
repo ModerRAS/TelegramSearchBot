@@ -9,7 +9,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
         string Id,
         string DisplayName,
         LLMProvider Provider,
-        string DefaultGateway,
+        /// <summary>Null = gateway must be entered during creation (e.g. user-owned OpenCode Go gateway).</summary>
+        string? DefaultGateway,
         string[] DefaultModels,
         bool RequiresApiKey,
         string? Notes = null);
@@ -68,6 +69,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 "https://api.moonshot.cn/v1",
                 new[] { "kimi-k2-0711-preview", "moonshot-v1-128k" },
                 RequiresApiKey: true),
+            new LlmProviderPreset(
+                "opencode-zen", "OpenCode Zen (官方订阅目录)", LLMProvider.Anthropic,
+                "https://opencode.ai/zen",
+                Array.Empty<string>(),
+                RequiresApiKey: true,
+                Notes: "Anthropic 兼容；订阅 token 作为 API Key；目录模型不自动创建，授权模型请用 添加模型 手工维护。"),
+            new LlmProviderPreset(
+                "opencode-go", "OpenCode Go (自建网关)", LLMProvider.Anthropic,
+                null,
+                Array.Empty<string>(),
+                RequiresApiKey: true,
+                Notes: "创建时需输入你的 OpenCode Go 网关地址；Anthropic 兼容，自动携带 x-opencode-session 头；模型请用 添加模型 维护。"),
         };
 
         public static LlmProviderPreset? FindById(string id) =>
@@ -78,7 +91,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var sb = new System.Text.StringBuilder("请选择要创建的渠道预设：\n");
             for (var i = 0; i < Presets.Count; i++) {
                 var p = Presets[i];
-                sb.AppendLine($"{i + 1}. {p.DisplayName}  ({p.DefaultGateway})");
+                sb.AppendLine($"{i + 1}. {p.DisplayName}  ({p.DefaultGateway ?? "创建时输入"})");
                 if (p.DefaultModels.Length > 0) {
                     sb.AppendLine($"   默认模型: {string.Join(", ", p.DefaultModels)}");
                 }

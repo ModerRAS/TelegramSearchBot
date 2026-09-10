@@ -51,6 +51,7 @@ namespace TelegramSearchBot.Service.Manage {
             {
                 { LLMConfState.AwaitingName.GetDescription(), HandleAwaitingNameAsync },
                 { LLMConfState.AwaitingPresetSelection.GetDescription(), HandleAwaitingPresetSelectionAsync },
+                { LLMConfState.AwaitingPresetGateway.GetDescription(), HandleAwaitingPresetGatewayAsync },
                 { LLMConfState.AwaitingPresetApiKey.GetDescription(), HandleAwaitingPresetApiKeyAsync },
                 { LLMConfState.AwaitingGateway.GetDescription(), HandleAwaitingGatewayAsync },
                 { LLMConfState.AwaitingProvider.GetDescription(), HandleAwaitingProviderAsync },
@@ -105,8 +106,14 @@ namespace TelegramSearchBot.Service.Manage {
             }
 
             var preset = LlmProviderCatalog.Presets[presetIndex - 1];
+            if (preset.DefaultGateway == null) {
+                await redis.SetDataAsync(preset.Id);
+                await redis.SetStateAsync(LLMConfState.AwaitingPresetGateway.GetDescription());
+                return (true, $"请输入 {preset.DisplayName} 的网关地址:");
+            }
+
             if (!preset.RequiresApiKey) {
-                return await CreatePresetChannelAsync(redis, preset, string.Empty);
+                return await CreatePresetChannelAsync(redis, preset, string.Empty, preset.DefaultGateway);
             }
 
             await redis.SetDataAsync(preset.Id);
@@ -114,21 +121,42 @@ namespace TelegramSearchBot.Service.Manage {
             return (true, $"请输入 {preset.DisplayName} 的 API Key（本地/免 Key 服务发送 - 跳过）:");
         }
 
-        private async Task<(bool, string)> HandleAwaitingPresetApiKeyAsync(EditLLMConfRedisHelper redis, string command) {
+        private async Task<(bool, string)> HandleAwaitingPresetGatewayAsync(EditLLMConfRedisHelper redis, string command) {
             var preset = LlmProviderCatalog.FindById(await redis.GetDataAsync());
             if (preset == null) {
                 await redis.DeleteKeysAsync();
                 return (false, "预设状态丢失，请重新发送 预制渠道");
             }
 
-            var apiKey = command.Trim().Equals("-", StringComparison.OrdinalIgnoreCase) ? string.Empty : command.Trim();
-            return await CreatePresetChannelAsync(redis, preset, apiKey);
+            var gateway = command.Trim();
+            if (!Uri.TryCreate(gateway, UriKind.Absolute, out var uri) ||
+                ( uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps )) {
+                return (false, "请输入有效的网关地址（以 http:// 或 https:// 开头）");
+            }
+
+            await redis.SetDataAsync($"{preset.Id}|{gateway}");
+            await redis.SetStateAsync(LLMConfState.AwaitingPresetApiKey.GetDescription());
+            return (true, $"请输入 {preset.DisplayName} 的 API Key（订阅 token）:");
         }
 
-        private async Task<(bool, string)> CreatePresetChannelAsync(EditLLMConfRedisHelper redis, LlmProviderPreset preset, string apiKey) {
+        private async Task<(bool, string)> HandleAwaitingPresetApiKeyAsync(EditLLMConfRedisHelper redis, string command) {
+            var data = await redis.GetDataAsync() ?? string.Empty;
+            var parts = data.Split('|', 2);
+            var preset = LlmProviderCatalog.FindById(parts[0]);
+            if (preset == null) {
+                await redis.DeleteKeysAsync();
+                return (false, "预设状态丢失，请重新发送 预制渠道");
+            }
+
+            var apiKey = command.Trim().Equals("-", StringComparison.OrdinalIgnoreCase) ? string.Empty : command.Trim();
+            var gateway = parts.Length > 1 ? parts[1] : preset.DefaultGateway!;
+            return await CreatePresetChannelAsync(redis, preset, apiKey, gateway);
+        }
+
+        private async Task<(bool, string)> CreatePresetChannelAsync(EditLLMConfRedisHelper redis, LlmProviderPreset preset, string apiKey, string gateway) {
             var channelId = await Helper.AddChannel(
                 preset.DisplayName,
-                preset.DefaultGateway,
+                gateway,
                 apiKey,
                 preset.Provider,
                 1,

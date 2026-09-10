@@ -59,6 +59,19 @@ namespace TelegramSearchBot.Interface.AI.LLM {
             return ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken);
         }
 
+        /// <summary>
+        /// Execute with caller-provided history rows (LLMAgent worker path). The rows already
+        /// include the input message; implementations must not touch the database for history.
+        /// Default falls back to the legacy self-loading path.
+        /// </summary>
+        public IAsyncEnumerable<string> ExecWithHistoryAsync(
+            IReadOnlyList<AgentHistoryMessage> history,
+            Message message, long ChatId, string modelName, LLMChannel channel,
+            LLMApiBinding binding, LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            return ExecAsync(message, ChatId, modelName, channel, binding, executionContext, cancellationToken);
+        }
+
         public IAsyncEnumerable<string> ResumeFromSnapshotAsync(LlmContinuationSnapshot snapshot, LLMChannel channel,
                                                                  LLMApiBinding binding,
                                                                  LlmExecutionContext executionContext,
