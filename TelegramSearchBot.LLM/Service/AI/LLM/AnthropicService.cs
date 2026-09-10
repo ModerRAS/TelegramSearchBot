@@ -707,222 +707,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
             using var client = CreateClient(channel, binding);
             var anthropicTools = ConvertToAnthropicTools(nativeTools, promptCachingEnabled);
 
-            int maxToolCycles = Env.MaxToolCycles;
-            var currentMessageContentBuilder = new StringBuilder();
-            var trackedHistory = new List<SerializedChatMessage>();
-            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = systemPrompt });
-
-            for (int cycle = 0; cycle < maxToolCycles; cycle++) {
-                if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                var parameters = new MessageCreateParams {
-                    Model = modelName,
-                    MaxTokens = 8192,
-                    System = BuildSystemPrompt(systemPrompt, promptCachingEnabled),
-                    Messages = providerHistory,
-                    Tools = anthropicTools,
-                };
-
-                var contentBuilder = new StringBuilder();
-                var toolUseBlocks = new List<(string id, string name, string inputJson)>();
-                var currentToolInputBuilder = new StringBuilder();
-                string currentToolId = null;
-                string currentToolName = null;
-                bool hasToolUse = false;
-                long? cacheCreationInputTokens = null;
-                long? cacheReadInputTokens = null;
-                object usageObservation = null;
-
-                await foreach (var rawEvent in client.Messages.CreateStreaming(parameters, cancellationToken)) {
-                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                    if (rawEvent.TryPickStart(out var messageStartEvent) && messageStartEvent.Message?.Usage != null) {
-                        usageObservation = new {
-                            messageStartEvent.Message.Usage.InputTokens,
-                            messageStartEvent.Message.Usage.OutputTokens,
-                            messageStartEvent.Message.Usage.CacheCreationInputTokens,
-                            messageStartEvent.Message.Usage.CacheReadInputTokens,
-                            RawData = messageStartEvent.Message.Usage.RawData,
-                        };
-                    }
-
-                    if (rawEvent.TryPickDelta(out var messageDeltaEvent) && messageDeltaEvent.Usage != null) {
-                        cacheCreationInputTokens = messageDeltaEvent.Usage.CacheCreationInputTokens ?? cacheCreationInputTokens;
-                        cacheReadInputTokens = messageDeltaEvent.Usage.CacheReadInputTokens ?? cacheReadInputTokens;
-                        usageObservation = new {
-                            messageDeltaEvent.Usage.InputTokens,
-                            messageDeltaEvent.Usage.OutputTokens,
-                            messageDeltaEvent.Usage.CacheCreationInputTokens,
-                            messageDeltaEvent.Usage.CacheReadInputTokens,
-                            RawData = messageDeltaEvent.Usage.RawData,
-                        };
-                    }
-
-                    if (rawEvent.TryPickContentBlockStart(out var startEvent)) {
-                        if (startEvent.ContentBlock.TryPickToolUse(out var toolUseStart)) {
-                            currentToolId = toolUseStart.ID;
-                            currentToolName = toolUseStart.Name;
-                            currentToolInputBuilder.Clear();
-                            hasToolUse = true;
-                        }
-                    } else if (rawEvent.TryPickContentBlockDelta(out var deltaEvent)) {
-                        if (deltaEvent.Delta.TryPickText(out var textDelta)) {
-                            contentBuilder.Append(textDelta.Text);
-                            currentMessageContentBuilder.Append(textDelta.Text);
-                            if (currentMessageContentBuilder.Length > 10) {
-                                yield return currentMessageContentBuilder.ToString();
-                            }
-                        } else if (deltaEvent.Delta.TryPickInputJson(out var inputJsonDelta)) {
-                            currentToolInputBuilder.Append(inputJsonDelta.PartialJson);
-                        }
-                    } else if (rawEvent.TryPickContentBlockStop(out _)) {
-                        if (currentToolId != null) {
-                            toolUseBlocks.Add((currentToolId, currentToolName, currentToolInputBuilder.ToString()));
-                            currentToolId = null;
-                            currentToolName = null;
-                        }
-                    }
-                }
-
-                LogPromptCachingObservation(
-                    channel,
-                    "Anthropic",
-                    modelName,
-                    promptCachingEnabled,
-                    toolDefinitionHash,
-                    stablePrefixHash,
-                    cacheBreakpointInserted,
-                    cacheCreationInputTokens,
-                    cacheReadInputTokens,
-                    usageObservation);
-
-                string responseText = contentBuilder.ToString().Trim();
-
-                if (hasToolUse && toolUseBlocks.Any()) {
-                    // Build assistant message with text + tool use blocks
-                    var assistantContentBlocks = new List<ContentBlockParam>();
-                    if (!string.IsNullOrWhiteSpace(responseText)) {
-                        assistantContentBlocks.Add(new TextBlockParam(responseText));
-                    }
-                    foreach (var (id, name, inputJson) in toolUseBlocks) {
-                        Dictionary<string, JsonElement> parsedInput;
-                        try {
-                            parsedInput = string.IsNullOrWhiteSpace(inputJson)
-                                ? new Dictionary<string, JsonElement>()
-                                : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson);
-                        } catch (Exception ex) {
-                            _logger.LogError(
-                                ex,
-                                "{ServiceName}: Failed to deserialize Anthropic native tool input for assistant history. ToolUseId={ToolUseId}, ToolName={ToolName}, InputJson={InputJson}, ErrorSummary={ErrorSummary}",
-                                ServiceName,
-                                id,
-                                name,
-                                inputJson,
-                                ex.GetLogSummary());
-                            parsedInput = new Dictionary<string, JsonElement>();
-                        }
-                        assistantContentBlocks.Add(new ToolUseBlockParam {
-                            ID = id,
-                            Name = name,
-                            Input = parsedInput
-                        });
-                    }
-
-                    providerHistory.Add(new MessageParam {
-                        Role = Role.Assistant,
-                        Content = assistantContentBlocks
-                    });
-
-                    trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = responseText });
-
-                    var toolNamesBuilder = new StringBuilder();
-                    foreach (var (id, name, inputJson) in toolUseBlocks) {
-                        Dictionary<string, string> argsDict = null;
-                        if (!string.IsNullOrWhiteSpace(inputJson)) {
-                            try {
-                                argsDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson)
-                                    .ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
-                            } catch (Exception ex) {
-                                _logger.LogError(
-                                    ex,
-                                    "{ServiceName}: Failed to deserialize Anthropic native tool input for display. ToolUseId={ToolUseId}, ToolName={ToolName}, InputJson={InputJson}, ErrorSummary={ErrorSummary}",
-                                    ServiceName,
-                                    id,
-                                    name,
-                                    inputJson,
-                                    ex.GetLogSummary());
-                            }
-                        }
-                        argsDict ??= new Dictionary<string, string>();
-                        toolNamesBuilder.Append(McpToolHelper.FormatToolCallDisplay(name, argsDict));
-                    }
-                    currentMessageContentBuilder.Append(toolNamesBuilder.ToString());
-                    yield return currentMessageContentBuilder.ToString();
-
-                    // Execute tools and build tool result message
-                    var toolResultBlocks = new List<ContentBlockParam>();
-                    foreach (var (id, name, inputJson) in toolUseBlocks) {
-                        _logger.LogInformation("{ServiceName}: Native tool call: {ToolName} with arguments: {Arguments}", ServiceName, name, inputJson);
-
-                        string toolResultString;
-                        bool isError = false;
-                        try {
-                            var argsDict = string.IsNullOrWhiteSpace(inputJson)
-                                ? new Dictionary<string, string>()
-                                : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson)
-                                    .ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
-
-                            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(name, argsDict, toolContext);
-                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
-                            _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result length: {Length}", ServiceName, name, toolResultString.Length);
-                        } catch (Exception ex) {
-                            isError = true;
-                            _logger.LogError(
-                                ex,
-                                "{ServiceName}: Error executing Anthropic native tool {ToolName}. ToolUseId={ToolUseId}, InputJson={InputJson}, ErrorSummary={ErrorSummary}",
-                                ServiceName,
-                                name,
-                                id,
-                                inputJson,
-                                ex.GetLogSummary());
-                            toolResultString = $"Error executing tool {name}: {ex.GetLogSummary()}";
-                        }
-
-                        toolResultBlocks.Add(new ToolResultBlockParam(id) {
-                            Content = toolResultString,
-                            IsError = isError,
-                        });
-                    }
-
-                    providerHistory.Add(new MessageParam {
-                        Role = Role.User,
-                        Content = toolResultBlocks
-                    });
-                } else {
-                    // Regular text response, no tool calls
-                    if (!string.IsNullOrWhiteSpace(responseText)) {
-                        trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = responseText });
-                    }
-                    yield break;
-                }
-            }
-
-            _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-            if (executionContext != null) {
-                executionContext.IterationLimitReached = true;
-                executionContext.SnapshotData = new LlmContinuationSnapshot {
-                    SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
-                    ChatId = ChatId,
-                    OriginalMessageId = message.MessageId,
-                    UserId = message.FromUserId,
-                    ModelName = modelName,
-                    Provider = "Anthropic",
-                    ChannelId = channel.Id,
-                    LastAccumulatedContent = currentMessageContentBuilder.ToString(),
-                    CyclesSoFar = maxToolCycles,
-                    ProviderHistory = trackedHistory,
-                };
+            var trackedHistory = new List<SerializedChatMessage> {
+                new SerializedChatMessage { Role = "system", Content = systemPrompt }
+            };
+            var source = new AnthropicTurnSource(
+                this, client, systemPrompt, providerHistory, trackedHistory, anthropicTools,
+                promptCachingEnabled, toolDefinitionHash, stablePrefixHash, cacheBreakpointInserted,
+                modelName, channel);
+            var meta = new LlmToolLoopMeta {
+                ChatId = ChatId,
+                OriginalMessageId = message.MessageId,
+                UserId = message.FromUserId,
+                ModelName = modelName,
+                Provider = "Anthropic",
+                ChannelId = channel.Id
+            };
+            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
+            await foreach (var item in LlmToolLoop.RunAsync(source, null, toolContext, meta, executionContext, cancellationToken)) {
+                yield return item;
             }
         }
 
@@ -952,154 +754,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             using var client = CreateClient(channel, binding);
 
-            int maxToolCycles = Env.MaxToolCycles;
-            var currentMessageContentBuilder = new StringBuilder();
-            var trackedHistory = new List<SerializedChatMessage>();
-            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = systemPrompt });
-
-            for (int cycle = 0; cycle < maxToolCycles; cycle++) {
-                if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                var parameters = new MessageCreateParams {
-                    Model = modelName,
-                    MaxTokens = 8192,
-                    System = BuildSystemPrompt(systemPrompt, promptCachingEnabled),
-                    Messages = providerHistory,
-                };
-
-                var llmResponseBuilder = new StringBuilder();
-                long? cacheCreationInputTokens = null;
-                long? cacheReadInputTokens = null;
-                object usageObservation = null;
-
-                await foreach (var rawEvent in client.Messages.CreateStreaming(parameters, cancellationToken)) {
-                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                    if (rawEvent.TryPickStart(out var messageStartEvent) && messageStartEvent.Message?.Usage != null) {
-                        usageObservation = new {
-                            messageStartEvent.Message.Usage.InputTokens,
-                            messageStartEvent.Message.Usage.OutputTokens,
-                            messageStartEvent.Message.Usage.CacheCreationInputTokens,
-                            messageStartEvent.Message.Usage.CacheReadInputTokens,
-                            RawData = messageStartEvent.Message.Usage.RawData,
-                        };
-                    }
-
-                    if (rawEvent.TryPickDelta(out var messageDeltaEvent) && messageDeltaEvent.Usage != null) {
-                        cacheCreationInputTokens = messageDeltaEvent.Usage.CacheCreationInputTokens ?? cacheCreationInputTokens;
-                        cacheReadInputTokens = messageDeltaEvent.Usage.CacheReadInputTokens ?? cacheReadInputTokens;
-                        usageObservation = new {
-                            messageDeltaEvent.Usage.InputTokens,
-                            messageDeltaEvent.Usage.OutputTokens,
-                            messageDeltaEvent.Usage.CacheCreationInputTokens,
-                            messageDeltaEvent.Usage.CacheReadInputTokens,
-                            RawData = messageDeltaEvent.Usage.RawData,
-                        };
-                    }
-
-                    if (rawEvent.TryPickContentBlockDelta(out var deltaEvent)) {
-                        if (deltaEvent.Delta.TryPickText(out var textDelta)) {
-                            currentMessageContentBuilder.Append(textDelta.Text);
-                            llmResponseBuilder.Append(textDelta.Text);
-                            if (currentMessageContentBuilder.Length > 10) {
-                                yield return currentMessageContentBuilder.ToString();
-                            }
-                        }
-                    }
-                }
-
-                LogPromptCachingObservation(
-                    channel,
-                    "Anthropic",
-                    modelName,
-                    promptCachingEnabled,
-                    toolDefinitionHash,
-                    stablePrefixHash,
-                    cacheBreakpointInserted,
-                    cacheCreationInputTokens,
-                    cacheReadInputTokens,
-                    usageObservation);
-
-                string llmFullResponseText = llmResponseBuilder.ToString().Trim();
-                _logger.LogDebug("{ServiceName} raw full response (Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
-
-                trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = llmFullResponseText });
-
-                if (!string.IsNullOrWhiteSpace(llmFullResponseText)) {
-                    providerHistory.Add(new MessageParam {
-                        Role = Role.Assistant,
-                        Content = llmFullResponseText
-                    });
-                } else if (cycle < maxToolCycles - 1) {
-                    _logger.LogWarning("{ServiceName}: LLM returned empty response during tool cycle {Cycle}.", ServiceName, cycle + 1);
-                }
-
-                // XML tool parsing
-                if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any()) {
-                    var firstToolCall = parsedToolCalls[0];
-                    string parsedToolName = firstToolCall.toolName;
-                    Dictionary<string, string> toolArguments = firstToolCall.arguments;
-
-                    _logger.LogInformation("{ServiceName}: LLM requested tool: {ToolName} with arguments: {Arguments}", ServiceName, parsedToolName, JsonConvert.SerializeObject(toolArguments));
-                    if (parsedToolCalls.Count > 1) {
-                        _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
-                    }
-
-                    currentMessageContentBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
-                    yield return currentMessageContentBuilder.ToString();
-
-                    string toolResultString;
-                    bool isError = false;
-                    try {
-                        var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-                        object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
-                        toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
-                        _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
-                    } catch (Exception ex) {
-                        isError = true;
-                        _logger.LogError(
-                            ex,
-                            "{ServiceName}: Error executing Anthropic XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
-                            ServiceName,
-                            parsedToolName,
-                            JsonConvert.SerializeObject(toolArguments),
-                            ex.GetLogSummary());
-                        toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
-                    }
-
-                    string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
-                    string feedback = $"{feedbackPrefix}{toolResultString}]";
-
-                    trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = feedback });
-
-                    providerHistory.Add(new MessageParam {
-                        Role = Role.User,
-                        Content = feedback
-                    });
-                    _logger.LogInformation("Added user feedback to history for LLM: {Feedback}", feedback);
-                } else {
-                    if (string.IsNullOrWhiteSpace(llmFullResponseText)) {
-                        _logger.LogWarning("{ServiceName}: LLM returned empty final non-tool response for ChatId {ChatId}.", ServiceName, ChatId);
-                    }
-                    yield break;
-                }
-            }
-
-            _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-            if (executionContext != null) {
-                executionContext.IterationLimitReached = true;
-                executionContext.SnapshotData = new LlmContinuationSnapshot {
-                    SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
-                    ChatId = ChatId,
-                    OriginalMessageId = message.MessageId,
-                    UserId = message.FromUserId,
-                    ModelName = modelName,
-                    Provider = "Anthropic",
-                    ChannelId = channel.Id,
-                    LastAccumulatedContent = currentMessageContentBuilder.ToString(),
-                    CyclesSoFar = maxToolCycles,
-                    ProviderHistory = trackedHistory,
-                };
+            var trackedHistory = new List<SerializedChatMessage> {
+                new SerializedChatMessage { Role = "system", Content = systemPrompt }
+            };
+            var source = new AnthropicTurnSource(
+                this, client, systemPrompt, providerHistory, trackedHistory, null,
+                promptCachingEnabled, toolDefinitionHash, stablePrefixHash, cacheBreakpointInserted,
+                modelName, channel);
+            var meta = new LlmToolLoopMeta {
+                ChatId = ChatId,
+                OriginalMessageId = message.MessageId,
+                UserId = message.FromUserId,
+                ModelName = modelName,
+                Provider = "Anthropic",
+                ChannelId = channel.Id
+            };
+            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
+            await foreach (var item in LlmToolLoop.RunAsync(source, null, toolContext, meta, executionContext, cancellationToken)) {
+                yield return item;
             }
         }
 
@@ -1140,6 +812,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 ServiceName, snapshot.SnapshotId, snapshot.ChatId, snapshot.ProviderHistory?.Count ?? 0);
 
             var (systemPrompt, providerHistory) = DeserializeProviderHistory(snapshot.ProviderHistory);
+            var trackedHistory = snapshot.ProviderHistory ?? new List<SerializedChatMessage>();
             var promptCachingEnabled = await IsPromptCachingEnabledAsync();
             var (toolDefinitionHash, stablePrefixHash) = BuildPromptCachingContext(
                 "anthropic-resume",
@@ -1149,28 +822,94 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             using var client = CreateClient(channel, binding);
 
-            var fullContentBuilder = new StringBuilder(snapshot.LastAccumulatedContent ?? "");
-            var newContentBuilder = new StringBuilder();
+            var source = new AnthropicTurnSource(
+                this, client, systemPrompt ?? string.Empty, providerHistory, trackedHistory, null,
+                promptCachingEnabled, toolDefinitionHash, stablePrefixHash, cacheBreakpointInserted,
+                modelName, channel);
+            var meta = new LlmToolLoopMeta {
+                ChatId = snapshot.ChatId,
+                OriginalMessageId = snapshot.OriginalMessageId,
+                UserId = snapshot.UserId,
+                ModelName = modelName,
+                Provider = "Anthropic",
+                ChannelId = channel.Id,
+                BaseCycles = snapshot.CyclesSoFar,
+                InitialContent = snapshot.LastAccumulatedContent ?? string.Empty
+            };
+            var toolContext = new ToolContext { ChatId = snapshot.ChatId, UserId = snapshot.UserId, MessageId = snapshot.OriginalMessageId };
+            await foreach (var item in LlmToolLoop.RunAsync(source, null, toolContext, meta, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
 
-            int maxToolCycles = Env.MaxToolCycles;
-            var trackedHistory = snapshot.ProviderHistory ?? new List<SerializedChatMessage>();
+        #endregion
 
-            for (int cycle = 0; cycle < maxToolCycles; cycle++) {
-                if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+        /// <summary>
+        /// Per-run turn source for the Anthropic Messages API. Streams one turn per call and
+        /// owns the provider-typed history plus the serialized history used for snapshots.
+        /// Supports both native tool-calling (tools attached) and the XML text protocol.
+        /// </summary>
+        private sealed class AnthropicTurnSource : ILlmTurnSource {
+            private readonly AnthropicService _svc;
+            private readonly AnthropicClient _client;
+            private readonly string _systemPrompt;
+            private readonly List<MessageParam> _providerHistory;
+            private readonly List<SerializedChatMessage> _trackedHistory;
+            private readonly List<ToolUnion>? _tools;
+            private readonly bool _promptCachingEnabled;
+            private readonly string _toolDefinitionHash;
+            private readonly string _stablePrefixHash;
+            private readonly bool _cacheBreakpointInserted;
+            private readonly string _modelName;
+            private readonly LLMChannel _channel;
 
+            private List<(string id, string name, string inputJson)> _pendingToolCalls = new();
+            private string _pendingTurnText = string.Empty;
+
+            public AnthropicTurnSource(
+                AnthropicService svc, AnthropicClient client, string systemPrompt,
+                List<MessageParam> providerHistory, List<SerializedChatMessage> trackedHistory,
+                List<ToolUnion>? tools, bool promptCachingEnabled,
+                string toolDefinitionHash, string stablePrefixHash, bool cacheBreakpointInserted,
+                string modelName, LLMChannel channel) {
+                _svc = svc;
+                _client = client;
+                _systemPrompt = systemPrompt;
+                _providerHistory = providerHistory;
+                _trackedHistory = trackedHistory;
+                _tools = tools;
+                _promptCachingEnabled = promptCachingEnabled;
+                _toolDefinitionHash = toolDefinitionHash;
+                _stablePrefixHash = stablePrefixHash;
+                _cacheBreakpointInserted = cacheBreakpointInserted;
+                _modelName = modelName;
+                _channel = channel;
+            }
+
+            public bool SupportsNativeTools => _tools != null && _tools.Count > 0;
+
+            public async IAsyncEnumerable<LlmStreamEvent> StreamTurnAsync(
+                string? userContent,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
                 var parameters = new MessageCreateParams {
-                    Model = modelName,
+                    Model = _modelName,
                     MaxTokens = 8192,
-                    System = BuildSystemPrompt(systemPrompt ?? string.Empty, promptCachingEnabled),
-                    Messages = providerHistory,
+                    System = BuildSystemPrompt(_systemPrompt, _promptCachingEnabled),
+                    Messages = _providerHistory,
+                    Tools = SupportsNativeTools ? _tools : null,
                 };
 
-                var llmResponseBuilder = new StringBuilder();
+
+                var turnText = new StringBuilder();
+                var toolUseBlocks = new List<(string id, string name, string inputJson)>();
+                var currentToolInputBuilder = new StringBuilder();
+                string currentToolId = null;
+                string currentToolName = null;
                 long? cacheCreationInputTokens = null;
                 long? cacheReadInputTokens = null;
                 object usageObservation = null;
 
-                await foreach (var rawEvent in client.Messages.CreateStreaming(parameters, cancellationToken)) {
+                await foreach (var rawEvent in _client.Messages.CreateStreaming(parameters, cancellationToken)) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
                     if (rawEvent.TryPickStart(out var messageStartEvent) && messageStartEvent.Message?.Usage != null) {
@@ -1195,104 +934,104 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         };
                     }
 
-                    if (rawEvent.TryPickContentBlockDelta(out var deltaEvent)) {
+                    if (rawEvent.TryPickContentBlockStart(out var startEvent)) {
+                        if (startEvent.ContentBlock.TryPickToolUse(out var toolUseStart)) {
+                            currentToolId = toolUseStart.ID;
+                            currentToolName = toolUseStart.Name;
+                            currentToolInputBuilder.Clear();
+                        }
+                    } else if (rawEvent.TryPickContentBlockDelta(out var deltaEvent)) {
                         if (deltaEvent.Delta.TryPickText(out var textDelta)) {
-                            fullContentBuilder.Append(textDelta.Text);
-                            newContentBuilder.Append(textDelta.Text);
-                            llmResponseBuilder.Append(textDelta.Text);
-                            var newContent = newContentBuilder.ToString();
-                            if (newContent.Length > 10) {
-                                yield return newContent;
-                            }
+                            turnText.Append(textDelta.Text);
+                            yield return new LlmStreamEvent.TextDelta(textDelta.Text);
+                        } else if (deltaEvent.Delta.TryPickInputJson(out var inputJsonDelta)) {
+                            currentToolInputBuilder.Append(inputJsonDelta.PartialJson);
+                        }
+                    } else if (rawEvent.TryPickContentBlockStop(out _)) {
+                        if (currentToolId != null) {
+                            toolUseBlocks.Add((currentToolId, currentToolName, currentToolInputBuilder.ToString()));
+                            currentToolId = null;
+                            currentToolName = null;
                         }
                     }
                 }
 
-                LogPromptCachingObservation(
-                    channel,
-                    "Anthropic",
-                    modelName,
-                    promptCachingEnabled,
-                    toolDefinitionHash,
-                    stablePrefixHash,
-                    cacheBreakpointInserted,
-                    cacheCreationInputTokens,
-                    cacheReadInputTokens,
-                    usageObservation);
+                _svc.LogPromptCachingObservation(
+                    _channel, "Anthropic", _modelName, _promptCachingEnabled,
+                    _toolDefinitionHash, _stablePrefixHash, _cacheBreakpointInserted,
+                    cacheCreationInputTokens, cacheReadInputTokens, usageObservation);
 
-                string llmFullResponseText = llmResponseBuilder.ToString().Trim();
-                _logger.LogDebug("{ServiceName} raw full response (Resume Cycle {Cycle}): {Response}", ServiceName, cycle + 1, llmFullResponseText);
+                var responseText = turnText.ToString().Trim();
+                _pendingTurnText = responseText;
+                _pendingToolCalls = toolUseBlocks;
 
-                if (!string.IsNullOrWhiteSpace(llmFullResponseText)) {
-                    providerHistory.Add(new MessageParam {
-                        Role = Role.Assistant,
-                        Content = llmFullResponseText
-                    });
-                    trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = llmFullResponseText });
-                }
+                yield return new LlmStreamEvent.TurnCompleted(new LlmTurnResult {
+                    Text = responseText,
+                    ToolCalls = toolUseBlocks.Select(b => new LlmNativeToolCall {
+                        Id = b.id,
+                        Name = b.name,
+                        ArgumentsJson = string.IsNullOrWhiteSpace(b.inputJson) ? "{}" : b.inputJson
+                    }).ToList(),
+                    StreamedAny = turnText.Length > 0,
+                    UsageObservation = usageObservation
+                });
+            }
 
-                if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any()) {
-                    var firstToolCall = parsedToolCalls[0];
-                    string parsedToolName = firstToolCall.toolName;
-
-                    _logger.LogInformation("{ServiceName}: LLM requested tool (resume): {ToolName}", ServiceName, parsedToolName);
-
-                    var toolIndicator = McpToolHelper.FormatToolCallDisplay(parsedToolName, firstToolCall.arguments);
-                    newContentBuilder.Append(toolIndicator);
-                    fullContentBuilder.Append(toolIndicator);
-                    yield return newContentBuilder.ToString();
-
-                    string toolResultString;
-                    bool isError = false;
-                    try {
-                        var toolContext = new ToolContext { ChatId = snapshot.ChatId, UserId = snapshot.UserId, MessageId = snapshot.OriginalMessageId };
-                        object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, firstToolCall.arguments, toolContext);
-                        toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
-                    } catch (Exception ex) {
-                        isError = true;
-                        _logger.LogError(
-                            ex,
-                            "{ServiceName}: Error executing Anthropic XML tool {ToolName} (resume). Arguments={Arguments}, SnapshotId={SnapshotId}, ErrorSummary={ErrorSummary}",
-                            ServiceName,
-                            parsedToolName,
-                            JsonConvert.SerializeObject(firstToolCall.arguments),
-                            snapshot.SnapshotId,
-                            ex.GetLogSummary());
-                        toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
+            public void CommitAssistantTurn(string text, string reasoning, bool streamedAny) {
+                if (SupportsNativeTools) {
+                    // Native final-text turn: provider history is not extended (matches legacy behavior).
+                    if (!string.IsNullOrWhiteSpace(text)) {
+                        _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = text });
                     }
-
-                    string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
-                    string feedback = $"{feedbackPrefix}{toolResultString}]";
-
-                    providerHistory.Add(new MessageParam {
-                        Role = Role.User,
-                        Content = feedback
-                    });
-                    trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = feedback });
-                } else {
-                    yield break;
+                    return;
                 }
+                if (!string.IsNullOrWhiteSpace(text)) {
+                    _providerHistory.Add(new MessageParam { Role = Role.Assistant, Content = text });
+                }
+                _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = text });
             }
 
-            _logger.LogWarning("{ServiceName}: Max tool call cycles reached again during resume for ChatId {ChatId}.", ServiceName, snapshot.ChatId);
-            if (executionContext != null) {
-                executionContext.IterationLimitReached = true;
-                executionContext.SnapshotData = new LlmContinuationSnapshot {
-                    SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
-                    ChatId = snapshot.ChatId,
-                    OriginalMessageId = snapshot.OriginalMessageId,
-                    UserId = snapshot.UserId,
-                    ModelName = modelName,
-                    Provider = "Anthropic",
-                    ChannelId = channel.Id,
-                    LastAccumulatedContent = fullContentBuilder.ToString(),
-                    CyclesSoFar = snapshot.CyclesSoFar + maxToolCycles,
-                    ProviderHistory = trackedHistory,
-                };
+            public void CommitToolResults(IReadOnlyList<LlmToolResult> results) {
+                // Assistant message with text + tool_use blocks, then a user message with the results.
+                var assistantContentBlocks = new List<ContentBlockParam>();
+                if (!string.IsNullOrWhiteSpace(_pendingTurnText)) {
+                    assistantContentBlocks.Add(new TextBlockParam(_pendingTurnText));
+                }
+                foreach (var (id, name, inputJson) in _pendingToolCalls) {
+                    Dictionary<string, JsonElement> parsedInput;
+                    try {
+                        parsedInput = string.IsNullOrWhiteSpace(inputJson)
+                            ? new Dictionary<string, JsonElement>()
+                            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson);
+                    } catch (Exception ex) {
+                        _svc._logger.LogError(
+                            ex,
+                            "{ServiceName}: Failed to deserialize Anthropic native tool input for assistant history. ToolUseId={ToolUseId}, ToolName={ToolName}, InputJson={InputJson}, ErrorSummary={ErrorSummary}",
+                            _svc.ServiceName, id, name, inputJson, ex.GetLogSummary());
+                        parsedInput = new Dictionary<string, JsonElement>();
+                    }
+                    assistantContentBlocks.Add(new ToolUseBlockParam {
+                        ID = id,
+                        Name = name,
+                        Input = parsedInput
+                    });
+                }
+                _providerHistory.Add(new MessageParam { Role = Role.Assistant, Content = assistantContentBlocks });
+                _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = _pendingTurnText });
+
+                var toolResultBlocks = new List<ContentBlockParam>();
+                foreach (var result in results) {
+                    toolResultBlocks.Add(new ToolResultBlockParam(result.ToolCallId) {
+                        Content = result.Result,
+                        IsError = result.IsError,
+                    });
+                }
+                _providerHistory.Add(new MessageParam { Role = Role.User, Content = toolResultBlocks });
             }
+
+            public IReadOnlyList<SerializedChatMessage> GetTrackedHistory() => _trackedHistory;
         }
 
-        #endregion
 
         #region Serialization
 
