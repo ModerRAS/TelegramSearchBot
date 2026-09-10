@@ -416,86 +416,72 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 _chatSessions[ChatId] = chatSession;
             }
 
-            int maxToolCycles = Env.MaxToolCycles;
-            var currentMessageBuilder = new StringBuilder();
-            // Track history for snapshot
-            var trackedHistory = new List<SerializedChatMessage>();
             var botName = await GetBotNameAsync();
-            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = McpToolHelper.FormatSystemPrompt(botName, ChatId) });
+            var trackedHistory = new List<SerializedChatMessage> {
+                new SerializedChatMessage { Role = "system", Content = McpToolHelper.FormatSystemPrompt(botName, ChatId) }
+            };
 
-            for (int cycle = 0; cycle < maxToolCycles; cycle++) {
-                if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+            var source = new GeminiTurnSource(this, chatSession, trackedHistory);
+            var meta = new LlmToolLoopMeta {
+                ChatId = ChatId,
+                OriginalMessageId = message.MessageId,
+                UserId = message.FromUserId,
+                ModelName = modelName,
+                Provider = "Gemini",
+                ChannelId = channel.Id
+            };
+            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
+            await foreach (var item in LlmToolLoop.RunAsync(source, message.Content, toolContext, meta, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
 
-                var fullResponseBuilder = new StringBuilder();
-                trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = message.Content });
+        /// <summary>
+        /// Session-based text-protocol turn source for Gemini (ChatSession owns history).
+        /// Snapshot history is tracked manually alongside the session.
+        /// </summary>
+        private sealed class GeminiTurnSource : ILlmTurnSource {
+            private readonly GeminiService _svc;
+            private readonly ChatSession _chatSession;
+            private readonly List<SerializedChatMessage> _trackedHistory;
 
-                await foreach (var chunk in chatSession.StreamContentAsync(message.Content)) {
-                    currentMessageBuilder.Append(chunk.Text);
-                    fullResponseBuilder.Append(chunk.Text);
-                    yield return currentMessageBuilder.ToString();
-                }
-
-                string llmResponse = fullResponseBuilder.ToString().Trim();
-                _logger.LogDebug("Gemini raw response (Cycle {Cycle}): {Response}", cycle + 1, llmResponse);
-                trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = llmResponse });
-
-                if (McpToolHelper.TryParseToolCalls(llmResponse, out var toolCalls) && toolCalls.Any()) {
-                    var firstToolCall = toolCalls[0];
-                    _logger.LogInformation("Gemini requested tool: {ToolName} with args: {Args}",
-                        firstToolCall.toolName,
-                        JsonConvert.SerializeObject(firstToolCall.arguments));
-
-                    currentMessageBuilder.Append(McpToolHelper.FormatToolCallDisplay(firstToolCall.toolName, firstToolCall.arguments));
-                    yield return currentMessageBuilder.ToString();
-
-                    string toolResult;
-                    bool isError = false;
-                    try {
-                        var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-                        var result = await McpToolHelper.ExecuteRegisteredToolAsync(
-                            firstToolCall.toolName,
-                            firstToolCall.arguments,
-                            toolContext);
-                        toolResult = McpToolHelper.ConvertToolResultToString(result);
-                    } catch (Exception ex) {
-                        isError = true;
-                        _logger.LogError(
-                            ex,
-                            "{ServiceName}: Error executing Gemini XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
-                            ServiceName,
-                            firstToolCall.toolName,
-                            JsonConvert.SerializeObject(firstToolCall.arguments),
-                            ex.GetLogSummary());
-                        toolResult = $"Error executing tool {firstToolCall.toolName}: {ex.GetLogSummary()}";
-                    }
-
-                    string feedback = isError
-                        ? $"[Tool '{firstToolCall.toolName}' execution failed: {toolResult}]"
-                        : $"[Tool '{firstToolCall.toolName}' result: {toolResult}]";
-
-                    message.Content = feedback;
-                    continue;
-                }
-
-                yield break;
+            public GeminiTurnSource(GeminiService svc, ChatSession chatSession, List<SerializedChatMessage> trackedHistory) {
+                _svc = svc;
+                _chatSession = chatSession;
+                _trackedHistory = trackedHistory;
             }
 
-            _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-            if (executionContext != null) {
-                executionContext.IterationLimitReached = true;
-                executionContext.SnapshotData = new LlmContinuationSnapshot {
-                    SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
-                    ChatId = ChatId,
-                    OriginalMessageId = message.MessageId,
-                    UserId = message.FromUserId,
-                    ModelName = modelName,
-                    Provider = "Gemini",
-                    ChannelId = channel.Id,
-                    LastAccumulatedContent = currentMessageBuilder.ToString(),
-                    CyclesSoFar = maxToolCycles,
-                    ProviderHistory = trackedHistory,
-                };
+            public bool SupportsNativeTools => false;
+
+            public async IAsyncEnumerable<LlmStreamEvent> StreamTurnAsync(
+                string? userContent,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+                var turnText = new StringBuilder();
+                await foreach (var chunk in _chatSession.StreamContentAsync(userContent ?? string.Empty).WithCancellation(cancellationToken)) {
+                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+                    turnText.Append(chunk.Text);
+                    yield return new LlmStreamEvent.TextDelta(chunk.Text);
+                }
+
+                var response = turnText.ToString().Trim();
+                _trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = userContent ?? string.Empty });
+                _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = response });
+
+                yield return new LlmStreamEvent.TurnCompleted(new LlmTurnResult {
+                    Text = response,
+                    StreamedAny = turnText.Length > 0
+                });
             }
+
+            public void CommitAssistantTurn(string text, string reasoning, bool streamedAny) {
+                // Session tracks history; tracked snapshot history already updated in StreamTurnAsync.
+            }
+
+            public void CommitToolResults(IReadOnlyList<LlmToolResult> results) {
+                // Text protocol: the shared loop sends tool feedback as the next user message.
+            }
+
+            public IReadOnlyList<SerializedChatMessage> GetTrackedHistory() => _trackedHistory;
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {

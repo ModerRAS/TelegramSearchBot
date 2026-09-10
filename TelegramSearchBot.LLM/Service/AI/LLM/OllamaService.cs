@@ -172,101 +172,73 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var trackedHistory = new List<SerializedChatMessage>();
             trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = systemPrompt });
 
-            try {
-                string nextMessageToSend = message.Content;
-                int maxToolCycles = Env.MaxToolCycles;
-                var currentLlmResponseBuilder = new StringBuilder(); // Accumulates tokens for the current LLM response
-
-                for (int cycle = 0; cycle < maxToolCycles; cycle++) {
-                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                    bool receivedAnyToken = false;
-
-                    trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = nextMessageToSend });
-
-                    _logger.LogDebug("Sending to Ollama (Cycle {Cycle}): {Message}", cycle + 1, nextMessageToSend);
-                    await foreach (var token in chat.SendAsync(nextMessageToSend, cancellationToken).WithCancellation(cancellationToken)) {
-                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-                        currentLlmResponseBuilder.Append(token);
-                        receivedAnyToken = true;
-                        yield return currentLlmResponseBuilder.ToString(); // Yield current full message
-                    }
-                    string llmFullResponseText = currentLlmResponseBuilder.ToString().Trim();
-                    _logger.LogDebug("LLM raw full response (Cycle {Cycle}): {Response}", cycle + 1, llmFullResponseText);
-
-                    if (receivedAnyToken) {
-                        trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = llmFullResponseText });
-                    }
-
-                    if (!receivedAnyToken && cycle < maxToolCycles - 1 && !string.IsNullOrEmpty(nextMessageToSend)) {
-                        _logger.LogWarning("{ServiceName}: Ollama returned empty stream during tool cycle {Cycle} for input '{Input}'.", ServiceName, cycle + 1, nextMessageToSend);
-                    }
-
-                    // --- Tool Handling (using the full accumulated response text) ---
-                    if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any()) {
-                        var firstToolCall = parsedToolCalls[0];
-                        string parsedToolName = firstToolCall.toolName;
-                        Dictionary<string, string> toolArguments = firstToolCall.arguments;
-
-                        _logger.LogInformation("{ServiceName}: LLM requested tool: {ToolName} with arguments: {Arguments}", ServiceName, parsedToolName, JsonConvert.SerializeObject(toolArguments));
-                        if (parsedToolCalls.Count > 1) {
-                            _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
-                        }
-
-                        currentLlmResponseBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
-                        yield return currentLlmResponseBuilder.ToString();
-
-                        string toolResultString;
-                        bool isError = false;
-                        try {
-                            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
-                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
-                            _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
-                        } catch (Exception ex) {
-                            isError = true;
-                            _logger.LogError(
-                                ex,
-                                "{ServiceName}: Error executing Ollama XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
-                                ServiceName,
-                                parsedToolName,
-                                JsonConvert.SerializeObject(toolArguments),
-                                ex.GetLogSummary());
-                            toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
-                        }
-
-                        string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
-                        nextMessageToSend = $"{feedbackPrefix}{toolResultString}]";
-                        _logger.LogInformation("Prepared feedback for next LLM call: {Feedback}", nextMessageToSend);
-                    } else {
-                        if (string.IsNullOrWhiteSpace(llmFullResponseText) && receivedAnyToken) {
-                            _logger.LogWarning("{ServiceName}: LLM returned empty final non-tool response after trimming for ChatId {ChatId}.", ServiceName, ChatId);
-                        } else if (!receivedAnyToken && string.IsNullOrEmpty(llmFullResponseText)) {
-                            _logger.LogWarning("{ServiceName}: LLM returned empty stream and empty final non-tool response for ChatId {ChatId}.", ServiceName, ChatId);
-                        }
-                        yield break;
-                    }
-                }
-
-                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-                if (executionContext != null) {
-                    executionContext.IterationLimitReached = true;
-                    executionContext.SnapshotData = new LlmContinuationSnapshot {
-                        SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
-                        ChatId = ChatId,
-                        OriginalMessageId = message.MessageId,
-                        UserId = message.FromUserId,
-                        ModelName = modelName,
-                        Provider = "Ollama",
-                        ChannelId = channel.Id,
-                        LastAccumulatedContent = currentLlmResponseBuilder.ToString(),
-                        CyclesSoFar = maxToolCycles,
-                        ProviderHistory = trackedHistory,
-                    };
-                }
-            } finally {
-                // No cleanup needed for ToolContext
+            var source = new OllamaTurnSource(this, chat, trackedHistory);
+            var meta = new LlmToolLoopMeta {
+                ChatId = ChatId,
+                OriginalMessageId = message.MessageId,
+                UserId = message.FromUserId,
+                ModelName = modelName,
+                Provider = "Ollama",
+                ChannelId = channel.Id
+            };
+            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
+            await foreach (var item in LlmToolLoop.RunAsync(source, message.Content, toolContext, meta, executionContext, cancellationToken)) {
+                yield return item;
             }
+        }
+
+        /// <summary>
+        /// Session-based text-protocol turn source for Ollama (OllamaSharp.Chat owns history).
+        /// Snapshot history is tracked manually alongside the session.
+        /// </summary>
+        private sealed class OllamaTurnSource : ILlmTurnSource {
+            private readonly OllamaService _svc;
+            private readonly OllamaSharp.Chat _chat;
+            private readonly List<SerializedChatMessage> _trackedHistory;
+
+            public OllamaTurnSource(OllamaService svc, OllamaSharp.Chat chat, List<SerializedChatMessage> trackedHistory) {
+                _svc = svc;
+                _chat = chat;
+                _trackedHistory = trackedHistory;
+            }
+
+            public bool SupportsNativeTools => false;
+
+            public async IAsyncEnumerable<LlmStreamEvent> StreamTurnAsync(
+                string? userContent,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+                _trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = userContent ?? string.Empty });
+
+                var turnText = new StringBuilder();
+                var streamedAny = false;
+                await foreach (var token in _chat.SendAsync(userContent ?? string.Empty, cancellationToken).WithCancellation(cancellationToken)) {
+                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
+                    turnText.Append(token);
+                    streamedAny = true;
+                    yield return new LlmStreamEvent.TextDelta(token);
+                }
+
+                if (!streamedAny) {
+                    _svc._logger.LogWarning("{ServiceName}: Ollama returned an empty stream during a tool cycle.", _svc.ServiceName);
+                }
+
+                yield return new LlmStreamEvent.TurnCompleted(new LlmTurnResult {
+                    Text = turnText.ToString().Trim(),
+                    StreamedAny = streamedAny
+                });
+            }
+
+            public void CommitAssistantTurn(string text, string reasoning, bool streamedAny) {
+                if (streamedAny) {
+                    _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = text });
+                }
+            }
+
+            public void CommitToolResults(IReadOnlyList<LlmToolResult> results) {
+                // Text protocol: the shared loop sends tool feedback as the next user message.
+            }
+
+            public IReadOnlyList<SerializedChatMessage> GetTrackedHistory() => _trackedHistory;
         }
 
         // ConvertToolResultToString has been moved to McpToolHelper
