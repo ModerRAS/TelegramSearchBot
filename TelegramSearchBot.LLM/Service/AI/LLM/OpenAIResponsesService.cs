@@ -274,207 +274,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var apiKey = new ApiKeyCredential(LlmBindingSupport.ResolveApiKey(channel, binding));
             var responsesClient = new ResponsesClient(apiKey, clientOptions);
 
-            // --- Tool call loop ---
-            int maxToolCycles = Env.MaxToolCycles;
-            var currentMessageContentBuilder = new StringBuilder();
-
-            for (int cycle = 0; cycle < maxToolCycles; cycle++) {
-                if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                // Build options with input items
-                var options = new CreateResponseOptions {
-                    Model = modelName,
-                    Instructions = instructions,
-                    StreamingEnabled = true,
-                };
-                var cacheKeyAttached = false;
-                if (promptCachingEnabled) {
-                    PromptCachingHelper.ApplyOpenAiPromptCaching(options, promptCacheKey, PromptCachingHelper.OpenAiDefaultPromptCacheRetention);
-                    cacheKeyAttached = true;
-                }
-                foreach (var tool in responseTools) {
-                    options.Tools.Add(tool);
-                }
-                foreach (var item in inputItems) {
-                    options.InputItems.Add(item);
-                }
-
-                // Accumulators for streaming
-                var textBuilder = new StringBuilder();
-                var reasoningBuilder = new StringBuilder();
-                var toolCallAccums = new Dictionary<int, ResponsesToolCallAccumulator>();
-                ResponseResult completedResult = null;
-
-                bool streamingError = false;
-                string streamingErrorMessage = null;
-
-                // Stream the response
-                await foreach (var update in responsesClient.CreateResponseStreamingAsync(options, cancellationToken).WithCancellation(cancellationToken)) {
-                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                    try {
-                        ProcessStreamingUpdate(update, textBuilder, currentMessageContentBuilder, reasoningBuilder, toolCallAccums, ref completedResult);
-                    } catch (OperationCanceledException) {
-                        throw;
-                    } catch (Exception ex) {
-                        _logger.LogError(ex, "{ServiceName}: Error during streaming update (Cycle {Cycle})", ServiceName, cycle);
-                        streamingError = true;
-                        streamingErrorMessage = ex.Message;
-                        break;
-                    }
-
-                    // Yield progressive text outside try-catch
-                    if (currentMessageContentBuilder.Length > 10) {
-                        var text = currentMessageContentBuilder.ToString();
-                        if (text.Length > 10) {
-                            yield return text;
-                        }
-                    }
-                }
-
-                if (streamingError) {
-                    yield return $"\n[Error: {streamingErrorMessage}]";
-                    yield break;
-                }
-
-                if (shouldObservePromptCaching) {
-                    LogPromptCachingObservation(
-                        "OpenAIResponses",
-                        channel,
-                        modelName,
-                        promptCachingEnabled,
-                        toolDefinitionHash,
-                        stablePrefixHash,
-                        promptCacheKey,
-                        completedResult?.Usage,
-                        cacheKeyAttached);
-                }
-
-                string responseText = textBuilder.ToString().Trim();
-                string reasoningContent = reasoningBuilder.ToString().Trim();
-
-                // --- Check if we have completed response with tool calls ---
-                var completedFuncCalls = new List<FunctionCallResponseItem>();
-                if (completedResult?.OutputItems != null) {
-                    foreach (var outputItem in completedResult.OutputItems) {
-                        if (outputItem is FunctionCallResponseItem fcItem
-                            && !string.IsNullOrWhiteSpace(fcItem.CallId)
-                            && !string.IsNullOrWhiteSpace(fcItem.FunctionName)) {
-                            completedFuncCalls.Add(fcItem);
-                        }
-                    }
-                }
-
-                if (completedFuncCalls.Any()) {
-                    // --- Handle tool calls ---
-                    // Add assistant's text response to history (if any)
-                    if (!string.IsNullOrWhiteSpace(responseText)) {
-                        inputItems.Add(ResponseItem.CreateAssistantMessageItem(responseText));
-                    }
-
-                    var toolIndicators = new StringBuilder();
-                    foreach (var funcCall in completedFuncCalls) {
-                        string rawCallId = funcCall.CallId;
-                        string rawName = funcCall.FunctionName;
-                        string rawArgsJson = funcCall.FunctionArguments?.ToString() ?? "{}";
-                        string callId = rawCallId;
-                        string name = rawName;
-                        string argsJson = rawArgsJson;
-
-                        // Normalize
-                        callId = OpenAIService.NormalizeToolCallId(callId);
-                        name = OpenAIService.NormalizeToolCallName(name);
-                        argsJson = OpenAIService.NormalizeToolCallArguments(argsJson);
-                        _logger.LogDebug(
-                            "{ServiceName}: Responses API function call metadata normalized. RawCallId={RawCallId}, CallId={CallId}, RawName={RawName}, Name={Name}, RawArguments={RawArguments}, Arguments={Arguments}",
-                            ServiceName,
-                            rawCallId,
-                            callId,
-                            rawName,
-                            name,
-                            rawArgsJson,
-                            argsJson);
-
-                        // Add function call item to history
-                        try {
-                            inputItems.Add(ResponseItem.CreateFunctionCallItem(
-                                callId,
-                                name,
-                                BinaryData.FromString(argsJson)));
-                        } catch (Exception ex) {
-                            _logger.LogError(
-                                ex,
-                                "{ServiceName}: Failed to create Responses API function call item. CallId={CallId}, ToolName={ToolName}, Arguments={Arguments}, ErrorSummary={ErrorSummary}",
-                                ServiceName,
-                                callId,
-                                name,
-                                argsJson,
-                                ex.GetLogSummary());
-                            throw;
-                        }
-
-                        var argsDict = OpenAIService.DeserializeToolArgumentsForDisplay(argsJson);
-                        toolIndicators.Append(McpToolHelper.FormatToolCallDisplay(name, argsDict));
-
-                        // Execute tool
-                        _logger.LogInformation(
-                            "{ServiceName}: Responses API tool call parsed; executing now. Tool={ToolName}, CallId={CallId}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Arguments={Arguments}",
-                            ServiceName,
-                            name,
-                            callId,
-                            ChatId,
-                            message.FromUserId,
-                            message.MessageId,
-                            argsJson);
-
-                        string toolResultString;
-                        try {
-                            var toolContext = new ToolContext {
-                                ChatId = ChatId,
-                                UserId = message.FromUserId,
-                                MessageId = message.MessageId
-                            };
-                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(name, argsDict, toolContext);
-                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
-                            _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result length: {Length}",
-                                ServiceName, name, toolResultString.Length);
-                        } catch (Exception ex) {
-                            _logger.LogError(
-                                ex,
-                                "{ServiceName}: Error executing Responses API tool {ToolName}. CallId={CallId}, Arguments={Arguments}, ErrorSummary={ErrorSummary}",
-                                ServiceName,
-                                name,
-                                callId,
-                                argsJson,
-                                ex.GetLogSummary());
-                            toolResultString = $"Error executing tool {name}: {ex.GetLogSummary()}";
-                        }
-
-                        // Add function call output to history
-                        inputItems.Add(ResponseItem.CreateFunctionCallOutputItem(callId, toolResultString));
-
-                        _logger.LogInformation("{ServiceName}: Added function call output for {ToolName}", ServiceName, name);
-                    }
-
-                    currentMessageContentBuilder.Append(toolIndicators.ToString());
-                    yield return currentMessageContentBuilder.ToString();
-
-                    // Continue loop for next LLM call
-                    continue;
-                }
-
-                // --- Regular text response (no tool calls) ---
-                if (!string.IsNullOrWhiteSpace(responseText)) {
-                    yield return responseText;
-                }
-                yield break;
-            }
-
-            // --- Max tool call cycles reached ---
-            _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-            if (executionContext != null) {
-                executionContext.IterationLimitReached = true;
-                executionContext.SnapshotData = BuildSnapshot(ChatId, message, modelName, channel, currentMessageContentBuilder.ToString(), maxToolCycles, inputItems);
+            var source = new ResponsesTurnSource(
+                this, responsesClient, responseTools, instructions, inputItems,
+                shouldObservePromptCaching, promptCachingEnabled, toolDefinitionHash, stablePrefixHash, promptCacheKey,
+                modelName, channel);
+            var meta = new LlmToolLoopMeta {
+                ChatId = ChatId,
+                OriginalMessageId = message.MessageId,
+                UserId = message.FromUserId,
+                ModelName = modelName,
+                Provider = "OpenAIResponses",
+                ChannelId = channel.Id
+            };
+            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
+            await foreach (var item in LlmToolLoop.RunAsync(source, null, toolContext, meta, executionContext, cancellationToken)) {
+                yield return item;
             }
         }
 
@@ -552,197 +366,204 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var apiKey = new ApiKeyCredential(LlmBindingSupport.ResolveApiKey(channel, binding));
             var responsesClient = new ResponsesClient(apiKey, clientOptions);
 
-            var fullContentBuilder = new StringBuilder(snapshot.LastAccumulatedContent ?? "");
-            var newContentBuilder = new StringBuilder();
+            var source = new ResponsesTurnSource(
+                this, responsesClient, responseTools, instructions, inputItems,
+                shouldObservePromptCaching, promptCachingEnabled, toolDefinitionHash, stablePrefixHash, promptCacheKey,
+                modelName, channel);
+            var meta = new LlmToolLoopMeta {
+                ChatId = snapshot.ChatId,
+                OriginalMessageId = snapshot.OriginalMessageId,
+                UserId = snapshot.UserId,
+                ModelName = modelName,
+                Provider = "OpenAIResponses",
+                ChannelId = channel.Id,
+                BaseCycles = snapshot.CyclesSoFar,
+                InitialContent = snapshot.LastAccumulatedContent ?? string.Empty
+            };
+            var toolContext = new ToolContext { ChatId = snapshot.ChatId, UserId = snapshot.UserId, MessageId = snapshot.OriginalMessageId };
+            await foreach (var item in LlmToolLoop.RunAsync(source, null, toolContext, meta, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
 
-            try {
-                int maxToolCycles = Env.MaxToolCycles;
+        /// <summary>
+        /// Per-run turn source for the OpenAI Responses API. Owns the input item list,
+        /// streams one turn per call, and surfaces completed function calls to the shared loop.
+        /// </summary>
+        private sealed class ResponsesTurnSource : ILlmTurnSource {
+            private readonly OpenAIResponsesService _svc;
+            private readonly ResponsesClient _responsesClient;
+            private readonly List<FunctionTool> _responseTools;
+            private readonly string _instructions;
+            private readonly List<ResponseItem> _inputItems;
+            private readonly bool _shouldObservePromptCaching;
+            private readonly bool _promptCachingEnabled;
+            private readonly string _toolDefinitionHash;
+            private readonly string _stablePrefixHash;
+            private readonly string _promptCacheKey;
+            private readonly string _modelName;
+            private readonly LLMChannel _channel;
 
-                for (int cycle = 0; cycle < maxToolCycles; cycle++) {
+            public ResponsesTurnSource(
+                OpenAIResponsesService svc, ResponsesClient responsesClient, List<FunctionTool> responseTools,
+                string instructions, List<ResponseItem> inputItems,
+                bool shouldObservePromptCaching, bool promptCachingEnabled,
+                string toolDefinitionHash, string stablePrefixHash, string promptCacheKey,
+                string modelName, LLMChannel channel) {
+                _svc = svc;
+                _responsesClient = responsesClient;
+                _responseTools = responseTools;
+                _instructions = instructions;
+                _inputItems = inputItems;
+                _shouldObservePromptCaching = shouldObservePromptCaching;
+                _promptCachingEnabled = promptCachingEnabled;
+                _toolDefinitionHash = toolDefinitionHash;
+                _stablePrefixHash = stablePrefixHash;
+                _promptCacheKey = promptCacheKey;
+                _modelName = modelName;
+                _channel = channel;
+            }
+
+            public bool SupportsNativeTools => true;
+
+            public async IAsyncEnumerable<LlmStreamEvent> StreamTurnAsync(
+                string? userContent,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+                var options = new CreateResponseOptions {
+                    Model = _modelName,
+                    Instructions = _instructions,
+                    StreamingEnabled = true,
+                };
+                var cacheKeyAttached = false;
+                if (_promptCachingEnabled) {
+                    PromptCachingHelper.ApplyOpenAiPromptCaching(options, _promptCacheKey, PromptCachingHelper.OpenAiDefaultPromptCacheRetention);
+                    cacheKeyAttached = true;
+                }
+                foreach (var tool in _responseTools) {
+                    options.Tools.Add(tool);
+                }
+                foreach (var item in _inputItems) {
+                    options.InputItems.Add(item);
+                }
+
+                var textBuilder = new StringBuilder();
+                var reasoningBuilder = new StringBuilder();
+                var uiBuilder = new StringBuilder();
+                var toolCallAccums = new Dictionary<int, ResponsesToolCallAccumulator>();
+                ResponseResult completedResult = null;
+                var lastUiLength = 0;
+                var streamedAny = false;
+                var streamingError = false;
+                string streamingErrorMessage = null;
+
+                await foreach (var update in _responsesClient.CreateResponseStreamingAsync(options, cancellationToken).WithCancellation(cancellationToken)) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
-                    var options = new CreateResponseOptions {
-                        Model = modelName,
-                        Instructions = instructions,
-                        StreamingEnabled = true,
-                    };
-                    var cacheKeyAttached = false;
-                    if (promptCachingEnabled) {
-                        PromptCachingHelper.ApplyOpenAiPromptCaching(options, promptCacheKey, PromptCachingHelper.OpenAiDefaultPromptCacheRetention);
-                        cacheKeyAttached = true;
-                    }
-                    foreach (var tool in responseTools) {
-                        options.Tools.Add(tool);
-                    }
-                    foreach (var item in inputItems) {
-                        options.InputItems.Add(item);
+                    try {
+                        OpenAIResponsesService.ProcessStreamingUpdate(update, textBuilder, uiBuilder, reasoningBuilder, toolCallAccums, ref completedResult);
+                    } catch (OperationCanceledException) {
+                        throw;
+                    } catch (Exception ex) {
+                        _svc._logger.LogError(ex, "{ServiceName}: Error during streaming update", _svc.ServiceName);
+                        streamingError = true;
+                        streamingErrorMessage = ex.Message;
+                        break;
                     }
 
-                    var textBuilder = new StringBuilder();
-                    var toolCallAccums = new Dictionary<int, ResponsesToolCallAccumulator>();
-                    ResponseResult completedResult = null;
-
-                    bool resumeStreamingError = false;
-
-                    await foreach (var update in responsesClient.CreateResponseStreamingAsync(options, cancellationToken).WithCancellation(cancellationToken)) {
-                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                        try {
-                            ProcessResumeStreamingUpdate(update, textBuilder, fullContentBuilder, newContentBuilder, toolCallAccums, ref completedResult);
-                        } catch (OperationCanceledException) {
-                            throw;
-                        } catch (Exception ex) {
-                            _logger.LogError(ex, "{ServiceName}: Error during resume streaming call (Cycle {Cycle})", ServiceName, cycle);
-                            resumeStreamingError = true;
-                            break;
-                        }
-
-                        // Yield progressive text outside try-catch
-                        if (newContentBuilder.Length > 10) {
-                            yield return newContentBuilder.ToString();
-                        }
+                    if (uiBuilder.Length > lastUiLength) {
+                        var delta = uiBuilder.ToString(lastUiLength, uiBuilder.Length - lastUiLength);
+                        lastUiLength = uiBuilder.Length;
+                        streamedAny = true;
+                        yield return new LlmStreamEvent.TextDelta(delta);
                     }
+                }
 
-                    if (resumeStreamingError) {
-                        yield break;
-                    }
+                if (_shouldObservePromptCaching) {
+                    _svc.LogPromptCachingObservation(
+                        "OpenAIResponses",
+                        _channel,
+                        _modelName,
+                        _promptCachingEnabled,
+                        _toolDefinitionHash,
+                        _stablePrefixHash,
+                        _promptCacheKey,
+                        completedResult?.Usage,
+                        cacheKeyAttached);
+                }
 
-                    if (shouldObservePromptCaching) {
-                        LogPromptCachingObservation(
-                            "OpenAIResponses",
-                            channel,
-                            modelName,
-                            promptCachingEnabled,
-                            toolDefinitionHash,
-                            stablePrefixHash,
-                            promptCacheKey,
-                            completedResult?.Usage,
-                            cacheKeyAttached);
-                    }
+                var responseText = textBuilder.ToString().Trim();
+                var reasoningContent = reasoningBuilder.ToString().Trim();
+                var toolCalls = new List<LlmNativeToolCall>();
 
-                    string responseText = textBuilder.ToString().Trim();
-
-                    // Check for tool calls
-                    var completedFuncCalls = new List<FunctionCallResponseItem>();
-                    if (completedResult?.OutputItems != null) {
-                        foreach (var outputItem in completedResult.OutputItems) {
-                            if (outputItem is FunctionCallResponseItem fcItem
-                                && !string.IsNullOrWhiteSpace(fcItem.CallId)
-                                && !string.IsNullOrWhiteSpace(fcItem.FunctionName)) {
-                                completedFuncCalls.Add(fcItem);
-                            }
-                        }
-                    }
-
-                    if (completedFuncCalls.Any()) {
-                        if (!string.IsNullOrWhiteSpace(responseText)) {
-                            inputItems.Add(ResponseItem.CreateAssistantMessageItem(responseText));
-                        }
-
-                        foreach (var funcCall in completedFuncCalls) {
-                            string rawCallId = funcCall.CallId;
-                            string rawName = funcCall.FunctionName;
-                            string rawArgsJson = funcCall.FunctionArguments?.ToString() ?? "{}";
-                            string callId = OpenAIService.NormalizeToolCallId(rawCallId);
-                            string name = OpenAIService.NormalizeToolCallName(rawName);
-                            string argsJson = OpenAIService.NormalizeToolCallArguments(rawArgsJson);
-                            _logger.LogDebug(
-                                "{ServiceName}: Responses API resume function call metadata normalized. RawCallId={RawCallId}, CallId={CallId}, RawName={RawName}, Name={Name}, RawArguments={RawArguments}, Arguments={Arguments}",
-                                ServiceName,
-                                rawCallId,
-                                callId,
-                                rawName,
-                                name,
-                                rawArgsJson,
-                                argsJson);
-
-                            try {
-                                inputItems.Add(ResponseItem.CreateFunctionCallItem(
-                                    callId, name,
-                                    BinaryData.FromString(argsJson)));
-                            } catch (Exception ex) {
-                                _logger.LogError(
-                                    ex,
-                                    "{ServiceName}: Failed to create Responses API function call item during resume. CallId={CallId}, ToolName={ToolName}, Arguments={Arguments}, SnapshotId={SnapshotId}, ErrorSummary={ErrorSummary}",
-                                    ServiceName,
-                                    callId,
-                                    name,
-                                    argsJson,
-                                    snapshot.SnapshotId,
-                                    ex.GetLogSummary());
-                                throw;
-                            }
-
-                            var argsDict = OpenAIService.DeserializeToolArgumentsForDisplay(argsJson);
-
-                            string toolResultString;
-                            try {
-                                _logger.LogInformation(
-                                    "{ServiceName}: Responses API tool call parsed during resume; executing now. Tool={ToolName}, CallId={CallId}, ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}, Arguments={Arguments}",
-                                    ServiceName,
-                                    name,
-                                    callId,
-                                    snapshot.ChatId,
-                                    snapshot.UserId,
-                                    snapshot.OriginalMessageId,
-                                    argsJson);
-                                var toolContext = new ToolContext {
-                                    ChatId = snapshot.ChatId,
-                                    UserId = snapshot.UserId,
-                                    MessageId = snapshot.OriginalMessageId
-                                };
-                                object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(name, argsDict, toolContext);
-                                toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
-                            } catch (Exception ex) {
-                                _logger.LogError(
-                                    ex,
-                                    "{ServiceName}: Error executing Responses API tool {ToolName} (resume). CallId={CallId}, Arguments={Arguments}, SnapshotId={SnapshotId}, ErrorSummary={ErrorSummary}",
-                                    ServiceName,
-                                    name,
-                                    callId,
-                                    argsJson,
-                                    snapshot.SnapshotId,
-                                    ex.GetLogSummary());
-                                toolResultString = $"Error executing tool {name}: {ex.GetLogSummary()}.";
-                            }
-
-                            var toolIndicator = McpToolHelper.FormatToolCallDisplay(name, argsDict);
-                            newContentBuilder.Append(toolIndicator);
-                            fullContentBuilder.Append(toolIndicator);
-                            yield return newContentBuilder.ToString();
-
-                            inputItems.Add(ResponseItem.CreateFunctionCallOutputItem(callId, toolResultString));
-                        }
-                        continue;
-                    }
-
-                    // No tool calls - yield final content
-                    if (!string.IsNullOrWhiteSpace(responseText)) {
-                        yield return newContentBuilder.ToString();
-                    }
+                if (streamingError) {
+                    yield return new LlmStreamEvent.TurnCompleted(new LlmTurnResult {
+                        Text = $"{responseText}\n[Error: {streamingErrorMessage}]",
+                        StreamedAny = streamedAny
+                    });
                     yield break;
                 }
 
-                // Max cycles reached again
-                _logger.LogWarning("{ServiceName}: Max tool call cycles reached again during resume for ChatId {ChatId}.", ServiceName, snapshot.ChatId);
-                if (executionContext != null) {
-                    executionContext.IterationLimitReached = true;
-                    executionContext.SnapshotData = new LlmContinuationSnapshot {
-                        SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
-                        SnapshotId = snapshot.SnapshotId,
-                        ChatId = snapshot.ChatId,
-                        OriginalMessageId = snapshot.OriginalMessageId,
-                        UserId = snapshot.UserId,
-                        ModelName = modelName,
-                        Provider = "OpenAIResponses",
-                        ChannelId = channel.Id,
-                        LastAccumulatedContent = fullContentBuilder.ToString(),
-                        CyclesSoFar = snapshot.CyclesSoFar + maxToolCycles,
-                        ProviderHistory = SerializeInputItems(inputItems),
-                    };
+                var completedFuncCalls = new List<FunctionCallResponseItem>();
+                if (completedResult?.OutputItems != null) {
+                    foreach (var outputItem in completedResult.OutputItems) {
+                        if (outputItem is FunctionCallResponseItem fcItem
+                            && !string.IsNullOrWhiteSpace(fcItem.CallId)
+                            && !string.IsNullOrWhiteSpace(fcItem.FunctionName)) {
+                            completedFuncCalls.Add(fcItem);
+                        }
+                    }
                 }
-            } finally {
-                // No cleanup needed
+
+                if (completedFuncCalls.Any()) {
+                    // Assistant text (if any) + function call items enter history at commit time.
+                    foreach (var funcCall in completedFuncCalls) {
+                        var callId = OpenAIService.NormalizeToolCallId(funcCall.CallId);
+                        var name = OpenAIService.NormalizeToolCallName(funcCall.FunctionName);
+                        var argsJson = OpenAIService.NormalizeToolCallArguments(funcCall.FunctionArguments?.ToString() ?? "{}");
+                        toolCalls.Add(new LlmNativeToolCall {
+                            Id = callId,
+                            Name = name,
+                            ArgumentsJson = argsJson
+                        });
+                    }
+                    _pendingAssistantText = responseText;
+                } else {
+                    _pendingAssistantText = null;
+                    if (!string.IsNullOrWhiteSpace(responseText)) {
+                        _inputItems.Add(ResponseItem.CreateAssistantMessageItem(responseText));
+                    }
+                }
+
+                yield return new LlmStreamEvent.TurnCompleted(new LlmTurnResult {
+                    Text = responseText,
+                    Reasoning = reasoningContent,
+                    ToolCalls = toolCalls,
+                    StreamedAny = streamedAny
+                });
+            }
+
+            private string _pendingAssistantText;
+
+            public void CommitAssistantTurn(string text, string reasoning, bool streamedAny) {
+                // Final text was already appended to input items during StreamTurnAsync.
+            }
+
+            public void CommitToolResults(IReadOnlyList<LlmToolResult> results) {
+                if (!string.IsNullOrWhiteSpace(_pendingAssistantText)) {
+                    _inputItems.Add(ResponseItem.CreateAssistantMessageItem(_pendingAssistantText));
+                }
+                foreach (var result in results) {
+                    _inputItems.Add(ResponseItem.CreateFunctionCallItem(
+                        result.ToolCallId,
+                        result.Name,
+                        BinaryData.FromString("{}")));
+                    _inputItems.Add(ResponseItem.CreateFunctionCallOutputItem(result.ToolCallId, result.Result));
+                }
+                _pendingAssistantText = null;
+            }
+
+            public IReadOnlyList<SerializedChatMessage> GetTrackedHistory() {
+                return OpenAIResponsesService.SerializeInputItems(_inputItems);
             }
         }
 

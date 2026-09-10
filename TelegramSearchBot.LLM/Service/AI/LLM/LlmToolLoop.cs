@@ -82,6 +82,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             results.Add(new LlmToolResult {
                                 ToolCallId = call.Id,
                                 Name = call.Name,
+                                ArgumentsJson = call.ArgumentsJson,
                                 Result = resultString,
                                 IsError = isError
                             });

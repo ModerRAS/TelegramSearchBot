@@ -30,6 +30,7 @@ namespace TelegramSearchBot.Model.AI {
     public sealed class LlmToolResult {
         public string ToolCallId { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public string ArgumentsJson { get; set; } = "{}";
         public string Result { get; set; } = string.Empty;
         public bool IsError { get; set; }
     }
