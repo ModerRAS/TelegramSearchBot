@@ -20,6 +20,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly Mock<ILogger<ModelCapabilityService>> _loggerMock;
         private readonly Mock<IServiceProvider> _serviceProviderMock;
+        private readonly Mock<OpenAIService> _openAIServiceMock;
         private readonly ModelCapabilityService _service;
 
         public ModelCapabilityServiceTests() {
@@ -29,6 +30,15 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             _dbContext = new DataDbContext(options);
             _loggerMock = new Mock<ILogger<ModelCapabilityService>>();
             _serviceProviderMock = new Mock<IServiceProvider>();
+
+            var messageExtensionServiceMock = new Mock<IMessageExtensionService>();
+            _openAIServiceMock = new Mock<OpenAIService>(
+                _dbContext,
+                new Mock<ILogger<OpenAIService>>().Object,
+                messageExtensionServiceMock.Object,
+                new Mock<IHttpClientFactory>().Object);
+            _serviceProviderMock.Setup(sp => sp.GetService(typeof(OpenAIService)))
+                .Returns(_openAIServiceMock.Object);
 
             _service = new ModelCapabilityService(
                 _loggerMock.Object,
@@ -406,6 +416,112 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         public async Task GetModelsByCapability_NoMatches_ReturnsEmpty() {
             var result = await _service.GetModelsByCapability("nonexistent");
             Assert.Empty(result);
+        }
+
+        // ===== Phase 3: metadata 不创建/不复活授权行（blueprint §四.6） =====
+
+        [Fact]
+        public async Task UpdateChannelModelCapabilities_MetadataDoesNotCreateRow() {
+            // Arrange: 渠道存在，但没有任何模型行；metadata 返回 phantom-model
+            var channel = new LLMChannel {
+                Name = "openai",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
+            };
+            _dbContext.LLMChannels.Add(channel);
+            await _dbContext.SaveChangesAsync();
+
+            _openAIServiceMock.Setup(s => s.GetAllModelsWithCapabilities(It.IsAny<LLMChannel>()))
+                .ReturnsAsync(new List<ModelWithCapabilities> {
+                    new ModelWithCapabilities { ModelName = "phantom-model" }
+                });
+
+            // Act
+            var result = await _service.UpdateChannelModelCapabilities(channel.Id);
+
+            // Assert: 不创建新行、不产生能力记录
+            Assert.True(result);
+            Assert.Empty(await _dbContext.ChannelsWithModel.ToListAsync());
+            Assert.Empty(await _dbContext.ModelCapabilities.ToListAsync());
+        }
+
+        [Fact]
+        public async Task UpdateChannelModelCapabilities_MetadataDoesNotResurrect() {
+            // Arrange: 已软删除的模型行，metadata 返回同名模型
+            var channel = new LLMChannel {
+                Name = "openai",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
+            };
+            _dbContext.LLMChannels.Add(channel);
+            await _dbContext.SaveChangesAsync();
+
+            var cwm = new ChannelWithModel {
+                ModelName = "gpt-4o",
+                LLMChannelId = channel.Id,
+                IsDeleted = true
+            };
+            _dbContext.ChannelsWithModel.Add(cwm);
+            await _dbContext.SaveChangesAsync();
+
+            var modelWithCaps = new ModelWithCapabilities { ModelName = "gpt-4o" };
+            modelWithCaps.SetCapability("function_calling", "true");
+            _openAIServiceMock.Setup(s => s.GetAllModelsWithCapabilities(It.IsAny<LLMChannel>()))
+                .ReturnsAsync(new List<ModelWithCapabilities> { modelWithCaps });
+
+            // Act
+            var result = await _service.UpdateChannelModelCapabilities(channel.Id);
+
+            // Assert: 行保持已删除，且未写入能力
+            Assert.True(result);
+            var loaded = await _dbContext.ChannelsWithModel.SingleAsync();
+            Assert.True(loaded.IsDeleted);
+            Assert.Empty(await _dbContext.ModelCapabilities.ToListAsync());
+        }
+
+        [Fact]
+        public async Task UpdateChannelModelCapabilities_MetadataMergesCaseInsensitive() {
+            // Arrange: 已存在的非删除行 gpt-4o；metadata 以 GPT-4O 返回 → 忽略大小写合并
+            var channel = new LLMChannel {
+                Name = "openai",
+                Gateway = "gw",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 1
+            };
+            _dbContext.LLMChannels.Add(channel);
+            await _dbContext.SaveChangesAsync();
+
+            var cwm = new ChannelWithModel {
+                ModelName = "gpt-4o",
+                LLMChannelId = channel.Id,
+                IsDeleted = false
+            };
+            _dbContext.ChannelsWithModel.Add(cwm);
+            await _dbContext.SaveChangesAsync();
+
+            var modelWithCaps = new ModelWithCapabilities { ModelName = "GPT-4O" };
+            modelWithCaps.SetCapability("function_calling", "true");
+            _openAIServiceMock.Setup(s => s.GetAllModelsWithCapabilities(It.IsAny<LLMChannel>()))
+                .ReturnsAsync(new List<ModelWithCapabilities> { modelWithCaps });
+
+            // Act
+            var result = await _service.UpdateChannelModelCapabilities(channel.Id);
+
+            // Assert: 能力合并到现有行
+            Assert.True(result);
+            var caps = await _dbContext.ModelCapabilities.ToListAsync();
+            Assert.Single(caps);
+            Assert.Equal(cwm.Id, caps[0].ChannelWithModelId);
+            Assert.Equal("function_calling", caps[0].CapabilityName);
+            Assert.Equal("true", caps[0].CapabilityValue);
         }
     }
 }

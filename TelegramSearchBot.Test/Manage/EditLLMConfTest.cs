@@ -111,6 +111,8 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync((int id) => new LLMChannel { Id = id, Name = "Test Channel", Provider = LLMProvider.OpenAI });
             helperMock.Setup(h => h.RefreshAllChannel())
                 .ReturnsAsync(2);
+            helperMock.Setup(h => h.GetModelsByChannelId(It.IsAny<long>()))
+                .ReturnsAsync(new List<string>());
 
             _service = new EditLLMConfService(
                 helperMock.Object,
@@ -332,6 +334,9 @@ namespace TelegramSearchBot.Test.Manage {
             });
             await _context.SaveChangesAsync();
 
+            helperMock.Setup(h => h.GetModelsByChannelId(1))
+                .ReturnsAsync(new List<string> { "model1" });
+
             var stateKey = $"llmconf:{chatId}:state";
 
             // Setup state transitions
@@ -352,6 +357,44 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.True(result2.Item1);
             Assert.Contains("渠道 Test Channel 下的模型列表：", result2.Item2);
             Assert.Contains("- model1", result2.Item2);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_ViewModels_MultiBindingDisplay() {
+            // Arrange: 同模型多 binding 的管理展示 `model [channel/binding/protocol]`（格式由 GetModelsByChannelId 提供）
+            long chatId = 456;
+            var channel = new LLMChannel {
+                Id = 2,
+                Name = "Test Channel",
+                Gateway = "http://test.com",
+                ApiKey = "test-key",
+                Provider = LLMProvider.OpenAI
+            };
+            await _context.LLMChannels.AddAsync(channel);
+            await _context.SaveChangesAsync();
+
+            helperMock.Setup(h => h.GetModelsByChannelId(2))
+                .ReturnsAsync(new List<string> {
+                    "gpt-4o [Test Channel/1/OpenAIChat]",
+                    "gpt-4o [Test Channel/2/OpenAIResponses]"
+                });
+
+            var stateKey = $"llmconf:{chatId}:state";
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)
+                .ReturnsAsync("viewing_model_select_channel");
+
+            helperMock.Setup(h => h.GetAllChannels())
+                .ReturnsAsync(new List<LLMChannel> { channel });
+
+            // Act & Assert
+            var result1 = await _service.ExecuteAsync("查看模型", chatId);
+            Assert.True(result1.Item1);
+            var result2 = await _service.ExecuteAsync("2", chatId);
+            Assert.True(result2.Item1);
+            Assert.Contains("渠道 Test Channel 下的模型列表：", result2.Item2);
+            Assert.Contains("- gpt-4o [Test Channel/1/OpenAIChat]", result2.Item2);
+            Assert.Contains("- gpt-4o [Test Channel/2/OpenAIResponses]", result2.Item2);
         }
 
         [Fact]

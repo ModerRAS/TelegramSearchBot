@@ -24,5 +24,10 @@ namespace TelegramSearchBot.Model.Data {
         public int Priority { get; set; }
 
         public virtual ICollection<ChannelWithModel> Models { get; set; }
+
+        /// <summary>
+        /// 该 channel 的 API 绑定（endpoint/协议/认证）。至多一条 IsDefault=true。
+        /// </summary>
+        public virtual ICollection<LLMApiBinding> Bindings { get; set; } = new List<LLMApiBinding>();
     }
 }

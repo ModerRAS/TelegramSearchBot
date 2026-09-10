@@ -127,6 +127,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
                                                         LlmExecutionContext executionContext,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, null, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+                                                        LLMApiBinding binding,
+                                                        LlmExecutionContext executionContext,
+                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
             modelName = modelName ?? Env.OllamaModelName;
             if (string.IsNullOrWhiteSpace(modelName)) {
@@ -134,7 +143,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 yield return $"Error: {ServiceName} model name is not configured.";
                 yield break;
             }
-            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway)) {
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
                 _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
                 yield return $"Error: {ServiceName} channel/gateway is not configured.";
                 yield break;
@@ -142,7 +152,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             // --- Client and Model Setup ---
             HttpClient httpClient = _httpClientFactory?.CreateClient("OllamaClient") ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(channel.Gateway);
+            httpClient.BaseAddress = new Uri(endpoint);
             var ollama = new OllamaApiClient(httpClient, modelName);
 
             if (!await CheckAndPullModelAsync(ollama, modelName)) {
@@ -279,6 +289,32 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
+        public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel, LLMApiBinding binding) {
+            if (channel == null) return Enumerable.Empty<string>();
+            if (binding == null) return await GetAllModels(channel);
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (string.IsNullOrWhiteSpace(endpoint)) {
+                return Enumerable.Empty<string>();
+            }
+
+            try {
+                var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
+                httpClient.BaseAddress = new Uri(endpoint);
+                var ollama = new OllamaApiClient(httpClient);
+
+                var models = await ollama.ListLocalModelsAsync();
+                return models.Select(m => m.Name);
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Error getting Ollama models");
+                return Enumerable.Empty<string>();
+            }
+        }
+
+        public async Task<bool> IsHealthyAsync(LLMChannel channel, LLMApiBinding binding) {
+            var models = await GetAllModels(channel, binding);
+            return models.Any();
+        }
+
         /// <summary>
         /// 获取Ollama模型及其能力信息
         /// </summary>
@@ -402,12 +438,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {
+            return await GenerateEmbeddingsAsync(text, modelName, channel, null);
+        }
+
+        public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel, LLMApiBinding binding) {
             if (string.IsNullOrWhiteSpace(modelName)) {
                 modelName = "bge-m3";
             }
 
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
+                _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
+                throw new InvalidOperationException($"Error: {ServiceName} channel/gateway is not configured.");
+            }
+
             var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(channel.Gateway);
+            httpClient.BaseAddress = new Uri(endpoint);
             var ollama = new OllamaApiClient(httpClient, modelName);
 
             if (!await CheckAndPullModelAsync(ollama, modelName)) {
@@ -429,14 +475,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt = null) {
+            return await AnalyzeImageAsync(photoPath, modelName, channel, null, prompt);
+        }
+
+        public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, LLMApiBinding binding, string prompt = null) {
             if (string.IsNullOrWhiteSpace(modelName)) {
                 modelName = "gemma3:27b";
             }
 
             prompt = string.IsNullOrWhiteSpace(prompt) ? GeneralLLMService.DefaultAltPhotoPrompt : prompt;
 
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
+                _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
+                return $"Error: {ServiceName} channel/gateway is not configured.";
+            }
+
             var httpClient = _httpClientFactory?.CreateClient() ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(channel.Gateway);
+            httpClient.BaseAddress = new Uri(endpoint);
             var ollama = new OllamaApiClient(httpClient, modelName);
             ollama.SelectedModel = modelName;
             var chat = new Chat(ollama);

@@ -78,6 +78,20 @@ namespace TelegramSearchBot.Model {
                 .HasForeignKey(ti => ti.TodoListId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // 配置 API 绑定：channel 一对多 bindings；模型可选关联 binding
+            modelBuilder.Entity<LLMApiBinding>()
+                .HasOne(b => b.LLMChannel)
+                .WithMany(c => c.Bindings)
+                .HasForeignKey(b => b.LLMChannelId);
+
+            modelBuilder.Entity<LLMApiBinding>()
+                .HasIndex(b => b.LLMChannelId);
+
+            modelBuilder.Entity<ChannelWithModel>()
+                .HasOne(m => m.ApiBinding)
+                .WithMany()
+                .HasForeignKey(m => m.ApiBindingId);
+
             // You can add other configurations here if needed
         }
         public virtual DbSet<Message> Messages { get; set; }
@@ -87,6 +101,7 @@ namespace TelegramSearchBot.Model {
         public virtual DbSet<GroupSettings> GroupSettings { get; set; }
         public virtual DbSet<LLMChannel> LLMChannels { get; set; }
         public virtual DbSet<ChannelWithModel> ChannelsWithModel { get; set; }
+        public virtual DbSet<LLMApiBinding> LLMApiBindings { get; set; }
         public virtual DbSet<ModelCapability> ModelCapabilities { get; set; }
         public virtual DbSet<AppConfigurationItem> AppConfigurationItems { get; set; } // Added for BiliCookie and other app configs
         public virtual DbSet<ShortUrlMapping> ShortUrlMappings { get; set; } = null!;

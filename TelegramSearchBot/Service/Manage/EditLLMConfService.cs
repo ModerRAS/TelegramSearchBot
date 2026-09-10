@@ -355,11 +355,8 @@ namespace TelegramSearchBot.Service.Manage {
                 return (true, "找不到指定的渠道");
             }
 
-            // 获取该渠道下的所有模型
-            var channelModels = await DataContext.ChannelsWithModel
-                .Where(m => m.LLMChannelId == viewModelChannelId && !m.IsDeleted)
-                .Select(m => m.ModelName)
-                .ToListAsync();
+            // 获取该渠道下的所有模型（多 binding 同模型显示为 `model [channel/binding/protocol]`，见 GetModelsByChannelId）
+            var channelModels = await Helper.GetModelsByChannelId(viewModelChannelId);
 
             var modelSb = new StringBuilder();
             modelSb.AppendLine($"渠道 {viewModelChannel.Name} 下的模型列表：");

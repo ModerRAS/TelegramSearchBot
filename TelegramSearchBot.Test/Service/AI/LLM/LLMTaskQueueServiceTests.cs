@@ -267,6 +267,251 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             return new DataDbContext(options);
         }
 
+        // ====================================================================
+        // Phase 2：Agent 路径 binding 复制与序列化兼容
+        // ====================================================================
+
+        [Fact]
+        public async Task EnqueueMessageTaskAsync_WithDefaultBinding_CopiesBindingIntoPayload() {
+            var originalFlag = Env.EnableLLMAgentProcess;
+            Env.EnableLLMAgentProcess = true;
+
+            try {
+                await using var dbContext = CreateDbContext();
+                var binding = SeedChannelWithBinding(dbContext, 401, "gpt-binding");
+                dbContext.GroupSettings.Add(new GroupSettings {
+                    GroupId = -4001,
+                    LLMModelName = "gpt-binding"
+                });
+                await dbContext.SaveChangesAsync();
+
+                var (service, getPayload) = CreateQueueService(dbContext);
+                var handle = await service.EnqueueMessageTaskAsync(
+                    -4001, 456, 789, DateTime.UtcNow, "input", "bot", 1001);
+
+                Assert.NotNull(handle);
+                var task = JsonConvert.DeserializeObject<AgentExecutionTask>(getPayload());
+                Assert.NotNull(task);
+                Assert.Equal(binding.Id, task!.Channel.BindingId);
+                Assert.Equal(binding.Endpoint, task.Channel.BindingEndpoint);
+                Assert.Equal(LlmProtocol.OpenAIChat, task.Channel.BindingProtocol);
+                Assert.Equal(LlmAuthProfile.Bearer, task.Channel.BindingAuthProfile);
+                Assert.Equal("https://legacy.example", task.Channel.Gateway); // legacy 字段保留
+                Assert.Equal(LLMProvider.OpenAI, task.Channel.Provider);
+            } finally {
+                Env.EnableLLMAgentProcess = originalFlag;
+            }
+        }
+
+        [Fact]
+        public async Task EnqueueMessageTaskAsync_IsPreferredBinding_WinsOverChannelDefault() {
+            var originalFlag = Env.EnableLLMAgentProcess;
+            Env.EnableLLMAgentProcess = true;
+
+            try {
+                await using var dbContext = CreateDbContext();
+                SeedChannelWithPreferredBinding(dbContext, 402, "gpt-preferred", out var preferredBinding);
+                dbContext.GroupSettings.Add(new GroupSettings {
+                    GroupId = -4002,
+                    LLMModelName = "gpt-preferred"
+                });
+                await dbContext.SaveChangesAsync();
+
+                var (service, getPayload) = CreateQueueService(dbContext);
+                var handle = await service.EnqueueMessageTaskAsync(
+                    -4002, 456, 789, DateTime.UtcNow, "input", "bot", 1001);
+
+                Assert.NotNull(handle);
+                var task = JsonConvert.DeserializeObject<AgentExecutionTask>(getPayload());
+                Assert.NotNull(task);
+                Assert.Equal(preferredBinding.Id, task!.Channel.BindingId);
+                Assert.Equal(LlmProtocol.OpenAIResponses, task.Channel.BindingProtocol);
+                Assert.Equal(preferredBinding.Endpoint, task.Channel.BindingEndpoint);
+            } finally {
+                Env.EnableLLMAgentProcess = originalFlag;
+            }
+        }
+
+        [Fact]
+        public async Task EnqueueMessageTaskAsync_LegacyNoBinding_NullBindingFields() {
+            var originalFlag = Env.EnableLLMAgentProcess;
+            Env.EnableLLMAgentProcess = true;
+
+            try {
+                await using var dbContext = CreateDbContext();
+                SeedChannel(dbContext, 403, "gpt-legacy");
+                dbContext.GroupSettings.Add(new GroupSettings {
+                    GroupId = -4003,
+                    LLMModelName = "gpt-legacy"
+                });
+                await dbContext.SaveChangesAsync();
+
+                var (service, getPayload) = CreateQueueService(dbContext);
+                var handle = await service.EnqueueMessageTaskAsync(
+                    -4003, 456, 789, DateTime.UtcNow, "input", "bot", 1001);
+
+                Assert.NotNull(handle);
+                var task = JsonConvert.DeserializeObject<AgentExecutionTask>(getPayload());
+                Assert.NotNull(task);
+                Assert.Null(task!.Channel.BindingId);
+                Assert.Null(task.Channel.BindingProtocol);
+                Assert.Null(task.Channel.BindingAuthProfile);
+                Assert.Equal(string.Empty, task.Channel.BindingEndpoint);
+                // legacy 路径：Agent 端按 Provider/Gateway 解析（LlmServiceProxy.ToBinding 返回 null）
+                Assert.Equal(LLMProvider.OpenAI, task.Channel.Provider);
+                Assert.Equal("https://example.invalid", task.Channel.Gateway);
+            } finally {
+                Env.EnableLLMAgentProcess = originalFlag;
+            }
+        }
+
+        [Fact]
+        public void AgentChannelConfig_LegacyJson_DeserializesWithNullBindingFields() {
+            // 旧 LLMAgent 二进制序列化的 config 没有 binding 字段 → 新二进制解析后走 legacy 路径
+            var legacyJson = "{\"ChannelId\":321,\"Name\":\"c\",\"Gateway\":\"https://x\",\"ApiKey\":\"k\",\"Provider\":1,\"Parallel\":1,\"Priority\":10,\"ModelName\":\"m\",\"Capabilities\":[]}";
+
+            var config = JsonConvert.DeserializeObject<AgentChannelConfig>(legacyJson);
+
+            Assert.NotNull(config);
+            Assert.Null(config!.BindingId);
+            Assert.Null(config.BindingProtocol);
+            Assert.Null(config.BindingAuthProfile);
+            Assert.Equal(string.Empty, config.BindingEndpoint);
+            Assert.Equal(LLMProvider.OpenAI, config.Provider);
+        }
+
+        [Fact]
+        public void AgentChannelConfig_NewJson_RoundTripsBindingFields() {
+            // 新二进制序列化含 binding 字段；旧 LLMAgent 二进制反序列化时忽略未知字段（Newtonsoft 行为），不崩溃
+            var config = new AgentChannelConfig {
+                ChannelId = 321,
+                Name = "c",
+                Gateway = "https://legacy",
+                ApiKey = "k",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 10,
+                ModelName = "m",
+                BindingId = 7,
+                BindingEndpoint = "https://opencode.ai/zen/v1",
+                BindingProtocol = LlmProtocol.OpenAIChat,
+                BindingAuthProfile = LlmAuthProfile.Bearer
+            };
+
+            var json = JsonConvert.SerializeObject(config);
+            var back = JsonConvert.DeserializeObject<AgentChannelConfig>(json);
+
+            Assert.NotNull(back);
+            Assert.Equal(7, back!.BindingId);
+            Assert.Equal("https://opencode.ai/zen/v1", back.BindingEndpoint);
+            Assert.Equal(LlmProtocol.OpenAIChat, back.BindingProtocol);
+            Assert.Equal(LlmAuthProfile.Bearer, back.BindingAuthProfile);
+        }
+
+        private static (LLMTaskQueueService Service, Func<string> Payload) CreateQueueService(DataDbContext dbContext) {
+            var redisMock = new Mock<IConnectionMultiplexer>();
+            var dbMock = new Mock<IDatabase>();
+            redisMock.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(dbMock.Object);
+
+            dbMock.Setup(d => d.HashGetAllAsync(
+                    It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync([
+                    new HashEntry("chatId", -1),
+                    new HashEntry("processId", 999),
+                    new HashEntry("port", 0),
+                    new HashEntry("status", "idle"),
+                    new HashEntry("lastHeartbeatUtc", DateTime.UtcNow.ToString("O")),
+                    new HashEntry("lastActiveAtUtc", DateTime.UtcNow.ToString("O"))
+                ]);
+
+            string pushedPayload = string.Empty;
+            dbMock.Setup(d => d.ListLeftPushAsync(
+                    It.IsAny<RedisKey>(),
+                    It.IsAny<RedisValue>(),
+                    It.IsAny<When>(),
+                    It.IsAny<CommandFlags>()))
+                .Callback<RedisKey, RedisValue, When, CommandFlags>((_, value, _, _) => pushedPayload = value.ToString())
+                .ReturnsAsync(1);
+            dbMock.Setup(d => d.HashSetAsync(It.IsAny<RedisKey>(), It.IsAny<HashEntry[]>(), It.IsAny<CommandFlags>()))
+                .Returns(Task.CompletedTask);
+
+            var registry = new AgentRegistryService(
+                redisMock.Object,
+                Mock.Of<IAgentProcessLauncher>(),
+                Mock.Of<ILogger<AgentRegistryService>>());
+            var polling = new ChunkPollingService(redisMock.Object);
+            var service = new LLMTaskQueueService(dbContext, redisMock.Object, polling, registry);
+            return (service, () => pushedPayload);
+        }
+
+        private static LLMApiBinding SeedChannelWithBinding(DataDbContext dbContext, int channelId, string modelName) {
+            return SeedChannelWithBindings(dbContext, channelId, modelName, preferredProtocol: null, out _);
+        }
+
+        private static LLMApiBinding SeedChannelWithPreferredBinding(DataDbContext dbContext, int channelId, string modelName, out LLMApiBinding preferredBinding) {
+            return SeedChannelWithBindings(dbContext, channelId, modelName, LlmProtocol.OpenAIResponses, out preferredBinding);
+        }
+
+        private static LLMApiBinding SeedChannelWithBindings(DataDbContext dbContext, int channelId, string modelName, LlmProtocol? preferredProtocol, out LLMApiBinding preferredBinding) {
+            var channel = new LLMChannel {
+                Id = channelId,
+                Name = "test-channel",
+                Gateway = "https://legacy.example",
+                ApiKey = "key",
+                Provider = LLMProvider.OpenAI,
+                Parallel = 1,
+                Priority = 10
+            };
+            var defaultBinding = new LLMApiBinding {
+                Id = channelId * 10 + 1,
+                LLMChannelId = channelId,
+                Endpoint = "https://opencode.ai/zen/v1",
+                Protocol = LlmProtocol.OpenAIChat,
+                AuthProfile = LlmAuthProfile.Bearer,
+                IsDefault = true
+            };
+            var preferred = new LLMApiBinding {
+                Id = channelId * 10 + 2,
+                LLMChannelId = channelId,
+                Endpoint = "https://opencode.ai/zen/go/v1",
+                Protocol = LlmProtocol.OpenAIResponses,
+                AuthProfile = LlmAuthProfile.Bearer,
+                IsDefault = false
+            };
+            preferredBinding = preferred;
+
+            var defaultRow = new ChannelWithModel {
+                Id = channelId * 100 + 1,
+                LLMChannelId = channelId,
+                LLMChannel = channel,
+                ModelName = modelName,
+                IsDeleted = false,
+                ApiBindingId = defaultBinding.Id,
+                ApiBinding = defaultBinding,
+                Capabilities = new List<ModelCapability>()
+            };
+            var preferredRow = new ChannelWithModel {
+                Id = channelId * 100 + 2,
+                LLMChannelId = channelId,
+                LLMChannel = channel,
+                ModelName = modelName,
+                IsDeleted = false,
+                ApiBindingId = preferred.Id,
+                ApiBinding = preferred,
+                IsPreferred = preferredProtocol.HasValue,
+                Capabilities = new List<ModelCapability>()
+            };
+
+            channel.Bindings.Add(defaultBinding);
+            channel.Bindings.Add(preferred);
+            dbContext.LLMChannels.Add(channel);
+            dbContext.LLMApiBindings.AddRange(defaultBinding, preferred);
+            dbContext.ChannelsWithModel.Add(defaultRow);
+            dbContext.ChannelsWithModel.Add(preferredRow);
+            dbContext.SaveChanges();
+            return defaultBinding;
+        }
+
         private static void SeedChannel(DataDbContext dbContext, int channelId, string modelName) {
             var channel = new LLMChannel {
                 Id = channelId,
