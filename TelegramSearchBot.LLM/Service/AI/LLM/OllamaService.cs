@@ -115,8 +115,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        // --- Main Execution Logic (Using OllamaSharp.Chat helper) ---
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+                public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
                                                         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             var executionContext = new LlmExecutionContext();
             await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
@@ -161,18 +160,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
             ollama.SelectedModel = modelName;
 
-            // --- History and Prompt Setup ---
-            // NOTE: History context is limited as OllamaSharp.Chat manages it.
+            var rows = await LlmHistoryQueryService.LoadAsync(_dbContext, null, ChatId, message, cancellationToken);
             var botName = await GetBotNameAsync();
             var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
 
-            var chat = new OllamaSharp.Chat(ollama, systemPrompt);
+            var transport = new OllamaTransport(this, ollama, systemPrompt);
+            var history = LlmHistoryProjector.Project(rows, supportsVision: false, _logger);
 
-            // Track history explicitly for snapshot serialization
-            var trackedHistory = new List<SerializedChatMessage>();
-            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = systemPrompt });
-
-            var source = new OllamaTurnSource(this, chat, trackedHistory);
             var meta = new LlmToolLoopMeta {
                 ChatId = ChatId,
                 OriginalMessageId = message.MessageId,
@@ -182,36 +176,136 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 ChannelId = channel.Id
             };
             var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            await foreach (var item in LlmToolLoop.RunAsync(source, message.Content, toolContext, meta, executionContext, cancellationToken)) {
+            var run = new LlmAgentRunRequest {
+                Transport = transport,
+                SystemPrompt = systemPrompt,
+                History = history,
+                Tools = null,
+                Config = new LlmTransportConfig {
+                    ModelName = modelName,
+                    Endpoint = endpoint,
+                    Provider = channel.Provider,
+                    Binding = binding,
+                    Channel = channel,
+                    SupportsVision = false
+                },
+                ToolContext = toolContext,
+                Meta = meta,
+                ExecutionContext = executionContext
+            };
+            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        /// <inheritdoc />
+        public async IAsyncEnumerable<string> ExecWithHistoryAsync(
+            IReadOnlyList<AgentHistoryMessage> history,
+            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+            LLMApiBinding binding, LlmExecutionContext executionContext,
+            bool supportsVision,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
+            modelName = modelName ?? Env.OllamaModelName;
+            if (string.IsNullOrWhiteSpace(modelName)) {
+                _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
+                yield return $"Error: {ServiceName} model name is not configured.";
+                yield break;
+            }
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
+                _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
+                yield return $"Error: {ServiceName} channel/gateway is not configured.";
+                yield break;
+            }
+
+            HttpClient httpClient = _httpClientFactory?.CreateClient("OllamaClient") ?? new HttpClient();
+            httpClient.BaseAddress = new Uri(endpoint);
+            var ollama = new OllamaApiClient(httpClient, modelName);
+
+            if (!await CheckAndPullModelAsync(ollama, modelName)) {
+                yield return $"Error: Could not check or pull Ollama model '{modelName}'.";
+                yield break;
+            }
+            ollama.SelectedModel = modelName;
+
+            var botName = await GetBotNameAsync();
+            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
+
+            var transport = new OllamaTransport(this, ollama, systemPrompt);
+            var projected = LlmHistoryProjector.Project(history, supportsVision: false, _logger);
+
+            var meta = new LlmToolLoopMeta {
+                ChatId = ChatId,
+                OriginalMessageId = message.MessageId,
+                UserId = message.FromUserId,
+                ModelName = modelName,
+                Provider = "Ollama",
+                ChannelId = channel.Id
+            };
+            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
+            var run = new LlmAgentRunRequest {
+                Transport = transport,
+                SystemPrompt = systemPrompt,
+                History = projected,
+                Tools = null,
+                Config = new LlmTransportConfig {
+                    ModelName = modelName,
+                    Endpoint = endpoint,
+                    Provider = channel.Provider,
+                    Binding = binding,
+                    Channel = channel,
+                    SupportsVision = false
+                },
+                ToolContext = toolContext,
+                Meta = meta,
+                ExecutionContext = executionContext
+            };
+            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
                 yield return item;
             }
         }
 
         /// <summary>
-        /// Session-based text-protocol turn source for Ollama (OllamaSharp.Chat owns history).
-        /// Snapshot history is tracked manually alongside the session.
+        /// Text-protocol transport for Ollama (OllamaSharp session). Seeds the session from the
+        /// normalized history and streams the newest user message each turn.
         /// </summary>
-        private sealed class OllamaTurnSource : ILlmTurnSource {
+        private sealed class OllamaTransport : ILlmTransport {
             private readonly OllamaService _svc;
-            private readonly OllamaSharp.Chat _chat;
-            private readonly List<SerializedChatMessage> _trackedHistory;
+            private readonly OllamaApiClient _ollama;
+            private readonly string _systemPrompt;
+            private OllamaSharp.Chat? _chat;
 
-            public OllamaTurnSource(OllamaService svc, OllamaSharp.Chat chat, List<SerializedChatMessage> trackedHistory) {
+            public OllamaTransport(OllamaService svc, OllamaApiClient ollama, string systemPrompt) {
                 _svc = svc;
-                _chat = chat;
-                _trackedHistory = trackedHistory;
+                _ollama = ollama;
+                _systemPrompt = systemPrompt;
             }
 
             public bool SupportsNativeTools => false;
 
             public async IAsyncEnumerable<LlmStreamEvent> StreamTurnAsync(
-                string? userContent,
+                LlmTurnRequest request,
                 [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-                _trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = userContent ?? string.Empty });
+                if (_chat == null) {
+                    _chat = new OllamaSharp.Chat(_ollama, _systemPrompt);
+                    // Seed the session with all history except the newest user message.
+                    for (int i = 0; i < request.History.Count - 1; i++) {
+                        var m = request.History[i];
+                        if (m.Role == LlmRole.User) {
+                            _chat.Messages.Add(new OllamaSharp.Models.Chat.Message { Role = ChatRole.User, Content = m.Text ?? string.Empty });
+                        } else if (m.Role == LlmRole.Assistant) {
+                            _chat.Messages.Add(new OllamaSharp.Models.Chat.Message { Role = ChatRole.Assistant, Content = m.Text ?? string.Empty });
+                        }
+                    }
+                }
+
+                var lastUser = request.History.LastOrDefault(m => m.Role == LlmRole.User);
+                var prompt = lastUser?.Text ?? string.Empty;
 
                 var turnText = new StringBuilder();
                 var streamedAny = false;
-                await foreach (var token in _chat.SendAsync(userContent ?? string.Empty, cancellationToken).WithCancellation(cancellationToken)) {
+                await foreach (var token in _chat.SendAsync(prompt, cancellationToken).WithCancellation(cancellationToken)) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                     turnText.Append(token);
                     streamedAny = true;
@@ -227,21 +321,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     StreamedAny = streamedAny
                 });
             }
-
-            public void CommitAssistantTurn(string text, string reasoning, bool streamedAny) {
-                if (streamedAny) {
-                    _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = text });
-                }
-            }
-
-            public void CommitToolResults(IReadOnlyList<LlmToolResult> results) {
-                // Text protocol: the shared loop sends tool feedback as the next user message.
-            }
-
-            public IReadOnlyList<SerializedChatMessage> GetTrackedHistory() => _trackedHistory;
         }
-
-        // ConvertToolResultToString has been moved to McpToolHelper
 
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
             if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway)) {

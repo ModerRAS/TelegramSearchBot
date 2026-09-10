@@ -10,7 +10,7 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Tools;
 
 namespace TelegramSearchBot.Service.AI.LLM {
-    /// <summary>Identity data captured into iteration-limit continuation snapshots.</summary>
+    /// <summary>Identity + resume data captured into iteration-limit continuation snapshots.</summary>
     public sealed class LlmToolLoopMeta {
         public long ChatId { get; set; }
         public long OriginalMessageId { get; set; }
@@ -25,34 +25,50 @@ namespace TelegramSearchBot.Service.AI.LLM {
         public string InitialContent { get; set; } = string.Empty;
     }
 
+    /// <summary>Everything one agent run needs.</summary>
+    public sealed class LlmAgentRunRequest {
+        public ILlmTransport Transport { get; set; } = null!;
+        public string SystemPrompt { get; set; } = string.Empty;
+        /// <summary>Normalized chat history INCLUDING the input user message (no system entry).</summary>
+        public List<LlmMessage> History { get; set; } = [];
+        public IReadOnlyList<LlmToolSpec>? Tools { get; set; }
+        public LlmTransportConfig Config { get; set; } = new();
+        public ToolContext ToolContext { get; set; } = new();
+        public LlmToolLoopMeta Meta { get; set; } = new();
+        public LlmExecutionContext? ExecutionContext { get; set; }
+    }
+
     /// <summary>
-    /// The single shared agent tool-call loop. Drives <see cref="ILlmTurnSource"/> turns,
-    /// executes tools via <see cref="McpToolHelper"/>, yields accumulated-content snapshots,
-    /// and builds the iteration-limit continuation snapshot. Replaces the per-provider
-    /// copies of this cycle.
+    /// The single shared agent tool-call loop. Owns the normalized <see cref="LlmMessage"/>
+    /// history, drives the transport turn by turn, executes tools via <see cref="McpToolHelper"/>,
+    /// yields accumulated-content snapshots, and builds v2 continuation snapshots.
     /// </summary>
     public static class LlmToolLoop {
+        private const string MalformedToolCallCorrection =
+            "Tool call failed before execution due to malformed tool metadata. Please verify the tool name and parameters, then try again.";
+
         public static async IAsyncEnumerable<string> RunAsync(
-            ILlmTurnSource source,
-            string? initialUserContent,
-            ToolContext toolContext,
-            LlmToolLoopMeta meta,
-            LlmExecutionContext? executionContext,
+            LlmAgentRunRequest run,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             var maxToolCycles = Env.MaxToolCycles;
-            var contentBuilder = new StringBuilder(meta.InitialContent ?? string.Empty);
+            var contentBuilder = new StringBuilder(run.Meta.InitialContent ?? string.Empty);
             var baseline = contentBuilder.Length;
 
             string NewContent() => contentBuilder.ToString(baseline, contentBuilder.Length - baseline);
-
-            var userContent = initialUserContent;
+            bool IsNative() => run.Transport.SupportsNativeTools && run.Tools != null && run.Tools.Count > 0;
 
             for (int cycle = 0; cycle < maxToolCycles; cycle++) {
                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
                 LlmTurnResult? turn = null;
+                var request = new LlmTurnRequest {
+                    SystemPrompt = run.SystemPrompt,
+                    History = run.History,
+                    Tools = IsNative() ? run.Tools : null,
+                    Config = run.Config
+                };
 
-                await foreach (var evt in source.StreamTurnAsync(userContent, cancellationToken).WithCancellation(cancellationToken)) {
+                await foreach (var evt in run.Transport.StreamTurnAsync(request, cancellationToken).WithCancellation(cancellationToken)) {
                     switch (evt) {
                         case LlmStreamEvent.TextDelta textDelta:
                             contentBuilder.Append(textDelta.Delta);
@@ -72,81 +88,71 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 turn ??= new LlmTurnResult();
                 var turnText = (turn.Text ?? string.Empty).Trim();
 
-                if (source.SupportsNativeTools) {
+                if (IsNative()) {
                     if (turn.ToolCalls.Count > 0) {
-                        var results = new List<LlmToolResult>();
+                        run.History.Add(LlmMessage.Assistant(turnText, turn.Reasoning, turn.ToolCalls));
                         var indicators = new StringBuilder();
                         foreach (var call in turn.ToolCalls) {
                             var argsDict = call.ParseArguments();
-                            var (resultString, isError) = await ExecuteToolAsync(call.Name, argsDict, toolContext);
-                            results.Add(new LlmToolResult {
-                                ToolCallId = call.Id,
-                                Name = call.Name,
-                                ArgumentsJson = call.ArgumentsJson,
-                                Result = resultString,
-                                IsError = isError
-                            });
+                            var (resultString, isError) = await ExecuteToolAsync(call.Name, argsDict, run.ToolContext);
+                            run.History.Add(LlmMessage.ToolResult(call.Id, call.Name, resultString, isError));
                             indicators.Append(McpToolHelper.FormatToolCallDisplay(call.Name, argsDict));
                         }
                         contentBuilder.Append(indicators.ToString());
                         yield return NewContent();
-                        source.CommitToolResults(results);
-                        userContent = null;
                         continue;
                     }
 
                     if (turn.MalformedToolCall) {
-                        // The source appended a self-correction message to its own history.
-                        userContent = null;
+                        // Transport reported malformed metadata; ask the model to self-correct.
+                        run.History.Add(LlmMessage.User(MalformedToolCallCorrection));
                         continue;
                     }
 
-                    source.CommitAssistantTurn(turnText, turn.Reasoning, turn.StreamedAny);
+                    run.History.Add(LlmMessage.Assistant(turnText, turn.Reasoning));
                     yield break;
                 }
 
-                // Text-embedded tool protocol.
-                source.CommitAssistantTurn(turnText, turn.Reasoning, turn.StreamedAny);
+                // Text-embedded (XML) tool protocol.
+                if (!string.IsNullOrWhiteSpace(turnText)) {
+                    run.History.Add(LlmMessage.Assistant(turnText, turn.Reasoning));
+                }
 
                 if (McpToolHelper.TryParseToolCalls(turnText, out var parsedToolCalls) && parsedToolCalls.Count > 0) {
                     var first = parsedToolCalls[0];
                     if (parsedToolCalls.Count > 1) {
-                        LogMultipleToolCalls(first.toolName, parsedToolCalls.Count);
+                        Serilog.Log.Warning(
+                            "LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.",
+                            parsedToolCalls.Count, first.toolName);
                     }
-                    var (resultString, isError) = await ExecuteToolAsync(first.toolName, first.arguments, toolContext);
+                    var (resultString, isError) = await ExecuteToolAsync(first.toolName, first.arguments, run.ToolContext);
                     contentBuilder.Append(McpToolHelper.FormatToolCallDisplay(first.toolName, first.arguments));
                     yield return NewContent();
-                    userContent = isError
+                    run.History.Add(LlmMessage.User(isError
                         ? $"[Tool '{first.toolName}' Execution Failed. Error: {resultString}]"
-                        : $"[Executed Tool '{first.toolName}'. Result: {resultString}]";
+                        : $"[Executed Tool '{first.toolName}'. Result: {resultString}]"));
                     continue;
                 }
 
                 yield break;
             }
 
-            // Iteration limit reached — persist continuation snapshot for user confirmation.
-            if (executionContext != null) {
-                executionContext.IterationLimitReached = true;
-                executionContext.SnapshotData = new LlmContinuationSnapshot {
+            // Iteration limit reached — persist v2 continuation snapshot for user confirmation.
+            if (run.ExecutionContext != null) {
+                run.ExecutionContext.IterationLimitReached = true;
+                run.ExecutionContext.SnapshotData = new LlmContinuationSnapshot {
                     SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
-                    ChatId = meta.ChatId,
-                    OriginalMessageId = meta.OriginalMessageId,
-                    UserId = meta.UserId,
-                    ModelName = meta.ModelName,
-                    Provider = meta.Provider,
-                    ChannelId = meta.ChannelId,
+                    ChatId = run.Meta.ChatId,
+                    OriginalMessageId = run.Meta.OriginalMessageId,
+                    UserId = run.Meta.UserId,
+                    ModelName = run.Meta.ModelName,
+                    Provider = run.Meta.Provider,
+                    ChannelId = run.Meta.ChannelId,
                     LastAccumulatedContent = contentBuilder.ToString(),
-                    CyclesSoFar = meta.BaseCycles + maxToolCycles,
-                    ProviderHistory = new List<SerializedChatMessage>(source.GetTrackedHistory() ?? []),
+                    CyclesSoFar = run.Meta.BaseCycles + maxToolCycles,
+                    NormalizedHistory = new List<LlmMessage>(run.History)
                 };
             }
-        }
-
-        private static void LogMultipleToolCalls(string toolName, int count) {
-            Serilog.Log.Warning(
-                "LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.",
-                count, toolName);
         }
 
         private static async Task<(string Result, bool IsError)> ExecuteToolAsync(

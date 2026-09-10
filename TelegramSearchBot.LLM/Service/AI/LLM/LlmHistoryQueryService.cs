@@ -21,21 +21,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
     /// per-provider projections convert rows to their native message types without touching
     /// the database. Previously duplicated (with per-message N+1 lookups) in each provider.
     /// </summary>
-    [Injectable(Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)]
-    public class LlmHistoryQueryService : IService {
-        private readonly DataDbContext _dbContext;
-        private readonly LlmVisibilityService? _llmVisibilityService;
-
-        public string ServiceName => nameof(LlmHistoryQueryService);
-
-        public LlmHistoryQueryService(DataDbContext dbContext, LlmVisibilityService? llmVisibilityService = null) {
-            _dbContext = dbContext;
-            _llmVisibilityService = llmVisibilityService;
-        }
-
+    public static class LlmHistoryQueryService {
         /// <summary>Rows ordered chronologically; the input message is appended last (when visible),
         /// matching the legacy per-provider GetChatHistory behavior.</summary>
-        public async Task<List<AgentHistoryMessage>> LoadAsync(long chatId, DataMessage? inputMessage = null, CancellationToken cancellationToken = default) {
+        public static async Task<List<AgentHistoryMessage>> LoadAsync(
+            DataDbContext _dbContext,
+            LlmVisibilityService? _llmVisibilityService,
+            long chatId,
+            DataMessage? inputMessage = null,
+            CancellationToken cancellationToken = default) {
             var messages = await _dbContext.Messages.AsNoTracking()
                 .Where(m => m.GroupId == chatId && m.DateTime > DateTime.UtcNow.AddHours(-1))
                 .OrderBy(m => m.DateTime)
@@ -54,8 +48,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 messages = await _llmVisibilityService.FilterVisibleMessagesAsync(chatId, messages, cancellationToken);
             }
 
-            var users = await ResolveUsersAsync(messages, cancellationToken);
-            var extensionsByMessageId = await ResolveExtensionsAsync(messages, cancellationToken);
+            var users = await ResolveUsersAsync(_dbContext, messages, cancellationToken);
+            var extensionsByMessageId = await ResolveExtensionsAsync(_dbContext, messages, cancellationToken);
 
             if (inputMessage != null &&
                 ( _llmVisibilityService == null ||
@@ -101,22 +95,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }).ToList();
         }
 
-        private async Task<Dictionary<long, UserData>> ResolveUsersAsync(List<DataMessage> messages, CancellationToken cancellationToken) {
+        private static async Task<Dictionary<long, UserData>> ResolveUsersAsync(DataDbContext dbContext, List<DataMessage> messages, CancellationToken cancellationToken) {
             var userIds = messages.Select(x => x.FromUserId).Distinct().ToList();
             if (userIds.Count == 0) {
                 return new Dictionary<long, UserData>();
             }
-            return await _dbContext.UserData.AsNoTracking()
+            return await dbContext.UserData.AsNoTracking()
                 .Where(x => userIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, cancellationToken);
         }
 
-        private async Task<Dictionary<long, List<AgentMessageExtensionSnapshot>>> ResolveExtensionsAsync(List<DataMessage> messages, CancellationToken cancellationToken) {
+        private static async Task<Dictionary<long, List<AgentMessageExtensionSnapshot>>> ResolveExtensionsAsync(DataDbContext dbContext, List<DataMessage> messages, CancellationToken cancellationToken) {
             var messageIds = messages.Select(x => x.Id).ToList();
             if (messageIds.Count == 0) {
                 return new Dictionary<long, List<AgentMessageExtensionSnapshot>>();
             }
-            var extensionRecords = await _dbContext.MessageExtensions.AsNoTracking()
+            var extensionRecords = await dbContext.MessageExtensions.AsNoTracking()
                 .Where(x => messageIds.Contains(x.MessageDataId))
                 .ToListAsync(cancellationToken);
             return extensionRecords

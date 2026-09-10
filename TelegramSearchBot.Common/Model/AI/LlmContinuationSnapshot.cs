@@ -76,9 +76,16 @@ namespace TelegramSearchBot.Model.AI {
         public int ChannelId { get; set; }
 
         /// <summary>
-        /// Serialized conversation history (all messages including system, user, assistant, tool results)
+        /// Schema v1 (legacy): per-provider serialized history. Kept for deserializing old snapshots;
+        /// obsolete snapshots expire via TTL and are not migrated.
         /// </summary>
-        public List<SerializedChatMessage> ProviderHistory { get; set; } = [];
+        public List<SerializedChatMessage>? ProviderHistory { get; set; }
+
+        /// <summary>
+        /// Schema v2: normalized conversation history (all messages including system, user,
+        /// assistant with tool calls, tool results). The single snapshot format going forward.
+        /// </summary>
+        public List<LlmMessage>? NormalizedHistory { get; set; }
 
         /// <summary>
         /// The last accumulated content that was displayed to the user

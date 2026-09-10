@@ -634,17 +634,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 yield break;
             }
 
-            // Try native tool calling first; fall back to XML prompt-based if it fails
-            bool useNativeToolCalling = true;
-            var nativeTools = McpToolHelper.GetNativeToolDefinitions();
+            var rows = await LlmHistoryQueryService.LoadAsync(_dbContext, _llmVisibilityService, ChatId, message, cancellationToken);
+            var supportsVision = await CheckVisionSupport(modelName, channel.Id);
 
-            if (nativeTools == null || !nativeTools.Any()) {
-                useNativeToolCalling = false;
-            }
+            var nativeTools = McpToolHelper.GetNativeToolDefinitions();
+            var useNativeToolCalling = nativeTools is { Count: > 0 };
 
             if (useNativeToolCalling) {
                 bool nativeFailed = false;
-                var nativeEnumerator = ExecWithNativeToolCallingAsync(message, ChatId, modelName, channel, binding, executionContext, nativeTools, cancellationToken);
+                var nativeEnumerator = ExecWithNativeToolCallingAsync(rows, supportsVision, message, ChatId, modelName, channel, binding, executionContext, nativeTools, cancellationToken);
                 await using var enumerator = nativeEnumerator.GetAsyncEnumerator(cancellationToken);
                 bool hasFirst = false;
                 try {
@@ -666,7 +664,55 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             // Fallback: XML prompt-based tool calling
-            await foreach (var item in ExecWithXmlToolCallingAsync(message, ChatId, modelName, channel, binding, executionContext, cancellationToken)) {
+            await foreach (var item in ExecWithXmlToolCallingAsync(rows, supportsVision, message, ChatId, modelName, channel, binding, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        /// <inheritdoc />
+        public async IAsyncEnumerable<string> ExecWithHistoryAsync(
+            IReadOnlyList<AgentHistoryMessage> history,
+            DataMessage message, long ChatId, string modelName, LLMChannel channel,
+            LLMApiBinding binding, LlmExecutionContext executionContext,
+            bool supportsVision,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            if (string.IsNullOrWhiteSpace(modelName)) modelName = "claude-sonnet-4-20250514";
+
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
+            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
+                _logger.LogError("{ServiceName}: Channel or ApiKey is not configured.", ServiceName);
+                yield return $"Error: {ServiceName} channel/apikey is not configured.";
+                yield break;
+            }
+
+                        var nativeTools = McpToolHelper.GetNativeToolDefinitions();
+            var useNativeToolCalling = nativeTools is { Count: > 0 };
+
+            if (useNativeToolCalling) {
+                bool nativeFailed = false;
+                var nativeEnumerator = ExecWithNativeToolCallingAsync(history, supportsVision, message, ChatId, modelName, channel, binding, executionContext, nativeTools, cancellationToken);
+                await using var enumerator = nativeEnumerator.GetAsyncEnumerator(cancellationToken);
+                bool hasFirst = false;
+                try {
+                    hasFirst = await enumerator.MoveNextAsync();
+                } catch (Exception ex) when (IsToolCallingNotSupportedError(ex)) {
+                    _logger.LogInformation("{ServiceName}: Native tool calling not supported for model {Model}, falling back to XML prompt-based tool calling. Error: {Error}", ServiceName, modelName, ex.Message);
+                    nativeFailed = true;
+                }
+
+                if (!nativeFailed) {
+                    if (hasFirst) {
+                        yield return enumerator.Current;
+                        while (await enumerator.MoveNextAsync()) {
+                            yield return enumerator.Current;
+                        }
+                    }
+                    yield break;
+                }
+            }
+
+            await foreach (var item in ExecWithXmlToolCallingAsync(history, supportsVision, message, ChatId, modelName, channel, binding, executionContext, cancellationToken)) {
                 yield return item;
             }
         }
@@ -678,11 +724,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     message.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
                     message.Contains("invalid", StringComparison.OrdinalIgnoreCase) );
         }
-
         /// <summary>
         /// Execute LLM with native Anthropic tool calling API.
         /// </summary>
-        private async IAsyncEnumerable<string> ExecWithNativeToolCallingAsync(
+        public async IAsyncEnumerable<string> ExecWithNativeToolCallingAsync(
+            IReadOnlyList<AgentHistoryMessage> rows,
+            bool supportsVision,
             DataMessage message, long ChatId, string modelName, LLMChannel channel,
             LLMApiBinding binding,
             LlmExecutionContext executionContext,
@@ -692,28 +739,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             var botName = await GetBotNameAsync();
             string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, ChatId);
-            bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
-            var (_, providerHistory) = await GetChatHistory(ChatId, systemPrompt, message, supportsVision);
             var promptCachingEnabled = await IsPromptCachingEnabledAsync();
-            var stableHistory = providerHistory.Count > 0
-                ? providerHistory.Take(providerHistory.Count - 1).ToList()
-                : new List<MessageParam>();
-            var (toolDefinitionHash, stablePrefixHash) = BuildPromptCachingContext(
-                "anthropic-native",
-                systemPrompt,
-                SerializeProviderHistory(systemPrompt, stableHistory));
-            providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
-
             using var client = CreateClient(channel, binding);
-            var anthropicTools = ConvertToAnthropicTools(nativeTools, promptCachingEnabled);
 
-            var trackedHistory = new List<SerializedChatMessage> {
-                new SerializedChatMessage { Role = "system", Content = systemPrompt }
-            };
-            var source = new AnthropicTurnSource(
-                this, client, systemPrompt, providerHistory, trackedHistory, anthropicTools,
-                promptCachingEnabled, toolDefinitionHash, stablePrefixHash, cacheBreakpointInserted,
-                modelName, channel);
+            var transport = new AnthropicMessagesTransport(this, client, systemPrompt, modelName, channel,
+                nativeTools: true, promptCachingEnabled);
+            var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
+
             var meta = new LlmToolLoopMeta {
                 ChatId = ChatId,
                 OriginalMessageId = message.MessageId,
@@ -723,15 +755,33 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 ChannelId = channel.Id
             };
             var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            await foreach (var item in LlmToolLoop.RunAsync(source, null, toolContext, meta, executionContext, cancellationToken)) {
+            var run = new LlmAgentRunRequest {
+                Transport = transport,
+                SystemPrompt = systemPrompt,
+                History = history,
+                Tools = McpToolHelper.GetLlmToolSpecs(),
+                Config = new LlmTransportConfig {
+                    ModelName = modelName,
+                    Endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding),
+                    ApiKey = LlmBindingSupport.ResolveApiKey(channel, binding),
+                    Provider = channel.Provider,
+                    Binding = binding,
+                    Channel = channel,
+                    SupportsVision = supportsVision,
+                    PromptCachingEnabled = promptCachingEnabled
+                },
+                ToolContext = toolContext,
+                Meta = meta,
+                ExecutionContext = executionContext
+            };
+            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
                 yield return item;
             }
         }
 
-        /// <summary>
-        /// Execute LLM with XML prompt-based tool calling (fallback).
-        /// </summary>
         private async IAsyncEnumerable<string> ExecWithXmlToolCallingAsync(
+            IReadOnlyList<AgentHistoryMessage> rows,
+            bool supportsVision,
             DataMessage message, long ChatId, string modelName, LLMChannel channel,
             LLMApiBinding binding,
             LlmExecutionContext executionContext,
@@ -740,27 +790,13 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
             var botName = await GetBotNameAsync();
             string systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
-            bool supportsVision = await CheckVisionSupport(modelName, channel.Id);
-            var (_, providerHistory) = await GetChatHistory(ChatId, systemPrompt, message, supportsVision);
             var promptCachingEnabled = await IsPromptCachingEnabledAsync();
-            var stableHistory = providerHistory.Count > 0
-                ? providerHistory.Take(providerHistory.Count - 1).ToList()
-                : new List<MessageParam>();
-            var (toolDefinitionHash, stablePrefixHash) = BuildPromptCachingContext(
-                "anthropic-xml",
-                systemPrompt,
-                SerializeProviderHistory(systemPrompt, stableHistory));
-            providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
-
             using var client = CreateClient(channel, binding);
 
-            var trackedHistory = new List<SerializedChatMessage> {
-                new SerializedChatMessage { Role = "system", Content = systemPrompt }
-            };
-            var source = new AnthropicTurnSource(
-                this, client, systemPrompt, providerHistory, trackedHistory, null,
-                promptCachingEnabled, toolDefinitionHash, stablePrefixHash, cacheBreakpointInserted,
-                modelName, channel);
+            var transport = new AnthropicMessagesTransport(this, client, systemPrompt, modelName, channel,
+                nativeTools: false, promptCachingEnabled);
+            var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
+
             var meta = new LlmToolLoopMeta {
                 ChatId = ChatId,
                 OriginalMessageId = message.MessageId,
@@ -770,7 +806,26 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 ChannelId = channel.Id
             };
             var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            await foreach (var item in LlmToolLoop.RunAsync(source, null, toolContext, meta, executionContext, cancellationToken)) {
+            var run = new LlmAgentRunRequest {
+                Transport = transport,
+                SystemPrompt = systemPrompt,
+                History = history,
+                Tools = null,
+                Config = new LlmTransportConfig {
+                    ModelName = modelName,
+                    Endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding),
+                    ApiKey = LlmBindingSupport.ResolveApiKey(channel, binding),
+                    Provider = channel.Provider,
+                    Binding = binding,
+                    Channel = channel,
+                    SupportsVision = supportsVision,
+                    PromptCachingEnabled = promptCachingEnabled
+                },
+                ToolContext = toolContext,
+                Meta = meta,
+                ExecutionContext = executionContext
+            };
+            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
                 yield return item;
             }
         }
@@ -798,6 +853,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 _logger.LogError("{ServiceName}: Cannot resume from null snapshot.", ServiceName);
                 yield break;
             }
+            if (snapshot.NormalizedHistory is not { Count: > 0 } savedHistory) {
+                _logger.LogError("{ServiceName}: Snapshot {SnapshotId} has no v2 normalized history (legacy v1 snapshots expire via TTL).", ServiceName, snapshot.SnapshotId);
+                yield break;
+            }
             var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
             var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
             if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
@@ -809,23 +868,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "claude-sonnet-4-20250514";
 
             _logger.LogInformation("{ServiceName}: Resuming from snapshot {SnapshotId} for ChatId {ChatId}, restoring {HistoryCount} history entries.",
-                ServiceName, snapshot.SnapshotId, snapshot.ChatId, snapshot.ProviderHistory?.Count ?? 0);
+                ServiceName, snapshot.SnapshotId, snapshot.ChatId, savedHistory.Count);
 
-            var (systemPrompt, providerHistory) = DeserializeProviderHistory(snapshot.ProviderHistory);
-            var trackedHistory = snapshot.ProviderHistory ?? new List<SerializedChatMessage>();
+            string systemPrompt;
+            if (savedHistory[0].Role == LlmRole.System) {
+                systemPrompt = savedHistory[0].Text ?? string.Empty;
+                savedHistory = savedHistory.Skip(1).ToList();
+            } else {
+                var botName = await GetBotNameAsync();
+                systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, snapshot.ChatId);
+            }
+
             var promptCachingEnabled = await IsPromptCachingEnabledAsync();
-            var (toolDefinitionHash, stablePrefixHash) = BuildPromptCachingContext(
-                "anthropic-resume",
-                systemPrompt ?? string.Empty,
-                snapshot.ProviderHistory ?? []);
-            providerHistory = PrepareMessagesForPromptCaching(providerHistory, promptCachingEnabled, excludeDynamicTail: false, out var cacheBreakpointInserted);
-
             using var client = CreateClient(channel, binding);
 
-            var source = new AnthropicTurnSource(
-                this, client, systemPrompt ?? string.Empty, providerHistory, trackedHistory, null,
-                promptCachingEnabled, toolDefinitionHash, stablePrefixHash, cacheBreakpointInserted,
-                modelName, channel);
+            var transport = new AnthropicMessagesTransport(this, client, systemPrompt, modelName, channel,
+                nativeTools: false, promptCachingEnabled);
+
             var meta = new LlmToolLoopMeta {
                 ChatId = snapshot.ChatId,
                 OriginalMessageId = snapshot.OriginalMessageId,
@@ -837,7 +896,26 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 InitialContent = snapshot.LastAccumulatedContent ?? string.Empty
             };
             var toolContext = new ToolContext { ChatId = snapshot.ChatId, UserId = snapshot.UserId, MessageId = snapshot.OriginalMessageId };
-            await foreach (var item in LlmToolLoop.RunAsync(source, null, toolContext, meta, executionContext, cancellationToken)) {
+            var run = new LlmAgentRunRequest {
+                Transport = transport,
+                SystemPrompt = systemPrompt,
+                History = savedHistory,
+                Tools = null,
+                Config = new LlmTransportConfig {
+                    ModelName = modelName,
+                    Endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding),
+                    ApiKey = LlmBindingSupport.ResolveApiKey(channel, binding),
+                    Provider = channel.Provider,
+                    Binding = binding,
+                    Channel = channel,
+                    SupportsVision = false,
+                    PromptCachingEnabled = promptCachingEnabled
+                },
+                ToolContext = toolContext,
+                Meta = meta,
+                ExecutionContext = executionContext
+            };
+            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
                 yield return item;
             }
         }
@@ -845,69 +923,79 @@ namespace TelegramSearchBot.Service.AI.LLM {
         #endregion
 
         /// <summary>
-        /// Per-run turn source for the Anthropic Messages API. Streams one turn per call and
-        /// owns the provider-typed history plus the serialized history used for snapshots.
-        /// Supports both native tool-calling (tools attached) and the XML text protocol.
+        /// Stateless transport adapter for the Anthropic Messages API. Converts the normalized
+        /// history to MessageParam per turn (including tool_use/tool_result blocks and prompt
+        /// cache breakpoints) and streams one assistant turn.
         /// </summary>
-        private sealed class AnthropicTurnSource : ILlmTurnSource {
+        private sealed class AnthropicMessagesTransport : ILlmTransport {
             private readonly AnthropicService _svc;
             private readonly AnthropicClient _client;
             private readonly string _systemPrompt;
-            private readonly List<MessageParam> _providerHistory;
-            private readonly List<SerializedChatMessage> _trackedHistory;
-            private readonly List<ToolUnion>? _tools;
-            private readonly bool _promptCachingEnabled;
-            private readonly string _toolDefinitionHash;
-            private readonly string _stablePrefixHash;
-            private readonly bool _cacheBreakpointInserted;
             private readonly string _modelName;
             private readonly LLMChannel _channel;
+            private readonly bool _nativeTools;
+            private readonly bool _promptCachingEnabled;
+            private List<MessageParam>? _preparedHistory;
+            private int _convertedCount;
+            private bool _cacheBreakpointInserted;
 
-            private List<(string id, string name, string inputJson)> _pendingToolCalls = new();
-            private string _pendingTurnText = string.Empty;
-
-            public AnthropicTurnSource(
-                AnthropicService svc, AnthropicClient client, string systemPrompt,
-                List<MessageParam> providerHistory, List<SerializedChatMessage> trackedHistory,
-                List<ToolUnion>? tools, bool promptCachingEnabled,
-                string toolDefinitionHash, string stablePrefixHash, bool cacheBreakpointInserted,
-                string modelName, LLMChannel channel) {
+            public AnthropicMessagesTransport(AnthropicService svc, AnthropicClient client, string systemPrompt,
+                string modelName, LLMChannel channel, bool nativeTools, bool promptCachingEnabled) {
                 _svc = svc;
                 _client = client;
                 _systemPrompt = systemPrompt;
-                _providerHistory = providerHistory;
-                _trackedHistory = trackedHistory;
-                _tools = tools;
-                _promptCachingEnabled = promptCachingEnabled;
-                _toolDefinitionHash = toolDefinitionHash;
-                _stablePrefixHash = stablePrefixHash;
-                _cacheBreakpointInserted = cacheBreakpointInserted;
                 _modelName = modelName;
                 _channel = channel;
+                _nativeTools = nativeTools;
+                _promptCachingEnabled = promptCachingEnabled;
             }
 
-            public bool SupportsNativeTools => _tools != null && _tools.Count > 0;
+            private LlmTurnRequest? _lastRequest;
+
+            public bool SupportsNativeTools => _nativeTools;
 
             public async IAsyncEnumerable<LlmStreamEvent> StreamTurnAsync(
-                string? userContent,
+                LlmTurnRequest request,
                 [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+                _lastRequest = request;
+                // Legacy wire semantics: prompt-cache preparation runs once per run (first turn);
+                // later turns append raw deltas so user messages stay string-typed on the wire.
+                if (_preparedHistory == null) {
+                    _preparedHistory = PrepareMessagesForPromptCaching(ToProviderHistory(request.History), _promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
+                    _cacheBreakpointInserted = cacheBreakpointInserted;
+                } else if (request.History.Count > _convertedCount) {
+                    _preparedHistory.AddRange(ToProviderHistory(request.History.Skip(_convertedCount)));
+                }
+                _convertedCount = request.History.Count;
+                var providerHistory = _preparedHistory;
+                try { System.IO.File.AppendAllText("C:/temp/anthropic_dbg.log", "caching=" + _promptCachingEnabled + " " + System.Text.Json.JsonSerializer.Serialize(new { P = providerHistory }) + Environment.NewLine + "###" + Environment.NewLine); } catch { }
+
+                var nativeToolSpecs = request.Tools;
+                var rawHistory = providerHistory.ToList();
+                var (toolDefinitionHash, stablePrefixHash) = BuildPromptCachingContext(
+                    _nativeTools ? "anthropic-native" : "anthropic-xml",
+                    _systemPrompt,
+                    SerializeProviderHistory(_systemPrompt, rawHistory));
                 var parameters = new MessageCreateParams {
                     Model = _modelName,
                     MaxTokens = 8192,
                     System = BuildSystemPrompt(_systemPrompt, _promptCachingEnabled),
-                    Messages = _providerHistory,
-                    Tools = SupportsNativeTools ? _tools : null,
+                    Messages = providerHistory,
+                    Tools = _nativeTools && nativeToolSpecs is { Count: > 0 }
+                        ? ConvertToAnthropicToolSpecs(nativeToolSpecs, _promptCachingEnabled)
+                        : null,
                 };
 
+
+                long? cacheCreationInputTokens = null;
+                long? cacheReadInputTokens = null;
+                object usageObservation = null;
 
                 var turnText = new StringBuilder();
                 var toolUseBlocks = new List<(string id, string name, string inputJson)>();
                 var currentToolInputBuilder = new StringBuilder();
                 string currentToolId = null;
                 string currentToolName = null;
-                long? cacheCreationInputTokens = null;
-                long? cacheReadInputTokens = null;
-                object usageObservation = null;
 
                 await foreach (var rawEvent in _client.Messages.CreateStreaming(parameters, cancellationToken)) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
@@ -958,16 +1046,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                 _svc.LogPromptCachingObservation(
                     _channel, "Anthropic", _modelName, _promptCachingEnabled,
-                    _toolDefinitionHash, _stablePrefixHash, _cacheBreakpointInserted,
+                    toolDefinitionHash, stablePrefixHash, _cacheBreakpointInserted,
                     cacheCreationInputTokens, cacheReadInputTokens, usageObservation);
 
-                var responseText = turnText.ToString().Trim();
-                _pendingTurnText = responseText;
-                _pendingToolCalls = toolUseBlocks;
-
                 yield return new LlmStreamEvent.TurnCompleted(new LlmTurnResult {
-                    Text = responseText,
-                    ToolCalls = toolUseBlocks.Select(b => new LlmNativeToolCall {
+                    Text = turnText.ToString().Trim(),
+                    ToolCalls = toolUseBlocks.Select(b => new LlmToolCall {
                         Id = b.id,
                         Name = b.name,
                         ArgumentsJson = string.IsNullOrWhiteSpace(b.inputJson) ? "{}" : b.inputJson
@@ -977,59 +1061,118 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 });
             }
 
-            public void CommitAssistantTurn(string text, string reasoning, bool streamedAny) {
-                if (SupportsNativeTools) {
-                    // Native final-text turn: provider history is not extended (matches legacy behavior).
-                    if (!string.IsNullOrWhiteSpace(text)) {
-                        _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = text });
+            private List<MessageParam> ToProviderHistory(IEnumerable<LlmMessage> messages) {
+                var request = _lastRequest!;
+
+                var result = new List<MessageParam>();
+                var pendingToolResults = new List<ContentBlockParam>();
+
+                void FlushToolResults() {
+                    if (pendingToolResults.Count > 0) {
+                        result.Add(new MessageParam { Role = Role.User, Content = pendingToolResults.ToList() });
+                        pendingToolResults.Clear();
                     }
-                    return;
                 }
-                if (!string.IsNullOrWhiteSpace(text)) {
-                    _providerHistory.Add(new MessageParam { Role = Role.Assistant, Content = text });
+
+                foreach (var m in request.History) {
+                    switch (m.Role) {
+                        case LlmRole.User: {
+                            FlushToolResults();
+                            if (m.ImagePng != null && request.Config.SupportsVision) {
+                                var blocks = new List<ContentBlockParam>();
+                                if (!string.IsNullOrEmpty(m.Text)) {
+                                    blocks.Add(new TextBlockParam(m.Text));
+                                }
+                                blocks.Add(new ImageBlockParam(new Base64ImageSource {
+                                    Data = Convert.ToBase64String(m.ImagePng),
+                                    MediaType = MediaType.ImagePng
+                                }));
+                                result.Add(new MessageParam { Role = Role.User, Content = blocks });
+                            } else {
+                                // Plain-text user messages use string content (wire-compatible with legacy).
+                                result.Add(new MessageParam { Role = Role.User, Content = m.Text ?? string.Empty });
+                            }
+                            break;
+                        }
+                        case LlmRole.Assistant: {
+                            FlushToolResults();
+                            var blocks = new List<ContentBlockParam>();
+                            if (!string.IsNullOrEmpty(m.Text)) {
+                                blocks.Add(new TextBlockParam(m.Text));
+                            }
+                            if (m.ToolCalls is { Count: > 0 }) {
+                                foreach (var tc in m.ToolCalls) {
+                                    Dictionary<string, JsonElement> parsedInput;
+                                    try {
+                                        parsedInput = string.IsNullOrWhiteSpace(tc.ArgumentsJson)
+                                            ? new Dictionary<string, JsonElement>()
+                                            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(tc.ArgumentsJson)
+                                              ?? new Dictionary<string, JsonElement>();
+                                    } catch (Exception) {
+                                        parsedInput = new Dictionary<string, JsonElement>();
+                                    }
+                                    blocks.Add(new ToolUseBlockParam { ID = tc.Id, Name = tc.Name, Input = parsedInput });
+                                }
+                            }
+                            if (blocks.Count > 0) {
+                                result.Add(new MessageParam { Role = Role.Assistant, Content = blocks });
+                            }
+                            break;
+                        }
+                        case LlmRole.Tool:
+                            pendingToolResults.Add(new ToolResultBlockParam(m.ToolCallId ?? string.Empty) {
+                                Content = m.Text ?? string.Empty,
+                                IsError = m.IsToolError
+                            });
+                            break;
+                    }
                 }
-                _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = text });
+                FlushToolResults();
+
+                // Anthropic requires strictly alternating user/assistant starting with user.
+                return EnsureAlternatingRoles(result);
             }
 
-            public void CommitToolResults(IReadOnlyList<LlmToolResult> results) {
-                // Assistant message with text + tool_use blocks, then a user message with the results.
-                var assistantContentBlocks = new List<ContentBlockParam>();
-                if (!string.IsNullOrWhiteSpace(_pendingTurnText)) {
-                    assistantContentBlocks.Add(new TextBlockParam(_pendingTurnText));
-                }
-                foreach (var (id, name, inputJson) in _pendingToolCalls) {
-                    Dictionary<string, JsonElement> parsedInput;
+            private static List<ToolUnion> ConvertToAnthropicToolSpecs(IReadOnlyList<LlmToolSpec> specs, bool enablePromptCaching) {
+                var tools = new List<ToolUnion>();
+                for (int index = 0; index < specs.Count; index++) {
+                    var spec = specs[index];
                     try {
-                        parsedInput = string.IsNullOrWhiteSpace(inputJson)
-                            ? new Dictionary<string, JsonElement>()
-                            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson);
-                    } catch (Exception ex) {
-                        _svc._logger.LogError(
-                            ex,
-                            "{ServiceName}: Failed to deserialize Anthropic native tool input for assistant history. ToolUseId={ToolUseId}, ToolName={ToolName}, InputJson={InputJson}, ErrorSummary={ErrorSummary}",
-                            _svc.ServiceName, id, name, inputJson, ex.GetLogSummary());
-                        parsedInput = new Dictionary<string, JsonElement>();
+                        var schemaDoc = System.Text.Json.JsonDocument.Parse(spec.ParametersJson);
+                        var root = schemaDoc.RootElement;
+
+                        var properties = new Dictionary<string, JsonElement>();
+                        var required = new List<string>();
+
+                        if (root.TryGetProperty("properties", out var propsEl) && propsEl.ValueKind == JsonValueKind.Object) {
+                            foreach (var prop in propsEl.EnumerateObject()) {
+                                properties[prop.Name] = prop.Value.Clone();
+                            }
+                        }
+
+                        if (root.TryGetProperty("required", out var reqEl) && reqEl.ValueKind == JsonValueKind.Array) {
+                            foreach (var item in reqEl.EnumerateArray()) {
+                                required.Add(item.GetString());
+                            }
+                        }
+
+                        var inputSchema = new InputSchema {
+                            Type = System.Text.Json.JsonDocument.Parse("\"object\"").RootElement,
+                            Properties = properties,
+                            Required = required
+                        };
+
+                        tools.Add(new ToolUnion(new Tool {
+                            Name = spec.Name,
+                            Description = spec.Description,
+                            InputSchema = inputSchema,
+                            CacheControl = enablePromptCaching && index == specs.Count - 1 ? CreateCacheControl() : null,
+                        }, null));
+                    } catch (Exception) {
                     }
-                    assistantContentBlocks.Add(new ToolUseBlockParam {
-                        ID = id,
-                        Name = name,
-                        Input = parsedInput
-                    });
                 }
-                _providerHistory.Add(new MessageParam { Role = Role.Assistant, Content = assistantContentBlocks });
-                _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = _pendingTurnText });
-
-                var toolResultBlocks = new List<ContentBlockParam>();
-                foreach (var result in results) {
-                    toolResultBlocks.Add(new ToolResultBlockParam(result.ToolCallId) {
-                        Content = result.Result,
-                        IsError = result.IsError,
-                    });
-                }
-                _providerHistory.Add(new MessageParam { Role = Role.User, Content = toolResultBlocks });
+                return tools;
             }
-
-            public IReadOnlyList<SerializedChatMessage> GetTrackedHistory() => _trackedHistory;
         }
 
 

@@ -391,37 +391,40 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LLMChannel channel,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, null, executionContext, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        public async IAsyncEnumerable<string> ExecAsync(
+            Message message,
+            long ChatId,
+            string modelName,
+            LLMChannel channel,
+            LLMApiBinding binding,
+            LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
             if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
 
             var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
             var model = googleAI.CreateGenerativeModel("models/" + modelName);
-            var fullResponse = new StringBuilder();
 
             if (_llmVisibilityService != null &&
                 message != null &&
                 await _llmVisibilityService.IsUserInvisibleAsync(ChatId, message.FromUserId, cancellationToken)) {
-                _chatSessions.Remove(ChatId);
                 yield break;
             }
 
-            var history = await GetChatHistory(ChatId, message, await CheckVisionSupport(modelName, channel.Id));
-            if (_llmVisibilityService != null &&
-                ( await _llmVisibilityService.GetInvisibleUserIdsAsync(ChatId, cancellationToken) ).Count > 0) {
-                _chatSessions.Remove(ChatId);
-            }
-
-            if (!_chatSessions.TryGetValue(ChatId, out var chatSession)) {
-                chatSession = model.StartChat(history: history);
-                _chatSessions[ChatId] = chatSession;
-            }
+            var rows = await LlmHistoryQueryService.LoadAsync(_dbContext, _llmVisibilityService, ChatId, message, cancellationToken);
+            var supportsVision = await CheckVisionSupport(modelName, channel.Id);
 
             var botName = await GetBotNameAsync();
-            var trackedHistory = new List<SerializedChatMessage> {
-                new SerializedChatMessage { Role = "system", Content = McpToolHelper.FormatSystemPrompt(botName, ChatId) }
-            };
+            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
 
-            var source = new GeminiTurnSource(this, chatSession, trackedHistory);
+            var transport = new GeminiTransport(this, model, supportsVision);
+            var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
+
             var meta = new LlmToolLoopMeta {
                 ChatId = ChatId,
                 OriginalMessageId = message.MessageId,
@@ -431,57 +434,153 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 ChannelId = channel.Id
             };
             var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            await foreach (var item in LlmToolLoop.RunAsync(source, message.Content, toolContext, meta, executionContext, cancellationToken)) {
+            var run = new LlmAgentRunRequest {
+                Transport = transport,
+                SystemPrompt = systemPrompt,
+                History = history,
+                Tools = null,
+                Config = new LlmTransportConfig {
+                    ModelName = modelName,
+                    Provider = channel.Provider,
+                    Binding = binding,
+                    Channel = channel,
+                    SupportsVision = supportsVision
+                },
+                ToolContext = toolContext,
+                Meta = meta,
+                ExecutionContext = executionContext
+            };
+            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
+                yield return item;
+            }
+        }
+
+        /// <inheritdoc />
+        public async IAsyncEnumerable<string> ExecWithHistoryAsync(
+            IReadOnlyList<AgentHistoryMessage> history,
+            Message message,
+            long ChatId,
+            string modelName,
+            LLMChannel channel,
+            LLMApiBinding binding, LlmExecutionContext executionContext,
+            bool supportsVision,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
+            if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
+
+            var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
+            var model = googleAI.CreateGenerativeModel("models/" + modelName);
+
+            if (_llmVisibilityService != null &&
+                message != null &&
+                await _llmVisibilityService.IsUserInvisibleAsync(ChatId, message.FromUserId, cancellationToken)) {
+                yield break;
+            }
+
+                        var botName = await GetBotNameAsync();
+            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
+
+            var transport = new GeminiTransport(this, model, supportsVision);
+            var projected = LlmHistoryProjector.Project(history, supportsVision, _logger);
+
+            var meta = new LlmToolLoopMeta {
+                ChatId = ChatId,
+                OriginalMessageId = message.MessageId,
+                UserId = message.FromUserId,
+                ModelName = modelName,
+                Provider = "Gemini",
+                ChannelId = channel.Id
+            };
+            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
+            var run = new LlmAgentRunRequest {
+                Transport = transport,
+                SystemPrompt = systemPrompt,
+                History = projected,
+                Tools = null,
+                Config = new LlmTransportConfig {
+                    ModelName = modelName,
+                    Provider = channel.Provider,
+                    Binding = binding,
+                    Channel = channel,
+                    SupportsVision = supportsVision
+                },
+                ToolContext = toolContext,
+                Meta = meta,
+                ExecutionContext = executionContext
+            };
+            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
                 yield return item;
             }
         }
 
         /// <summary>
-        /// Session-based text-protocol turn source for Gemini (ChatSession owns history).
-        /// Snapshot history is tracked manually alongside the session.
+        /// Text-protocol transport for Gemini (GenerativeAI session). Seeds the session from the
+        /// normalized history and streams the newest user message each turn.
         /// </summary>
-        private sealed class GeminiTurnSource : ILlmTurnSource {
+        private sealed class GeminiTransport : ILlmTransport {
             private readonly GeminiService _svc;
-            private readonly ChatSession _chatSession;
-            private readonly List<SerializedChatMessage> _trackedHistory;
+            private readonly GenerativeModel _model;
+            private readonly bool _supportsVision;
+            private ChatSession? _chatSession;
 
-            public GeminiTurnSource(GeminiService svc, ChatSession chatSession, List<SerializedChatMessage> trackedHistory) {
+            public GeminiTransport(GeminiService svc, GenerativeModel model, bool supportsVision) {
                 _svc = svc;
-                _chatSession = chatSession;
-                _trackedHistory = trackedHistory;
+                _model = model;
+                _supportsVision = supportsVision;
             }
 
             public bool SupportsNativeTools => false;
 
             public async IAsyncEnumerable<LlmStreamEvent> StreamTurnAsync(
-                string? userContent,
+                LlmTurnRequest request,
                 [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+                if (_chatSession == null) {
+                    var seedHistory = ToContents(request.History.Take(request.History.Count - 1).ToList());
+                    _chatSession = _model.StartChat(history: seedHistory);
+                }
+
+                var lastUser = request.History.LastOrDefault(m => m.Role == LlmRole.User);
+                var prompt = lastUser?.Text ?? string.Empty;
+
                 var turnText = new StringBuilder();
-                await foreach (var chunk in _chatSession.StreamContentAsync(userContent ?? string.Empty).WithCancellation(cancellationToken)) {
+                await foreach (var chunk in _chatSession.StreamContentAsync(prompt).WithCancellation(cancellationToken)) {
                     if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
                     turnText.Append(chunk.Text);
                     yield return new LlmStreamEvent.TextDelta(chunk.Text);
                 }
 
-                var response = turnText.ToString().Trim();
-                _trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = userContent ?? string.Empty });
-                _trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = response });
-
                 yield return new LlmStreamEvent.TurnCompleted(new LlmTurnResult {
-                    Text = response,
+                    Text = turnText.ToString().Trim(),
                     StreamedAny = turnText.Length > 0
                 });
             }
 
-            public void CommitAssistantTurn(string text, string reasoning, bool streamedAny) {
-                // Session tracks history; tracked snapshot history already updated in StreamTurnAsync.
+            private List<GenerativeAI.Types.Content> ToContents(List<LlmMessage> messages) {
+                var contents = new List<GenerativeAI.Types.Content>();
+                foreach (var m in messages) {
+                    if (m.Role == LlmRole.User) {
+                        var role = Roles.User;
+                        if (m.ImagePng != null && _supportsVision) {
+                            var parts = new List<Part>();
+                            if (!string.IsNullOrWhiteSpace(m.Text)) {
+                                parts.Add(new Part { Text = m.Text.Trim() });
+                            }
+                            parts.Add(new Part {
+                                InlineData = new GenerativeAI.Types.Blob {
+                                    MimeType = m.ImageMediaType ?? "image/png",
+                                    Data = Convert.ToBase64String(m.ImagePng)
+                                }
+                            });
+                            contents.Add(new Content { Parts = parts, Role = role });
+                        } else {
+                            contents.Add(new Content(m.Text?.Trim() ?? string.Empty, role));
+                        }
+                    } else if (m.Role == LlmRole.Assistant) {
+                        contents.Add(new Content(m.Text?.Trim() ?? string.Empty, Roles.Model));
+                    }
+                }
+                return contents;
             }
-
-            public void CommitToolResults(IReadOnlyList<LlmToolResult> results) {
-                // Text protocol: the shared loop sends tool feedback as the next user message.
-            }
-
-            public IReadOnlyList<SerializedChatMessage> GetTrackedHistory() => _trackedHistory;
         }
 
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {

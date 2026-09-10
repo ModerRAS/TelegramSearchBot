@@ -22,7 +22,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
             AgentExecutionTask task,
             LlmExecutionContext executionContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken) {
-            await SeedTaskDataAsync(task, cancellationToken);
+            List<AgentHistoryMessage> history = task.History;
 
             var binding = ToBinding(task.Channel);
             var service = binding != null ? ResolveService(binding.Protocol) : ResolveService(task.Channel.Provider);
@@ -48,7 +48,11 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 DateTime = task.CreatedAtUtc
             };
 
-            await foreach (var chunk in service.ExecAsync(message, task.ChatId, task.ModelName, channel, binding, executionContext, cancellationToken)
+            var supportsVision = task.Channel.Capabilities.Any(c =>
+                c.Name.Equals("vision", StringComparison.OrdinalIgnoreCase) &&
+                c.Value.Equals("true", StringComparison.OrdinalIgnoreCase));
+
+            await foreach (var chunk in service.ExecWithHistoryAsync(history, message, task.ChatId, task.ModelName, channel, binding, executionContext, supportsVision, cancellationToken)
                                .WithCancellation(cancellationToken)) {
                 yield return chunk;
             }
@@ -105,69 +109,6 @@ namespace TelegramSearchBot.LLMAgent.Service {
                     botUserId);
                 Env.BotId = botUserId;
             }
-        }
-
-        private async Task SeedTaskDataAsync(AgentExecutionTask task, CancellationToken cancellationToken) {
-            var dbContext = _serviceProvider.GetRequiredService<DataDbContext>();
-            await dbContext.Database.EnsureDeletedAsync(cancellationToken);
-            await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-
-            dbContext.LLMChannels.Add(ToEntity(task.Channel));
-            var channelWithModel = new ChannelWithModel {
-                Id = 1,
-                LLMChannelId = task.Channel.ChannelId,
-                ModelName = task.ModelName,
-                IsDeleted = false
-            };
-            dbContext.ChannelsWithModel.Add(channelWithModel);
-            dbContext.GroupSettings.Add(new GroupSettings {
-                GroupId = task.ChatId,
-                LLMModelName = task.ModelName
-            });
-
-            foreach (var capability in task.Channel.Capabilities) {
-                dbContext.ModelCapabilities.Add(new ModelCapability {
-                    ChannelWithModelId = channelWithModel.Id,
-                    CapabilityName = capability.Name,
-                    CapabilityValue = capability.Value,
-                    Description = capability.Description
-                });
-            }
-
-            var seededUsers = new HashSet<long>();
-            foreach (var historyMessage in task.History) {
-                dbContext.Messages.Add(new Message {
-                    Id = historyMessage.DataId,
-                    DateTime = historyMessage.DateTime,
-                    GroupId = historyMessage.GroupId,
-                    MessageId = historyMessage.MessageId,
-                    FromUserId = historyMessage.FromUserId,
-                    ReplyToUserId = historyMessage.ReplyToUserId,
-                    ReplyToMessageId = historyMessage.ReplyToMessageId,
-                    Content = historyMessage.Content
-                });
-
-                if (seededUsers.Add(historyMessage.User.UserId)) {
-                    dbContext.UserData.Add(new UserData {
-                        Id = historyMessage.User.UserId,
-                        FirstName = historyMessage.User.FirstName,
-                        LastName = historyMessage.User.LastName,
-                        UserName = historyMessage.User.UserName,
-                        IsBot = historyMessage.User.IsBot,
-                        IsPremium = historyMessage.User.IsPremium
-                    });
-                }
-
-                foreach (var extension in historyMessage.Extensions) {
-                    dbContext.MessageExtensions.Add(new MessageExtension {
-                        MessageDataId = historyMessage.DataId,
-                        Name = extension.Name,
-                        Value = extension.Value
-                    });
-                }
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         private static LLMChannel ToEntity(AgentChannelConfig config) {

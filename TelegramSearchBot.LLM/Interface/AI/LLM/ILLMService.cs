@@ -68,6 +68,7 @@ namespace TelegramSearchBot.Interface.AI.LLM {
             IReadOnlyList<AgentHistoryMessage> history,
             Message message, long ChatId, string modelName, LLMChannel channel,
             LLMApiBinding binding, LlmExecutionContext executionContext,
+            bool supportsVision = false,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
             return ExecAsync(message, ChatId, modelName, channel, binding, executionContext, cancellationToken);
         }

@@ -258,7 +258,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// Generates OpenAI-compatible ChatTool definitions for all registered tools (built-in and external).
         /// Used for native function/tool calling API instead of XML prompt-based tool calling.
         /// </summary>
-        public static List<OpenAI.Chat.ChatTool> GetNativeToolDefinitions() {
+                /// <summary>
+        /// Native tool definitions in the provider-neutral form consumed by ILlmTransport.
+        /// </summary>
+        public static List<LlmToolSpec> GetLlmToolSpecs() {
+            return GetNativeToolDefinitions().Select(t => new LlmToolSpec {
+                Name = t.FunctionName ?? string.Empty,
+                Description = t.FunctionDescription ?? string.Empty,
+                ParametersJson = t.FunctionParameters?.ToString() ?? "{}",
+                StrictSchema = t.FunctionSchemaIsStrict == true
+            }).ToList();
+        }
+
+public static List<OpenAI.Chat.ChatTool> GetNativeToolDefinitions() {
             var tools = new List<OpenAI.Chat.ChatTool>();
 
             // Built-in tools
