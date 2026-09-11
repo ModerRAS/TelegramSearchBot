@@ -78,11 +78,11 @@ namespace TelegramSearchBot.Test.Manage {
             _geminiServiceMock = new Mock<GeminiService>(_context, geminiLoggerMock.Object, httpClientFactoryMock.Object);
 
             // 新增 ILLMFactory mock
-            var llmFactoryMock = new Mock<ILLMFactory>();
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.MiniMax)).Returns(_openAIServiceMock.Object);
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(_ollamaServiceMock.Object);
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(_geminiServiceMock.Object);
+            var llmFactoryMock = new Mock<LlmProviderRegistry>((IServiceProvider)null);
+            llmFactoryMock.Setup(f => f.GetProvider(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetProvider(LLMProvider.MiniMax)).Returns(_openAIServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetProvider(LLMProvider.Ollama)).Returns(_ollamaServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetProvider(LLMProvider.Gemini)).Returns(_geminiServiceMock.Object);
 
             // 创建Logger mock
             _loggerMock = new Mock<ILogger<EditLLMConfHelper>>();

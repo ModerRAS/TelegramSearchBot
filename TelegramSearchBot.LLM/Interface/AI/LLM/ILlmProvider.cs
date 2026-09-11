@@ -8,7 +8,7 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Interface.AI.LLM {
-    public interface ILLMService {
+    public interface ILlmProvider {
         public IAsyncEnumerable<string> ExecAsync(Message message, long ChatId, string modelName, LLMChannel channel,
                                                   [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default);
 

@@ -36,7 +36,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
     /// 与现有的 OpenAIService（Chat Completions API）并存。
     /// </summary>
     [Injectable(ServiceLifetime.Transient)]
-    public class OpenAIResponsesService : IService, ILLMService {
+    public class OpenAIResponsesService : IService, ILlmProvider {
         public string ServiceName => "OpenAIResponsesService";
 
         /// <summary>
@@ -133,7 +133,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
 
         // ========================================================================
-        // ILLMService Implementation
+        // ILlmProvider Implementation
         // ========================================================================
 
         public async IAsyncEnumerable<string> ExecAsync(
@@ -1040,23 +1040,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return model;
         }
 
-        Task<string> ILLMService.AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt) {
+        Task<string> ILlmProvider.AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt) {
             return AnalyzeImageAsync(photoPath, modelName, channel, prompt);
         }
 
-        Task<IEnumerable<string>> ILLMService.GetAllModels(LLMChannel channel) {
+        Task<IEnumerable<string>> ILlmProvider.GetAllModels(LLMChannel channel) {
             return GetAllModels(channel);
         }
 
-        Task<IEnumerable<ModelWithCapabilities>> ILLMService.GetAllModelsWithCapabilities(LLMChannel channel) {
+        Task<IEnumerable<ModelWithCapabilities>> ILlmProvider.GetAllModelsWithCapabilities(LLMChannel channel) {
             return GetAllModelsWithCapabilities(channel);
         }
 
-        Task<float[]> ILLMService.GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {
+        Task<float[]> ILlmProvider.GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {
             return GenerateEmbeddingsAsync(text, modelName, channel);
         }
 
-        IAsyncEnumerable<string> ILLMService.ResumeFromSnapshotAsync(LlmContinuationSnapshot snapshot, LLMChannel channel,
+        IAsyncEnumerable<string> ILlmProvider.ResumeFromSnapshotAsync(LlmContinuationSnapshot snapshot, LLMChannel channel,
             LlmExecutionContext executionContext,
             CancellationToken cancellationToken) {
             return ResumeFromSnapshotAsync(snapshot, channel, executionContext, cancellationToken);

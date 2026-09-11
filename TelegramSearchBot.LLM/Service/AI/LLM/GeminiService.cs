@@ -23,7 +23,7 @@ using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(ServiceLifetime.Transient)]
-    public class GeminiService : ILLMService, IService {
+    public class GeminiService : ILlmProvider, IService {
         public string ServiceName => "GeminiService";
         private readonly ILogger<GeminiService> _logger;
         private readonly DataDbContext _dbContext;

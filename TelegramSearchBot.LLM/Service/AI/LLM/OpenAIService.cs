@@ -33,7 +33,7 @@ using CommonChat = OpenAI.Chat;
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not inheriting from BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
-    public class OpenAIService : IService, ILLMService {
+    public class OpenAIService : IService, ILlmProvider {
         public string ServiceName => "OpenAIService";
 
         /// <summary>

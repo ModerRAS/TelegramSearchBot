@@ -124,7 +124,7 @@ namespace TelegramSearchBot.Extension {
 
         public static IServiceCollection ConfigureAllServices(this IServiceCollection services) {
             var assembly = typeof(GeneralBootstrap).Assembly;
-            var llmAssembly = typeof(ILLMFactory).Assembly;
+            var llmAssembly = typeof(LlmProviderRegistry).Assembly;
             return services
                 .AddTelegramBotClient()
                 .AddRedis()

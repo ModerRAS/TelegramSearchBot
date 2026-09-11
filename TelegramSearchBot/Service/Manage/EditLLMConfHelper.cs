@@ -20,13 +20,13 @@ namespace TelegramSearchBot.Service.Manage {
     public class EditLLMConfHelper : IService, IEditLLMConfHelper {
         public string ServiceName => "EditLLMConfHelper";
         protected readonly DataDbContext DataContext;
-        private readonly ILLMFactory _LLMFactory;
+        private readonly LlmProviderRegistry _LLMFactory;
         private readonly IModelCapabilityService _modelCapabilityService;
         private readonly ILogger<EditLLMConfHelper> _logger;
 
         public EditLLMConfHelper(
             DataDbContext context,
-            ILLMFactory llmFactory,
+            LlmProviderRegistry llmFactory,
             IModelCapabilityService modelCapabilityService,
             ILogger<EditLLMConfHelper> logger
             ) {
@@ -63,7 +63,7 @@ namespace TelegramSearchBot.Service.Manage {
                 _logger.LogInformation("成功添加新通道: {ChannelName} ({Provider})", Name, Provider);
 
                 IEnumerable<string> models;
-                var service = _LLMFactory.GetLLMService(Provider);
+                var service = _LLMFactory.GetProvider(Provider);
                 if (service == null) {
                     _logger.LogWarning("未找到提供商 {Provider} 的LLM服务", Provider);
                     return -1;
@@ -122,7 +122,7 @@ namespace TelegramSearchBot.Service.Manage {
                     continue;
                 }
 
-                var service = _LLMFactory.GetLLMService(channel.Provider);
+                var service = _LLMFactory.GetProvider(channel.Provider);
                 if (service == null) {
                     _logger.LogWarning("未找到通道 {ChannelName} ({Provider}) 的LLM服务", channel.Name, channel.Provider);
                     continue;

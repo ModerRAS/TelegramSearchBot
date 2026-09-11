@@ -76,7 +76,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
             };
         }
 
-        private ILLMService ResolveService(LLMProvider provider) {
+        private ILlmProvider ResolveService(LLMProvider provider) {
             return provider switch {
                 LLMProvider.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
                 LLMProvider.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
@@ -86,8 +86,8 @@ namespace TelegramSearchBot.LLMAgent.Service {
             };
         }
 
-        /// <summary>按 binding 线协议解析 client（与 ILLMFactory.GetLLMService(LlmProtocol) 同构）。</summary>
-        private ILLMService ResolveService(LlmProtocol protocol) {
+        /// <summary>按 binding 线协议解析 client（与 LlmProviderRegistry.GetProvider(LlmProtocol) 同构）。</summary>
+        private ILlmProvider ResolveService(LlmProtocol protocol) {
             return protocol switch {
                 LlmProtocol.OpenAIChat => _serviceProvider.GetRequiredService<OpenAIService>(),
                 LlmProtocol.OpenAIResponses => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),

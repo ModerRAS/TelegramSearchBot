@@ -25,7 +25,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         private readonly Mock<OpenAIService> _openAIServiceMock;
         private readonly Mock<OllamaService> _ollamaServiceMock;
         private readonly Mock<GeminiService> _geminiServiceMock;
-        private readonly Mock<ILLMFactory> _factoryMock;
+        private readonly Mock<LlmProviderRegistry> _factoryMock;
         private readonly GeneralLLMService _service;
 
         public GeneralLLMServiceTests() {
@@ -68,7 +68,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             var anthropicServiceMock = new Mock<AnthropicService>(
                 _dbContext, anthropicLogger.Object, messageExtensionServiceMock.Object, httpClientFactoryMock.Object);
 
-            _factoryMock = new Mock<ILLMFactory>();
+            _factoryMock = new Mock<LlmProviderRegistry>((IServiceProvider)null);
 
             _service = new GeneralLLMService(
                 _redisMock.Object,
@@ -213,7 +213,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
 
         [Fact]
         public async Task AnalyzeImageAsync_WithCustomPrompt_ForwardsPromptToProvider() {
-            var providerMock = new Mock<ILLMService>();
+            var providerMock = new Mock<ILlmProvider>();
             var channel = new LLMChannel {
                 Name = "vision-channel",
                 Gateway = "https://example.com",
@@ -445,14 +445,14 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             });
             await _dbContext.SaveChangesAsync();
 
-            var serviceMock = new Mock<ILLMService>();
+            var serviceMock = new Mock<ILlmProvider>();
             serviceMock.Setup(s => s.IsHealthyAsync(It.IsAny<LLMChannel>(), It.IsAny<LLMApiBinding>()))
                 .ReturnsAsync(true);
             serviceMock.Setup(s => s.ExecAsync(
                     It.IsAny<Message>(), It.IsAny<long>(), It.IsAny<string>(), It.IsAny<LLMChannel>(),
                     It.IsAny<LLMApiBinding>(), It.IsAny<LlmExecutionContext>(), It.IsAny<CancellationToken>()))
                 .Returns(EmptyStringStream());
-            _factoryMock.Setup(f => f.GetLLMService(It.IsAny<ResolvedLlmRoute>())).Returns(serviceMock.Object);
+            _factoryMock.Setup(f => f.GetProvider(It.IsAny<ResolvedLlmRoute>())).Returns(serviceMock.Object);
 
             var results = new List<string>();
             var message = new TelegramSearchBot.Model.Data.Message { Content = "hi", GroupId = 123, MessageId = 1, FromUserId = 1 };
@@ -462,7 +462,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 results.Add(r);
             }
 
-            _factoryMock.Verify(f => f.GetLLMService(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == 11 && r.Binding != null && r.Binding.Id == bDefault.Id)), Times.Once);
+            _factoryMock.Verify(f => f.GetProvider(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == 11 && r.Binding != null && r.Binding.Id == bDefault.Id)), Times.Once);
             serviceMock.Verify(s => s.ExecAsync(
                 It.IsAny<Message>(), It.IsAny<long>(), It.IsAny<string>(), It.IsAny<LLMChannel>(),
                 It.Is<LLMApiBinding>(b => b.Id == bDefault.Id), It.IsAny<LlmExecutionContext>(), It.IsAny<CancellationToken>()),
@@ -484,14 +484,14 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 new ChannelWithModel { Id = 33, ModelName = "m", LLMChannelId = 13, ApiBindingId = bHigh.Id, ApiBinding = bHigh });
             await _dbContext.SaveChangesAsync();
 
-            var serviceMock = new Mock<ILLMService>();
+            var serviceMock = new Mock<ILlmProvider>();
             serviceMock.Setup(s => s.IsHealthyAsync(It.IsAny<LLMChannel>(), It.IsAny<LLMApiBinding>()))
                 .ReturnsAsync(true);
             serviceMock.Setup(s => s.ExecAsync(
                     It.IsAny<Message>(), It.IsAny<long>(), It.IsAny<string>(), It.IsAny<LLMChannel>(),
                     It.IsAny<LLMApiBinding>(), It.IsAny<LlmExecutionContext>(), It.IsAny<CancellationToken>()))
                 .Returns(EmptyStringStream());
-            _factoryMock.Setup(f => f.GetLLMService(It.IsAny<ResolvedLlmRoute>())).Returns(serviceMock.Object);
+            _factoryMock.Setup(f => f.GetProvider(It.IsAny<ResolvedLlmRoute>())).Returns(serviceMock.Object);
 
             var message = new TelegramSearchBot.Model.Data.Message { Content = "hi", GroupId = 123, MessageId = 1, FromUserId = 1 };
             await foreach (var _ in _service.ExecOperationAsync(
@@ -500,8 +500,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             }
 
             // 高优先级渠道先被选中；成功后低优先级渠道不再被访问
-            _factoryMock.Verify(f => f.GetLLMService(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == highChannel.Id && r.Binding!.Id == bHigh.Id)), Times.Once);
-            _factoryMock.Verify(f => f.GetLLMService(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == lowChannel.Id)), Times.Never);
+            _factoryMock.Verify(f => f.GetProvider(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == highChannel.Id && r.Binding!.Id == bHigh.Id)), Times.Once);
+            _factoryMock.Verify(f => f.GetProvider(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == lowChannel.Id)), Times.Never);
         }
 
         [Fact]
@@ -521,12 +521,12 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             });
             await _dbContext.SaveChangesAsync();
 
-            var serviceMock = new Mock<ILLMService>();
+            var serviceMock = new Mock<ILlmProvider>();
             serviceMock.Setup(s => s.ResumeFromSnapshotAsync(
                     It.IsAny<LlmContinuationSnapshot>(), It.IsAny<LLMChannel>(), It.IsAny<LLMApiBinding>(),
                     It.IsAny<LlmExecutionContext>(), It.IsAny<CancellationToken>()))
                 .Returns(EmptyStringStream());
-            _factoryMock.Setup(f => f.GetLLMService(It.IsAny<ResolvedLlmRoute>())).Returns(serviceMock.Object);
+            _factoryMock.Setup(f => f.GetProvider(It.IsAny<ResolvedLlmRoute>())).Returns(serviceMock.Object);
 
             var snapshot = new LlmContinuationSnapshot {
                 SnapshotId = "s1",
@@ -542,7 +542,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 results.Add(r);
             }
 
-            _factoryMock.Verify(f => f.GetLLMService(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == 14 && r.Binding != null && r.Binding.Id == bDefault.Id)), Times.Once);
+            _factoryMock.Verify(f => f.GetProvider(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == 14 && r.Binding != null && r.Binding.Id == bDefault.Id)), Times.Once);
             serviceMock.Verify(s => s.ResumeFromSnapshotAsync(
                 It.IsAny<LlmContinuationSnapshot>(), It.IsAny<LLMChannel>(),
                 It.Is<LLMApiBinding>(b => b.Id == bDefault.Id), It.IsAny<LlmExecutionContext>(), It.IsAny<CancellationToken>()),

@@ -3,27 +3,23 @@ using System.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Attributes;
-using TelegramSearchBot.Interface;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model.AI;
 
 namespace TelegramSearchBot.Service.AI.LLM {
-    [Injectable(ServiceLifetime.Transient)]
-    public class LLMFactory : IService, ILLMFactory {
-        public string ServiceName => "LLMFactory";
-
+    /// <summary>
+    /// Resolves the provider implementation for a channel/protocol/route.
+    /// Replaces the old ILLMFactory/LLMFactory pair (no IService baggage).
+    /// </summary>
+    [Injectable(ServiceLifetime.Singleton)]
+    public class LlmProviderRegistry {
         private readonly IServiceProvider _serviceProvider;
-        private readonly ILogger<LLMFactory> _logger;
 
-        public LLMFactory(
-            IServiceProvider serviceProvider,
-            ILogger<LLMFactory> logger
-            ) {
-            _logger = logger;
+        public LlmProviderRegistry(IServiceProvider serviceProvider) {
             _serviceProvider = serviceProvider;
         }
 
-        public ILLMService GetLLMService(LLMProvider provider) {
+        public virtual ILlmProvider GetProvider(LLMProvider provider) {
             return provider switch {
                 LLMProvider.OpenAI => _serviceProvider.GetRequiredService<OpenAIService>(),
                 LLMProvider.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
@@ -32,26 +28,25 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 LLMProvider.LMStudio => _serviceProvider.GetRequiredService<OpenAIService>(),
                 LLMProvider.Anthropic => _serviceProvider.GetRequiredService<AnthropicService>(),
                 LLMProvider.ResponsesAPI => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
-                _ => throw new KeyNotFoundException($"No LLM service registered for provider {provider}.")
+                _ => throw new KeyNotFoundException($"No LLM provider registered for provider {provider}.")
             };
         }
 
-        public ILLMService GetLLMService(LlmProtocol protocol) {
+        public virtual ILlmProvider GetProvider(LlmProtocol protocol) {
             return protocol switch {
                 LlmProtocol.OpenAIChat => _serviceProvider.GetRequiredService<OpenAIService>(),
                 LlmProtocol.OpenAIResponses => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
                 LlmProtocol.AnthropicMessages => _serviceProvider.GetRequiredService<AnthropicService>(),
                 LlmProtocol.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
                 LlmProtocol.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
-                _ => throw new KeyNotFoundException($"No LLM service registered for protocol {protocol}.")
+                _ => throw new KeyNotFoundException($"No LLM provider registered for protocol {protocol}.")
             };
         }
 
-        public ILLMService GetLLMService(ResolvedLlmRoute route) {
+        public virtual ILlmProvider GetProvider(ResolvedLlmRoute route) {
             return route.Binding != null
-                ? GetLLMService(route.Binding.Protocol)
-                : GetLLMService(route.Channel.Provider);
+                ? GetProvider(route.Binding.Protocol)
+                : GetProvider(route.Channel.Provider);
         }
-
     }
 }

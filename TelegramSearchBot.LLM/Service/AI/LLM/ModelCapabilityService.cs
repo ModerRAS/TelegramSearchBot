@@ -48,7 +48,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return false;
                 }
 
-                var service = GetLLMService(channel.Provider);
+                var service = GetProvider(channel.Provider);
                 if (service == null) {
                     _logger.LogWarning("No LLM service found for provider {Provider}", channel.Provider);
                     return false;
@@ -281,15 +281,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// <summary>
         /// 根据提供商获取对应的LLM服务
         /// </summary>
-        private ILLMService GetLLMService(LLMProvider provider) {
+        private ILlmProvider GetProvider(LLMProvider provider) {
             return provider switch {
-                LLMProvider.OpenAI => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
-                LLMProvider.Ollama => _serviceProvider.GetService(typeof(OllamaService)) as ILLMService,
-                LLMProvider.Gemini => _serviceProvider.GetService(typeof(GeminiService)) as ILLMService,
-                LLMProvider.MiniMax => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
-                LLMProvider.LMStudio => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
-                LLMProvider.Anthropic => _serviceProvider.GetService(typeof(AnthropicService)) as ILLMService,
-                LLMProvider.ResponsesAPI => _serviceProvider.GetService(typeof(OpenAIResponsesService)) as ILLMService,
+                LLMProvider.OpenAI => _serviceProvider.GetService(typeof(OpenAIService)) as ILlmProvider,
+                LLMProvider.Ollama => _serviceProvider.GetService(typeof(OllamaService)) as ILlmProvider,
+                LLMProvider.Gemini => _serviceProvider.GetService(typeof(GeminiService)) as ILlmProvider,
+                LLMProvider.MiniMax => _serviceProvider.GetService(typeof(OpenAIService)) as ILlmProvider,
+                LLMProvider.LMStudio => _serviceProvider.GetService(typeof(OpenAIService)) as ILlmProvider,
+                LLMProvider.Anthropic => _serviceProvider.GetService(typeof(AnthropicService)) as ILlmProvider,
+                LLMProvider.ResponsesAPI => _serviceProvider.GetService(typeof(OpenAIResponsesService)) as ILlmProvider,
                 _ => null
             };
         }
@@ -305,7 +305,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 foreach (var channel in channels) {
                     results.Add($"\n=== {channel.Provider} 通道 (ID: {channel.Id}) ===");
 
-                    var service = GetLLMService(channel.Provider);
+                    var service = GetProvider(channel.Provider);
                     if (service == null) {
                         results.Add($"未找到 {channel.Provider} 服务");
                         continue;

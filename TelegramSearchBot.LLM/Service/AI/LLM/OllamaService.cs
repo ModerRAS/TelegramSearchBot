@@ -19,7 +19,7 @@ using SkiaSharp;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM; // For ILLMService
+using TelegramSearchBot.Interface.AI.LLM; // For ILlmProvider
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
@@ -27,7 +27,7 @@ using TelegramSearchBot.Model.Tools; // For BraveSearchResult
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
-    public class OllamaService : IService, ILLMService {
+    public class OllamaService : IService, ILlmProvider {
         public string ServiceName => "OllamaService";
 
         private readonly ILogger<OllamaService> _logger;

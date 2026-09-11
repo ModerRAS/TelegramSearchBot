@@ -78,10 +78,10 @@ namespace TelegramSearchBot.Test.Manage {
             geminiServiceMock.Setup(g => g.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
 
-            var llmFactoryMock = new Mock<ILLMFactory>();
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(ollamaServiceMock.Object);
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(geminiServiceMock.Object);
+            var llmFactoryMock = new Mock<LlmProviderRegistry>((IServiceProvider)null);
+            llmFactoryMock.Setup(f => f.GetProvider(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetProvider(LLMProvider.Ollama)).Returns(ollamaServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetProvider(LLMProvider.Gemini)).Returns(geminiServiceMock.Object);
 
             helperMock = new Mock<IEditLLMConfHelper>();
             helperMock.Setup(h => h.AddChannel(
