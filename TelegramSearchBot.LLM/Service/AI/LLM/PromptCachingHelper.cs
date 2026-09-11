@@ -165,6 +165,45 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 : PromptCachingOutcomes.Miss;
         }
 
+        /// <summary>Logs one Anthropic prompt-caching observation (moved from AnthropicService instance method).</summary>
+        public static void LogAnthropicPromptCachingObservation(
+            ILogger logger,
+            LLMChannel channel,
+            string providerName,
+            string modelName,
+            bool promptCachingEnabled,
+            string toolDefinitionHash,
+            string stablePrefixHash,
+            bool cacheBreakpointInserted,
+            long? cacheCreationInputTokens,
+            long? cacheReadInputTokens,
+            object usage) {
+            var usageJson = usage == null ? null : JsonConvert.SerializeObject(usage);
+            var observationKey = $"{providerName}:{modelName}:{stablePrefixHash}:{toolDefinitionHash}";
+            var outcome = DetermineAnthropicOutcome(
+                promptCachingEnabled,
+                cacheBreakpointInserted,
+                observationKey,
+                cacheCreationInputTokens,
+                cacheReadInputTokens,
+                out var missReason);
+
+            LogObservation(logger, new PromptCachingObservation {
+                Provider = providerName,
+                ChannelId = channel.Id,
+                Model = modelName,
+                PromptCachingEnabled = promptCachingEnabled,
+                StablePrefixHash = stablePrefixHash,
+                ToolDefinitionHash = toolDefinitionHash,
+                CacheOutcome = outcome,
+                MissReason = missReason,
+                CacheBreakpointInserted = cacheBreakpointInserted,
+                CacheCreationInputTokens = cacheCreationInputTokens,
+                CacheReadInputTokens = cacheReadInputTokens,
+                ProviderUsageJson = usageJson,
+            });
+        }
+
         public static string DetermineAnthropicOutcome(bool promptCachingEnabled, bool cacheBreakpointInserted, string observationKey, long? cacheCreationInputTokens, long? cacheReadInputTokens, out string missReason) {
             missReason = null;
             if (!promptCachingEnabled) {
