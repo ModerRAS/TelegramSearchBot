@@ -12,6 +12,7 @@ using Newtonsoft.Json;
 using OpenAI.Chat;
 using OpenAI.Responses;
 using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     public static class PromptCachingOutcomes {
@@ -84,6 +85,54 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (!string.IsNullOrWhiteSpace(promptCacheRetention)) {
                 patch.Set("$.prompt_cache_retention"u8, promptCacheRetention);
             }
+        }
+
+        /// <summary>Logs one OpenAI prompt-caching observation (moved from OpenAIService instance method).</summary>
+        public static void LogOpenAiPromptCachingObservation(
+            ILogger logger,
+            string providerName,
+            LLMChannel channel,
+            string modelName,
+            bool promptCachingEnabled,
+            string toolDefinitionHash,
+            string stablePrefixHash,
+            string promptCacheKey,
+            ChatTokenUsage usage,
+            bool cacheKeyAttached) {
+            var cachedTokenCount = usage?.InputTokenDetails?.CachedTokenCount;
+            var usageJson = usage == null
+                ? null
+                : JsonConvert.SerializeObject(new {
+                    usage.InputTokenCount,
+                    usage.OutputTokenCount,
+                    usage.TotalTokenCount,
+                    CachedTokenCount = usage.InputTokenDetails?.CachedTokenCount,
+                    ReasoningTokenCount = usage.OutputTokenDetails?.ReasoningTokenCount,
+                    AudioInputTokenCount = usage.InputTokenDetails?.AudioTokenCount,
+                    AudioOutputTokenCount = usage.OutputTokenDetails?.AudioTokenCount,
+                });
+            var outcome = DetermineOpenAiOutcome(
+                promptCachingEnabled,
+                cacheKeyAttached,
+                promptCacheKey,
+                cachedTokenCount,
+                out var missReason);
+
+            LogObservation(logger, new PromptCachingObservation {
+                Provider = providerName,
+                ChannelId = channel.Id,
+                Model = modelName,
+                PromptCachingEnabled = promptCachingEnabled,
+                StablePrefixHash = stablePrefixHash,
+                ToolDefinitionHash = toolDefinitionHash,
+                CacheOutcome = outcome,
+                MissReason = missReason,
+                PromptCacheKey = promptCacheKey,
+                PromptCacheRetention = OpenAiDefaultPromptCacheRetention,
+                CacheKeyAttached = cacheKeyAttached,
+                CachedTokenCount = cachedTokenCount,
+                ProviderUsageJson = usageJson,
+            });
         }
 
         public static string DetermineOpenAiOutcome(bool promptCachingEnabled, bool cacheKeyAttached, string promptCacheKey, int? cachedTokenCount, out string missReason) {
