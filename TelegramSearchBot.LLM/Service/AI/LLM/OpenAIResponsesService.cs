@@ -42,7 +42,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// <summary>
         /// Mutable accumulator for streaming tool call argument deltas.
         /// </summary>
-        private class ResponsesToolCallAccumulator {
+        internal class ResponsesToolCallAccumulator {
             public string CallId { get; set; }
             public string Name { get; set; }
             public StringBuilder Arguments { get; } = new StringBuilder();
@@ -114,7 +114,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return inputItems.Take(inputItems.Count - 1).ToList();
         }
 
-        private static (string toolDefinitionHash, string stablePrefixHash, string promptCacheKey) BuildPromptCachingContext(
+        internal static (string toolDefinitionHash, string stablePrefixHash, string promptCacheKey) BuildPromptCachingContext(
             string providerName,
             string modelName,
             string mode,
@@ -131,49 +131,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return (toolDefinitionHash, stablePrefixHash, promptCacheKey);
         }
 
-        private void LogPromptCachingObservation(
-            string providerName,
-            LLMChannel channel,
-            string modelName,
-            bool promptCachingEnabled,
-            string toolDefinitionHash,
-            string stablePrefixHash,
-            string promptCacheKey,
-            ResponseTokenUsage usage,
-            bool cacheKeyAttached) {
-            var cachedTokenCount = usage?.InputTokenDetails?.CachedTokenCount;
-            var usageJson = usage == null
-                ? null
-                : JsonConvert.SerializeObject(new {
-                    usage.InputTokenCount,
-                    usage.OutputTokenCount,
-                    usage.TotalTokenCount,
-                    CachedTokenCount = usage.InputTokenDetails?.CachedTokenCount,
-                    ReasoningTokenCount = usage.OutputTokenDetails?.ReasoningTokenCount,
-                });
-            var outcome = PromptCachingHelper.DetermineOpenAiOutcome(
-                promptCachingEnabled,
-                cacheKeyAttached,
-                promptCacheKey,
-                cachedTokenCount,
-                out var missReason);
-
-            PromptCachingHelper.LogObservation(_logger, new PromptCachingObservation {
-                Provider = providerName,
-                ChannelId = channel.Id,
-                Model = modelName,
-                PromptCachingEnabled = promptCachingEnabled,
-                StablePrefixHash = stablePrefixHash,
-                ToolDefinitionHash = toolDefinitionHash,
-                CacheOutcome = outcome,
-                MissReason = missReason,
-                PromptCacheKey = promptCacheKey,
-                PromptCacheRetention = PromptCachingHelper.OpenAiDefaultPromptCacheRetention,
-                CacheKeyAttached = cacheKeyAttached,
-                CachedTokenCount = cachedTokenCount,
-                ProviderUsageJson = usageJson,
-            });
-        }
 
         // ========================================================================
         // ILLMService Implementation
@@ -216,7 +173,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             var supportsVision = await CheckVisionSupport(modelName, channel.Id);
             var promptCachingEnabled = channel.Provider == LLMProvider.ResponsesAPI && await IsPromptCachingEnabledAsync();
 
-            var transport = new ResponsesTransport(this, endpoint, apiKey, binding, channel, supportsVision, promptCachingEnabled);
+            var transport = new Transports.ResponsesTransport(_httpClientFactory, _logger, endpoint, apiKey, binding, channel, supportsVision, promptCachingEnabled);
             var botName = await GetBotNameAsync();
             var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
 
@@ -272,7 +229,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
                         var promptCachingEnabled = channel.Provider == LLMProvider.ResponsesAPI && await IsPromptCachingEnabledAsync();
 
-            var transport = new ResponsesTransport(this, endpoint, apiKey, binding, channel, supportsVision, promptCachingEnabled);
+            var transport = new Transports.ResponsesTransport(_httpClientFactory, _logger, endpoint, apiKey, binding, channel, supportsVision, promptCachingEnabled);
             var botName = await GetBotNameAsync();
             var projected = LlmHistoryProjector.Project(history, supportsVision, _logger);
 
@@ -359,7 +316,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             var promptCachingEnabled = channel.Provider == LLMProvider.ResponsesAPI && await IsPromptCachingEnabledAsync();
-            var transport = new ResponsesTransport(this, endpoint, resolvedApiKey, binding, channel, false, promptCachingEnabled);
+            var transport = new Transports.ResponsesTransport(_httpClientFactory, _logger, endpoint, resolvedApiKey, binding, channel, false, promptCachingEnabled);
 
             var meta = new LlmToolLoopMeta {
                 ChatId = snapshot.ChatId,
@@ -400,200 +357,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// Native transport for the OpenAI Responses API: converts the normalized history to
         /// input items per turn and streams one assistant turn (text + function calls).
         /// </summary>
-        private sealed class ResponsesTransport : ILlmTransport {
-            private readonly OpenAIResponsesService _svc;
-            private readonly string _endpoint;
-            private readonly string _apiKey;
-            private readonly LLMApiBinding? _binding;
-            private readonly LLMChannel _channel;
-            private readonly bool _supportsVision;
-            private readonly bool _promptCachingEnabled;
-            private ResponsesClient? _client;
-
-            public ResponsesTransport(OpenAIResponsesService svc, string endpoint, string apiKey,
-                LLMApiBinding? binding, LLMChannel channel, bool supportsVision, bool promptCachingEnabled) {
-                _svc = svc;
-                _endpoint = endpoint;
-                _apiKey = apiKey;
-                _binding = binding;
-                _channel = channel;
-                _supportsVision = supportsVision;
-                _promptCachingEnabled = promptCachingEnabled;
-            }
-
-            public bool SupportsNativeTools => true;
-
-            public async IAsyncEnumerable<LlmStreamEvent> StreamTurnAsync(
-                LlmTurnRequest request,
-                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-                if (_client == null) {
-                    // ponytail: HttpClient outlives this scope (transport persists per run); factory-managed.
-                    var httpClient = _svc._httpClientFactory.CreateClient();
-                    OpencodeSessionHeaders.Apply(httpClient, _channel, _binding, $"tsb-{_channel?.Id}");
-                    var clientOptions = new OpenAIClientOptions {
-                        Endpoint = new Uri(_endpoint),
-                        Transport = new HttpClientPipelineTransport(httpClient),
-                    };
-                    _client = new ResponsesClient(new ApiKeyCredential(_apiKey), clientOptions);
-                }
-
-                var inputItems = ToInputItems(request);
-                var instructions = request.SystemPrompt;
-
-                var shouldObservePromptCaching = _channel.Provider == LLMProvider.ResponsesAPI;
-                var promptCachingEnabled = shouldObservePromptCaching && _promptCachingEnabled;
-                var (toolDefinitionHash, stablePrefixHash, promptCacheKey) = OpenAIResponsesService.BuildPromptCachingContext(
-                    "OpenAIResponses",
-                    request.Config.ModelName,
-                    "responses",
-                    instructions,
-                    inputItems,
-                    excludeDynamicTail: true);
-
-                var options = new CreateResponseOptions {
-                    Model = request.Config.ModelName,
-                    Instructions = instructions,
-                    StreamingEnabled = true,
-                };
-                var cacheKeyAttached = false;
-                if (promptCachingEnabled) {
-                    PromptCachingHelper.ApplyOpenAiPromptCaching(options, promptCacheKey, PromptCachingHelper.OpenAiDefaultPromptCacheRetention);
-                    cacheKeyAttached = true;
-                }
-                if (request.Tools is { Count: > 0 }) {
-                    foreach (var spec in request.Tools) {
-                        options.Tools.Add(new FunctionTool(
-                            spec.Name,
-                            BinaryData.FromString(spec.ParametersJson),
-                            spec.StrictSchema) {
-                            FunctionDescription = spec.Description
-                        });
-                    }
-                }
-                foreach (var item in inputItems) {
-                    options.InputItems.Add(item);
-                }
-
-                var textBuilder = new StringBuilder();
-                var reasoningBuilder = new StringBuilder();
-                var uiBuilder = new StringBuilder();
-                var toolCallAccums = new Dictionary<int, ResponsesToolCallAccumulator>();
-                ResponseResult completedResult = null;
-                var lastUiLength = 0;
-                var streamedAny = false;
-
-                await foreach (var update in _client.CreateResponseStreamingAsync(options, cancellationToken).WithCancellation(cancellationToken)) {
-                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                    OpenAIResponsesService.ProcessStreamingUpdate(update, textBuilder, uiBuilder, reasoningBuilder, toolCallAccums, ref completedResult);
-
-                    if (uiBuilder.Length > lastUiLength) {
-                        var delta = uiBuilder.ToString(lastUiLength, uiBuilder.Length - lastUiLength);
-                        lastUiLength = uiBuilder.Length;
-                        streamedAny = true;
-                        yield return new LlmStreamEvent.TextDelta(delta);
-                    }
-                }
-
-                if (shouldObservePromptCaching) {
-                    _svc.LogPromptCachingObservation(
-                        "OpenAIResponses",
-                        _channel,
-                        request.Config.ModelName,
-                        promptCachingEnabled,
-                        toolDefinitionHash,
-                        stablePrefixHash,
-                        promptCacheKey,
-                        completedResult?.Usage,
-                        cacheKeyAttached);
-                }
-
-                var responseText = textBuilder.ToString().Trim();
-                var reasoningContent = reasoningBuilder.ToString().Trim();
-                var toolCalls = new List<LlmToolCall>();
-
-                if (completedResult?.OutputItems != null) {
-                    foreach (var outputItem in completedResult.OutputItems) {
-                        if (outputItem is FunctionCallResponseItem fcItem
-                            && !string.IsNullOrWhiteSpace(fcItem.CallId)
-                            && !string.IsNullOrWhiteSpace(fcItem.FunctionName)) {
-                            toolCalls.Add(new LlmToolCall {
-                                Id = OpenAIService.NormalizeToolCallId(fcItem.CallId),
-                                Name = OpenAIService.NormalizeToolCallName(fcItem.FunctionName),
-                                ArgumentsJson = OpenAIService.NormalizeToolCallArguments(fcItem.FunctionArguments?.ToString() ?? "{}")
-                            });
-                        }
-                    }
-                }
-
-                yield return new LlmStreamEvent.TurnCompleted(new LlmTurnResult {
-                    Text = responseText,
-                    Reasoning = reasoningContent,
-                    ToolCalls = toolCalls,
-                    StreamedAny = streamedAny
-                });
-            }
-
-            private List<ResponseItem> ToInputItems(LlmTurnRequest request) {
-                var inputItems = new List<ResponseItem>();
-                foreach (var m in request.History) {
-                    switch (m.Role) {
-                        case LlmRole.User: {
-                            var images = m.ImagePng != null && request.Config.SupportsVision
-                                ? new List<byte[]> { m.ImagePng }
-                                : null;
-                            _svc.AddResponseItemFromAccumulated(inputItems, 1, m.Text ?? string.Empty, images);
-                            break;
-                        }
-                        case LlmRole.Assistant:
-                            if (!string.IsNullOrWhiteSpace(m.Text)) {
-                                inputItems.Add(ResponseItem.CreateAssistantMessageItem(m.Text));
-                            }
-                            if (m.ToolCalls is { Count: > 0 }) {
-                                foreach (var tc in m.ToolCalls) {
-                                    inputItems.Add(ResponseItem.CreateFunctionCallItem(
-                                        tc.Id, tc.Name, BinaryData.FromString(tc.ArgumentsJson)));
-                                }
-                            }
-                            break;
-                        case LlmRole.Tool:
-                            inputItems.Add(ResponseItem.CreateFunctionCallOutputItem(m.ToolCallId ?? string.Empty, m.Text ?? string.Empty));
-                            break;
-                    }
-                }
-                return inputItems;
-            }
-        }
-
-        private void AddResponseItemFromAccumulated(
-            List<ResponseItem> inputItems, long fromUserId, string content, List<byte[]> images) {
-            if (string.IsNullOrWhiteSpace(content) && (images == null || images.Count == 0)) return;
-            if (!string.IsNullOrWhiteSpace(content)) {
-                content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
-            }
-
-            if (fromUserId == Env.BotId) {
-                // Assistant message
-                if (!string.IsNullOrWhiteSpace(content)) {
-                    inputItems.Add(ResponseItem.CreateAssistantMessageItem(content));
-                }
-            } else {
-                // User message (possibly with images)
-                if (images != null && images.Count > 0) {
-                    var parts = new List<ResponseContentPart>();
-                    if (!string.IsNullOrWhiteSpace(content)) {
-                        parts.Add(ResponseContentPart.CreateInputTextPart(content.Trim()));
-                    }
-                    foreach (var imageBytes in images) {
-                        parts.Add(ResponseContentPart.CreateInputImagePart(
-                            BinaryData.FromBytes(imageBytes), null));
-                    }
-                    inputItems.Add(ResponseItem.CreateUserMessageItem((IEnumerable<ResponseContentPart>)parts));
-                } else {
-                    inputItems.Add(ResponseItem.CreateUserMessageItem(content.Trim()));
-                }
-            }
-        }
 
         // ========================================================================
         // Helper: Vision support check
@@ -658,7 +421,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         // ========================================================================
 
 
-        private static void ProcessStreamingUpdate(
+        internal static void ProcessStreamingUpdate(
             StreamingResponseUpdate update,
             StringBuilder textBuilder,
             StringBuilder contentBuilder,
@@ -710,7 +473,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
 
-        private static void ProcessResumeStreamingUpdate(
+        internal static void ProcessResumeStreamingUpdate(
             StreamingResponseUpdate update,
             StringBuilder textBuilder,
             StringBuilder fullContentBuilder,
@@ -1137,7 +900,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 }
 
                 if (previous != null && !IsSameSender(previous, message)) {
-                    AddResponseItemFromAccumulated(inputItems, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
+                    Transports.ResponsesTransport.AddResponseItemFromAccumulated(inputItems, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
                     str.Clear();
                     pendingImages.Clear();
                 }
@@ -1182,7 +945,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             if (previous != null && str.Length > 0) {
-                AddResponseItemFromAccumulated(inputItems, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
+                Transports.ResponsesTransport.AddResponseItemFromAccumulated(inputItems, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
             }
 
             return inputItems;

@@ -204,6 +204,52 @@ namespace TelegramSearchBot.Service.AI.LLM {
             });
         }
 
+        /// <summary>Logs one OpenAI Responses prompt-caching observation (moved from OpenAIResponsesService instance method).</summary>
+        public static void LogResponsesPromptCachingObservation(
+            ILogger logger,
+            string providerName,
+            LLMChannel channel,
+            string modelName,
+            bool promptCachingEnabled,
+            string toolDefinitionHash,
+            string stablePrefixHash,
+            string promptCacheKey,
+            ResponseTokenUsage usage,
+            bool cacheKeyAttached) {
+            var cachedTokenCount = usage?.InputTokenDetails?.CachedTokenCount;
+            var usageJson = usage == null
+                ? null
+                : JsonConvert.SerializeObject(new {
+                    usage.InputTokenCount,
+                    usage.OutputTokenCount,
+                    usage.TotalTokenCount,
+                    CachedTokenCount = usage.InputTokenDetails?.CachedTokenCount,
+                    ReasoningTokenCount = usage.OutputTokenDetails?.ReasoningTokenCount,
+                });
+            var outcome = DetermineOpenAiOutcome(
+                promptCachingEnabled,
+                cacheKeyAttached,
+                promptCacheKey,
+                cachedTokenCount,
+                out var missReason);
+
+            LogObservation(logger, new PromptCachingObservation {
+                Provider = providerName,
+                ChannelId = channel.Id,
+                Model = modelName,
+                PromptCachingEnabled = promptCachingEnabled,
+                StablePrefixHash = stablePrefixHash,
+                ToolDefinitionHash = toolDefinitionHash,
+                CacheOutcome = outcome,
+                MissReason = missReason,
+                PromptCacheKey = promptCacheKey,
+                PromptCacheRetention = OpenAiDefaultPromptCacheRetention,
+                CacheKeyAttached = cacheKeyAttached,
+                CachedTokenCount = cachedTokenCount,
+                ProviderUsageJson = usageJson,
+            });
+        }
+
         public static string DetermineAnthropicOutcome(bool promptCachingEnabled, bool cacheBreakpointInserted, string observationKey, long? cacheCreationInputTokens, long? cacheReadInputTokens, out string missReason) {
             missReason = null;
             if (!promptCachingEnabled) {
