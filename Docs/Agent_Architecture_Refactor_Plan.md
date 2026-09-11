@@ -191,6 +191,101 @@ public sealed class LlmTurnRequest {
 - 快照 round-trip 测试（native tool_call id 不丢）
 - worker 路径：task.History 直达 transport，零 DB 触碰（以 mock DbContext 断言）
 
+### Phase 4.5：Provider 类彻底消除（pi 终态，本 PR 或下一 PR）
+
+Phase 4 之后 5 个 `*Service` 类（~4500 行）仍是聊天胶水 + Provider API 的载体，与 pi 的「provider=数据、dialect=模块」仍有距离。本阶段将其**物理删除**：
+
+**目标结构**
+
+```
+TelegramSearchBot.LLM/Service/AI/LLM/
+  Transports/            ILlmTransport + 5 实现 + 各自 static Create(channel, binding, …)
+                         ← 吸收 service 胶水：client 构造/端点归一化/MiniMax 判断/
+                           Opencode headers/prompt-caching 开关/静态助手随迁
+  ProviderApi/           ILlmModelCatalog / ILlmEmbeddings / ILlmVision（可选接口）
+                         + 5 个方言实现（目录/向量/图像/健康/Ollama pull）
+  LlmChatRunner          共享聊天 runner：history 组装 + native/XML 降级 dispatch + 调 LlmToolLoop
+                         （替代 5 份 ExecWithHistoryAsync）
+  LlmProviderRegistry    GetTransport(LlmProtocol, …) + GetCatalog/GetEmbeddings/GetVision(provider)
+  删除：OpenAIService/AnthropicService/OpenAIResponsesService/GeminiService/OllamaService、ILlmProvider
+```
+
+**目标架构图**
+
+```mermaid
+flowchart TB
+    subgraph CALLERS[调用方]
+        CTRL[GeneralLLMController]
+        AGENT[AgentChat 队列/Worker]
+        OCR[LLMOCRService / AltPhotoController / RefreshService]
+        FAISS[FaissVectorService]
+        CONF[EditLLMConfHelper]
+        CAP[ModelCapabilityService]
+    end
+
+    subgraph FACADE[GeneralLLMService facade（签名不变）]
+        EXEC[ExecAsync / ExecWithHistoryAsync / ResumeFromSnapshot]
+        OP[ExecOperationAsync]
+    end
+
+    subgraph CORE[共享核心]
+        RUNNER[LlmChatRunner\nnative/XML 降级 dispatch]
+        LOOP[LlmToolLoop\n唯一 agent 循环]
+        HIST[LlmHistoryQueryService\nLlmHistoryProjector\nLlmPhotoLoader]
+        SNAP[LlmContinuationService\nRedis 快照]
+    end
+
+    subgraph REG[LlmProviderRegistry]
+        GT[GetTransport(protocol, config)]
+        GC[GetCatalog / GetEmbeddings / GetVision(provider)]
+    end
+
+    subgraph TRANSPORTS[Transports/ — 方言=接口]
+        T1[OpenAiChatTransport\n+MiniMax/LMStudio/OpenCode 分支]
+        T2[AnthropicMessagesTransport]
+        T3[OpenAIResponsesTransport]
+        T4[GeminiTransport]
+        T5[OllamaTransport]
+    end
+
+    subgraph API[ProviderApi/ — provider 数据面]
+        A1[OpenAiModelApi\n含 MiniMax 内部目录]
+        A2[AnthropicModelApi]
+        A3[ResponsesModelApi]
+        A4[GeminiModelApi\n能力推断]
+        A5[OllamaModelApi\n含 CheckAndPullModel]
+    end
+
+    CTRL --> FACADE
+    AGENT -->|纯 DTO 历史| RUNNER
+    FACADE --> RUNNER
+    FACADE --> OP --> GC
+    OCR --> FACADE
+    FAISS --> FACADE
+    CONF --> GC
+    CAP --> GC
+
+    RUNNER --> GT --> T1 & T2 & T3 & T4 & T5
+    RUNNER --> LOOP
+    LOOP -.per-turn.-> TRANSPORTS
+    RUNNER --> HIST
+    RUNNER --> SNAP
+    GC --> A1 & A2 & A3 & A4 & A5
+```
+
+**执行序列（每步编译+测试绿+提交）**
+
+| 步 | 内容 | 规模 |
+|---|---|---|
+| S1 | 新建 `LlmChatRunner`（native/XML 降级 dispatch 集中一份，替代 5 份重复） | ~200 行新 |
+| S2-S6 | 每 transport 加 `static Create`，胶水+静态助手迁入，service 降级为两行转发 | 5×~250 行搬迁 |
+| S7-S9 | 目录/向量/视觉/健康 → `ProviderApi/` 方言类 + registry 三种 Get | ~1100 行搬迁 |
+| S10 | facade 收编：message 路径直接走 `LlmHistoryQueryService` + runner；`Func<ILlmProvider,…>` → 能力接口 | ~150 行改写 |
+| S11 | **删除 5 个 service 文件 + ILlmProvider**；测试改 mock 对象；wire 测试直接 new transport | 净删 ~2500 行 |
+| S12 | push、CI 确认、PR 描述与文档更新 | — |
+
+**风险与校验**：OpenCode wire 测试只换构造点（transport 代码不动 → 格式锁定不受影响）；native/XML 双路径 dispatch 等价迁移靠 `LlmToolLoopTests` + wire 测试兜底；`BotName`/`CheckVisionSupport` 下沉共享助手；`Mock<OpenAIService>` 4 参构造的测试逐个改 mock 新接口。
+
 ### Phase 5：单入口 + 状态收敛（独立 PR）
 
 **范围**
@@ -211,6 +306,64 @@ Phase 4 完成后 worker 里只剩「BRPOP + 调 transport」~200 行，届时�
 
 ---
 
+## 七、LLM 领域 ER 图（当前表结构 = 目标表结构）
+
+Schema 不变，迁移即语义对齐。SQLite 实体表如下；`LlmContinuationSnapshot` 只存 Redis（24h TTL），`AgentHistoryMessage`/`LlmMessage` 为纯 DTO 不落表。
+
+```mermaid
+erDiagram
+    LLMChannel ||--o{ ChannelWithModel : "Models"
+    LLMChannel ||--o{ LLMApiBinding : "Bindings"
+    ChannelWithModel |o--o| LLMApiBinding : "ApiBindingId?"
+    ChannelWithModel ||--o{ ModelCapability : "Capabilities"
+
+    LLMChannel {
+        int Id PK
+        string Name
+        string Gateway
+        string ApiKey
+        LLMProvider Provider "enum: OpenAI/Anthropic/Gemini/Ollama/MiniMax/LMStudio/ResponsesAPI"
+        int Parallel "并发限制"
+        int Priority "路由排序"
+    }
+
+    ChannelWithModel {
+        int Id PK
+        int LLMChannelId FK
+        string ModelName "如 gpt-4o / claude-4-sonnet"
+        int ApiBindingId FK "nullable，可继承 channel 默认"
+        bool IsDeleted "软删"
+        AuthorizationSource AuthorizationSource "Manual/Binding"
+        bool IsPreferred "默认模型偏好"
+    }
+
+    LLMApiBinding {
+        int Id PK
+        int LLMChannelId FK
+        string Endpoint "绑定端点（可覆盖 Gateway）"
+        LlmProtocol Protocol "enum: OpenAIChat/AnthropicMessages/OpenAIResponses/Gemini/Ollama"
+        LlmAuthProfile AuthProfile
+        bool IsDefault "同名模型多绑定时默认走此绑定"
+    }
+
+    ModelCapability {
+        int Id PK
+        int ChannelWithModelId FK
+        string CapabilityName "如 vision/tools/prompt_cache"
+        string CapabilityValue
+        string Description
+        datetime LastUpdated
+    }
+```
+
+**关键语义**
+- `LLMChannel.Provider` 决定预设渠道与 ProviderApi（目录/向量/视觉）；`LLMApiBinding.Protocol` 决定聊天走的 wire 方言（Transport）——两者可不同源（如 OpenAI 渠道绑 Anthropic 协议端点）
+- `ChannelWithModel.ApiBindingId` 为空 = 用渠道默认端点；非空 = 该模型行走指定协议绑定
+- 路由（`ResolvedLlmRoute`）= 依 `ModelName` 找 `ChannelWithModel` 行 → binding 优先、否则 channel，`IsDefault`+`Priority` 破平
+- 编辑渠道的预设流程（`presetId` / `presetId|gateway`）写入的就是这三张表，预设只是元数据，不自动建行
+
+---
+
 ## 五、兼容性与风险
 
 | 风险 | 缓解 |
@@ -223,13 +376,14 @@ Phase 4 完成后 worker 里只剩「BRPOP + 调 transport」~200 行，届时�
 
 ---
 
-## 六、执行顺序
+## 八、执行顺序
 
 ```
 [PR #390 - 本分支]
   P1 共享循环（已完成）
   P2 预设（已完成）
-  P3+4 整体重写：LlmMessage → 投影 → 循环 v2 → 5 transports → registry → 删旧  ← 下一步
+  P3+4 整体重写：LlmMessage → 投影 → 循环 v2 → 5 transports → registry → 删旧（已完成，CI 绿）
+  P4.5 provider 类彻底删除：LlmChatRunner → Transport.Create → ProviderApi → 删 5 个 service ← 下一步
 
 [PR #391]
   P5 单入口 + Redis 状态收敛
