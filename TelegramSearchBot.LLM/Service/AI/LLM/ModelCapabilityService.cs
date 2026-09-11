@@ -22,15 +22,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         private readonly ILogger<ModelCapabilityService> _logger;
         private readonly DataDbContext _dbContext;
-        private readonly IServiceProvider _serviceProvider;
+        private readonly LlmProviderRegistry _registry;
 
         public ModelCapabilityService(
             ILogger<ModelCapabilityService> logger,
             DataDbContext dbContext,
-            IServiceProvider serviceProvider) {
+            LlmProviderRegistry registry) {
             _logger = logger;
             _dbContext = dbContext;
-            _serviceProvider = serviceProvider;
+            _registry = registry;
         }
 
         /// <summary>
@@ -279,19 +279,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
-        /// 根据提供商获取对应的LLM服务
+        /// 根据提供商获取对应的LLM服务；未知提供商返回 null（保持原有的降级语义）。
         /// </summary>
         private ILlmProvider GetProvider(LLMProvider provider) {
-            return provider switch {
-                LLMProvider.OpenAI => _serviceProvider.GetService(typeof(OpenAIService)) as ILlmProvider,
-                LLMProvider.Ollama => _serviceProvider.GetService(typeof(OllamaService)) as ILlmProvider,
-                LLMProvider.Gemini => _serviceProvider.GetService(typeof(GeminiService)) as ILlmProvider,
-                LLMProvider.MiniMax => _serviceProvider.GetService(typeof(OpenAIService)) as ILlmProvider,
-                LLMProvider.LMStudio => _serviceProvider.GetService(typeof(OpenAIService)) as ILlmProvider,
-                LLMProvider.Anthropic => _serviceProvider.GetService(typeof(AnthropicService)) as ILlmProvider,
-                LLMProvider.ResponsesAPI => _serviceProvider.GetService(typeof(OpenAIResponsesService)) as ILlmProvider,
-                _ => null
-            };
+            try {
+                return _registry.GetProvider(provider);
+            } catch (KeyNotFoundException) {
+                return null;
+            }
         }
 
         /// <summary>

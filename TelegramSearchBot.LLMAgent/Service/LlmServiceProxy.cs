@@ -11,10 +11,12 @@ using TelegramSearchBot.Service.AI.LLM;
 namespace TelegramSearchBot.LLMAgent.Service {
     public sealed class LlmServiceProxy : IAgentTaskExecutor {
         private readonly IServiceProvider _serviceProvider;
+        private readonly LlmProviderRegistry _registry;
         private readonly ILogger<LlmServiceProxy> _logger;
 
         public LlmServiceProxy(IServiceProvider serviceProvider, ILogger<LlmServiceProxy> logger) {
             _serviceProvider = serviceProvider;
+            _registry = serviceProvider.GetRequiredService<LlmProviderRegistry>();
             _logger = logger;
         }
 
@@ -77,25 +79,21 @@ namespace TelegramSearchBot.LLMAgent.Service {
         }
 
         private ILlmProvider ResolveService(LLMProvider provider) {
-            return provider switch {
-                LLMProvider.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
-                LLMProvider.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
-                LLMProvider.Anthropic => _serviceProvider.GetRequiredService<AnthropicService>(),
-                LLMProvider.ResponsesAPI => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
-                _ => _serviceProvider.GetRequiredService<OpenAIService>()
-            };
+            try {
+                return _registry.GetProvider(provider);
+            } catch (KeyNotFoundException) {
+                // 保持原有降级语义：未知 provider 回退到 OpenAI 兼容路径
+                return _registry.GetProvider(LLMProvider.OpenAI);
+            }
         }
 
-        /// <summary>按 binding 线协议解析 client（与 LlmProviderRegistry.GetProvider(LlmProtocol) 同构）。</summary>
+        /// <summary>按 binding 线协议解析 client，统一委托给 LlmProviderRegistry；未知协议回退 OpenAI。</summary>
         private ILlmProvider ResolveService(LlmProtocol protocol) {
-            return protocol switch {
-                LlmProtocol.OpenAIChat => _serviceProvider.GetRequiredService<OpenAIService>(),
-                LlmProtocol.OpenAIResponses => _serviceProvider.GetRequiredService<OpenAIResponsesService>(),
-                LlmProtocol.AnthropicMessages => _serviceProvider.GetRequiredService<AnthropicService>(),
-                LlmProtocol.Ollama => _serviceProvider.GetRequiredService<OllamaService>(),
-                LlmProtocol.Gemini => _serviceProvider.GetRequiredService<GeminiService>(),
-                _ => _serviceProvider.GetRequiredService<OpenAIService>()
-            };
+            try {
+                return _registry.GetProvider(protocol);
+            } catch (KeyNotFoundException) {
+                return _registry.GetProvider(LlmProtocol.OpenAIChat);
+            }
         }
 
         private void ApplyBotIdentity(string botName, long botUserId) {

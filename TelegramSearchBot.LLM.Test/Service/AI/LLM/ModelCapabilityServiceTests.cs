@@ -21,6 +21,7 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         private readonly Mock<ILogger<ModelCapabilityService>> _loggerMock;
         private readonly Mock<IServiceProvider> _serviceProviderMock;
         private readonly Mock<OpenAIService> _openAIServiceMock;
+        private readonly Mock<LlmProviderRegistry> _registryMock = new((IServiceProvider)null);
         private readonly ModelCapabilityService _service;
 
         public ModelCapabilityServiceTests() {
@@ -39,11 +40,13 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 new Mock<IHttpClientFactory>().Object);
             _serviceProviderMock.Setup(sp => sp.GetService(typeof(OpenAIService)))
                 .Returns(_openAIServiceMock.Object);
+            _registryMock.Setup(r => r.GetProvider(It.IsAny<LLMProvider>()))
+                .Returns(_openAIServiceMock.Object);
 
             _service = new ModelCapabilityService(
                 _loggerMock.Object,
                 _dbContext,
-                _serviceProviderMock.Object);
+                _registryMock.Object);
         }
 
         [Fact]
