@@ -363,6 +363,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
         // ========================================================================
 
 
+        public bool IsSameSender(Message message1, Message message2) {
+            if (message1 == null || message2 == null) return false;
+            bool msg1IsUser = message1.FromUserId != Env.BotId;
+            bool msg2IsUser = message2.FromUserId != Env.BotId;
+            return msg1IsUser == msg2IsUser;
+        }
+
+        // ========================================================================
+        // Helper: Load message photo
+        // ========================================================================
+
+
         private async Task<bool> CheckVisionSupport(string modelName, int channelId) {
             try {
                 var channelWithModel = await _dbContext.ChannelsWithModel
@@ -382,17 +394,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         // ========================================================================
         // Helper: IsSameSender
-        // ========================================================================
-
-        public bool IsSameSender(Message message1, Message message2) {
-            if (message1 == null || message2 == null) return false;
-            bool msg1IsUser = message1.FromUserId != Env.BotId;
-            bool msg2IsUser = message2.FromUserId != Env.BotId;
-            return msg1IsUser == msg2IsUser;
-        }
-
-        // ========================================================================
-        // Helper: Load message photo
         // ========================================================================
 
         private byte[] TryLoadMessagePhoto(long chatId, long messageId) {

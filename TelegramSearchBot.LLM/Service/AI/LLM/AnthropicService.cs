@@ -294,161 +294,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         #endregion
-
-        #region Chat History
-
-        public bool IsSameSender(DataMessage message1, DataMessage message2) {
-            if (message1 == null || message2 == null) return false;
-            bool msg1IsBot = message1.FromUserId == Env.BotId;
-            bool msg2IsBot = message2.FromUserId == Env.BotId;
-            return msg1IsBot == msg2IsBot;
-        }
-
-        /// <summary>
-        /// Build Anthropic message list from DB history. Anthropic requires alternating user/assistant roles.
-        /// Returns (systemPrompt, messages).
-        /// </summary>
-        public async Task<(string systemPrompt, List<MessageParam> messages)> GetChatHistory(
-            long chatId, string systemPrompt, DataMessage inputMessage = null) {
-            return await GetChatHistory(chatId, systemPrompt, inputMessage, false);
-        }
-
-        public async Task<(string systemPrompt, List<MessageParam> messages)> GetChatHistory(
-            long chatId, string systemPrompt, DataMessage inputMessage, bool supportsVision) {
-            var dbMessages = await _dbContext.Messages.AsNoTracking()
-                .Where(m => m.GroupId == chatId && m.DateTime > DateTime.UtcNow.AddHours(-1))
-                .OrderBy(m => m.DateTime)
-                .ToListAsync();
-
-            if (dbMessages.Count < 10) {
-                dbMessages = await _dbContext.Messages.AsNoTracking()
-                    .Where(m => m.GroupId == chatId)
-                    .OrderByDescending(m => m.DateTime)
-                    .Take(10)
-                    .OrderBy(m => m.DateTime)
-                    .ToListAsync();
+        private static string ExtractTextFromContent(MessageParamContent content) {
+            if (content.TryPickString(out var text)) {
+                return text;
             }
-
-            if (_llmVisibilityService != null) {
-                dbMessages = await _llmVisibilityService.FilterVisibleMessagesAsync(chatId, dbMessages);
-            }
-
-            if (inputMessage != null &&
-                ( _llmVisibilityService == null ||
-                  !await _llmVisibilityService.IsUserInvisibleAsync(chatId, inputMessage.FromUserId) )) {
-                dbMessages.Add(inputMessage);
-            }
-
-            _logger.LogInformation("Anthropic GetChatHistory: Found {Count} messages for ChatId {ChatId}.", dbMessages.Count, chatId);
-
-            var result = new List<MessageParam>();
-            var str = new StringBuilder();
-            DataMessage previous = null;
-            var userCache = new Dictionary<long, UserData>();
-            var pendingImages = new List<byte[]>();
-
-            foreach (var message in dbMessages) {
-                // Skip leading bot messages (Anthropic messages must start with user)
-                if (previous == null && !result.Any() && message.FromUserId == Env.BotId) {
-                    previous = message;
-                    continue;
-                }
-
-                if (previous != null && !IsSameSender(previous, message)) {
-                    AddMessageToHistory(result, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
-                    str.Clear();
-                    pendingImages.Clear();
-                }
-
-                str.Append($"[{message.DateTime:yyyy-MM-dd HH:mm:ss zzz}]");
-                if (message.FromUserId != 0) {
-                    if (!userCache.TryGetValue(message.FromUserId, out var fromUser)) {
-                        fromUser = await _dbContext.UserData.AsNoTracking()
-                            .FirstOrDefaultAsync(u => u.Id == message.FromUserId);
-                        if (fromUser != null) userCache[message.FromUserId] = fromUser;
-                    }
-                    str.Append(fromUser != null ? $"{fromUser.FirstName} {fromUser.LastName}".Trim() : $"User({message.FromUserId})");
-                } else {
-                    str.Append("System/Unknown");
-                }
-
-                if (message.ReplyToMessageId != 0) {
-                    str.Append($"（Reply to msg {message.ReplyToMessageId}）");
-                }
-                str.Append('：').Append(message.Content).Append("\n");
-
-                // Add message extensions if any
-                var extensions = await _messageExtensionService.GetByMessageDataIdAsync(message.Id);
-                if (extensions != null && extensions.Any()) {
-                    str.Append("[扩展信息：");
-                    foreach (var ext in extensions) {
-                        str.Append($"{ext.Name}={ext.Value}; ");
-                    }
-                    str.Append("]\n");
-                }
-
-                // 如果模型支持视觉，尝试加载消息关联的图片
-                if (supportsVision && message.FromUserId != Env.BotId) {
-                    var imageBytes = TryLoadMessagePhoto(message.GroupId, message.MessageId);
-                    if (imageBytes != null) {
-                        pendingImages.Add(imageBytes);
+            if (content.TryPickContentBlockParams(out var blocks)) {
+                var sb = new StringBuilder();
+                foreach (var block in blocks) {
+                    if (block.TryPickText(out var textBlock)) {
+                        sb.Append(textBlock.Text);
                     }
                 }
-
-                previous = message;
+                return sb.ToString();
             }
-
-            if (previous != null && str.Length > 0) {
-                AddMessageToHistory(result, previous.FromUserId, str.ToString(), supportsVision ? pendingImages : null);
-            }
-
-            // Ensure messages alternate user/assistant and start with user
-            result = EnsureAlternatingRoles(result);
-
-            return (systemPrompt, result);
+            return content.ToString();
         }
 
-        private void AddMessageToHistory(List<MessageParam> history, long fromUserId, string content) {
-            AddMessageToHistory(history, fromUserId, content, null);
-        }
-
-        private void AddMessageToHistory(List<MessageParam> history, long fromUserId, string content, List<byte[]> images) {
-            if (string.IsNullOrWhiteSpace(content) && ( images == null || images.Count == 0 )) return;
-            if (!string.IsNullOrWhiteSpace(content)) {
-                content = System.Text.RegularExpressions.Regex.Replace(content.Trim(), @"\n{3,}", "\n\n");
-            }
-
-            var role = fromUserId == Env.BotId ? Role.Assistant : Role.User;
-
-            if (images != null && images.Count > 0 && role == Role.User) {
-                var contentBlocks = new List<ContentBlockParam>();
-                if (!string.IsNullOrWhiteSpace(content)) {
-                    contentBlocks.Add(new TextBlockParam(content.Trim()));
-                }
-                foreach (var imageBytes in images) {
-                    contentBlocks.Add(new ImageBlockParam {
-                        Source = new Base64ImageSource {
-                            Data = Convert.ToBase64String(imageBytes),
-                            MediaType = MediaType.ImagePng
-                        }
-                    });
-                }
-                history.Add(new MessageParam {
-                    Role = role,
-                    Content = contentBlocks
-                });
-            } else {
-                history.Add(new MessageParam {
-                    Role = role,
-                    Content = content?.Trim() ?? ""
-                });
-            }
-        }
-
-        /// <summary>
-        /// Ensures message list starts with user and alternates between user/assistant.
-        /// Merges consecutive same-role messages.
-        /// </summary>
         internal static List<MessageParam> EnsureAlternatingRoles(List<MessageParam> messages) {
             if (!messages.Any()) return messages;
 
@@ -480,23 +341,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return result;
         }
 
-        private static string ExtractTextFromContent(MessageParamContent content) {
-            if (content.TryPickString(out var text)) {
-                return text;
-            }
-            if (content.TryPickContentBlockParams(out var blocks)) {
-                var sb = new StringBuilder();
-                foreach (var block in blocks) {
-                    if (block.TryPickText(out var textBlock)) {
-                        sb.Append(textBlock.Text);
-                    }
-                }
-                return sb.ToString();
-            }
-            return content.ToString();
-        }
-
-        #endregion
 
         #region Vision Support
 
