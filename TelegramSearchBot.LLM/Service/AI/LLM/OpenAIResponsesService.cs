@@ -66,6 +66,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IMessageExtensionService _messageExtensionService;
         private readonly LlmVisibilityService _llmVisibilityService;
         private readonly PromptCachingSettingsService _promptCachingSettingsService;
+        private readonly LlmChatRunner _chatRunner;
 
         public OpenAIResponsesService(
             DataDbContext context,
@@ -82,7 +83,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             IHttpClientFactory httpClientFactory,
             IBotIdentityProvider botIdentityProvider,
             LlmVisibilityService llmVisibilityService = null,
-            PromptCachingSettingsService promptCachingSettingsService = null) {
+            PromptCachingSettingsService promptCachingSettingsService = null,
+            LlmChatRunner chatRunner = null) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
@@ -90,6 +92,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _botIdentityProvider = botIdentityProvider;
             _llmVisibilityService = llmVisibilityService;
             _promptCachingSettingsService = promptCachingSettingsService;
+            _chatRunner = chatRunner;
             _logger.LogInformation("OpenAIResponsesService instance created.");
         }
 
@@ -217,59 +220,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LLMApiBinding binding, LlmExecutionContext executionContext,
             bool supportsVision,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
-                _logger.LogError("{ServiceName}: Channel, Gateway, or ApiKey is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} channel/gateway/apikey is not configured.";
-                yield break;
-            }
-
-                        var promptCachingEnabled = channel.Provider == LLMProvider.ResponsesAPI && await IsPromptCachingEnabledAsync();
-
-            var transport = new Transports.ResponsesTransport(_httpClientFactory, _logger, endpoint, apiKey, binding, channel, supportsVision, promptCachingEnabled);
-            var botName = await GetBotNameAsync();
-            var projected = LlmHistoryProjector.Project(history, supportsVision, _logger);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = ChatId,
-                OriginalMessageId = message.MessageId,
-                UserId = message.FromUserId,
-                ModelName = modelName,
-                Provider = "OpenAIResponses",
-                ChannelId = channel.Id
-            };
-            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, ChatId),
-                History = projected,
-                Tools = McpToolHelper.GetLlmToolSpecs(),
-                Config = new LlmTransportConfig {
-                    ModelName = modelName,
-                    Endpoint = endpoint,
-                    ApiKey = apiKey,
-                    Provider = channel.Provider,
-                    Binding = binding,
-                    Channel = channel,
-                    SupportsVision = supportsVision,
-                    PromptCachingEnabled = promptCachingEnabled
-                },
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
+            // Glue (client construction, native/XML fallback dispatch) lives in LlmChatRunner.
+            await foreach (var item in _chatRunner.RunAsync(history, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
                 yield return item;
             }
         }
-
-        // ========================================================================
-        // Resume From Snapshot
-        // ========================================================================
-
         public async IAsyncEnumerable<string> ResumeFromSnapshotAsync(
             LlmContinuationSnapshot snapshot, LLMChannel channel,
             LlmExecutionContext executionContext,
