@@ -74,7 +74,8 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 _redisMock.Object,
                 _dbContext,
                 _loggerMock.Object,
-                _factoryMock.Object);
+                _factoryMock.Object,
+                new LlmChatRunner(new Mock<IHttpClientFactory>().Object, new Mock<ILogger<LlmChatRunner>>().Object, _factoryMock.Object));
         }
 
         [Fact]
@@ -521,12 +522,14 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             });
             await _dbContext.SaveChangesAsync();
 
-            var serviceMock = new Mock<ILlmProvider>();
-            serviceMock.Setup(s => s.ResumeFromSnapshotAsync(
-                    It.IsAny<LlmContinuationSnapshot>(), It.IsAny<LLMChannel>(), It.IsAny<LLMApiBinding>(),
-                    It.IsAny<LlmExecutionContext>(), It.IsAny<CancellationToken>()))
-                .Returns(EmptyStringStream());
-            _factoryMock.Setup(f => f.GetProvider(It.IsAny<ResolvedLlmRoute>())).Returns(serviceMock.Object);
+            var serviceMock = new Mock<ILlmTransport>();
+            serviceMock.Setup(t => t.StreamTurnAsync(It.IsAny<LlmTurnRequest>(), It.IsAny<CancellationToken>()))
+                .Returns(EmptyLlmStream());
+            var bundle = new LlmTransportBundle(serviceMock.Object, new LlmTransportConfig { ModelName = "m" });
+            _factoryMock.Setup(f => f.GetTransport(It.IsAny<LLMChannel>(), It.IsAny<LLMApiBinding>(), It.IsAny<string>(),
+                    It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>(),
+                    It.IsAny<ILogger>(), It.IsAny<IHttpClientFactory>()))
+                .ReturnsAsync(bundle);
 
             var snapshot = new LlmContinuationSnapshot {
                 SnapshotId = "s1",
@@ -535,21 +538,28 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
                 Provider = "OpenAI",
                 ChatId = 123,
                 UserId = 1,
-                OriginalMessageId = 1
+                OriginalMessageId = 1,
+                NormalizedHistory = new List<LlmMessage> {
+                    new LlmMessage { Role = LlmRole.System, Text = "sys" },
+                    new LlmMessage { Role = LlmRole.User, Text = "hi" }
+                }
             };
             var results = new List<string>();
             await foreach (var r in _service.ResumeFromSnapshotAsync(snapshot, new LlmExecutionContext())) {
                 results.Add(r);
             }
 
-            _factoryMock.Verify(f => f.GetProvider(It.Is<ResolvedLlmRoute>(r => r.Channel.Id == 14 && r.Binding != null && r.Binding.Id == bDefault.Id)), Times.Once);
-            serviceMock.Verify(s => s.ResumeFromSnapshotAsync(
-                It.IsAny<LlmContinuationSnapshot>(), It.IsAny<LLMChannel>(),
-                It.Is<LLMApiBinding>(b => b.Id == bDefault.Id), It.IsAny<LlmExecutionContext>(), It.IsAny<CancellationToken>()),
-                Times.Once);
+            _factoryMock.Verify(f => f.GetTransport(It.Is<LLMChannel>(c => c.Id == 14),
+                It.Is<LLMApiBinding>(b => b.Id == bDefault.Id), It.IsAny<string>(), It.IsAny<long>(),
+                It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>(),
+                It.IsAny<ILogger>(), It.IsAny<IHttpClientFactory>()), Times.Once);
         }
 
         private static async IAsyncEnumerable<string> EmptyStringStream() {
+            yield break;
+        }
+
+        private static async IAsyncEnumerable<LlmStreamEvent> EmptyLlmStream() {
             yield break;
         }
 

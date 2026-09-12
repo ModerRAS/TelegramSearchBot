@@ -67,7 +67,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// over channel provider (e.g. OpenAI channel on an Anthropic-protocol binding).
         /// Async because Ollama may pull the model on first use.
         /// </summary>
-        public async Task<LlmTransportBundle> GetTransport(LLMChannel channel, LLMApiBinding binding, string modelName, long chatId,
+        public virtual async Task<LlmTransportBundle> GetTransport(LLMChannel channel, LLMApiBinding binding, string modelName, long chatId,
             bool nativeTools, bool promptCachingEnabled, bool supportsVision, string systemPrompt,
             Microsoft.Extensions.Logging.ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory) {
             var protocol = binding?.Protocol ?? channel.Provider switch {

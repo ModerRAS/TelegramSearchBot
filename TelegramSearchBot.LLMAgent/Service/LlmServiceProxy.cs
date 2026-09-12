@@ -12,11 +12,13 @@ namespace TelegramSearchBot.LLMAgent.Service {
     public sealed class LlmServiceProxy : IAgentTaskExecutor {
         private readonly IServiceProvider _serviceProvider;
         private readonly LlmProviderRegistry _registry;
+        private readonly LlmChatRunner _chatRunner;
         private readonly ILogger<LlmServiceProxy> _logger;
 
         public LlmServiceProxy(IServiceProvider serviceProvider, ILogger<LlmServiceProxy> logger) {
             _serviceProvider = serviceProvider;
             _registry = serviceProvider.GetRequiredService<LlmProviderRegistry>();
+            _chatRunner = serviceProvider.GetRequiredService<LlmChatRunner>();
             _logger = logger;
         }
 
@@ -27,12 +29,11 @@ namespace TelegramSearchBot.LLMAgent.Service {
             List<AgentHistoryMessage> history = task.History;
 
             var binding = ToBinding(task.Channel);
-            var service = binding != null ? ResolveService(binding.Protocol) : ResolveService(task.Channel.Provider);
             ApplyBotIdentity(task.BotName, task.BotUserId);
             var channel = ToEntity(task.Channel);
 
             if (task.Kind == AgentTaskKind.Continuation && task.ContinuationSnapshot != null) {
-                await foreach (var chunk in service.ResumeFromSnapshotAsync(task.ContinuationSnapshot, channel, binding, executionContext, cancellationToken)
+                await foreach (var chunk in _chatRunner.RunFromSnapshotAsync(task.ContinuationSnapshot, channel, binding, executionContext, cancellationToken)
                                    .WithCancellation(cancellationToken)) {
                     yield return chunk;
                 }
@@ -54,7 +55,7 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 c.Name.Equals("vision", StringComparison.OrdinalIgnoreCase) &&
                 c.Value.Equals("true", StringComparison.OrdinalIgnoreCase));
 
-            await foreach (var chunk in service.ExecWithHistoryAsync(history, message, task.ChatId, task.ModelName, channel, binding, executionContext, supportsVision, cancellationToken)
+            await foreach (var chunk in _chatRunner.RunAsync(history, message, task.ChatId, task.ModelName, channel, binding, executionContext, supportsVision, cancellationToken)
                                .WithCancellation(cancellationToken)) {
                 yield return chunk;
             }

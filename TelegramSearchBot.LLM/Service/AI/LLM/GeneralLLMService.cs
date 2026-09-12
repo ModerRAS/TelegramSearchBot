@@ -170,17 +170,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (route == null) {
                 // 六.8 legacy 回退：模型行缺失/软删时按渠道 Provider/Gateway 继续，不丢弃排队中的续聊
                 _logger.LogWarning("Cannot resume: model {Model} has no route on channel {ChannelId}, falling back to legacy provider route", snapshot.ModelName, channel.Id);
-                var legacyService = _LLMFactory.GetProvider(channel.Provider);
-                await foreach (var item in legacyService.ResumeFromSnapshotAsync(snapshot, channel, null, executionContext, cancellationToken)
+                await foreach (var item in _chatRunner.RunFromSnapshotAsync(snapshot, channel, null, executionContext, cancellationToken)
                                                   .WithCancellation(cancellationToken)) {
                     yield return item;
                 }
                 yield break;
             }
 
-            var service = _LLMFactory.GetProvider(route);
-
-            await foreach (var item in service.ResumeFromSnapshotAsync(snapshot, channel, route.Binding, executionContext, cancellationToken)
+            await foreach (var item in _chatRunner.RunFromSnapshotAsync(snapshot, channel, route.Binding, executionContext, cancellationToken)
                                               .WithCancellation(cancellationToken)) {
                 yield return item;
             }
