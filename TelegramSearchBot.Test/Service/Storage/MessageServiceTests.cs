@@ -67,23 +67,23 @@ namespace TelegramSearchBot.Test.Service.Storage {
             _mockMediator = new Mock<IMediator>();
 
             // Create mocks for all LLM services
-            var mockOllamaLogger = new Mock<ILogger<OllamaService>>();
-            var mockOllamaService = new Mock<OllamaService>(
+            var mockOllamaLogger = new Mock<ILogger<OllamaModelApi>>();
+            var mockOllamaModelApi = new Mock<OllamaModelApi>(
                 _context,
                 mockOllamaLogger.Object,
                 Mock.Of<IServiceProvider>(),
                 Mock.Of<IHttpClientFactory>());
 
-            var mockOpenAILogger = new Mock<ILogger<OpenAIService>>();
+            var mockOpenAILogger = new Mock<ILogger<OpenAiModelApi>>();
             var messageExtensionService = new MessageExtensionService(_context);
-            var mockOpenAIService = new Mock<OpenAIService>(
+            var mockOpenAiModelApi = new Mock<OpenAiModelApi>(
                 _context,
                 mockOpenAILogger.Object,
                 messageExtensionService,
                 Mock.Of<IHttpClientFactory>());
 
-            var mockGeminiLogger = new Mock<ILogger<GeminiService>>();
-            var mockGeminiService = new Mock<GeminiService>(
+            var mockGeminiLogger = new Mock<ILogger<GeminiModelApi>>();
+            var mockGeminiModelApi = new Mock<GeminiModelApi>(
                 _context,
                 mockGeminiLogger.Object,
                 Mock.Of<IHttpClientFactory>());

@@ -22,7 +22,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
     public sealed class AnthropicMessagesTransport : ILlmTransport {
         /// <summary>
         /// Builds the transport from a channel/binding pair. Absorbs the client
-        /// construction glue formerly in AnthropicService.CreateClient.
+        /// construction glue formerly in AnthropicModelApi.CreateClient.
         /// </summary>
         public static LlmTransportBundle Create(LLMChannel channel, LLMApiBinding binding, string modelName, string systemPrompt,
             bool nativeTools, bool promptCachingEnabled, ILogger logger) {
@@ -87,7 +87,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
             // Legacy wire semantics: prompt-cache preparation runs once per run (first turn);
             // later turns append raw deltas so user messages stay string-typed on the wire.
             if (_preparedHistory == null) {
-                _preparedHistory = AnthropicService.PrepareMessagesForPromptCaching(ToProviderHistory(request.History), _promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
+                _preparedHistory = AnthropicModelApi.PrepareMessagesForPromptCaching(ToProviderHistory(request.History), _promptCachingEnabled, excludeDynamicTail: true, out var cacheBreakpointInserted);
                 _cacheBreakpointInserted = cacheBreakpointInserted;
             } else if (request.History.Count > _convertedCount) {
                 _preparedHistory.AddRange(ToProviderHistory(request.History.Skip(_convertedCount)));
@@ -98,14 +98,14 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
 
             var nativeToolSpecs = request.Tools;
             var rawHistory = providerHistory.ToList();
-            var (toolDefinitionHash, stablePrefixHash) = AnthropicService.BuildPromptCachingContext(
+            var (toolDefinitionHash, stablePrefixHash) = AnthropicModelApi.BuildPromptCachingContext(
                 _nativeTools ? "anthropic-native" : "anthropic-xml",
                 _systemPrompt,
-                AnthropicService.SerializeProviderHistory(_systemPrompt, rawHistory));
+                AnthropicModelApi.SerializeProviderHistory(_systemPrompt, rawHistory));
             var parameters = new MessageCreateParams {
                 Model = _modelName,
                 MaxTokens = 8192,
-                System = AnthropicService.BuildSystemPrompt(_systemPrompt, _promptCachingEnabled),
+                System = AnthropicModelApi.BuildSystemPrompt(_systemPrompt, _promptCachingEnabled),
                 Messages = providerHistory,
                 Tools = _nativeTools && nativeToolSpecs is { Count: > 0 }
                     ? ConvertToAnthropicToolSpecs(nativeToolSpecs, _promptCachingEnabled)
@@ -256,7 +256,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
             FlushToolResults();
 
             // Anthropic requires strictly alternating user/assistant starting with user.
-            return AnthropicService.EnsureAlternatingRoles(result);
+            return AnthropicModelApi.EnsureAlternatingRoles(result);
         }
 
         private static List<ToolUnion> ConvertToAnthropicToolSpecs(IReadOnlyList<LlmToolSpec> specs, bool enablePromptCaching) {
@@ -292,7 +292,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
                         Name = spec.Name,
                         Description = spec.Description,
                         InputSchema = inputSchema,
-                        CacheControl = enablePromptCaching && index == specs.Count - 1 ? AnthropicService.CreateCacheControl() : null,
+                        CacheControl = enablePromptCaching && index == specs.Count - 1 ? AnthropicModelApi.CreateCacheControl() : null,
                     }, null));
                 } catch (Exception) {
                 }

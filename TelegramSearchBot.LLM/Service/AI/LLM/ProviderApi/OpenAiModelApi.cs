@@ -33,9 +33,7 @@ using CommonChat = OpenAI.Chat;
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not inheriting from BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
-    public class OpenAIService : IService, ILlmProvider, ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
-        public string ServiceName => "OpenAIService";
-
+    public class OpenAiModelApi : ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
         /// <summary>
         /// Mutable accumulator for streaming tool call updates.
         /// </summary>
@@ -120,70 +118,27 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 : sanitized.Substring(0, maxChars) + $"...<truncated {sanitized.Length - maxChars} chars>";
         }
 
-        private readonly ILogger<OpenAIService> _logger;
+        private readonly ILogger<OpenAiModelApi> _logger;
         private readonly DataDbContext _dbContext;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IMessageExtensionService _messageExtensionService;
-        private readonly IBotIdentityProvider _botIdentityProvider;
-        private readonly IGroupLlmSettingsService _groupLlmSettingsService;
-        private readonly LlmVisibilityService _llmVisibilityService;
-        private readonly PromptCachingSettingsService _promptCachingSettingsService;
-        private readonly LlmChatRunner _chatRunner;
-        private string _fallbackBotName = string.Empty;
 
-        public OpenAIService(
-            DataDbContext context,
-            ILogger<OpenAIService> logger,
-            IMessageExtensionService messageExtensionService,
-            IHttpClientFactory httpClientFactory)
-            : this(context, logger, messageExtensionService, httpClientFactory, null, null, null, null) {
-        }
+        private const string ServiceName = "OpenAiModelApi";
 
-        public OpenAIService(
+        public OpenAiModelApi(
             DataDbContext context,
-            ILogger<OpenAIService> logger,
+            ILogger<OpenAiModelApi> logger,
             IMessageExtensionService messageExtensionService,
-            IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider,
-            IGroupLlmSettingsService groupLlmSettingsService,
-            LlmVisibilityService llmVisibilityService = null,
-            PromptCachingSettingsService promptCachingSettingsService = null,
-            LlmChatRunner chatRunner = null) {
+            IHttpClientFactory httpClientFactory) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
-            _botIdentityProvider = botIdentityProvider;
-            _groupLlmSettingsService = groupLlmSettingsService;
-            _llmVisibilityService = llmVisibilityService;
-            _promptCachingSettingsService = promptCachingSettingsService;
-            _chatRunner = chatRunner;
-            _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
+            _logger.LogInformation("OpenAiModelApi instance created. McpToolHelper should be initialized at application startup.");
         }
 
-        public string BotName {
-            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            set {
-                if (_botIdentityProvider != null) {
-                    _botIdentityProvider.SetIdentity(Env.BotId, value);
-                } else {
-                    _fallbackBotName = value ?? string.Empty;
-                }
-            }
-        }
 
-        private async Task<string> GetBotNameAsync() {
-            if (_botIdentityProvider == null) {
-                return _fallbackBotName;
-            }
 
-            var identity = await _botIdentityProvider.GetIdentityAsync();
-            return identity.UserName ?? string.Empty;
-        }
-
-        private async Task<bool> IsPromptCachingEnabledAsync() {
-            return _promptCachingSettingsService == null || await _promptCachingSettingsService.IsEnabledAsync();
-        }
 
         private static List<ChatMessage> GetStablePrefixMessages(List<ChatMessage> providerHistory, bool excludeDynamicTail) {
             if (!excludeDynamicTail || providerHistory.Count <= 1) {
@@ -904,316 +859,21 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        private async Task<bool> CheckVisionSupport(string modelName, int channelId) {
-            try {
-                var channelWithModel = await _dbContext.ChannelsWithModel
-                    .Include(c => c.Capabilities)
-                    .FirstOrDefaultAsync(c => c.ModelName == modelName && c.LLMChannelId == channelId && !c.IsDeleted);
 
-                if (channelWithModel?.Capabilities != null) {
-                    return channelWithModel.Capabilities.Any(c =>
-                        c.CapabilityName == "vision" && c.CapabilityValue == "true");
-                }
 
-                return false;
-            } catch (Exception ex) {
-                _logger.LogDebug(ex, "检查模型视觉能力时出错: {ModelName}", modelName);
-                return false;
-            }
-        }
 
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            var executionContext = new LlmExecutionContext();
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        LlmExecutionContext executionContext,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, null, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        LLMApiBinding binding,
-                                                        LlmExecutionContext executionContext,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName;
-
-            if (string.IsNullOrWhiteSpace(modelName)) {
-                _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} model name is not configured.";
-                yield break;
-            }
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
-                _logger.LogError("{ServiceName}: Channel, Gateway, or ApiKey is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} channel/gateway/apikey is not configured.";
-                yield break;
-            }
-
-            var rows = await LlmHistoryQueryService.LoadAsync(_dbContext, _llmVisibilityService, ChatId, message, cancellationToken);
-            var supportsVision = await CheckVisionSupport(modelName, channel.Id);
-
-            // Try native tool calling first; fall back to XML prompt-based if it fails
-            var nativeTools = McpToolHelper.GetNativeToolDefinitions();
-            var useNativeToolCalling = nativeTools is { Count: > 0 };
-
-            if (useNativeToolCalling) {
-                bool nativeFailed = false;
-                var nativeEnumerator = ExecWithNativeToolCallingAsync(rows, supportsVision, message, ChatId, modelName, channel, binding, executionContext, nativeTools, cancellationToken);
-                await using var enumerator = nativeEnumerator.GetAsyncEnumerator(cancellationToken);
-                bool hasFirst = false;
-                try {
-                    hasFirst = await enumerator.MoveNextAsync();
-                } catch (Exception ex) when (IsToolCallingNotSupportedError(ex)) {
-                    _logger.LogInformation("{ServiceName}: Native tool calling not supported for model {Model}, falling back to XML prompt-based tool calling. Error: {Error}", ServiceName, modelName, ex.Message);
-                    nativeFailed = true;
-                }
-
-                if (!nativeFailed) {
-                    if (hasFirst) {
-                        yield return enumerator.Current;
-                        while (await enumerator.MoveNextAsync()) {
-                            yield return enumerator.Current;
-                        }
-                    }
-                    yield break;
-                }
-            }
-
-            // Fallback: XML prompt-based tool calling
-            await foreach (var item in ExecWithXmlToolCallingAsync(rows, supportsVision, message, ChatId, modelName, channel, binding, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
 
         /// <inheritdoc />
-        public async IAsyncEnumerable<string> ExecWithHistoryAsync(
-            IReadOnlyList<AgentHistoryMessage> history,
-            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding, LlmExecutionContext executionContext,
-            bool supportsVision,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            // Glue (client construction, native/XML fallback dispatch) lives in LlmChatRunner.
-            await foreach (var item in _chatRunner.RunAsync(history, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
-                yield return item;
-            }
-        }
 
-        private static bool IsToolCallingNotSupportedError(Exception ex) {
-            var message = ex.Message ?? "";
-            // Check for ClientResultException with specific HTTP status codes
-            if (ex is ClientResultException clientEx) {
-                // 400 Bad Request with tool-related error message
-                if (clientEx.Status == 400 && message.Contains("tool", StringComparison.OrdinalIgnoreCase)) {
-                    return true;
-                }
-            }
-            // Common error patterns when a model/API doesn't support tool calling
-            return message.Contains("tools", StringComparison.OrdinalIgnoreCase) &&
-                   ( message.Contains("not supported", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase) ) ||
-                   message.Contains("unrecognized request argument", StringComparison.OrdinalIgnoreCase);
-        }
 
-        private async IAsyncEnumerable<string> ExecWithNativeToolCallingAsync(
-            IReadOnlyList<AgentHistoryMessage> rows,
-            bool supportsVision,
-            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding,
-            LlmExecutionContext executionContext,
-            List<ChatTool> nativeTools,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
 
-            var botName = await GetBotNameAsync();
-            string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, ChatId);
-            var promptCachingEnabled = channel.Provider == LLMProvider.OpenAI && await IsPromptCachingEnabledAsync();
-            var includeEmptyReasoningContent = binding == null && ShouldIncludeEmptyReasoningContent(channel, modelName);
 
-            var clientParts = BuildClientParts(channel, binding, ChatId);
-            var transport = new Transports.OpenAiChatTransport(_logger, clientParts.Transport, clientParts.Credential, clientParts.Options, modelName, channel,
-                nativeTools: true, promptCachingEnabled, includeEmptyReasoningContent);
-            var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
 
-            var meta = new LlmToolLoopMeta {
-                ChatId = ChatId,
-                OriginalMessageId = message.MessageId,
-                UserId = message.FromUserId,
-                ModelName = modelName,
-                Provider = "OpenAI",
-                ChannelId = channel.Id
-            };
-            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = history,
-                Tools = McpToolHelper.GetLlmToolSpecs(),
-                Config = BuildConfig(modelName, channel, binding, supportsVision, promptCachingEnabled, includeEmptyReasoningContent),
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        private async IAsyncEnumerable<string> ExecWithXmlToolCallingAsync(
-            IReadOnlyList<AgentHistoryMessage> rows,
-            bool supportsVision,
-            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding,
-            LlmExecutionContext executionContext,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-
-            var botName = await GetBotNameAsync();
-            string systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
-            var promptCachingEnabled = channel.Provider == LLMProvider.OpenAI && await IsPromptCachingEnabledAsync();
-            var includeEmptyReasoningContent = binding == null && ShouldIncludeEmptyReasoningContent(channel, modelName);
-
-            var clientParts = BuildClientParts(channel, binding, ChatId);
-            var transport = new Transports.OpenAiChatTransport(_logger, clientParts.Transport, clientParts.Credential, clientParts.Options, modelName, channel,
-                nativeTools: false, promptCachingEnabled, includeEmptyReasoningContent);
-            var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = ChatId,
-                OriginalMessageId = message.MessageId,
-                UserId = message.FromUserId,
-                ModelName = modelName,
-                Provider = "OpenAI",
-                ChannelId = channel.Id
-            };
-            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = history,
-                Tools = null,
-                Config = BuildConfig(modelName, channel, binding, supportsVision, promptCachingEnabled, includeEmptyReasoningContent),
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        private LlmTransportConfig BuildConfig(string modelName, LLMChannel channel, LLMApiBinding binding,
-            bool supportsVision, bool promptCachingEnabled, bool includeEmptyReasoningContent) {
-            return new LlmTransportConfig {
-                ModelName = modelName,
-                Endpoint = NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding)),
-                ApiKey = LlmBindingSupport.ResolveApiKey(channel, binding),
-                Provider = channel.Provider,
-                Binding = binding,
-                Channel = channel,
-                SupportsVision = supportsVision,
-                PromptCachingEnabled = promptCachingEnabled,
-                IncludeEmptyReasoningContent = includeEmptyReasoningContent
-            };
-        }
-
-        private (HttpClientPipelineTransport Transport, ApiKeyCredential Credential, OpenAIClientOptions Options) BuildClientParts(LLMChannel channel, LLMApiBinding binding, long chatId) {
-            // ponytail: HttpClient must outlive this method (transport persists per run); factory-managed, not disposed here.
-            var httpClient = _httpClientFactory.CreateClient();
-            OpencodeSessionHeaders.Apply(httpClient, channel, binding, $"tsb-{chatId}");
-            var clientOptions = new OpenAIClientOptions {
-                Endpoint = new Uri(NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding))),
-                Transport = new HttpClientPipelineTransport(httpClient),
-            };
-            return (new HttpClientPipelineTransport(httpClient), new ApiKeyCredential(LlmBindingSupport.ResolveApiKey(channel, binding)), clientOptions);
-        }
 
         /// <summary>
         /// Resume LLM execution from a saved v2 (normalized) snapshot.
         /// </summary>
-        public async IAsyncEnumerable<string> ResumeFromSnapshotAsync(LlmContinuationSnapshot snapshot, LLMChannel channel,
-                                                                       LlmExecutionContext executionContext,
-                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            await foreach (var item in ResumeFromSnapshotAsync(snapshot, channel, null, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
 
-        public async IAsyncEnumerable<string> ResumeFromSnapshotAsync(LlmContinuationSnapshot snapshot, LLMChannel channel,
-                                                                       LLMApiBinding binding,
-                                                                       LlmExecutionContext executionContext,
-                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-            if (snapshot == null) {
-                _logger.LogError("{ServiceName}: Cannot resume from null snapshot.", ServiceName);
-                yield break;
-            }
-            if (snapshot.NormalizedHistory is not { Count: > 0 } savedHistory) {
-                _logger.LogError("{ServiceName}: Snapshot {SnapshotId} has no v2 normalized history (legacy v1 snapshots expire via TTL).", ServiceName, snapshot.SnapshotId);
-                yield break;
-            }
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
-                _logger.LogError("{ServiceName}: Channel, Gateway, or ApiKey is not configured for resume.", ServiceName);
-                yield break;
-            }
-
-            var modelName = snapshot.ModelName;
-            if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName;
-
-            _logger.LogInformation("{ServiceName}: Resuming from snapshot {SnapshotId} for ChatId {ChatId}, restoring {HistoryCount} history entries.",
-                ServiceName, snapshot.SnapshotId, snapshot.ChatId, savedHistory.Count);
-
-            // Peel the stored system prompt off the normalized history.
-            string systemPrompt;
-            if (savedHistory[0].Role == LlmRole.System) {
-                systemPrompt = savedHistory[0].Text ?? string.Empty;
-                savedHistory = savedHistory.Skip(1).ToList();
-            } else {
-                var botName = await GetBotNameAsync();
-                systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, snapshot.ChatId);
-            }
-
-            var promptCachingEnabled = channel.Provider == LLMProvider.OpenAI && await IsPromptCachingEnabledAsync();
-            var includeEmptyReasoningContent = binding == null && ShouldIncludeEmptyReasoningContent(channel, modelName);
-            var clientParts = BuildClientParts(channel, binding, snapshot.ChatId);
-            var transport = new Transports.OpenAiChatTransport(_logger, clientParts.Transport, clientParts.Credential, clientParts.Options, modelName, channel,
-                nativeTools: false, promptCachingEnabled, includeEmptyReasoningContent);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = snapshot.ChatId,
-                OriginalMessageId = snapshot.OriginalMessageId,
-                UserId = snapshot.UserId,
-                ModelName = modelName,
-                Provider = "OpenAI",
-                ChannelId = channel.Id,
-                BaseCycles = snapshot.CyclesSoFar,
-                InitialContent = snapshot.LastAccumulatedContent ?? string.Empty
-            };
-            var toolContext = new ToolContext { ChatId = snapshot.ChatId, UserId = snapshot.UserId, MessageId = snapshot.OriginalMessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = savedHistory,
-                Tools = null,
-                Config = BuildConfig(modelName, channel, binding, false, promptCachingEnabled, includeEmptyReasoningContent),
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
-                yield return item;
-            }
-        }
 
         /// <summary>
         /// Stateless transport adapter for the OpenAI Chat Completions API: converts the
@@ -1423,35 +1083,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        public async Task<(string, string)> SetModel(string ModelName, long ChatId) {
-            if (_groupLlmSettingsService != null) {
-                var (previous, current) = await _groupLlmSettingsService.SetModelAsync(ChatId, ModelName);
-                return (previous, current);
-            }
-
-            var GroupSetting = await _dbContext.GroupSettings
-                                .Where(s => s.GroupId == ChatId)
-                                .FirstOrDefaultAsync();
-            var CurrentModelName = GroupSetting?.LLMModelName;
-            if (GroupSetting is null) {
-                await _dbContext.AddAsync(new GroupSettings() { GroupId = ChatId, LLMModelName = ModelName });
-            } else {
-                GroupSetting.LLMModelName = ModelName;
-            }
-            await _dbContext.SaveChangesAsync();
-            return (CurrentModelName ?? "Default", ModelName);
-        }
-        public async Task<string> GetModel(long ChatId) {
-            if (_groupLlmSettingsService != null) {
-                return await _groupLlmSettingsService.GetModelAsync(ChatId);
-            }
-
-            var GroupSetting = await _dbContext.GroupSettings.AsNoTracking()
-                                      .Where(s => s.GroupId == ChatId)
-                                      .FirstOrDefaultAsync();
-            var ModelName = GroupSetting?.LLMModelName;
-            return ModelName;
-        }
 
         public async Task<string> AnalyzeImageAsync(string photoPath, string modelName, LLMChannel channel, string prompt = null) {
             return await AnalyzeImageAsync(photoPath, modelName, channel, null, prompt);

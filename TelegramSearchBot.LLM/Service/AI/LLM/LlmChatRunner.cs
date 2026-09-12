@@ -239,7 +239,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         private static string ProviderLabel(LLMChannel channel) {
             if (channel.Provider == LLMProvider.OpenAI && channel.Gateway != null &&
-                OpenAIService.IsMiniMaxCompatibleEndpoint(channel, string.Empty)) {
+                OpenAiModelApi.IsMiniMaxCompatibleEndpoint(channel, string.Empty)) {
                 return "MiniMax";
             }
             return channel.Provider.ToString();

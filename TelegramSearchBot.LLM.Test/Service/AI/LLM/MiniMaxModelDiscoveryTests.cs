@@ -36,14 +36,14 @@ namespace TelegramSearchBot.LLM.Test.Service.AI.LLM {
         public void NormalizeOpenAIEndpoint_MiniMax_AppendsV1ExactlyOnce(string gateway, string expected) {
             var channel = new LLMChannel { Provider = LLMProvider.MiniMax, Gateway = gateway };
 
-            Assert.Equal(expected, OpenAIService.NormalizeOpenAIEndpoint(channel));
+            Assert.Equal(expected, OpenAiModelApi.NormalizeOpenAIEndpoint(channel));
         }
 
         [Fact]
         public void NormalizeOpenAIEndpoint_OtherProvider_PreservesGateway() {
             var channel = new LLMChannel { Provider = LLMProvider.OpenAI, Gateway = "https://example.com/custom/" };
 
-            Assert.Equal("https://example.com/custom/", OpenAIService.NormalizeOpenAIEndpoint(channel));
+            Assert.Equal("https://example.com/custom/", OpenAiModelApi.NormalizeOpenAIEndpoint(channel));
         }
 
         [Fact]
@@ -70,12 +70,12 @@ namespace TelegramSearchBot.LLM.Test.Service.AI.LLM {
             Assert.Equal("https://api.minimaxi.com/v1/models", handler.RequestUri?.AbsoluteUri);
         }
 
-        private static OpenAIService CreateService(StubHandler handler) {
+        private static OpenAiModelApi CreateService(StubHandler handler) {
             var factory = new Mock<IHttpClientFactory>();
             factory.Setup(x => x.CreateClient(It.IsAny<string>())).Returns(() => new HttpClient(handler, false));
-            return new OpenAIService(
+            return new OpenAiModelApi(
                 null,
-                Mock.Of<ILogger<OpenAIService>>(),
+                Mock.Of<ILogger<OpenAiModelApi>>(),
                 Mock.Of<IMessageExtensionService>(),
                 factory.Object);
         }

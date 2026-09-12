@@ -84,7 +84,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
 
             var shouldObservePromptCaching = _channel.Provider == LLMProvider.ResponsesAPI;
             var promptCachingEnabled = shouldObservePromptCaching && _promptCachingEnabled;
-            var (toolDefinitionHash, stablePrefixHash, promptCacheKey) = OpenAIResponsesService.BuildPromptCachingContext(
+            var (toolDefinitionHash, stablePrefixHash, promptCacheKey) = ResponsesModelApi.BuildPromptCachingContext(
                 "OpenAIResponses",
                 request.Config.ModelName,
                 "responses",
@@ -119,7 +119,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
             var textBuilder = new StringBuilder();
             var reasoningBuilder = new StringBuilder();
             var uiBuilder = new StringBuilder();
-            var toolCallAccums = new Dictionary<int, OpenAIResponsesService.ResponsesToolCallAccumulator>();
+            var toolCallAccums = new Dictionary<int, ResponsesModelApi.ResponsesToolCallAccumulator>();
             ResponseResult completedResult = null;
             var lastUiLength = 0;
             var streamedAny = false;
@@ -127,7 +127,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
             await foreach (var update in _client.CreateResponseStreamingAsync(options, cancellationToken).WithCancellation(cancellationToken)) {
                 if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
 
-                OpenAIResponsesService.ProcessStreamingUpdate(update, textBuilder, uiBuilder, reasoningBuilder, toolCallAccums, ref completedResult);
+                ResponsesModelApi.ProcessStreamingUpdate(update, textBuilder, uiBuilder, reasoningBuilder, toolCallAccums, ref completedResult);
 
                 if (uiBuilder.Length > lastUiLength) {
                     var delta = uiBuilder.ToString(lastUiLength, uiBuilder.Length - lastUiLength);
@@ -157,9 +157,9 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
                         && !string.IsNullOrWhiteSpace(fcItem.CallId)
                         && !string.IsNullOrWhiteSpace(fcItem.FunctionName)) {
                         toolCalls.Add(new LlmToolCall {
-                            Id = OpenAIService.NormalizeToolCallId(fcItem.CallId),
-                            Name = OpenAIService.NormalizeToolCallName(fcItem.FunctionName),
-                            ArgumentsJson = OpenAIService.NormalizeToolCallArguments(fcItem.FunctionArguments?.ToString() ?? "{}")
+                            Id = OpenAiModelApi.NormalizeToolCallId(fcItem.CallId),
+                            Name = OpenAiModelApi.NormalizeToolCallName(fcItem.FunctionName),
+                            ArgumentsJson = OpenAiModelApi.NormalizeToolCallArguments(fcItem.FunctionArguments?.ToString() ?? "{}")
                         });
                     }
                 }

@@ -31,13 +31,13 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
     public sealed class OpenAiChatTransport : ILlmTransport {
         /// <summary>
         /// Builds the transport plus its turn config from a channel/binding pair.
-        /// Absorbs the client-construction glue formerly in OpenAIService.BuildClientParts.
+        /// Absorbs the client-construction glue formerly in OpenAiModelApi.BuildClientParts.
         /// </summary>
         public static LlmTransportBundle Create(LLMChannel channel, LLMApiBinding binding, string modelName, long chatId,
             bool nativeTools, bool promptCachingEnabled, ILogger logger, IHttpClientFactory httpClientFactory) {
-            var endpoint = OpenAIService.NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding));
+            var endpoint = OpenAiModelApi.NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding));
             var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
-            var includeEmptyReasoningContent = binding == null && OpenAIService.ShouldIncludeEmptyReasoningContent(channel, modelName);
+            var includeEmptyReasoningContent = binding == null && OpenAiModelApi.ShouldIncludeEmptyReasoningContent(channel, modelName);
 
             // ponytail: HttpClient must outlive this method (transport persists per run); factory-managed, not disposed here.
             var httpClient = httpClientFactory.CreateClient();
@@ -106,7 +106,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
 
                     var shouldObservePromptCaching = _channel.Provider == LLMProvider.OpenAI;
                     var promptCachingEnabled = shouldObservePromptCaching && _promptCachingEnabled;
-                    var (toolDefinitionHash, stablePrefixHash, promptCacheKey) = OpenAIService.BuildPromptCachingContext(
+                    var (toolDefinitionHash, stablePrefixHash, promptCacheKey) = OpenAiModelApi.BuildPromptCachingContext(
                         "OpenAI",
                         _modelName,
                         _nativeTools ? "chat-native" : "chat-xml",
@@ -136,7 +136,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
                             }
                         }
 
-                        var reasoningUpdate = OpenAIService.GetStreamingReasoningContent(update);
+                        var reasoningUpdate = OpenAiModelApi.GetStreamingReasoningContent(update);
                         if (!string.IsNullOrEmpty(reasoningUpdate)) {
                             reasoningContentBuilder.Append(reasoningUpdate);
                             streamedAny = true;
@@ -181,17 +181,17 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
                     if (_nativeTools && finishReason == ChatFinishReason.ToolCalls && toolCallAccumulators.Any()) {
                         foreach (var (index, acc) in toolCallAccumulators) {
                             if (string.IsNullOrWhiteSpace(acc.Id)) {
-                                _logger.LogWarning("OpenAIService: Tool call at index {Index} has no ID, generating fallback.", index);
+                                _logger.LogWarning("OpenAiModelApi: Tool call at index {Index} has no ID, generating fallback.", index);
                             }
                             toolCalls.Add(new LlmToolCall {
-                                Id = OpenAIService.NormalizeToolCallId(acc.Id),
-                                Name = OpenAIService.NormalizeToolCallName(acc.Name),
-                                ArgumentsJson = OpenAIService.NormalizeToolCallArguments(acc.Arguments.ToString())
+                                Id = OpenAiModelApi.NormalizeToolCallId(acc.Id),
+                                Name = OpenAiModelApi.NormalizeToolCallName(acc.Name),
+                                ArgumentsJson = OpenAiModelApi.NormalizeToolCallArguments(acc.Arguments.ToString())
                             });
                         }
                     } else if (toolCallAccumulators.Any()) {
                         _logger.LogWarning(
-                            "OpenAIService: Native response contained tool call updates but finish reason was not ToolCalls. FinishReason={FinishReason}, ToolCallCount={ToolCallCount}",
+                            "OpenAiModelApi: Native response contained tool call updates but finish reason was not ToolCalls. FinishReason={FinishReason}, ToolCallCount={ToolCallCount}",
                             finishReason, toolCallAccumulators.Count);
                     }
 
@@ -233,11 +233,11 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
                                     if (!string.IsNullOrWhiteSpace(m.Text)) {
                                         assistant = new AssistantChatMessage(calls) { Content = { ChatMessageContentPart.CreateTextPart(m.Text) } };
                                     }
-                                    OpenAIService.SetAssistantReasoningContent(assistant, m.Thinking, _includeEmptyReasoningContent);
+                                    OpenAiModelApi.SetAssistantReasoningContent(assistant, m.Thinking, _includeEmptyReasoningContent);
                                     messages.Add(assistant);
                                 } else {
                                     var assistant = new AssistantChatMessage(m.Text ?? string.Empty);
-                                    OpenAIService.SetAssistantReasoningContent(assistant, m.Thinking, _includeEmptyReasoningContent);
+                                    OpenAiModelApi.SetAssistantReasoningContent(assistant, m.Thinking, _includeEmptyReasoningContent);
                                     messages.Add(assistant);
                                 }
                                 break;

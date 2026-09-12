@@ -19,7 +19,7 @@ using SkiaSharp;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM; // For ILlmProvider
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
@@ -27,60 +27,26 @@ using TelegramSearchBot.Model.Tools; // For BraveSearchResult
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
-    public class OllamaService : IService, ILlmProvider, ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
-        public string ServiceName => "OllamaService";
+    public class OllamaModelApi : ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
+        private const string ServiceName = "OllamaModelApi";
 
-        private readonly ILogger<OllamaService> _logger;
+        private readonly ILogger<OllamaModelApi> _logger;
         private readonly DataDbContext _dbContext;
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IBotIdentityProvider _botIdentityProvider;
-        private readonly LlmChatRunner _chatRunner;
-        private string _fallbackBotName = string.Empty;
-        public string BotName {
-            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            set {
-                if (_botIdentityProvider != null) {
-                    _botIdentityProvider.SetIdentity(Env.BotId, value);
-                } else {
-                    _fallbackBotName = value ?? string.Empty;
-                }
-            }
-        }
-
-        public OllamaService(
-            DataDbContext context,
-            ILogger<OllamaService> logger,
-            IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory)
-            : this(context, logger, serviceProvider, httpClientFactory, null) {
-        }
-
         // Constructor requires dependencies needed directly by this class
-        public OllamaService(
+        public OllamaModelApi(
             DataDbContext context,
-            ILogger<OllamaService> logger,
+            ILogger<OllamaModelApi> logger,
             IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider,
-            LlmChatRunner chatRunner = null) {
+            IHttpClientFactory httpClientFactory) {
             _logger = logger;
             _dbContext = context;
             _serviceProvider = serviceProvider;
             _httpClientFactory = httpClientFactory;
-            _botIdentityProvider = botIdentityProvider;
-            _chatRunner = chatRunner;
-            _logger.LogInformation("OllamaService instance created. McpToolHelper should be initialized at application startup.");
+            _logger.LogInformation("OllamaModelApi instance created");
         }
 
-        private async Task<string> GetBotNameAsync() {
-            if (_botIdentityProvider == null) {
-                return _fallbackBotName;
-            }
-
-            var identity = await _botIdentityProvider.GetIdentityAsync();
-            return identity.UserName ?? string.Empty;
-        }
 
         // --- Helper methods specific to this service ---
 
@@ -118,101 +84,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-                public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            var executionContext = new LlmExecutionContext();
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
+        
 
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        LlmExecutionContext executionContext,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, null, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        LLMApiBinding binding,
-                                                        LlmExecutionContext executionContext,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-            modelName = modelName ?? Env.OllamaModelName;
-            if (string.IsNullOrWhiteSpace(modelName)) {
-                _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} model name is not configured.";
-                yield break;
-            }
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
-                _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} channel/gateway is not configured.";
-                yield break;
-            }
-
-            // --- Client and Model Setup ---
-            HttpClient httpClient = _httpClientFactory?.CreateClient("OllamaClient") ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(endpoint);
-            var ollama = new OllamaApiClient(httpClient, modelName);
-
-            if (!await CheckAndPullModelAsync(ollama, modelName)) {
-                yield return $"Error: Could not check or pull Ollama model '{modelName}'.";
-                yield break;
-            }
-            ollama.SelectedModel = modelName;
-
-            var rows = await LlmHistoryQueryService.LoadAsync(_dbContext, null, ChatId, message, cancellationToken);
-            var botName = await GetBotNameAsync();
-            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
-
-            var transport = new Transports.OllamaTransport(_logger, ollama, systemPrompt);
-            var history = LlmHistoryProjector.Project(rows, supportsVision: false, _logger);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = ChatId,
-                OriginalMessageId = message.MessageId,
-                UserId = message.FromUserId,
-                ModelName = modelName,
-                Provider = "Ollama",
-                ChannelId = channel.Id
-            };
-            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = history,
-                Tools = null,
-                Config = new LlmTransportConfig {
-                    ModelName = modelName,
-                    Endpoint = endpoint,
-                    Provider = channel.Provider,
-                    Binding = binding,
-                    Channel = channel,
-                    SupportsVision = false
-                },
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
-                yield return item;
-            }
-        }
 
         /// <inheritdoc />
-        public async IAsyncEnumerable<string> ExecWithHistoryAsync(
-            IReadOnlyList<AgentHistoryMessage> history,
-            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding, LlmExecutionContext executionContext,
-            bool supportsVision,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            // Glue (client construction, model pull check, fallback dispatch) lives in LlmChatRunner.
-            await foreach (var item in _chatRunner.RunAsync(history, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
-                yield return item;
-            }
-        }
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
             if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway)) {
                 return Enumerable.Empty<string>();

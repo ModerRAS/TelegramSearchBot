@@ -25,29 +25,14 @@ using DataMessage = TelegramSearchBot.Model.Data.Message;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(ServiceLifetime.Transient)]
-    public class AnthropicService : IService, ILlmProvider, ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
-        public string ServiceName => "AnthropicService";
+    public class AnthropicModelApi : ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
+        private const string ServiceName = "AnthropicModelApi";
 
-        private readonly ILogger<AnthropicService> _logger;
+        private readonly ILogger<AnthropicModelApi> _logger;
         private readonly DataDbContext _dbContext;
         private readonly IMessageExtensionService _messageExtensionService;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IBotIdentityProvider _botIdentityProvider;
-        private readonly LlmVisibilityService _llmVisibilityService;
-        private readonly PromptCachingSettingsService _promptCachingSettingsService;
-        private readonly LlmChatRunner _chatRunner;
-        private string _fallbackBotName = string.Empty;
 
-        public string BotName {
-            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            set {
-                if (_botIdentityProvider != null) {
-                    _botIdentityProvider.SetIdentity(Env.BotId, value);
-                } else {
-                    _fallbackBotName = value ?? string.Empty;
-                }
-            }
-        }
 
         private static readonly string[] _anthropicModels = {
             "claude-sonnet-4-20250514",
@@ -59,42 +44,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
             "claude-3-haiku-20240307"
         };
 
-        public AnthropicService(
+        public AnthropicModelApi(
             DataDbContext context,
-            ILogger<AnthropicService> logger,
+            ILogger<AnthropicModelApi> logger,
             IMessageExtensionService messageExtensionService,
-            IHttpClientFactory httpClientFactory)
-            : this(context, logger, messageExtensionService, httpClientFactory, null, null, null) {
-        }
-
-        public AnthropicService(
-            DataDbContext context,
-            ILogger<AnthropicService> logger,
-            IMessageExtensionService messageExtensionService,
-            IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider,
-            LlmVisibilityService llmVisibilityService = null,
-            PromptCachingSettingsService promptCachingSettingsService = null,
-            LlmChatRunner chatRunner = null) {
+            IHttpClientFactory httpClientFactory) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
             _httpClientFactory = httpClientFactory;
-            _botIdentityProvider = botIdentityProvider;
-            _llmVisibilityService = llmVisibilityService;
-            _promptCachingSettingsService = promptCachingSettingsService;
-            _chatRunner = chatRunner;
-            _logger.LogInformation("AnthropicService instance created. McpToolHelper should be initialized at application startup.");
+            _logger.LogInformation("AnthropicModelApi instance created.");
         }
 
-        private async Task<string> GetBotNameAsync() {
-            if (_botIdentityProvider == null) {
-                return _fallbackBotName;
-            }
-
-            var identity = await _botIdentityProvider.GetIdentityAsync();
-            return identity.UserName ?? string.Empty;
-        }
 
         private AnthropicClient CreateClient(LLMChannel channel, LLMApiBinding? binding = null) {
             var options = new Anthropic.Core.ClientOptions {
@@ -113,9 +74,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return new AnthropicClient(options);
         }
 
-        private async Task<bool> IsPromptCachingEnabledAsync() {
-            return _promptCachingSettingsService == null || await _promptCachingSettingsService.IsEnabledAsync();
-        }
 
         internal static CacheControlEphemeral CreateCacheControl() {
             return new CacheControlEphemeral();
@@ -350,23 +308,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// <summary>
         /// 检查模型是否支持视觉能力
         /// </summary>
-        private async Task<bool> CheckVisionSupport(string modelName, int channelId) {
-            try {
-                var channelWithModel = await _dbContext.ChannelsWithModel
-                    .Include(c => c.Capabilities)
-                    .FirstOrDefaultAsync(c => c.ModelName == modelName && c.LLMChannelId == channelId && !c.IsDeleted);
-
-                if (channelWithModel?.Capabilities != null) {
-                    return channelWithModel.Capabilities.Any(c =>
-                        c.CapabilityName == "vision" && c.CapabilityValue == "true");
-                }
-
-                return false;
-            } catch (Exception ex) {
-                _logger.LogDebug(ex, "检查模型视觉能力时出错: {ModelName}", modelName);
-                return false;
-            }
-        }
 
         /// <summary>
         /// 尝试加载消息关联的图片文件，转换为PNG格式的字节数组
@@ -442,293 +383,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             return tools;
-        }
-
-        #endregion
-
-        #region ExecAsync
-
-        public async IAsyncEnumerable<string> ExecAsync(
-            DataMessage message, long ChatId, string modelName, LLMChannel channel,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            var executionContext = new LlmExecutionContext();
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        public async IAsyncEnumerable<string> ExecAsync(
-            DataMessage message, long ChatId, string modelName, LLMChannel channel,
-            LlmExecutionContext executionContext,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, null, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        public async IAsyncEnumerable<string> ExecAsync(
-            DataMessage message, long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding,
-            LlmExecutionContext executionContext,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            if (string.IsNullOrWhiteSpace(modelName)) modelName = "claude-sonnet-4-20250514";
-
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
-                _logger.LogError("{ServiceName}: Channel or ApiKey is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} channel/apikey is not configured.";
-                yield break;
-            }
-
-            var rows = await LlmHistoryQueryService.LoadAsync(_dbContext, _llmVisibilityService, ChatId, message, cancellationToken);
-            var supportsVision = await CheckVisionSupport(modelName, channel.Id);
-
-            var nativeTools = McpToolHelper.GetNativeToolDefinitions();
-            var useNativeToolCalling = nativeTools is { Count: > 0 };
-
-            if (useNativeToolCalling) {
-                bool nativeFailed = false;
-                var nativeEnumerator = ExecWithNativeToolCallingAsync(rows, supportsVision, message, ChatId, modelName, channel, binding, executionContext, nativeTools, cancellationToken);
-                await using var enumerator = nativeEnumerator.GetAsyncEnumerator(cancellationToken);
-                bool hasFirst = false;
-                try {
-                    hasFirst = await enumerator.MoveNextAsync();
-                } catch (Exception ex) when (IsToolCallingNotSupportedError(ex)) {
-                    _logger.LogInformation("{ServiceName}: Native tool calling not supported for model {Model}, falling back to XML prompt-based tool calling. Error: {Error}", ServiceName, modelName, ex.Message);
-                    nativeFailed = true;
-                }
-
-                if (!nativeFailed) {
-                    if (hasFirst) {
-                        yield return enumerator.Current;
-                        while (await enumerator.MoveNextAsync()) {
-                            yield return enumerator.Current;
-                        }
-                    }
-                    yield break;
-                }
-            }
-
-            // Fallback: XML prompt-based tool calling
-            await foreach (var item in ExecWithXmlToolCallingAsync(rows, supportsVision, message, ChatId, modelName, channel, binding, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        /// <inheritdoc />
-        public async IAsyncEnumerable<string> ExecWithHistoryAsync(
-            IReadOnlyList<AgentHistoryMessage> history,
-            DataMessage message, long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding, LlmExecutionContext executionContext,
-            bool supportsVision,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            // Glue (client construction, native/XML fallback dispatch) lives in LlmChatRunner.
-            await foreach (var item in _chatRunner.RunAsync(history, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
-                yield return item;
-            }
-        }
-        private static bool IsToolCallingNotSupportedError(Exception ex) {
-            var message = ex.Message ?? "";
-            return message.Contains("tools", StringComparison.OrdinalIgnoreCase) &&
-                   ( message.Contains("not supported", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("invalid", StringComparison.OrdinalIgnoreCase) );
-        }
-        /// <summary>
-        /// Execute LLM with native Anthropic tool calling API.
-        /// </summary>
-        public async IAsyncEnumerable<string> ExecWithNativeToolCallingAsync(
-            IReadOnlyList<AgentHistoryMessage> rows,
-            bool supportsVision,
-            DataMessage message, long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding,
-            LlmExecutionContext executionContext,
-            List<OpenAI.Chat.ChatTool> nativeTools,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-
-            var botName = await GetBotNameAsync();
-            string systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, ChatId);
-            var promptCachingEnabled = await IsPromptCachingEnabledAsync();
-            using var client = CreateClient(channel, binding);
-
-            var transport = new Transports.AnthropicMessagesTransport(_logger, client, systemPrompt, modelName, channel,
-                nativeTools: true, promptCachingEnabled);
-            var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = ChatId,
-                OriginalMessageId = message.MessageId,
-                UserId = message.FromUserId,
-                ModelName = modelName,
-                Provider = "Anthropic",
-                ChannelId = channel.Id
-            };
-            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = history,
-                Tools = McpToolHelper.GetLlmToolSpecs(),
-                Config = new LlmTransportConfig {
-                    ModelName = modelName,
-                    Endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding),
-                    ApiKey = LlmBindingSupport.ResolveApiKey(channel, binding),
-                    Provider = channel.Provider,
-                    Binding = binding,
-                    Channel = channel,
-                    SupportsVision = supportsVision,
-                    PromptCachingEnabled = promptCachingEnabled
-                },
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        private async IAsyncEnumerable<string> ExecWithXmlToolCallingAsync(
-            IReadOnlyList<AgentHistoryMessage> rows,
-            bool supportsVision,
-            DataMessage message, long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding,
-            LlmExecutionContext executionContext,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-
-            var botName = await GetBotNameAsync();
-            string systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
-            var promptCachingEnabled = await IsPromptCachingEnabledAsync();
-            using var client = CreateClient(channel, binding);
-
-            var transport = new Transports.AnthropicMessagesTransport(_logger, client, systemPrompt, modelName, channel,
-                nativeTools: false, promptCachingEnabled);
-            var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = ChatId,
-                OriginalMessageId = message.MessageId,
-                UserId = message.FromUserId,
-                ModelName = modelName,
-                Provider = "Anthropic",
-                ChannelId = channel.Id
-            };
-            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = history,
-                Tools = null,
-                Config = new LlmTransportConfig {
-                    ModelName = modelName,
-                    Endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding),
-                    ApiKey = LlmBindingSupport.ResolveApiKey(channel, binding),
-                    Provider = channel.Provider,
-                    Binding = binding,
-                    Channel = channel,
-                    SupportsVision = supportsVision,
-                    PromptCachingEnabled = promptCachingEnabled
-                },
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        #endregion
-
-        #region ResumeFromSnapshot
-
-        public async IAsyncEnumerable<string> ResumeFromSnapshotAsync(
-            LlmContinuationSnapshot snapshot, LLMChannel channel,
-            LlmExecutionContext executionContext,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            await foreach (var item in ResumeFromSnapshotAsync(snapshot, channel, null, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
-
-        public async IAsyncEnumerable<string> ResumeFromSnapshotAsync(
-            LlmContinuationSnapshot snapshot, LLMChannel channel,
-            LLMApiBinding binding,
-            LlmExecutionContext executionContext,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-            if (snapshot == null) {
-                _logger.LogError("{ServiceName}: Cannot resume from null snapshot.", ServiceName);
-                yield break;
-            }
-            if (snapshot.NormalizedHistory is not { Count: > 0 } savedHistory) {
-                _logger.LogError("{ServiceName}: Snapshot {SnapshotId} has no v2 normalized history (legacy v1 snapshots expire via TTL).", ServiceName, snapshot.SnapshotId);
-                yield break;
-            }
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
-                _logger.LogError("{ServiceName}: Channel or ApiKey is not configured for resume.", ServiceName);
-                yield break;
-            }
-
-            var modelName = snapshot.ModelName;
-            if (string.IsNullOrWhiteSpace(modelName)) modelName = "claude-sonnet-4-20250514";
-
-            _logger.LogInformation("{ServiceName}: Resuming from snapshot {SnapshotId} for ChatId {ChatId}, restoring {HistoryCount} history entries.",
-                ServiceName, snapshot.SnapshotId, snapshot.ChatId, savedHistory.Count);
-
-            string systemPrompt;
-            if (savedHistory[0].Role == LlmRole.System) {
-                systemPrompt = savedHistory[0].Text ?? string.Empty;
-                savedHistory = savedHistory.Skip(1).ToList();
-            } else {
-                var botName = await GetBotNameAsync();
-                systemPrompt = McpToolHelper.FormatSystemPromptForNativeToolCalling(botName, snapshot.ChatId);
-            }
-
-            var promptCachingEnabled = await IsPromptCachingEnabledAsync();
-            using var client = CreateClient(channel, binding);
-
-            var transport = new Transports.AnthropicMessagesTransport(_logger, client, systemPrompt, modelName, channel,
-                nativeTools: false, promptCachingEnabled);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = snapshot.ChatId,
-                OriginalMessageId = snapshot.OriginalMessageId,
-                UserId = snapshot.UserId,
-                ModelName = modelName,
-                Provider = "Anthropic",
-                ChannelId = channel.Id,
-                BaseCycles = snapshot.CyclesSoFar,
-                InitialContent = snapshot.LastAccumulatedContent ?? string.Empty
-            };
-            var toolContext = new ToolContext { ChatId = snapshot.ChatId, UserId = snapshot.UserId, MessageId = snapshot.OriginalMessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = savedHistory,
-                Tools = null,
-                Config = new LlmTransportConfig {
-                    ModelName = modelName,
-                    Endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding),
-                    ApiKey = LlmBindingSupport.ResolveApiKey(channel, binding),
-                    Provider = channel.Provider,
-                    Binding = binding,
-                    Channel = channel,
-                    SupportsVision = false,
-                    PromptCachingEnabled = promptCachingEnabled
-                },
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
-                yield return item;
-            }
         }
 
         #endregion

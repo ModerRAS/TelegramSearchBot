@@ -101,11 +101,11 @@ namespace TelegramSearchBot.LLMAgent {
             services.AddScoped<IMessageExtensionService, Service.InMemoryMessageExtensionService>();
             services.AddSingleton<IBotIdentityProvider, BotIdentityProvider>();
             services.AddScoped<IGroupLlmSettingsService, GroupLlmSettingsService>();
-            services.AddScoped<OpenAIService>();
-            services.AddScoped<OpenAIResponsesService>();
-            services.AddScoped<OllamaService>();
-            services.AddScoped<GeminiService>();
-            services.AddScoped<AnthropicService>();
+            services.AddScoped<OpenAiModelApi>();
+            services.AddScoped<ResponsesModelApi>();
+            services.AddScoped<OllamaModelApi>();
+            services.AddScoped<GeminiModelApi>();
+            services.AddScoped<AnthropicModelApi>();
             services.AddSingleton<Service.ToolExecutor>();
             services.AddScoped<Service.AgentToolService>();
             services.AddScoped<IFileToolService, FileToolService>();

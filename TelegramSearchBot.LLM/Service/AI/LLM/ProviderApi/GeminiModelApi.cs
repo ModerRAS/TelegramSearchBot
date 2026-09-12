@@ -23,58 +23,23 @@ using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(ServiceLifetime.Transient)]
-    public class GeminiService : IService, ILlmProvider, ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
-        public string ServiceName => "GeminiService";
-        private readonly ILogger<GeminiService> _logger;
+    public class GeminiModelApi : ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
+        private const string ServiceName = "GeminiModelApi";
+        private readonly ILogger<GeminiModelApi> _logger;
         private readonly DataDbContext _dbContext;
         private readonly Dictionary<long, ChatSession> _chatSessions = new();
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IBotIdentityProvider _botIdentityProvider;
-        private readonly LlmVisibilityService _llmVisibilityService;
-        private readonly LlmChatRunner _chatRunner;
-        private string _fallbackBotName = string.Empty;
-        public string BotName {
-            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            set {
-                if (_botIdentityProvider != null) {
-                    _botIdentityProvider.SetIdentity(Env.BotId, value);
-                } else {
-                    _fallbackBotName = value ?? string.Empty;
-                }
-            }
-        }
 
-        public GeminiService(
+        public GeminiModelApi(
             DataDbContext context,
-            ILogger<GeminiService> logger,
-            IHttpClientFactory httpClientFactory)
-            : this(context, logger, httpClientFactory, null, null) {
-        }
-
-        public GeminiService(
-            DataDbContext context,
-            ILogger<GeminiService> logger,
-            IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider,
-            LlmVisibilityService llmVisibilityService = null,
-            LlmChatRunner chatRunner = null) {
+            ILogger<GeminiModelApi> logger,
+            IHttpClientFactory httpClientFactory) {
             _logger = logger;
             _dbContext = context;
             _httpClientFactory = httpClientFactory;
-            _botIdentityProvider = botIdentityProvider;
-            _llmVisibilityService = llmVisibilityService;
-            _chatRunner = chatRunner;
-            _logger.LogInformation("GeminiService instance created");
+            _logger.LogInformation("GeminiModelApi instance created");
         }
 
-        private async Task<string> GetBotNameAsync() {
-            if (_botIdentityProvider == null) {
-                return _fallbackBotName;
-            }
-
-            var identity = await _botIdentityProvider.GetIdentityAsync();
-            return identity.UserName ?? string.Empty;
-        }
 
         private void AddMessageToHistory(List<GenerativeAI.Types.Content> chatHistory, long fromUserId, string content) {
             AddMessageToHistory(chatHistory, fromUserId, content, null);
@@ -107,23 +72,6 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        private async Task<bool> CheckVisionSupport(string modelName, int channelId) {
-            try {
-                var channelWithModel = await _dbContext.ChannelsWithModel
-                    .Include(c => c.Capabilities)
-                    .FirstOrDefaultAsync(c => c.ModelName == modelName && c.LLMChannelId == channelId && !c.IsDeleted);
-
-                if (channelWithModel?.Capabilities != null) {
-                    return channelWithModel.Capabilities.Any(c =>
-                        c.CapabilityName == "vision" && c.CapabilityValue == "true");
-                }
-
-                return false;
-            } catch (Exception ex) {
-                _logger.LogDebug(ex, "检查模型视觉能力时出错: {ModelName}", modelName);
-                return false;
-            }
-        }
 
         /// <summary>
         /// 尝试加载消息关联的图片文件，转换为PNG格式的字节数组
@@ -290,102 +238,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return model;
         }
 
-        public async IAsyncEnumerable<string> ExecAsync(
-            Message message,
-            long ChatId,
-            string modelName,
-            LLMChannel channel,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            var executionContext = new LlmExecutionContext();
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
 
-        public async IAsyncEnumerable<string> ExecAsync(
-            Message message,
-            long ChatId,
-            string modelName,
-            LLMChannel channel,
-            LlmExecutionContext executionContext,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, null, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
 
-        public async IAsyncEnumerable<string> ExecAsync(
-            Message message,
-            long ChatId,
-            string modelName,
-            LLMChannel channel,
-            LLMApiBinding binding,
-            LlmExecutionContext executionContext,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-            if (string.IsNullOrWhiteSpace(modelName)) modelName = "gemini-1.5-flash";
-
-            var googleAI = new GoogleAi(channel.ApiKey, client: _httpClientFactory.CreateClient());
-            var model = googleAI.CreateGenerativeModel("models/" + modelName);
-
-            if (_llmVisibilityService != null &&
-                message != null &&
-                await _llmVisibilityService.IsUserInvisibleAsync(ChatId, message.FromUserId, cancellationToken)) {
-                yield break;
-            }
-
-            var rows = await LlmHistoryQueryService.LoadAsync(_dbContext, _llmVisibilityService, ChatId, message, cancellationToken);
-            var supportsVision = await CheckVisionSupport(modelName, channel.Id);
-
-            var botName = await GetBotNameAsync();
-            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
-
-            var transport = new Transports.GeminiTransport(model, supportsVision);
-            var history = LlmHistoryProjector.Project(rows, supportsVision, _logger);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = ChatId,
-                OriginalMessageId = message.MessageId,
-                UserId = message.FromUserId,
-                ModelName = modelName,
-                Provider = "Gemini",
-                ChannelId = channel.Id
-            };
-            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = history,
-                Tools = null,
-                Config = new LlmTransportConfig {
-                    ModelName = modelName,
-                    Provider = channel.Provider,
-                    Binding = binding,
-                    Channel = channel,
-                    SupportsVision = supportsVision
-                },
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
-                yield return item;
-            }
-        }
 
         /// <inheritdoc />
-        public async IAsyncEnumerable<string> ExecWithHistoryAsync(
-            IReadOnlyList<AgentHistoryMessage> history,
-            Message message,
-            long ChatId, string modelName, LLMChannel channel,
-            LLMApiBinding binding, LlmExecutionContext executionContext,
-            bool supportsVision,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            // Glue (client construction, native/XML fallback dispatch) lives in LlmChatRunner.
-            await foreach (var item in _chatRunner.RunAsync(history, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
-                yield return item;
-            }
-        }
         public async Task<float[]> GenerateEmbeddingsAsync(string text, string modelName, LLMChannel channel) {
             if (channel == null || string.IsNullOrWhiteSpace(channel.ApiKey)) {
                 _logger.LogError("{ServiceName}: Channel or ApiKey is not configured", ServiceName);

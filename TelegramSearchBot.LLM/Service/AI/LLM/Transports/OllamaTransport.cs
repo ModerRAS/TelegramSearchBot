@@ -45,7 +45,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
             return new LlmTransportBundle(transport, config);
         }
 
-        /// <summary>Ensures the model exists locally, pulling it otherwise. Moved from OllamaService.</summary>
+        /// <summary>Ensures the model exists locally, pulling it otherwise. Moved from OllamaModelApi.</summary>
         public static async Task<bool> CheckAndPullModelAsync(OllamaApiClient ollama, string modelName, ILogger logger) {
             logger.LogInformation("Checking for Ollama model: {ModelName}", modelName);
             try {

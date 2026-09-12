@@ -11,13 +11,11 @@ using TelegramSearchBot.Service.AI.LLM;
 namespace TelegramSearchBot.LLMAgent.Service {
     public sealed class LlmServiceProxy : IAgentTaskExecutor {
         private readonly IServiceProvider _serviceProvider;
-        private readonly LlmProviderRegistry _registry;
         private readonly LlmChatRunner _chatRunner;
         private readonly ILogger<LlmServiceProxy> _logger;
 
         public LlmServiceProxy(IServiceProvider serviceProvider, ILogger<LlmServiceProxy> logger) {
             _serviceProvider = serviceProvider;
-            _registry = serviceProvider.GetRequiredService<LlmProviderRegistry>();
             _chatRunner = serviceProvider.GetRequiredService<LlmChatRunner>();
             _logger = logger;
         }
@@ -77,24 +75,6 @@ namespace TelegramSearchBot.LLMAgent.Service {
                 AuthProfile = config.BindingAuthProfile.Value,
                 IsDefault = false
             };
-        }
-
-        private ILlmProvider ResolveService(LLMProvider provider) {
-            try {
-                return _registry.GetProvider(provider);
-            } catch (KeyNotFoundException) {
-                // 保持原有降级语义：未知 provider 回退到 OpenAI 兼容路径
-                return _registry.GetProvider(LLMProvider.OpenAI);
-            }
-        }
-
-        /// <summary>按 binding 线协议解析 client，统一委托给 LlmProviderRegistry；未知协议回退 OpenAI。</summary>
-        private ILlmProvider ResolveService(LlmProtocol protocol) {
-            try {
-                return _registry.GetProvider(protocol);
-            } catch (KeyNotFoundException) {
-                return _registry.GetProvider(LlmProtocol.OpenAIChat);
-            }
         }
 
         private void ApplyBotIdentity(string botName, long botUserId) {
