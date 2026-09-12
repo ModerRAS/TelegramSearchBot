@@ -383,7 +383,7 @@ erDiagram
   P1 共享循环（已完成）
   P2 预设（已完成）
   P3+4 整体重写：LlmMessage → 投影 → 循环 v2 → 5 transports → registry → 删旧（已完成，CI 绿）
-  P4.5 provider 类彻底删除：LlmChatRunner → Transport.Create → ProviderApi → 删 5 个 service ← 下一步
+  P4.5 provider 类彻底删除：LlmChatRunner → Transport.Create → ProviderApi → 删 5 个 service（已完成，CI 绿）
 
 [PR #391]
   P5 单入口 + Redis 状态收敛
