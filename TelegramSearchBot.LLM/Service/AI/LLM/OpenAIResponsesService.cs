@@ -36,7 +36,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
     /// 与现有的 OpenAIService（Chat Completions API）并存。
     /// </summary>
     [Injectable(ServiceLifetime.Transient)]
-    public class OpenAIResponsesService : IService, ILlmProvider {
+    public class OpenAIResponsesService : IService, ILlmProvider, ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
         public string ServiceName => "OpenAIResponsesService";
 
         /// <summary>

@@ -25,7 +25,7 @@ using DataMessage = TelegramSearchBot.Model.Data.Message;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     [Injectable(ServiceLifetime.Transient)]
-    public class AnthropicService : IService, ILlmProvider {
+    public class AnthropicService : IService, ILlmProvider, ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
         public string ServiceName => "AnthropicService";
 
         private readonly ILogger<AnthropicService> _logger;

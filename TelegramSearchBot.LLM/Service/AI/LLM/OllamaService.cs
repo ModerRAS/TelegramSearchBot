@@ -27,7 +27,7 @@ using TelegramSearchBot.Model.Tools; // For BraveSearchResult
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
-    public class OllamaService : IService, ILlmProvider {
+    public class OllamaService : IService, ILlmProvider, ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
         public string ServiceName => "OllamaService";
 
         private readonly ILogger<OllamaService> _logger;

@@ -52,8 +52,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 : GetProvider(route.Channel.Provider);
         }
 
+        /// <summary>Catalog (model discovery) capability for a provider.</summary>
+        public ILlmModelCatalog GetCatalog(LLMProvider provider) => (ILlmModelCatalog)GetProvider(provider);
+
+        /// <summary>Embedding capability for a provider (Anthropic throws NotSupported).</summary>
+        public ILlmEmbeddings GetEmbeddings(LLMProvider provider) => (ILlmEmbeddings)GetProvider(provider);
+
+        /// <summary>Vision image-analysis capability for a provider.</summary>
+        public ILlmVision GetVision(LLMProvider provider) => (ILlmVision)GetProvider(provider);
+
         /// <summary>
         /// Resolves the chat wire transport for a channel/binding pair. Binding protocol wins
+
         /// over channel provider (e.g. OpenAI channel on an Anthropic-protocol binding).
         /// Async because Ollama may pull the model on first use.
         /// </summary>
