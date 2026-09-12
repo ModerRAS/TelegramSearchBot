@@ -35,6 +35,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IBotIdentityProvider _botIdentityProvider;
+        private readonly LlmChatRunner _chatRunner;
         private string _fallbackBotName = string.Empty;
         public string BotName {
             get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
@@ -61,12 +62,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
             ILogger<OllamaService> logger,
             IServiceProvider serviceProvider,
             IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider) {
+            IBotIdentityProvider botIdentityProvider,
+            LlmChatRunner chatRunner = null) {
             _logger = logger;
             _dbContext = context;
             _serviceProvider = serviceProvider;
             _httpClientFactory = httpClientFactory;
             _botIdentityProvider = botIdentityProvider;
+            _chatRunner = chatRunner;
             _logger.LogInformation("OllamaService instance created. McpToolHelper should be initialized at application startup.");
         }
 
@@ -205,67 +208,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LLMApiBinding binding, LlmExecutionContext executionContext,
             bool supportsVision,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-            modelName = modelName ?? Env.OllamaModelName;
-            if (string.IsNullOrWhiteSpace(modelName)) {
-                _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} model name is not configured.";
-                yield break;
-            }
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
-                _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} channel/gateway is not configured.";
-                yield break;
-            }
-
-            HttpClient httpClient = _httpClientFactory?.CreateClient("OllamaClient") ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(endpoint);
-            var ollama = new OllamaApiClient(httpClient, modelName);
-
-            if (!await CheckAndPullModelAsync(ollama, modelName)) {
-                yield return $"Error: Could not check or pull Ollama model '{modelName}'.";
-                yield break;
-            }
-            ollama.SelectedModel = modelName;
-
-            var botName = await GetBotNameAsync();
-            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
-
-            var transport = new Transports.OllamaTransport(_logger, ollama, systemPrompt);
-            var projected = LlmHistoryProjector.Project(history, supportsVision: false, _logger);
-
-            var meta = new LlmToolLoopMeta {
-                ChatId = ChatId,
-                OriginalMessageId = message.MessageId,
-                UserId = message.FromUserId,
-                ModelName = modelName,
-                Provider = "Ollama",
-                ChannelId = channel.Id
-            };
-            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-            var run = new LlmAgentRunRequest {
-                Transport = transport,
-                SystemPrompt = systemPrompt,
-                History = projected,
-                Tools = null,
-                Config = new LlmTransportConfig {
-                    ModelName = modelName,
-                    Endpoint = endpoint,
-                    Provider = channel.Provider,
-                    Binding = binding,
-                    Channel = channel,
-                    SupportsVision = false
-                },
-                ToolContext = toolContext,
-                Meta = meta,
-                ExecutionContext = executionContext
-            };
-            await foreach (var item in LlmToolLoop.RunAsync(run, cancellationToken)) {
+            // Glue (client construction, model pull check, fallback dispatch) lives in LlmChatRunner.
+            await foreach (var item in _chatRunner.RunAsync(history, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
                 yield return item;
             }
         }
-
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
             if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway)) {
                 return Enumerable.Empty<string>();
