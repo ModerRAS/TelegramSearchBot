@@ -281,9 +281,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// <summary>
         /// 根据提供商获取对应的LLM服务；未知提供商返回 null（保持原有的降级语义）。
         /// </summary>
-        private ILlmProvider GetProvider(LLMProvider provider) {
+        private ILlmModelCatalog GetProvider(LLMProvider provider) {
             try {
-                return _registry.GetProvider(provider);
+                return _registry.GetCatalog(provider);
             } catch (KeyNotFoundException) {
                 return null;
             }

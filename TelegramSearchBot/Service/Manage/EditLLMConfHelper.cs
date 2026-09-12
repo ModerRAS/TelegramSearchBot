@@ -63,7 +63,7 @@ namespace TelegramSearchBot.Service.Manage {
                 _logger.LogInformation("成功添加新通道: {ChannelName} ({Provider})", Name, Provider);
 
                 IEnumerable<string> models;
-                var service = _LLMFactory.GetProvider(Provider);
+                var service = _LLMFactory.GetCatalog(Provider);
                 if (service == null) {
                     _logger.LogWarning("未找到提供商 {Provider} 的LLM服务", Provider);
                     return -1;
@@ -122,7 +122,7 @@ namespace TelegramSearchBot.Service.Manage {
                     continue;
                 }
 
-                var service = _LLMFactory.GetProvider(channel.Provider);
+                var service = _LLMFactory.GetCatalog(channel.Provider);
                 if (service == null) {
                     _logger.LogWarning("未找到通道 {ChannelName} ({Provider}) 的LLM服务", channel.Name, channel.Provider);
                     continue;
