@@ -11,11 +11,30 @@ using OpenAI.Chat;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
+using System.Net.Http;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM.Transports {
     public sealed class GeminiTransport : ILlmTransport {
+        /// <summary>Builds the transport from a channel/binding pair (Gemini uses the channel ApiKey directly).</summary>
+        public static LlmTransportBundle Create(LLMChannel channel, LLMApiBinding binding, string modelName,
+            bool supportsVision, ILogger logger, IHttpClientFactory httpClientFactory) {
+            var googleAI = new GoogleAi(channel.ApiKey, client: httpClientFactory.CreateClient());
+            var model = googleAI.CreateGenerativeModel("models/" + modelName);
+            var transport = new GeminiTransport(model, supportsVision);
+            var config = new LlmTransportConfig {
+                ModelName = modelName,
+                Endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding),
+                ApiKey = channel.ApiKey,
+                Provider = channel.Provider,
+                Binding = binding,
+                Channel = channel,
+                SupportsVision = supportsVision
+            };
+            return new LlmTransportBundle(transport, config);
+        }
+
         private readonly GenerativeModel _model;
         private readonly bool _supportsVision;
         private ChatSession? _chatSession;

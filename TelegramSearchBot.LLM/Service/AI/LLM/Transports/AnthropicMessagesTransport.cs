@@ -20,6 +20,40 @@ using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM.Transports {
     public sealed class AnthropicMessagesTransport : ILlmTransport {
+        /// <summary>
+        /// Builds the transport from a channel/binding pair. Absorbs the client
+        /// construction glue formerly in AnthropicService.CreateClient.
+        /// </summary>
+        public static LlmTransportBundle Create(LLMChannel channel, LLMApiBinding binding, string modelName, string systemPrompt,
+            bool nativeTools, bool promptCachingEnabled, ILogger logger) {
+            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
+            var options = new Anthropic.Core.ClientOptions {
+                ApiKey = apiKey,
+            };
+            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+            if (!string.IsNullOrWhiteSpace(endpoint)) {
+                // Binding URL 已含 /v1（如 https://opencode.ai/zen/v1），SDK 会再追加 /v1/messages；
+                // 剥离尾部 /v1 使 SDK 追加后命中精确 binding 路径。legacy channel.Gateway 保持字节一致。
+                var trimmed = endpoint.TrimEnd('/');
+                if (binding != null && trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) {
+                    trimmed = trimmed.Substring(0, trimmed.Length - 3);
+                }
+                options.BaseUrl = trimmed;
+            }
+            var transport = new AnthropicMessagesTransport(logger, new AnthropicClient(options), systemPrompt, modelName, channel,
+                nativeTools, promptCachingEnabled);
+            var config = new LlmTransportConfig {
+                ModelName = modelName,
+                Endpoint = endpoint,
+                ApiKey = apiKey,
+                Provider = channel.Provider,
+                Binding = binding,
+                Channel = channel,
+                PromptCachingEnabled = promptCachingEnabled
+            };
+            return new LlmTransportBundle(transport, config);
+        }
+
         private readonly ILogger _logger;
         private readonly AnthropicClient _client;
         private readonly string _systemPrompt;

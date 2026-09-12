@@ -21,6 +21,26 @@ using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM.Transports {
     public sealed class ResponsesTransport : ILlmTransport {
+        /// <summary>
+        /// Builds the transport from a channel/binding pair (endpoint/apikey already resolved).
+        /// </summary>
+        public static LlmTransportBundle Create(LLMChannel channel, LLMApiBinding binding, string modelName, string endpoint, string apiKey,
+            bool promptCachingEnabled, bool supportsVision, ILogger logger, IHttpClientFactory httpClientFactory) {
+            var transport = new ResponsesTransport(httpClientFactory, logger, endpoint, apiKey, binding, channel,
+                supportsVision, promptCachingEnabled);
+            var config = new LlmTransportConfig {
+                ModelName = modelName,
+                Endpoint = endpoint,
+                ApiKey = apiKey,
+                Provider = channel.Provider,
+                Binding = binding,
+                Channel = channel,
+                SupportsVision = supportsVision,
+                PromptCachingEnabled = promptCachingEnabled
+            };
+            return new LlmTransportBundle(transport, config);
+        }
+
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger _logger;
         private readonly string _endpoint;

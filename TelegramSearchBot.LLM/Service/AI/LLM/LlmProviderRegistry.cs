@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Net.Http;
+using TelegramSearchBot.Model.Data;
+using Microsoft.Extensions.Logging;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model.AI;
@@ -47,6 +50,45 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return route.Binding != null
                 ? GetProvider(route.Binding.Protocol)
                 : GetProvider(route.Channel.Provider);
+        }
+
+        /// <summary>
+        /// Resolves the chat wire transport for a channel/binding pair. Binding protocol wins
+        /// over channel provider (e.g. OpenAI channel on an Anthropic-protocol binding).
+        /// Async because Ollama may pull the model on first use.
+        /// </summary>
+        public async Task<LlmTransportBundle> GetTransport(LLMChannel channel, LLMApiBinding binding, string modelName, long chatId,
+            bool nativeTools, bool promptCachingEnabled, bool supportsVision, string systemPrompt,
+            Microsoft.Extensions.Logging.ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory) {
+            var protocol = binding?.Protocol ?? channel.Provider switch {
+                LLMProvider.OpenAI => LlmProtocol.OpenAIChat,
+                LLMProvider.MiniMax => LlmProtocol.OpenAIChat,
+                LLMProvider.LMStudio => LlmProtocol.OpenAIChat,
+                LLMProvider.ResponsesAPI => LlmProtocol.OpenAIResponses,
+                LLMProvider.Anthropic => LlmProtocol.AnthropicMessages,
+                LLMProvider.Ollama => LlmProtocol.Ollama,
+                LLMProvider.Gemini => LlmProtocol.Gemini,
+                _ => LlmProtocol.OpenAIChat
+            };
+
+            switch (protocol) {
+                case LlmProtocol.OpenAIResponses:
+                    var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
+                    var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
+                    return Transports.ResponsesTransport.Create(channel, binding, modelName, endpoint, apiKey,
+                        promptCachingEnabled, supportsVision, logger, httpClientFactory);
+                case LlmProtocol.AnthropicMessages:
+                    return Transports.AnthropicMessagesTransport.Create(channel, binding, modelName, systemPrompt,
+                        nativeTools, promptCachingEnabled, logger);
+                case LlmProtocol.Gemini:
+                    return Transports.GeminiTransport.Create(channel, binding, modelName, supportsVision, logger, httpClientFactory);
+                case LlmProtocol.Ollama:
+                    return await Transports.OllamaTransport.CreateAsync(channel, binding, modelName, systemPrompt, logger, httpClientFactory);
+                case LlmProtocol.OpenAIChat:
+                default:
+                    return Transports.OpenAiChatTransport.Create(channel, binding, modelName, chatId,
+                        nativeTools, promptCachingEnabled, logger, httpClientFactory);
+            }
         }
     }
 }

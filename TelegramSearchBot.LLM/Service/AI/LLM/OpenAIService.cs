@@ -128,6 +128,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly IGroupLlmSettingsService _groupLlmSettingsService;
         private readonly LlmVisibilityService _llmVisibilityService;
         private readonly PromptCachingSettingsService _promptCachingSettingsService;
+        private readonly LlmChatRunner _chatRunner;
         private string _fallbackBotName = string.Empty;
 
         public OpenAIService(
@@ -146,7 +147,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             IBotIdentityProvider botIdentityProvider,
             IGroupLlmSettingsService groupLlmSettingsService,
             LlmVisibilityService llmVisibilityService = null,
-            PromptCachingSettingsService promptCachingSettingsService = null) {
+            PromptCachingSettingsService promptCachingSettingsService = null,
+            LlmChatRunner chatRunner = null) {
             _logger = logger;
             _dbContext = context;
             _messageExtensionService = messageExtensionService;
@@ -155,6 +157,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _groupLlmSettingsService = groupLlmSettingsService;
             _llmVisibilityService = llmVisibilityService;
             _promptCachingSettingsService = promptCachingSettingsService;
+            _chatRunner = chatRunner;
             _logger.LogInformation("OpenAIService instance created. McpToolHelper should be initialized at application startup.");
         }
 
@@ -997,48 +1000,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
             LLMApiBinding binding, LlmExecutionContext executionContext,
             bool supportsVision,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            if (string.IsNullOrWhiteSpace(modelName)) modelName = Env.OpenAIModelName;
-
-            if (string.IsNullOrWhiteSpace(modelName)) {
-                _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} model name is not configured.";
-                yield break;
-            }
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint) || (binding?.AuthProfile != LlmAuthProfile.None && string.IsNullOrWhiteSpace(apiKey))) {
-                _logger.LogError("{ServiceName}: Channel, Gateway, or ApiKey is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} channel/gateway/apikey is not configured.";
-                yield break;
-            }
-
-                        var nativeTools = McpToolHelper.GetNativeToolDefinitions();
-            var useNativeToolCalling = nativeTools is { Count: > 0 };
-
-            if (useNativeToolCalling) {
-                bool nativeFailed = false;
-                var nativeEnumerator = ExecWithNativeToolCallingAsync(history, supportsVision, message, ChatId, modelName, channel, binding, executionContext, nativeTools, cancellationToken);
-                await using var enumerator = nativeEnumerator.GetAsyncEnumerator(cancellationToken);
-                bool hasFirst = false;
-                try {
-                    hasFirst = await enumerator.MoveNextAsync();
-                } catch (Exception ex) when (IsToolCallingNotSupportedError(ex)) {
-                    _logger.LogInformation("{ServiceName}: Native tool calling not supported for model {Model}, falling back to XML prompt-based tool calling. Error: {Error}", ServiceName, modelName, ex.Message);
-                    nativeFailed = true;
-                }
-
-                if (!nativeFailed) {
-                    if (hasFirst) {
-                        yield return enumerator.Current;
-                        while (await enumerator.MoveNextAsync()) {
-                            yield return enumerator.Current;
-                        }
-                    }
-                    yield break;
-                }
-            }
-
-            await foreach (var item in ExecWithXmlToolCallingAsync(history, supportsVision, message, ChatId, modelName, channel, binding, executionContext, cancellationToken)) {
+            // Glue (client construction, native/XML fallback dispatch) lives in LlmChatRunner.
+            await foreach (var item in _chatRunner.RunAsync(history, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
                 yield return item;
             }
         }

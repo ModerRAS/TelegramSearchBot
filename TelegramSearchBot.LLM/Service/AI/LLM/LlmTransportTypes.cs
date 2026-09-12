@@ -2,6 +2,9 @@ using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
+    /// <summary>A transport instance plus the turn config it was built for.</summary>
+    public sealed record LlmTransportBundle(ILlmTransport Transport, LlmTransportConfig Config);
+
     /// <summary>Transport identity + credentials + quirks, resolved from LLMChannel + LLMApiBinding.</summary>
     public sealed class LlmTransportConfig {
         public string ModelName { get; set; } = string.Empty;

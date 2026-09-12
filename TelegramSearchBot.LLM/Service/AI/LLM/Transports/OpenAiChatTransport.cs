@@ -9,6 +9,7 @@ using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Net.Http;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
@@ -28,15 +29,49 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
     /// normalized history into SDK messages per turn and streams one assistant turn.
     /// </summary>
     public sealed class OpenAiChatTransport : ILlmTransport {
-                private readonly ILogger _logger;
-                private readonly HttpClientPipelineTransport _pipelineTransport;
-                private readonly ApiKeyCredential _credential;
-                private readonly OpenAIClientOptions _clientOptions;
-                private readonly string _modelName;
-                private readonly LLMChannel _channel;
-                private readonly bool _nativeTools;
-                private readonly bool _promptCachingEnabled;
-                private readonly bool _includeEmptyReasoningContent;
+        /// <summary>
+        /// Builds the transport plus its turn config from a channel/binding pair.
+        /// Absorbs the client-construction glue formerly in OpenAIService.BuildClientParts.
+        /// </summary>
+        public static LlmTransportBundle Create(LLMChannel channel, LLMApiBinding binding, string modelName, long chatId,
+            bool nativeTools, bool promptCachingEnabled, ILogger logger, IHttpClientFactory httpClientFactory) {
+            var endpoint = OpenAIService.NormalizeOpenAIEndpoint(channel, LlmBindingSupport.ResolveEndpoint(channel, binding));
+            var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
+            var includeEmptyReasoningContent = binding == null && OpenAIService.ShouldIncludeEmptyReasoningContent(channel, modelName);
+
+            // ponytail: HttpClient must outlive this method (transport persists per run); factory-managed, not disposed here.
+            var httpClient = httpClientFactory.CreateClient();
+            OpencodeSessionHeaders.Apply(httpClient, channel, binding, $"tsb-{chatId}");
+            var clientOptions = new OpenAIClientOptions {
+                Endpoint = new Uri(endpoint),
+                Transport = new HttpClientPipelineTransport(httpClient),
+            };
+            var transport = new OpenAiChatTransport(logger, new HttpClientPipelineTransport(httpClient),
+                new ApiKeyCredential(apiKey), clientOptions, modelName, channel,
+                nativeTools, promptCachingEnabled, includeEmptyReasoningContent);
+
+            var config = new LlmTransportConfig {
+                ModelName = modelName,
+                Endpoint = endpoint,
+                ApiKey = apiKey,
+                Provider = channel.Provider,
+                Binding = binding,
+                Channel = channel,
+                PromptCachingEnabled = promptCachingEnabled,
+                IncludeEmptyReasoningContent = includeEmptyReasoningContent
+            };
+            return new LlmTransportBundle(transport, config);
+        }
+
+        private readonly ILogger _logger;
+        private readonly HttpClientPipelineTransport _pipelineTransport;
+        private readonly ApiKeyCredential _credential;
+        private readonly OpenAIClientOptions _clientOptions;
+        private readonly string _modelName;
+        private readonly LLMChannel _channel;
+        private readonly bool _nativeTools;
+        private readonly bool _promptCachingEnabled;
+        private readonly bool _includeEmptyReasoningContent;
 
                 public OpenAiChatTransport(ILogger logger, HttpClientPipelineTransport pipelineTransport,
                     ApiKeyCredential credential, OpenAIClientOptions clientOptions, string modelName, LLMChannel channel,
