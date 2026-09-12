@@ -20,6 +20,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
         private readonly DataDbContext _dbContext;
         private readonly ILogger<GeneralLLMService> _logger;
         private readonly LlmProviderRegistry _LLMFactory;
+        private readonly LlmChatRunner _chatRunner;
+        private readonly LlmVisibilityService _llmVisibilityService;
 
         public string ServiceName => "GeneralLLMService";
 
@@ -36,12 +38,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
             IConnectionMultiplexer connectionMultiplexer,
             DataDbContext dbContext,
             ILogger<GeneralLLMService> logger,
-            LlmProviderRegistry _LLMFactory
+            LlmProviderRegistry _LLMFactory,
+            LlmChatRunner chatRunner = null,
+            LlmVisibilityService llmVisibilityService = null
             ) {
             this.connectionMultiplexer = connectionMultiplexer;
             _dbContext = dbContext;
             _logger = logger;
             this._LLMFactory = _LLMFactory;
+            _chatRunner = chatRunner;
+            _llmVisibilityService = llmVisibilityService;
         }
         public async Task<List<LLMChannel>> GetChannelsAsync(string modelName) {
             // 2. 查询ChannelWithModel获取关联的LLMChannel（排除已软删除的模型）
@@ -87,9 +93,24 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
 
             await foreach (var e in ExecOperationAsync((service, channel, binding, cancel) => {
-                return service.ExecAsync(message, ChatId, modelName, channel, binding, executionContext, cancellationToken);
+                // Chat glue (history load + vision check + dispatch) lives in LlmChatRunner; services are no longer consulted.
+                var rows = LlmHistoryQueryService.LoadAsync(_dbContext, _llmVisibilityService, ChatId, message, cancel);
+                var supportsVision = LlmCapabilityChecks.CheckVisionSupportAsync(_dbContext, _logger, modelName, channel.Id);
+                return RunMessageTurnAsync(rows, supportsVision, message, ChatId, modelName, channel, binding, executionContext, cancellationToken);
             }, modelName, cancellationToken)) {
                 yield return e;
+            }
+        }
+
+        private async IAsyncEnumerable<string> RunMessageTurnAsync(
+            Task<System.Collections.Generic.List<AgentHistoryMessage>> rowsTask, Task<bool> supportsVisionTask,
+            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+            LLMApiBinding binding, LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            System.Collections.Generic.IReadOnlyList<AgentHistoryMessage> rows = await rowsTask;
+            var supportsVision = await supportsVisionTask;
+            await foreach (var item in _chatRunner.RunAsync(rows, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
+                yield return item;
             }
         }
         public async IAsyncEnumerable<string> ExecAsync(
