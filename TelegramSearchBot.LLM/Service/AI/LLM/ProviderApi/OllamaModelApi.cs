@@ -19,7 +19,7 @@ using SkiaSharp;
 using TelegramSearchBot.Attributes;
 using TelegramSearchBot.Common;
 using TelegramSearchBot.Interface;
-using TelegramSearchBot.Interface.AI.LLM; // For ILLMService
+using TelegramSearchBot.Interface.AI.LLM;
 using TelegramSearchBot.Model;
 using TelegramSearchBot.Model.AI;
 using TelegramSearchBot.Model.Data;
@@ -27,57 +27,26 @@ using TelegramSearchBot.Model.Tools; // For BraveSearchResult
 namespace TelegramSearchBot.Service.AI.LLM {
     // Standalone implementation, not using BaseLlmService
     [Injectable(ServiceLifetime.Transient)]
-    public class OllamaService : IService, ILLMService {
-        public string ServiceName => "OllamaService";
+    public class OllamaModelApi : ILlmModelCatalog, ILlmEmbeddings, ILlmVision {
+        private const string ServiceName = "OllamaModelApi";
 
-        private readonly ILogger<OllamaService> _logger;
+        private readonly ILogger<OllamaModelApi> _logger;
         private readonly DataDbContext _dbContext;
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IBotIdentityProvider _botIdentityProvider;
-        private string _fallbackBotName = string.Empty;
-        public string BotName {
-            get => GetBotNameAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            set {
-                if (_botIdentityProvider != null) {
-                    _botIdentityProvider.SetIdentity(Env.BotId, value);
-                } else {
-                    _fallbackBotName = value ?? string.Empty;
-                }
-            }
-        }
-
-        public OllamaService(
-            DataDbContext context,
-            ILogger<OllamaService> logger,
-            IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory)
-            : this(context, logger, serviceProvider, httpClientFactory, null) {
-        }
-
         // Constructor requires dependencies needed directly by this class
-        public OllamaService(
+        public OllamaModelApi(
             DataDbContext context,
-            ILogger<OllamaService> logger,
+            ILogger<OllamaModelApi> logger,
             IServiceProvider serviceProvider,
-            IHttpClientFactory httpClientFactory,
-            IBotIdentityProvider botIdentityProvider) {
+            IHttpClientFactory httpClientFactory) {
             _logger = logger;
             _dbContext = context;
             _serviceProvider = serviceProvider;
             _httpClientFactory = httpClientFactory;
-            _botIdentityProvider = botIdentityProvider;
-            _logger.LogInformation("OllamaService instance created. McpToolHelper should be initialized at application startup.");
+            _logger.LogInformation("OllamaModelApi instance created");
         }
 
-        private async Task<string> GetBotNameAsync() {
-            if (_botIdentityProvider == null) {
-                return _fallbackBotName;
-            }
-
-            var identity = await _botIdentityProvider.GetIdentityAsync();
-            return identity.UserName ?? string.Empty;
-        }
 
         // --- Helper methods specific to this service ---
 
@@ -115,162 +84,10 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
-        // --- Main Execution Logic (Using OllamaSharp.Chat helper) ---
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            var executionContext = new LlmExecutionContext();
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
+        
 
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        LlmExecutionContext executionContext,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            await foreach (var item in ExecAsync(message, ChatId, modelName, channel, null, executionContext, cancellationToken)) {
-                yield return item;
-            }
-        }
 
-        public async IAsyncEnumerable<string> ExecAsync(Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
-                                                        LLMApiBinding binding,
-                                                        LlmExecutionContext executionContext,
-                                                        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
-            using var chatContentLogScope = LoggerHolders.PushChatContentLogScope();
-            modelName = modelName ?? Env.OllamaModelName;
-            if (string.IsNullOrWhiteSpace(modelName)) {
-                _logger.LogError("{ServiceName}: Model name is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} model name is not configured.";
-                yield break;
-            }
-            var endpoint = LlmBindingSupport.ResolveEndpoint(channel, binding);
-            if (channel == null || string.IsNullOrWhiteSpace(endpoint)) {
-                _logger.LogError("{ServiceName}: Channel or Gateway is not configured.", ServiceName);
-                yield return $"Error: {ServiceName} channel/gateway is not configured.";
-                yield break;
-            }
-
-            // --- Client and Model Setup ---
-            HttpClient httpClient = _httpClientFactory?.CreateClient("OllamaClient") ?? new HttpClient();
-            httpClient.BaseAddress = new Uri(endpoint);
-            var ollama = new OllamaApiClient(httpClient, modelName);
-
-            if (!await CheckAndPullModelAsync(ollama, modelName)) {
-                yield return $"Error: Could not check or pull Ollama model '{modelName}'.";
-                yield break;
-            }
-            ollama.SelectedModel = modelName;
-
-            // --- History and Prompt Setup ---
-            // NOTE: History context is limited as OllamaSharp.Chat manages it.
-            var botName = await GetBotNameAsync();
-            var systemPrompt = McpToolHelper.FormatSystemPrompt(botName, ChatId);
-
-            var chat = new OllamaSharp.Chat(ollama, systemPrompt);
-
-            // Track history explicitly for snapshot serialization
-            var trackedHistory = new List<SerializedChatMessage>();
-            trackedHistory.Add(new SerializedChatMessage { Role = "system", Content = systemPrompt });
-
-            try {
-                string nextMessageToSend = message.Content;
-                int maxToolCycles = Env.MaxToolCycles;
-                var currentLlmResponseBuilder = new StringBuilder(); // Accumulates tokens for the current LLM response
-
-                for (int cycle = 0; cycle < maxToolCycles; cycle++) {
-                    if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-
-                    bool receivedAnyToken = false;
-
-                    trackedHistory.Add(new SerializedChatMessage { Role = "user", Content = nextMessageToSend });
-
-                    _logger.LogDebug("Sending to Ollama (Cycle {Cycle}): {Message}", cycle + 1, nextMessageToSend);
-                    await foreach (var token in chat.SendAsync(nextMessageToSend, cancellationToken).WithCancellation(cancellationToken)) {
-                        if (cancellationToken.IsCancellationRequested) throw new TaskCanceledException();
-                        currentLlmResponseBuilder.Append(token);
-                        receivedAnyToken = true;
-                        yield return currentLlmResponseBuilder.ToString(); // Yield current full message
-                    }
-                    string llmFullResponseText = currentLlmResponseBuilder.ToString().Trim();
-                    _logger.LogDebug("LLM raw full response (Cycle {Cycle}): {Response}", cycle + 1, llmFullResponseText);
-
-                    if (receivedAnyToken) {
-                        trackedHistory.Add(new SerializedChatMessage { Role = "assistant", Content = llmFullResponseText });
-                    }
-
-                    if (!receivedAnyToken && cycle < maxToolCycles - 1 && !string.IsNullOrEmpty(nextMessageToSend)) {
-                        _logger.LogWarning("{ServiceName}: Ollama returned empty stream during tool cycle {Cycle} for input '{Input}'.", ServiceName, cycle + 1, nextMessageToSend);
-                    }
-
-                    // --- Tool Handling (using the full accumulated response text) ---
-                    if (McpToolHelper.TryParseToolCalls(llmFullResponseText, out var parsedToolCalls) && parsedToolCalls.Any()) {
-                        var firstToolCall = parsedToolCalls[0];
-                        string parsedToolName = firstToolCall.toolName;
-                        Dictionary<string, string> toolArguments = firstToolCall.arguments;
-
-                        _logger.LogInformation("{ServiceName}: LLM requested tool: {ToolName} with arguments: {Arguments}", ServiceName, parsedToolName, JsonConvert.SerializeObject(toolArguments));
-                        if (parsedToolCalls.Count > 1) {
-                            _logger.LogWarning("{ServiceName}: LLM returned multiple tool calls ({Count}). Only the first one ('{FirstToolName}') will be executed.", ServiceName, parsedToolCalls.Count, parsedToolName);
-                        }
-
-                        currentLlmResponseBuilder.Append(McpToolHelper.FormatToolCallDisplay(parsedToolName, toolArguments));
-                        yield return currentLlmResponseBuilder.ToString();
-
-                        string toolResultString;
-                        bool isError = false;
-                        try {
-                            var toolContext = new ToolContext { ChatId = ChatId, UserId = message.FromUserId, MessageId = message.MessageId };
-                            object toolResultObject = await McpToolHelper.ExecuteRegisteredToolAsync(parsedToolName, toolArguments, toolContext);
-                            toolResultString = McpToolHelper.ConvertToolResultToString(toolResultObject);
-                            _logger.LogInformation("{ServiceName}: Tool {ToolName} executed. Result: {Result}", ServiceName, parsedToolName, toolResultString);
-                        } catch (Exception ex) {
-                            isError = true;
-                            _logger.LogError(
-                                ex,
-                                "{ServiceName}: Error executing Ollama XML tool {ToolName}. Arguments={Arguments}, ErrorSummary={ErrorSummary}",
-                                ServiceName,
-                                parsedToolName,
-                                JsonConvert.SerializeObject(toolArguments),
-                                ex.GetLogSummary());
-                            toolResultString = $"Error executing tool {parsedToolName}: {ex.GetLogSummary()}.";
-                        }
-
-                        string feedbackPrefix = isError ? $"[Tool '{parsedToolName}' Execution Failed. Error: " : $"[Executed Tool '{parsedToolName}'. Result: ";
-                        nextMessageToSend = $"{feedbackPrefix}{toolResultString}]";
-                        _logger.LogInformation("Prepared feedback for next LLM call: {Feedback}", nextMessageToSend);
-                    } else {
-                        if (string.IsNullOrWhiteSpace(llmFullResponseText) && receivedAnyToken) {
-                            _logger.LogWarning("{ServiceName}: LLM returned empty final non-tool response after trimming for ChatId {ChatId}.", ServiceName, ChatId);
-                        } else if (!receivedAnyToken && string.IsNullOrEmpty(llmFullResponseText)) {
-                            _logger.LogWarning("{ServiceName}: LLM returned empty stream and empty final non-tool response for ChatId {ChatId}.", ServiceName, ChatId);
-                        }
-                        yield break;
-                    }
-                }
-
-                _logger.LogWarning("{ServiceName}: Max tool call cycles reached for chat {ChatId}. User confirmation needed.", ServiceName, ChatId);
-                if (executionContext != null) {
-                    executionContext.IterationLimitReached = true;
-                    executionContext.SnapshotData = new LlmContinuationSnapshot {
-                        SchemaVersion = LlmContinuationSnapshot.CurrentSchemaVersion,
-                        ChatId = ChatId,
-                        OriginalMessageId = message.MessageId,
-                        UserId = message.FromUserId,
-                        ModelName = modelName,
-                        Provider = "Ollama",
-                        ChannelId = channel.Id,
-                        LastAccumulatedContent = currentLlmResponseBuilder.ToString(),
-                        CyclesSoFar = maxToolCycles,
-                        ProviderHistory = trackedHistory,
-                    };
-                }
-            } finally {
-                // No cleanup needed for ToolContext
-            }
-        }
-
-        // ConvertToolResultToString has been moved to McpToolHelper
-
+        /// <inheritdoc />
         public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
             if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway)) {
                 return Enumerable.Empty<string>();

@@ -1,7 +1,7 @@
 #pragma warning disable CS8602 // Dereference of a possibly null reference
 // Phase 4 (blueprint §八-阶段4): protocol-level fake-server tests for OpenCode Go/Zen.
-// Drives the REAL SDK-backed clients (OpenAIService=Chat, OpenAIResponsesService=Responses,
-// AnthropicService=Messages) against a loopback HTTP server that mimics the Go/Zen URL
+// Drives the REAL SDK-backed clients (OpenAiModelApi=Chat, ResponsesModelApi=Responses,
+// AnthropicModelApi=Messages) against a loopback HTTP server that mimics the Go/Zen URL
 // spaces (/zen/v1/* and /zen/go/v1/*) and asserts the wire shape per protocol:
 // path, auth header isolation, body shape, tool round-trip, SSE stream events, system/instructions.
 // No new packages: the server is a hand-rolled TcpListener (loopback only, precedent:
@@ -180,9 +180,9 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
         private const string ModelName = "test-model";
 
         private readonly DataDbContext _db;
-        private readonly Mock<ILogger<OpenAIService>> _openAILogger = new();
-        private readonly Mock<ILogger<OpenAIResponsesService>> _responsesLogger = new();
-        private readonly Mock<ILogger<AnthropicService>> _anthropicLogger = new();
+        private readonly Mock<ILogger<OpenAiModelApi>> _openAILogger = new();
+        private readonly Mock<ILogger<ResponsesModelApi>> _responsesLogger = new();
+        private readonly Mock<ILogger<AnthropicModelApi>> _anthropicLogger = new();
         private readonly Mock<IMessageExtensionService> _messageExtension = new();
         private readonly Mock<IHttpClientFactory> _httpClientFactory = new();
         private readonly LLMChannel _channel;
@@ -230,18 +230,18 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             var sp = new ServiceCollection().BuildServiceProvider();
             McpToolHelper.EnsureInitialized(
                 typeof(OpenCodeWireProtocolTests).Assembly,
-                typeof(OpenAIService).Assembly,
+                typeof(OpenAiModelApi).Assembly,
                 sp,
                 new Mock<ILoggerFactory>().Object.CreateLogger("mcp"));
         }
 
         public void Dispose() => _db.Dispose();
 
-        private LLMApiBinding Binding(string endpointPrefix) => new() {
+        private LLMApiBinding Binding(string endpointPrefix, LlmProtocol protocol = LlmProtocol.OpenAIChat) => new() {
             Id = 1,
             LLMChannelId = 1,
             Endpoint = endpointPrefix,
-            Protocol = LlmProtocol.OpenAIChat,
+            Protocol = protocol,
             AuthProfile = LlmAuthProfile.Bearer,
             IsDefault = true
         };
@@ -252,26 +252,25 @@ namespace TelegramSearchBot.Test.Service.AI.LLM {
             return results;
         }
 
-        private async Task<List<string>> RunChatAsync(string endpointPrefix) {
-            var service = new OpenAIService(_db, _openAILogger.Object, _messageExtension.Object, _httpClientFactory.Object);
-            return await CollectAsync(service.ExecAsync(
-                _inputMessage, 100, ModelName, _channel, Binding(endpointPrefix),
-                new LlmExecutionContext(), CancellationToken.None));
-        }
+        private LlmChatRunner Runner() => new LlmChatRunner(
+            _httpClientFactory.Object,
+            new Mock<ILogger<LlmChatRunner>>().Object,
+            new LlmProviderRegistry(new ServiceCollection().BuildServiceProvider()));
 
-        private async Task<List<string>> RunResponsesAsync(string endpointPrefix) {
-            var service = new OpenAIResponsesService(_db, _responsesLogger.Object, _messageExtension.Object, _httpClientFactory.Object);
-            return await CollectAsync(service.ExecAsync(
-                _inputMessage, 100, ModelName, _channel, Binding(endpointPrefix),
-                new LlmExecutionContext(), CancellationToken.None));
-        }
+        private async Task<IReadOnlyList<AgentHistoryMessage>> LoadRowsAsync() =>
+            await LlmHistoryQueryService.LoadAsync(_db, null, 100, _inputMessage, CancellationToken.None);
 
-        private async Task<List<string>> RunMessagesAsync(string endpointPrefix) {
-            var service = new AnthropicService(_db, _anthropicLogger.Object, _messageExtension.Object, _httpClientFactory.Object);
-            return await CollectAsync(service.ExecAsync(
-                _inputMessage, 100, ModelName, _channel, Binding(endpointPrefix),
-                new LlmExecutionContext(), CancellationToken.None));
-        }
+        private async Task<List<string>> RunChatAsync(string endpointPrefix) =>
+            await CollectAsync(Runner().RunAsync(await LoadRowsAsync(), _inputMessage, 100, ModelName, _channel,
+                Binding(endpointPrefix, LlmProtocol.OpenAIChat), new LlmExecutionContext(), false, CancellationToken.None));
+
+        private async Task<List<string>> RunResponsesAsync(string endpointPrefix) =>
+            await CollectAsync(Runner().RunAsync(await LoadRowsAsync(), _inputMessage, 100, ModelName, _channel,
+                Binding(endpointPrefix, LlmProtocol.OpenAIResponses), new LlmExecutionContext(), false, CancellationToken.None));
+
+        private async Task<List<string>> RunMessagesAsync(string endpointPrefix) =>
+            await CollectAsync(Runner().RunAsync(await LoadRowsAsync(), _inputMessage, 100, ModelName, _channel,
+                Binding(endpointPrefix, LlmProtocol.AnthropicMessages), new LlmExecutionContext(), false, CancellationToken.None));
 
         // ====================================================================
         // Shared wire fixtures (SSE payloads)

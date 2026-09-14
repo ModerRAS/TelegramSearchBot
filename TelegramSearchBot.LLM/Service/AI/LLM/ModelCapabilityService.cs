@@ -22,15 +22,15 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         private readonly ILogger<ModelCapabilityService> _logger;
         private readonly DataDbContext _dbContext;
-        private readonly IServiceProvider _serviceProvider;
+        private readonly LlmProviderRegistry _registry;
 
         public ModelCapabilityService(
             ILogger<ModelCapabilityService> logger,
             DataDbContext dbContext,
-            IServiceProvider serviceProvider) {
+            LlmProviderRegistry registry) {
             _logger = logger;
             _dbContext = dbContext;
-            _serviceProvider = serviceProvider;
+            _registry = registry;
         }
 
         /// <summary>
@@ -48,7 +48,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return false;
                 }
 
-                var service = GetLLMService(channel.Provider);
+                var service = GetProvider(channel.Provider);
                 if (service == null) {
                     _logger.LogWarning("No LLM service found for provider {Provider}", channel.Provider);
                     return false;
@@ -279,19 +279,14 @@ namespace TelegramSearchBot.Service.AI.LLM {
         }
 
         /// <summary>
-        /// 根据提供商获取对应的LLM服务
+        /// 根据提供商获取对应的LLM服务；未知提供商返回 null（保持原有的降级语义）。
         /// </summary>
-        private ILLMService GetLLMService(LLMProvider provider) {
-            return provider switch {
-                LLMProvider.OpenAI => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
-                LLMProvider.Ollama => _serviceProvider.GetService(typeof(OllamaService)) as ILLMService,
-                LLMProvider.Gemini => _serviceProvider.GetService(typeof(GeminiService)) as ILLMService,
-                LLMProvider.MiniMax => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
-                LLMProvider.LMStudio => _serviceProvider.GetService(typeof(OpenAIService)) as ILLMService,
-                LLMProvider.Anthropic => _serviceProvider.GetService(typeof(AnthropicService)) as ILLMService,
-                LLMProvider.ResponsesAPI => _serviceProvider.GetService(typeof(OpenAIResponsesService)) as ILLMService,
-                _ => null
-            };
+        private ILlmModelCatalog GetProvider(LLMProvider provider) {
+            try {
+                return _registry.GetCatalog(provider);
+            } catch (KeyNotFoundException) {
+                return null;
+            }
         }
 
         /// <summary>
@@ -305,7 +300,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 foreach (var channel in channels) {
                     results.Add($"\n=== {channel.Provider} 通道 (ID: {channel.Id}) ===");
 
-                    var service = GetLLMService(channel.Provider);
+                    var service = GetProvider(channel.Provider);
                     if (service == null) {
                         results.Add($"未找到 {channel.Provider} 服务");
                         continue;

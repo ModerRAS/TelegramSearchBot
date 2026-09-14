@@ -19,7 +19,9 @@ namespace TelegramSearchBot.Service.AI.LLM {
         protected IConnectionMultiplexer connectionMultiplexer { get; set; }
         private readonly DataDbContext _dbContext;
         private readonly ILogger<GeneralLLMService> _logger;
-        private readonly ILLMFactory _LLMFactory;
+        private readonly LlmProviderRegistry _LLMFactory;
+        private readonly LlmChatRunner _chatRunner;
+        private readonly LlmVisibilityService _llmVisibilityService;
 
         public string ServiceName => "GeneralLLMService";
 
@@ -36,12 +38,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
             IConnectionMultiplexer connectionMultiplexer,
             DataDbContext dbContext,
             ILogger<GeneralLLMService> logger,
-            ILLMFactory _LLMFactory
+            LlmProviderRegistry _LLMFactory,
+            LlmChatRunner chatRunner = null,
+            LlmVisibilityService llmVisibilityService = null
             ) {
             this.connectionMultiplexer = connectionMultiplexer;
             _dbContext = dbContext;
             _logger = logger;
             this._LLMFactory = _LLMFactory;
+            _chatRunner = chatRunner;
+            _llmVisibilityService = llmVisibilityService;
         }
         public async Task<List<LLMChannel>> GetChannelsAsync(string modelName) {
             // 2. 查询ChannelWithModel获取关联的LLMChannel（排除已软删除的模型）
@@ -86,20 +92,37 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 yield break;
             }
 
-            await foreach (var e in ExecOperationAsync((service, channel, binding, cancel) => {
-                return service.ExecAsync(message, ChatId, modelName, channel, binding, executionContext, cancellationToken);
+            await foreach (var e in ExecOperationAsync<ILlmModelCatalog, string>((service, channel, binding, cancel) => {
+                // Chat glue (history load + vision check + dispatch) lives in LlmChatRunner; services are no longer consulted.
+                var rows = LlmHistoryQueryService.LoadAsync(_dbContext, _llmVisibilityService, ChatId, message, cancel);
+                var supportsVision = LlmCapabilityChecks.CheckVisionSupportAsync(_dbContext, _logger, modelName, channel.Id);
+                return RunMessageTurnAsync(rows, supportsVision, message, ChatId, modelName, channel, binding, executionContext, cancellationToken);
             }, modelName, cancellationToken)) {
                 yield return e;
+            }
+        }
+
+        private async IAsyncEnumerable<string> RunMessageTurnAsync(
+            Task<System.Collections.Generic.List<AgentHistoryMessage>> rowsTask, Task<bool> supportsVisionTask,
+            Model.Data.Message message, long ChatId, string modelName, LLMChannel channel,
+            LLMApiBinding binding, LlmExecutionContext executionContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            System.Collections.Generic.IReadOnlyList<AgentHistoryMessage> rows = await rowsTask;
+            var supportsVision = await supportsVisionTask;
+            await foreach (var item in _chatRunner.RunAsync(rows, message, ChatId, modelName, channel, binding, executionContext, supportsVision, cancellationToken)) {
+                yield return item;
             }
         }
         public async IAsyncEnumerable<string> ExecAsync(
             Model.Data.Message message,
             long ChatId,
             string modelName,
-            ILLMService service,
             LLMChannel channel,
             CancellationToken cancellation) {
-            await foreach (var e in service.ExecAsync(message, ChatId, modelName, channel, cancellation).WithCancellation(cancellation)) {
+            await foreach (var e in _chatRunner.RunAsync(
+                await LlmHistoryQueryService.LoadAsync(_dbContext, _llmVisibilityService, ChatId, message, cancellation),
+                message, ChatId, modelName, channel, null, new LlmExecutionContext(),
+                await LlmCapabilityChecks.CheckVisionSupportAsync(_dbContext, _logger, modelName, channel.Id), cancellation)) {
                 yield return e;
             }
         }
@@ -149,26 +172,23 @@ namespace TelegramSearchBot.Service.AI.LLM {
             if (route == null) {
                 // 六.8 legacy 回退：模型行缺失/软删时按渠道 Provider/Gateway 继续，不丢弃排队中的续聊
                 _logger.LogWarning("Cannot resume: model {Model} has no route on channel {ChannelId}, falling back to legacy provider route", snapshot.ModelName, channel.Id);
-                var legacyService = _LLMFactory.GetLLMService(channel.Provider);
-                await foreach (var item in legacyService.ResumeFromSnapshotAsync(snapshot, channel, null, executionContext, cancellationToken)
+                await foreach (var item in _chatRunner.RunFromSnapshotAsync(snapshot, channel, null, executionContext, cancellationToken)
                                                   .WithCancellation(cancellationToken)) {
                     yield return item;
                 }
                 yield break;
             }
 
-            var service = _LLMFactory.GetLLMService(route);
-
-            await foreach (var item in service.ResumeFromSnapshotAsync(snapshot, channel, route.Binding, executionContext, cancellationToken)
+            await foreach (var item in _chatRunner.RunFromSnapshotAsync(snapshot, channel, route.Binding, executionContext, cancellationToken)
                                               .WithCancellation(cancellationToken)) {
                 yield return item;
             }
         }
-        public async IAsyncEnumerable<TResult> ExecOperationAsync<TResult>(
-            Func<ILLMService, LLMChannel, LLMApiBinding, CancellationToken, IAsyncEnumerable<TResult>> operation,
+        public async IAsyncEnumerable<TResult> ExecOperationAsync<TCapability, TResult>(
+            Func<TCapability, LLMChannel, LLMApiBinding, CancellationToken, IAsyncEnumerable<TResult>> operation,
             string modelName,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
-            ) {
+            ) where TCapability : class {
 
             // 2. 查询ChannelWithModel获取关联的模型行（含 ApiBinding 导航，排除已软删除的模型）
             var modelRows = await _dbContext.ChannelsWithModel
@@ -208,7 +228,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     var route = LlmRouteResolver.Resolve(channel, modelName,
                         modelRows.Where(r => r.LLMChannelId == channel.Id).ToList(), _logger);
                     if (route == null) continue;
-                    var service = _LLMFactory.GetLLMService(route);
+                    var service = (TCapability)_LLMFactory.GetCatalog(channel.Provider);
 
                     if (count < channel.Parallel) {
                         // 获取锁并增加计数
@@ -217,7 +237,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                             // 5. 检查服务是否可用
                             bool isHealthy = false;
                             try {
-                                isHealthy = await service.IsHealthyAsync(channel, route.Binding);
+                                var catalog = service as ILlmModelCatalog;
+                                isHealthy = catalog == null || await catalog.IsHealthyAsync(channel, route.Binding);
                             } catch (Exception ex) {
                                 _logger.LogWarning(ex, $"LLM渠道 {channel.Id} ({channel.Provider}) 健康检查失败");
                                 continue;
@@ -264,7 +285,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 modelName = config.Value;
             }
 
-            await using var enumerator = ExecOperationAsync<string>((service, channel, binding, cancel) => {
+            await using var enumerator = ExecOperationAsync<ILlmVision, string>((service, channel, binding, cancel) => {
                 return AnalyzeImageAsync(PhotoPath, ChatId, modelName, service, channel, binding, prompt, cancel);
             }, modelName, cancellationToken).GetAsyncEnumerator();
 
@@ -275,19 +296,19 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogWarning($"未能获取 {modelName} 模型的图片分析结果");
             return $"Error:未能获取 {modelName} 模型的图片分析结果";
         }
-        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILlmVision service, LLMChannel channel, CancellationToken cancellationToken = default) {
             await foreach (var result in AnalyzeImageAsync(PhotoPath, ChatId, modelName, service, channel, DefaultAltPhotoPrompt, cancellationToken)) {
                 yield return result;
             }
         }
 
-        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, string prompt, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILlmVision service, LLMChannel channel, string prompt, CancellationToken cancellationToken = default) {
             prompt = string.IsNullOrWhiteSpace(prompt) ? DefaultAltPhotoPrompt : prompt;
             yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel, prompt);
             yield break;
         }
 
-        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILLMService service, LLMChannel channel, LLMApiBinding binding, string prompt, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<string> AnalyzeImageAsync(string PhotoPath, long ChatId, string modelName, ILlmVision service, LLMChannel channel, LLMApiBinding binding, string prompt, CancellationToken cancellationToken = default) {
             prompt = string.IsNullOrWhiteSpace(prompt) ? DefaultAltPhotoPrompt : prompt;
             yield return await service.AnalyzeImageAsync(PhotoPath, modelName, channel, binding, prompt);
             yield break;
@@ -312,7 +333,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 modelName = config.Value;
             }
 
-            await using var enumerator = ExecOperationAsync((service, channel, binding, cancel) => {
+            await using var enumerator = ExecOperationAsync<ILlmEmbeddings, float[]>((service, channel, binding, cancel) => {
                 return GenerateEmbeddingsAsync(message, modelName, service, channel, binding, cancel);
             }, modelName, cancellationToken).GetAsyncEnumerator();
 
@@ -323,11 +344,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
             _logger.LogWarning($"未能获取 {modelName} 模型的嵌入向量");
             return Array.Empty<float>();
         }
-        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILlmEmbeddings service, LLMChannel channel, CancellationToken cancellationToken = default) {
             yield return await service.GenerateEmbeddingsAsync(message, modelName, channel);
             yield break;
         }
-        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILLMService service, LLMChannel channel, LLMApiBinding binding, CancellationToken cancellationToken = default) {
+        public async IAsyncEnumerable<float[]> GenerateEmbeddingsAsync(string message, string modelName, ILlmEmbeddings service, LLMChannel channel, LLMApiBinding binding, CancellationToken cancellationToken = default) {
             yield return await service.GenerateEmbeddingsAsync(message, modelName, channel, binding);
             yield break;
         }

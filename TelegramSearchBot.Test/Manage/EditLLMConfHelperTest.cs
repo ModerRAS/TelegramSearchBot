@@ -20,10 +20,10 @@ namespace TelegramSearchBot.Test.Manage {
         private readonly DataDbContext _context;
         private readonly Mock<IConnectionMultiplexer> _redisMock;
         private readonly Mock<IDatabase> _dbMock;
-        private readonly Mock<OpenAIService> _openAIServiceMock;
+        private readonly Mock<OpenAiModelApi> _openAIServiceMock;
         private readonly Mock<MessageExtensionService> _messageExtensionServiceMock;
-        private readonly Mock<OllamaService> _ollamaServiceMock;
-        private readonly Mock<GeminiService> _geminiServiceMock;
+        private readonly Mock<OllamaModelApi> _ollamaServiceMock;
+        private readonly Mock<GeminiModelApi> _geminiServiceMock;
         private readonly Mock<IModelCapabilityService> _modelCapabilityServiceMock;
         private readonly Mock<ILogger<EditLLMConfHelper>> _loggerMock;
         private readonly EditLLMConfHelper _helper;
@@ -41,8 +41,8 @@ namespace TelegramSearchBot.Test.Manage {
                 .Returns(_dbMock.Object);
 
             var httpClientFactoryMock = new Mock<IHttpClientFactory>();
-            var openAiLogger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<OpenAIService>();
-            var ollamaLogger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<OllamaService>();
+            var openAiLogger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<OpenAiModelApi>();
+            var ollamaLogger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<OllamaModelApi>();
             var serviceProviderMock = new Mock<IServiceProvider>();
             _messageExtensionServiceMock = new Mock<MessageExtensionService>(_context);
 
@@ -53,7 +53,7 @@ namespace TelegramSearchBot.Test.Manage {
                 .ReturnsAsync(true);
 
             // Setup mock LLM services
-            _ollamaServiceMock = new Mock<OllamaService>(
+            _ollamaServiceMock = new Mock<OllamaModelApi>(
                 _context,
                 ollamaLogger,
                 serviceProviderMock.Object,
@@ -61,12 +61,12 @@ namespace TelegramSearchBot.Test.Manage {
             _ollamaServiceMock.Setup(s => s.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "ollama-model1", "ollama-model2" });
 
-            _geminiServiceMock = new Mock<GeminiService>();
+            _geminiServiceMock = new Mock<GeminiModelApi>();
             _geminiServiceMock.Setup(s => s.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
 
-            var openAiLoggerMock = new Mock<ILogger<OpenAIService>>();
-            _openAIServiceMock = new Mock<OpenAIService>(
+            var openAiLoggerMock = new Mock<ILogger<OpenAiModelApi>>();
+            _openAIServiceMock = new Mock<OpenAiModelApi>(
                 _context,
                 openAiLoggerMock.Object,
                 _messageExtensionServiceMock.Object,
@@ -74,15 +74,15 @@ namespace TelegramSearchBot.Test.Manage {
             _openAIServiceMock.Setup(s => s.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "openai-model1", "openai-model2" });
 
-            var geminiLoggerMock = new Mock<ILogger<GeminiService>>();
-            _geminiServiceMock = new Mock<GeminiService>(_context, geminiLoggerMock.Object, httpClientFactoryMock.Object);
+            var geminiLoggerMock = new Mock<ILogger<GeminiModelApi>>();
+            _geminiServiceMock = new Mock<GeminiModelApi>(_context, geminiLoggerMock.Object, httpClientFactoryMock.Object);
 
             // 新增 ILLMFactory mock
-            var llmFactoryMock = new Mock<ILLMFactory>();
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.MiniMax)).Returns(_openAIServiceMock.Object);
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Ollama)).Returns(_ollamaServiceMock.Object);
-            llmFactoryMock.Setup(f => f.GetLLMService(LLMProvider.Gemini)).Returns(_geminiServiceMock.Object);
+            var llmFactoryMock = new Mock<LlmProviderRegistry>((IServiceProvider)null);
+            llmFactoryMock.Setup(f => f.GetCatalog(LLMProvider.OpenAI)).Returns(_openAIServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetCatalog(LLMProvider.MiniMax)).Returns(_openAIServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetCatalog(LLMProvider.Ollama)).Returns(_ollamaServiceMock.Object);
+            llmFactoryMock.Setup(f => f.GetCatalog(LLMProvider.Gemini)).Returns(_geminiServiceMock.Object);
 
             // 创建Logger mock
             _loggerMock = new Mock<ILogger<EditLLMConfHelper>>();
@@ -252,8 +252,8 @@ namespace TelegramSearchBot.Test.Manage {
             // Arrange
             // Use mocks initialized in Initialize()
 
-            // Mock GeminiService
-            var geminiServiceMock = new Mock<GeminiService>(MockBehavior.Strict);
+            // Mock GeminiModelApi
+            var geminiServiceMock = new Mock<GeminiModelApi>(MockBehavior.Strict);
             geminiServiceMock.Setup(s => s.GetAllModels(It.IsAny<LLMChannel>()))
                 .ReturnsAsync(new List<string> { "gemini-model1", "gemini-model2" });
 

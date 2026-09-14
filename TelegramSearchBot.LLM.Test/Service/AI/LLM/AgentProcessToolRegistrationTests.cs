@@ -10,7 +10,7 @@ namespace TelegramSearchBot.LLM.Test.Service.AI.LLM {
         public void BuildServices_RegistersResponsesApiExecutor() {
             using var provider = BuildAgentServices();
 
-            Assert.NotNull(provider.GetService<OpenAIResponsesService>());
+            Assert.NotNull(provider.GetService<ResponsesModelApi>());
         }
 
         private static ServiceProvider BuildAgentServices() {

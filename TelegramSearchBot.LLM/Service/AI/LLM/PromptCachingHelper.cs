@@ -12,6 +12,7 @@ using Newtonsoft.Json;
 using OpenAI.Chat;
 using OpenAI.Responses;
 using TelegramSearchBot.Model.AI;
+using TelegramSearchBot.Model.Data;
 
 namespace TelegramSearchBot.Service.AI.LLM {
     public static class PromptCachingOutcomes {
@@ -86,6 +87,54 @@ namespace TelegramSearchBot.Service.AI.LLM {
             }
         }
 
+        /// <summary>Logs one OpenAI prompt-caching observation (moved from OpenAIService instance method).</summary>
+        public static void LogOpenAiPromptCachingObservation(
+            ILogger logger,
+            string providerName,
+            LLMChannel channel,
+            string modelName,
+            bool promptCachingEnabled,
+            string toolDefinitionHash,
+            string stablePrefixHash,
+            string promptCacheKey,
+            ChatTokenUsage usage,
+            bool cacheKeyAttached) {
+            var cachedTokenCount = usage?.InputTokenDetails?.CachedTokenCount;
+            var usageJson = usage == null
+                ? null
+                : JsonConvert.SerializeObject(new {
+                    usage.InputTokenCount,
+                    usage.OutputTokenCount,
+                    usage.TotalTokenCount,
+                    CachedTokenCount = usage.InputTokenDetails?.CachedTokenCount,
+                    ReasoningTokenCount = usage.OutputTokenDetails?.ReasoningTokenCount,
+                    AudioInputTokenCount = usage.InputTokenDetails?.AudioTokenCount,
+                    AudioOutputTokenCount = usage.OutputTokenDetails?.AudioTokenCount,
+                });
+            var outcome = DetermineOpenAiOutcome(
+                promptCachingEnabled,
+                cacheKeyAttached,
+                promptCacheKey,
+                cachedTokenCount,
+                out var missReason);
+
+            LogObservation(logger, new PromptCachingObservation {
+                Provider = providerName,
+                ChannelId = channel.Id,
+                Model = modelName,
+                PromptCachingEnabled = promptCachingEnabled,
+                StablePrefixHash = stablePrefixHash,
+                ToolDefinitionHash = toolDefinitionHash,
+                CacheOutcome = outcome,
+                MissReason = missReason,
+                PromptCacheKey = promptCacheKey,
+                PromptCacheRetention = OpenAiDefaultPromptCacheRetention,
+                CacheKeyAttached = cacheKeyAttached,
+                CachedTokenCount = cachedTokenCount,
+                ProviderUsageJson = usageJson,
+            });
+        }
+
         public static string DetermineOpenAiOutcome(bool promptCachingEnabled, bool cacheKeyAttached, string promptCacheKey, int? cachedTokenCount, out string missReason) {
             missReason = null;
             if (!promptCachingEnabled) {
@@ -114,6 +163,91 @@ namespace TelegramSearchBot.Service.AI.LLM {
             return firstObservation
                 ? PromptCachingOutcomes.AttemptedWrite
                 : PromptCachingOutcomes.Miss;
+        }
+
+        /// <summary>Logs one Anthropic prompt-caching observation (moved from AnthropicService instance method).</summary>
+        public static void LogAnthropicPromptCachingObservation(
+            ILogger logger,
+            LLMChannel channel,
+            string providerName,
+            string modelName,
+            bool promptCachingEnabled,
+            string toolDefinitionHash,
+            string stablePrefixHash,
+            bool cacheBreakpointInserted,
+            long? cacheCreationInputTokens,
+            long? cacheReadInputTokens,
+            object usage) {
+            var usageJson = usage == null ? null : JsonConvert.SerializeObject(usage);
+            var observationKey = $"{providerName}:{modelName}:{stablePrefixHash}:{toolDefinitionHash}";
+            var outcome = DetermineAnthropicOutcome(
+                promptCachingEnabled,
+                cacheBreakpointInserted,
+                observationKey,
+                cacheCreationInputTokens,
+                cacheReadInputTokens,
+                out var missReason);
+
+            LogObservation(logger, new PromptCachingObservation {
+                Provider = providerName,
+                ChannelId = channel.Id,
+                Model = modelName,
+                PromptCachingEnabled = promptCachingEnabled,
+                StablePrefixHash = stablePrefixHash,
+                ToolDefinitionHash = toolDefinitionHash,
+                CacheOutcome = outcome,
+                MissReason = missReason,
+                CacheBreakpointInserted = cacheBreakpointInserted,
+                CacheCreationInputTokens = cacheCreationInputTokens,
+                CacheReadInputTokens = cacheReadInputTokens,
+                ProviderUsageJson = usageJson,
+            });
+        }
+
+        /// <summary>Logs one OpenAI Responses prompt-caching observation (moved from OpenAIResponsesService instance method).</summary>
+        public static void LogResponsesPromptCachingObservation(
+            ILogger logger,
+            string providerName,
+            LLMChannel channel,
+            string modelName,
+            bool promptCachingEnabled,
+            string toolDefinitionHash,
+            string stablePrefixHash,
+            string promptCacheKey,
+            ResponseTokenUsage usage,
+            bool cacheKeyAttached) {
+            var cachedTokenCount = usage?.InputTokenDetails?.CachedTokenCount;
+            var usageJson = usage == null
+                ? null
+                : JsonConvert.SerializeObject(new {
+                    usage.InputTokenCount,
+                    usage.OutputTokenCount,
+                    usage.TotalTokenCount,
+                    CachedTokenCount = usage.InputTokenDetails?.CachedTokenCount,
+                    ReasoningTokenCount = usage.OutputTokenDetails?.ReasoningTokenCount,
+                });
+            var outcome = DetermineOpenAiOutcome(
+                promptCachingEnabled,
+                cacheKeyAttached,
+                promptCacheKey,
+                cachedTokenCount,
+                out var missReason);
+
+            LogObservation(logger, new PromptCachingObservation {
+                Provider = providerName,
+                ChannelId = channel.Id,
+                Model = modelName,
+                PromptCachingEnabled = promptCachingEnabled,
+                StablePrefixHash = stablePrefixHash,
+                ToolDefinitionHash = toolDefinitionHash,
+                CacheOutcome = outcome,
+                MissReason = missReason,
+                PromptCacheKey = promptCacheKey,
+                PromptCacheRetention = OpenAiDefaultPromptCacheRetention,
+                CacheKeyAttached = cacheKeyAttached,
+                CachedTokenCount = cachedTokenCount,
+                ProviderUsageJson = usageJson,
+            });
         }
 
         public static string DetermineAnthropicOutcome(bool promptCachingEnabled, bool cacheBreakpointInserted, string observationKey, long? cacheCreationInputTokens, long? cacheReadInputTokens, out string missReason) {
