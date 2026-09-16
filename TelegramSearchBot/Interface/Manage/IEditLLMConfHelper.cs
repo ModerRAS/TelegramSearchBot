@@ -28,5 +28,14 @@ namespace TelegramSearchBot.Interface.Manage {
         /// 已有 preferred 时降级并告警（遵循 phase-2 resolver 的告警+稳定解析约定）。
         /// </summary>
         Task<bool> SetModelPreferred(int channelId, string modelName, int bindingId);
+
+        /// <summary>
+        /// 确保渠道下存在指定 endpoint+protocol+auth 的 binding（非默认，幂等），返回 binding Id。
+        /// 多协议网关（如 OpenCode Zen/Go）在创建与刷新时按规则补建。
+        /// </summary>
+        Task<int> EnsureBinding(int channelId, string endpoint, LlmProtocol protocol, LlmAuthProfile authProfile);
+
+        /// <summary>把模型行改挂到指定 binding，并标记为模型级协议覆盖；成功返回 true。</summary>
+        Task<bool> AssignModelBinding(int channelId, string modelName, int bindingId);
     }
 }

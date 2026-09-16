@@ -91,7 +91,7 @@ namespace TelegramSearchBot.Service.AI.LLM {
                         promptCachingEnabled, supportsVision, logger, httpClientFactory);
                 case LlmProtocol.AnthropicMessages:
                     return Transports.AnthropicMessagesTransport.Create(channel, binding, modelName, systemPrompt,
-                        nativeTools, promptCachingEnabled, logger);
+                        nativeTools, promptCachingEnabled, logger, chatId);
                 case LlmProtocol.Gemini:
                     return Transports.GeminiTransport.Create(channel, binding, modelName, supportsVision, logger, httpClientFactory);
                 case LlmProtocol.Ollama:

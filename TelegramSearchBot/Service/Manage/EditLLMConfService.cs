@@ -172,6 +172,34 @@ namespace TelegramSearchBot.Service.Manage {
                 message += $"\n已预置模型: {string.Join(", ", preset.DefaultModels)}";
                 message += "\n如需自定义模型，可使用 `添加模型`。";
             }
+
+            // 多协议网关（OpenCode Zen/Go）：按预设声明补建 binding，并按模型名规则把预置模型挂到正确协议上。
+            if (preset.Bindings is { Count: > 0 }) {
+                var bindingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var binding in preset.Bindings) {
+                    var endpoint = LlmProviderCatalog.BuildBindingEndpoint(gateway, binding.EndpointSuffix);
+                    var bindingId = await Helper.EnsureBinding(channelId, endpoint, binding.Protocol, binding.AuthProfile);
+                    if (bindingId > 0) {
+                        bindingIds[binding.Id] = bindingId;
+                    }
+                }
+
+                var assigned = 0;
+                foreach (var model in preset.DefaultModels) {
+                    var ruleId = preset.ModelBindingRules.ResolveBindingId(model);
+                    if (ruleId != null && bindingIds.TryGetValue(ruleId, out var bindingId) &&
+                        await Helper.AssignModelBinding(channelId, model, bindingId)) {
+                        assigned++;
+                    }
+                }
+
+                message += $"\n已配置 {bindingIds.Count} 条协议绑定";
+                if (assigned > 0) {
+                    message += $"，按模型协议挂载 {assigned} 个模型";
+                }
+                message += "。";
+            }
+
             return (true, message);
         }
 
