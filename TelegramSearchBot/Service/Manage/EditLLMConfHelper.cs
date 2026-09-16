@@ -761,6 +761,82 @@ namespace TelegramSearchBot.Service.Manage {
             }
         }
 
+        /// <summary>渠道下的全部协议绑定（按 Id 升序）。</summary>
+        public async Task<List<LLMApiBinding>> GetBindings(int channelId) {
+            try {
+                return await DataContext.LLMApiBindings
+                    .Where(b => b.LLMChannelId == channelId)
+                    .OrderBy(b => b.Id)
+                    .ToListAsync();
+            } catch {
+                return new List<LLMApiBinding>();
+            }
+        }
+
+        /// <summary>把指定 binding 设为渠道默认（其余降级），并镜像 channel.Gateway/Provider（blueprint §七）。</summary>
+        public async Task<bool> PromoteBinding(int channelId, int bindingId) {
+            try {
+                var channel = await DataContext.LLMChannels.Include(c => c.Bindings).FirstOrDefaultAsync(c => c.Id == channelId);
+                if (channel == null) {
+                    return false;
+                }
+
+                var target = channel.Bindings.FirstOrDefault(b => b.Id == bindingId);
+                if (target == null) {
+                    _logger.LogWarning("设置默认 binding 失败：渠道 {ChannelId} 不存在 binding {BindingId}", channelId, bindingId);
+                    return false;
+                }
+
+                foreach (var binding in channel.Bindings) {
+                    binding.IsDefault = binding.Id == target.Id;
+                }
+                channel.Gateway = target.Endpoint;
+                channel.Provider = MapProtocolToProvider(target.Protocol);
+                await DataContext.SaveChangesAsync();
+                return true;
+            } catch (Exception ex) {
+                _logger.LogError(ex, "把 binding {BindingId} 设为渠道 {ChannelId} 默认失败", bindingId, channelId);
+                return false;
+            }
+        }
+
+        /// <summary>渠道下的模型行（按行 Id），展示格式与 GetModelsByChannelId 一致（多 binding 带协议标注）。</summary>
+        public async Task<List<(long RowId, string ModelName, string Display)>> GetModelRowsByChannelId(long channelId) {
+            var rows = await DataContext.ChannelsWithModel
+                .Include(c => c.ApiBinding)
+                .Include(c => c.LLMChannel)
+                .Where(c => c.LLMChannelId == channelId && !c.IsDeleted)
+                .OrderBy(c => c.ModelName).ThenBy(c => c.Id)
+                .ToListAsync();
+
+            var multiBindingNames = rows
+                .GroupBy(r => r.ModelName, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return rows
+                .Select(r => ((long)r.Id, r.ModelName, multiBindingNames.Contains(r.ModelName) ? FormatModelDisplay(r) : r.ModelName))
+                .ToList();
+        }
+
+        /// <summary>按行 Id 删除模型行（多 binding 下不会误删同名的其它行）。</summary>
+        public async Task<bool> RemoveModelRow(long rowId) {
+            try {
+                var row = await DataContext.ChannelsWithModel.FirstOrDefaultAsync(m => m.Id == rowId);
+                if (row == null) {
+                    return false;
+                }
+
+                DataContext.ChannelsWithModel.Remove(row);
+                await DataContext.SaveChangesAsync();
+                return true;
+            } catch (Exception ex) {
+                _logger.LogError(ex, "删除模型行 {RowId} 失败", rowId);
+                return false;
+            }
+        }
+
         /// <summary>
         /// channel Gateway/Provider 变更时同步默认 binding（镜像规则，blueprint §七）。
         /// 无默认 binding 时不创建（补建由 EnsureDefaultBinding 在 AddChannel/RefreshAllChannel 负责）。
