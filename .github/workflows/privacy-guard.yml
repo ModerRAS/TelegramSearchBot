@@ -25,12 +25,20 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
+          patterns=.githooks/sensitive-patterns.txt
+          if [ ! -f "$patterns" ]; then
+            echo "::error::Pattern file $patterns is missing; refusing to skip the privacy scan."
+            exit 1
+          fi
+
           printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" > /tmp/privacy-scan.txt
           git fetch --quiet origin "$BASE_REF"
           git log --format=%B "origin/$BASE_REF..HEAD" >> /tmp/privacy-scan.txt
 
-          if grep -nE -- '-100[0-9]{7,12}\b|[0-9]{8,10}:[A-Za-z0-9_-]{35}|sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}' /tmp/privacy-scan.txt; then
-            echo "::error::Unredacted identifier or secret found above. Replace real ids/tokens with <chat_id>/<user_id>/<task_id>/<token> placeholders and push/edit the PR."
+          # Report matched line numbers only: echoing matched content would re-leak it into public CI logs.
+          matched_lines="$(grep -nE -f "$patterns" /tmp/privacy-scan.txt | cut -d: -f1 | paste -sd, - || true)"
+          if [ -n "$matched_lines" ]; then
+            echo "::error::Unredacted identifier or secret found in PR text/commits (input lines: $matched_lines). Replace real ids/tokens with <chat_id>/<user_id>/<task_id>/<token> placeholders and push/edit the PR."
             exit 1
           fi
 

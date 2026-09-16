@@ -1,0 +1,17 @@
+<Project>
+  <!--
+    Git has no clone-time hook, so a fresh clone gets the sensitive-content hooks on the
+    first build (dotnet build/test/IDE build) instead: every project imports this file.
+    Manual fallback: git config core.hooksPath .githooks
+    See AGENTS.md § PUBLIC OUTPUT REDACTION.
+  -->
+  <Target Name="InstallGitHooks"
+          BeforeTargets="Build"
+          Condition="'$(CI)' != 'true' and Exists('$(MSBuildThisFileDirectory).git')">
+    <Exec Command="git config core.hooksPath .githooks"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ContinueOnError="true"
+          StandardOutputImportance="low"
+          StandardErrorImportance="low" />
+  </Target>
+</Project>

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Blocks commits whose message contains unredacted production identifiers or secrets.
+# Enable once per clone: git config core.hooksPath .githooks
+patterns="$(dirname "$0")/sensitive-patterns.txt"
+msg_file="$1"
+if [ ! -f "$patterns" ] || [ -z "$msg_file" ] || [ ! -f "$msg_file" ]; then
+    exit 0
+fi
+
+matches="$(grep -nE -f "$patterns" "$msg_file" || true)"
+if [ -n "$matches" ]; then
+    echo "" >&2
+    echo "✖ commit-msg: message matches sensitive-content patterns:" >&2
+    printf '%s\n' "$matches" | sed 's/^/  /' >&2
+    echo "" >&2
+    echo "Redact real ids/tokens with placeholders (<chat_id>, <user_id>, <task_id>, <token>, <key>)." >&2
+    echo "See AGENTS.md § PUBLIC OUTPUT REDACTION. Bypass (rare): git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0

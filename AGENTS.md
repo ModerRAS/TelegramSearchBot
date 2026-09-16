@@ -107,6 +107,7 @@ dotnet publish -r win-x64 --self-contained
 - Keep timestamps, log levels, error/exit codes and the shape of the log line; that is what matters for diagnosis and it leaks nothing.
 - Full logs live only in local/private storage, never in git history or on GitHub.
 - CI enforces this for PR titles/bodies and PR commit messages via `.github/workflows/privacy-guard.yml`. If the guard fails, redact and push/edit the PR; do not bypass it.
+- Local git hooks block offending commits before they exist: `.githooks/pre-commit` scans staged content, `.githooks/commit-msg` scans the message, both driven by `.githooks/sensitive-patterns.txt` (same patterns as CI). New clones install them automatically on the first `dotnet build`/`test` via `Directory.Build.targets`; manual fallback: `git config core.hooksPath .githooks`. Do not use `--no-verify` to skip them.
 
 ## Development Notes
 - **Platform**: Windows primary, Linux partial (OCR/ASR limited)
