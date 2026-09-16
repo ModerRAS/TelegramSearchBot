@@ -1,0 +1,37 @@
+# Fails a PR when its title, body, or commit messages contain unredacted
+# production identifiers (Telegram chat ids, bot tokens, API keys).
+# Incident: PR #391 quoted a raw production log line including a real group chat id.
+name: Privacy Guard
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan PR title/body and commit messages
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" > /tmp/privacy-scan.txt
+          git fetch --quiet origin "$BASE_REF"
+          git log --format=%B "origin/$BASE_REF..HEAD" >> /tmp/privacy-scan.txt
+
+          if grep -nE -- '-100[0-9]{7,12}\b|[0-9]{8,10}:[A-Za-z0-9_-]{35}|sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}' /tmp/privacy-scan.txt; then
+            echo "::error::Unredacted identifier or secret found above. Replace real ids/tokens with <chat_id>/<user_id>/<task_id>/<token> placeholders and push/edit the PR."
+            exit 1
+          fi
+
+          echo "No unredacted identifiers detected."

@@ -101,6 +101,13 @@ dotnet publish -r win-x64 --self-contained
 - If work is blocked by missing permissions, an external outage, or ambiguous requirements, state the blocker clearly.
 - After the workflow is complete, use the `ask_user` tool to ask what to do next.
 
+## PUBLIC OUTPUT REDACTION (HARD RULE)
+- Never paste raw production logs, configs, or API responses into public artifacts (PR/issue bodies, comments, commit messages, docs, code comments).
+- Redact real identifiers: Telegram chat/user/message ids → `<chat_id>` / `<user_id>` / `<message_id>`; task ids and process ids → `<task_id>` / `<pid>`; bot tokens, API keys, cookies, internal hostnames → `<token>` / `<key>` / `<host>`.
+- Keep timestamps, log levels, error/exit codes and the shape of the log line; that is what matters for diagnosis and it leaks nothing.
+- Full logs live only in local/private storage, never in git history or on GitHub.
+- CI enforces this for PR titles/bodies and PR commit messages via `.github/workflows/privacy-guard.yml`. If the guard fails, redact and push/edit the PR; do not bypass it.
+
 ## Development Notes
 - **Platform**: Windows primary, Linux partial (OCR/ASR limited)
 - **Config**: `%LOCALAPPDATA%/TelegramSearchBot/Config.json` - DO NOT use appsettings.json
