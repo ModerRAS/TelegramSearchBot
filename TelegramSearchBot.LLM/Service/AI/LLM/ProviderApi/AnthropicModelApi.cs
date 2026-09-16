@@ -208,16 +208,72 @@ namespace TelegramSearchBot.Service.AI.LLM {
 
         #region Models
 
-        public virtual Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
-            return Task.FromResult<IEnumerable<string>>(_anthropicModels);
+        public virtual async Task<IEnumerable<string>> GetAllModels(LLMChannel channel) {
+            var discovered = await TryDiscoverModelsAsync(channel);
+            if (discovered.Count > 0) {
+                return discovered;
+            }
+
+            _logger.LogInformation("Anthropic 目录发现失败或为空，回退到内置静态快照（{Count} 个模型）", _anthropicModels.Length);
+            return _anthropicModels;
         }
 
-        public virtual Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel) {
+        /// <summary>
+        /// Anthropic-compatible GET /v1/models 发现（官方 API 与 OpenCode 等兼容网关都提供）；
+        /// 任何失败都返回空列表，由调用方回退到静态快照，刷新链条不会因单个网关不可用而中断。
+        /// </summary>
+        private async Task<List<string>> TryDiscoverModelsAsync(LLMChannel channel) {
+            var result = new List<string>();
+            if (channel == null || string.IsNullOrWhiteSpace(channel.Gateway)) {
+                return result;
+            }
+
+            try {
+                var baseUrl = BuildModelsBaseUrl(channel.Gateway);
+                using var httpClient = _httpClientFactory.CreateClient();
+                if (!string.IsNullOrWhiteSpace(channel.ApiKey)) {
+                    httpClient.DefaultRequestHeaders.TryAddWithoutValidation("x-api-key", channel.ApiKey);
+                }
+                httpClient.DefaultRequestHeaders.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+                OpencodeSessionHeaders.Apply(httpClient, channel.Gateway);
+
+                using var response = await httpClient.GetAsync($"{baseUrl}/models?limit=100");
+                if (!response.IsSuccessStatusCode) {
+                    _logger.LogWarning("Anthropic 目录请求失败 {StatusCode} ({Url})", (int)response.StatusCode, baseUrl);
+                    return result;
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array) {
+                    return result;
+                }
+
+                foreach (var item in data.EnumerateArray()) {
+                    var id = item.TryGetProperty("id", out var idProperty) ? idProperty.GetString() : null;
+                    if (!string.IsNullOrWhiteSpace(id)) {
+                        result.Add(id!);
+                    }
+                }
+            } catch (Exception ex) {
+                _logger.LogWarning(ex, "Anthropic 目录请求异常，回退到静态快照");
+            }
+
+            return result;
+        }
+
+        /// <summary>把渠道网关归一化为 GET /v1/models 的基地址（重复的 /v1 只保留一次）。</summary>
+        internal static string BuildModelsBaseUrl(string gateway) {
+            var trimmed = gateway.TrimEnd('/');
+            return trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase) ? trimmed : trimmed + "/v1";
+        }
+
+        public virtual async Task<IEnumerable<ModelWithCapabilities>> GetAllModelsWithCapabilities(LLMChannel channel) {
             var results = new List<ModelWithCapabilities>();
-            foreach (var modelName in _anthropicModels) {
+            foreach (var modelName in await GetAllModels(channel)) {
                 results.Add(InferAnthropicModelCapabilities(modelName));
             }
-            return Task.FromResult<IEnumerable<ModelWithCapabilities>>(results);
+            return results;
         }
 
         private ModelWithCapabilities InferAnthropicModelCapabilities(string modelName) {
