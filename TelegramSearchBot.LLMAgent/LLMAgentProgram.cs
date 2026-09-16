@@ -106,6 +106,9 @@ namespace TelegramSearchBot.LLMAgent {
             services.AddScoped<OllamaModelApi>();
             services.AddScoped<GeminiModelApi>();
             services.AddScoped<AnthropicModelApi>();
+            // LlmServiceProxy resolves LlmChatRunner, which needs the registry (same lifetimes as the main process DI scan).
+            services.AddSingleton<LlmProviderRegistry>();
+            services.AddSingleton<LlmChatRunner>();
             services.AddSingleton<Service.ToolExecutor>();
             services.AddScoped<Service.AgentToolService>();
             services.AddScoped<IFileToolService, FileToolService>();
