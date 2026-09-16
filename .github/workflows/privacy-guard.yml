@@ -1,0 +1,45 @@
+# Fails a PR when its title, body, or commit messages contain unredacted
+# production identifiers (Telegram chat ids, bot tokens, API keys).
+# Incident: PR #391 quoted a raw production log line including a real group chat id.
+name: Privacy Guard
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan PR title/body and commit messages
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          patterns=.githooks/sensitive-patterns.txt
+          if [ ! -f "$patterns" ]; then
+            echo "::error::Pattern file $patterns is missing; refusing to skip the privacy scan."
+            exit 1
+          fi
+
+          printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" > /tmp/privacy-scan.txt
+          git fetch --quiet origin "$BASE_REF"
+          git log --format=%B "origin/$BASE_REF..HEAD" >> /tmp/privacy-scan.txt
+
+          # Report matched line numbers only: echoing matched content would re-leak it into public CI logs.
+          matched_lines="$(grep -nE -f "$patterns" /tmp/privacy-scan.txt | cut -d: -f1 | paste -sd, - || true)"
+          if [ -n "$matched_lines" ]; then
+            echo "::error::Unredacted identifier or secret found in PR text/commits (input lines: $matched_lines). Replace real ids/tokens with <chat_id>/<user_id>/<task_id>/<token> placeholders and push/edit the PR."
+            exit 1
+          fi
+
+          echo "No unredacted identifiers detected."

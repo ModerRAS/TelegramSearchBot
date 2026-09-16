@@ -1,0 +1,28 @@
+#!/bin/sh
+# Blocks commits whose staged content contains unredacted production identifiers or secrets.
+# Enable once per clone: git config core.hooksPath .githooks
+# Patterns live in .githooks/sensitive-patterns.txt (patterns only: blank lines would match everything).
+patterns="$(dirname "$0")/sensitive-patterns.txt"
+if [ ! -f "$patterns" ]; then
+    echo "pre-commit: $patterns not found, skipping sensitive-content scan" >&2
+    exit 0
+fi
+
+staged="$(git diff --cached --unified=0 --no-color --diff-filter=ACMR)"
+if [ -z "$staged" ]; then
+    exit 0
+fi
+
+matches="$(printf '%s\n' "$staged" | grep -nE -f "$patterns" || true)"
+if [ -n "$matches" ]; then
+    echo "" >&2
+    echo "✖ pre-commit: staged content matches sensitive-content patterns:" >&2
+    printf '%s\n' "$matches" | sed 's/^/  /' >&2
+    echo "" >&2
+    echo "Redact real ids/tokens with placeholders (<chat_id>, <user_id>, <task_id>, <token>, <key>)" >&2
+    echo "or remove the content before committing. See AGENTS.md § PUBLIC OUTPUT REDACTION." >&2
+    echo "Deliberate bypass (rare, review the diff first): git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0
