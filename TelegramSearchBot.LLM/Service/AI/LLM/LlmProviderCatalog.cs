@@ -4,7 +4,7 @@ using System.Linq;
 using TelegramSearchBot.Model.AI;
 
 namespace TelegramSearchBot.Service.AI.LLM {
-    /// <summary>A built-in provider preset: one code-defined entry of the provider catalog.</summary>
+    /// <summary>A built-in provider preset: one entry of the provider catalog.</summary>
     public sealed record LlmProviderPreset(
         string Id,
         string DisplayName,
@@ -53,102 +53,22 @@ namespace TelegramSearchBot.Service.AI.LLM {
     }
 
     /// <summary>
-    /// Code-defined provider catalog (pi-style): common providers ship preconfigured so the bot
-    /// admin only picks one and enters an API key. Custom endpoints are still supported by the
-    /// existing manual channel flow (新建渠道) and LLMApiBinding overrides.
+    /// Provider catalog (pi-style): presets ship as data (`Providers/providers.json`, embedded) so providers and
+    /// model lists can be updated without code changes — a user override at
+    /// `%LOCALAPPDATA%/TelegramSearchBot/providers.json` wins over the built-in copy.
+    /// Custom endpoints are still supported by the manual channel flow (新建渠道) and LLMApiBinding overrides.
     /// </summary>
     public static class LlmProviderCatalog {
-        public static readonly IReadOnlyList<LlmProviderPreset> Presets = new[] {
-            new LlmProviderPreset(
-                "anthropic", "Anthropic 官方", LLMProvider.Anthropic,
-                "https://api.anthropic.com",
-                new[] { "claude-sonnet-4-5", "claude-opus-4-1", "claude-haiku-4-5" },
-                RequiresApiKey: true),
-            new LlmProviderPreset(
-                "openai", "OpenAI 官方 (Chat Completions)", LLMProvider.OpenAI,
-                "https://api.openai.com/v1",
-                new[] { "gpt-4o", "gpt-4o-mini", "gpt-4.1" },
-                RequiresApiKey: true),
-            new LlmProviderPreset(
-                "openai-responses", "OpenAI 官方 (Responses API)", LLMProvider.ResponsesAPI,
-                "https://api.openai.com/v1",
-                new[] { "gpt-4o", "gpt-4.1" },
-                RequiresApiKey: true),
-            new LlmProviderPreset(
-                "gemini", "Google Gemini", LLMProvider.Gemini,
-                "https://generativelanguage.googleapis.com",
-                new[] { "gemini-2.0-flash", "gemini-2.5-pro" },
-                RequiresApiKey: true),
-            new LlmProviderPreset(
-                "minimax", "MiniMax", LLMProvider.MiniMax,
-                "https://api.minimax.chat/v1",
-                new[] { "MiniMax-Text-01", "abab6.5s-chat" },
-                RequiresApiKey: true),
-            new LlmProviderPreset(
-                "ollama", "本地 Ollama", LLMProvider.Ollama,
-                "http://localhost:11434",
-                Array.Empty<string>(),
-                RequiresApiKey: false,
-                Notes: "本地服务无需 API Key；模型通过 `添加模型` 手动添加或自动发现。"),
-            new LlmProviderPreset(
-                "lmstudio", "本地 LM Studio", LLMProvider.LMStudio,
-                "http://localhost:1234/v1",
-                Array.Empty<string>(),
-                RequiresApiKey: false,
-                Notes: "本地服务无需 API Key；模型通过 `添加模型` 手动添加。"),
-            new LlmProviderPreset(
-                "deepseek", "DeepSeek (OpenAI 兼容)", LLMProvider.OpenAI,
-                "https://api.deepseek.com/v1",
-                new[] { "deepseek-chat", "deepseek-reasoner" },
-                RequiresApiKey: true),
-            new LlmProviderPreset(
-                "moonshot", "Moonshot Kimi (OpenAI 兼容)", LLMProvider.OpenAI,
-                "https://api.moonshot.cn/v1",
-                new[] { "kimi-k2-0711-preview", "moonshot-v1-128k" },
-                RequiresApiKey: true),
-            // OpenCode 网关不是单协议服务商：Zen 按模型分属 Anthropic/OpenAI/Google 协议，
-            // Go 只有 Responses + Chat Completions。预设建渠道时按 ModelBindingRules 拆 binding。
-            new LlmProviderPreset(
-                "opencode-zen", "OpenCode Zen (官方订阅目录)", LLMProvider.OpenAI,
-                "https://opencode.ai/zen/v1",
-                Array.Empty<string>(),
-                RequiresApiKey: true,
-                Notes: "多协议网关（claude-*→Anthropic、gpt-*/grok-*→Responses、gemini-*→Google、其余→Chat Completions）；按量计费，目录不自动创建，授权模型请用 `添加模型`。",
-                Bindings: new[] {
-                    new LlmPresetBinding("anthropic", LlmProtocol.AnthropicMessages, LlmAuthProfile.AnthropicApiKey),
-                    new LlmPresetBinding("responses", LlmProtocol.OpenAIResponses, LlmAuthProfile.Bearer),
-                    new LlmPresetBinding("google", LlmProtocol.Gemini, LlmAuthProfile.Bearer)
-                },
-                ModelBindingRules: new[] {
-                    new LlmModelBindingRule("anthropic", "claude-"),
-                    new LlmModelBindingRule("responses", "gpt-", "grok-", "o3", "o4"),
-                    new LlmModelBindingRule("google", "gemini-")
-                }),
-            new LlmProviderPreset(
-                "opencode-go", "OpenCode Go (订阅网关)", LLMProvider.OpenAI,
-                "https://opencode.ai/zen/go/v1",
-                new[] {
-                    "grok-4.6", "gpt-5.6-luna",
-                    "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1",
-                    "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
-                    "longcat-2.0",
-                    "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp",
-                    "minimax-m3", "minimax-m2.7",
-                    "mimo-v2.5", "mimo-v2.5-pro",
-                    "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
-                    "muse-spark-1.3-contributor", "muse-spark-1.2-contributor",
-                    "hy4-preview", "hy3"
-                },
-                RequiresApiKey: true,
-                Notes: "OpenAI 兼容订阅网关（/responses + /chat/completions），自动携带 x-opencode-session；订阅覆盖目录模型，刷新会同步目录。自建网关请用 `新建渠道`。",
-                Bindings: new[] {
-                    new LlmPresetBinding("responses", LlmProtocol.OpenAIResponses, LlmAuthProfile.Bearer)
-                },
-                ModelBindingRules: new[] {
-                    new LlmModelBindingRule("responses", "grok-", "gpt-")
-                },
-                CatalogIsEntitlement: true),
-        };
+        private static readonly Lazy<LlmProviderCatalogDocument> Document =
+            new(() => LlmProviderCatalogLoader.Load(), LazyThreadSafetyMode.ExecutionAndPublication);
+
+        public static IReadOnlyList<LlmProviderPreset> Presets => Document.Value.Presets;
+
+        /// <summary>内置/覆盖目录的数据版本（providers.json 的 generatedAt）。</summary>
+        public static DateTimeOffset? GeneratedAt => Document.Value.GeneratedAt;
+
+        /// <summary>目录来源（`builtin` 或 `file:<path>`），便于排障。</summary>
+        public static string Source => Document.Value.Source;
 
         public static LlmProviderPreset? FindById(string id) =>
             Presets.FirstOrDefault(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));

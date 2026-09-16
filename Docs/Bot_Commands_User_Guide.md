@@ -154,6 +154,8 @@
             4.  机器人回复: `请输入 <预设名> 的 API Key（本地/免 Key 服务发送 - 跳过）:`
             5.  管理员发送 API Key（或 `-`）
             6.  机器人回复: `渠道创建成功（ID: x）`，并自动预置默认模型；自定义 endpoint / 模型仍可用 `新建渠道` / `添加模型` 修改。
+        *   **预设目录数据化**：预设来自内置 `providers.json`（每 6 小时的渠道刷新会让模型表跟随供应商最新状态）；如需增改服务商，可仿照内置文件在 `%LOCALAPPDATA%/TelegramSearchBot/providers.json` 放置覆盖文件（含 `generatedAt` 与 `presets`），重启后优先生效，覆盖文件损坏会自动回退内置目录。
+        *   **多协议网关**：OpenCode Zen 按模型名自动分派协议（`claude-*`→Anthropic、`gpt-*`/`grok-*`→Responses、`gemini-*`→Gemini、其余→Chat Completions）；OpenCode Go 为订阅网关，预置官方模型并通过 `/models` 只增不删地同步目录。
         *   **例如，使用 `新建渠道` 指令的交互流程可能如下：**
             1.  管理员发送: `新建渠道`
             2.  机器人回复: `请输入渠道的名称`
