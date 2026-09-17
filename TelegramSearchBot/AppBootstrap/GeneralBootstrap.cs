@@ -25,6 +25,7 @@ using TelegramSearchBot.Executor;
 using TelegramSearchBot.Extension;
 using TelegramSearchBot.Helper;
 using TelegramSearchBot.Interface.Controller;
+using TelegramSearchBot.Interface.Manage;
 using TelegramSearchBot.Interface.Mcp;
 using TelegramSearchBot.Manager;
 using TelegramSearchBot.Model;
@@ -264,6 +265,20 @@ namespace TelegramSearchBot.AppBootstrap {
             // 启动Host，SchedulerService作为HostedService会自动启动
             await host.StartAsync();
             Log.Information("Host已启动，定时任务调度器已作为后台服务启动");
+
+            // 启动后异步刷新一次渠道模型目录：ScheduledTask 只在 cron 到点才跑，
+            // 首次部署/重启后应尽快拿到供应商最新模型（失败由 6 小时定时任务兜底）。
+            _ = Task.Run(async () => {
+                try {
+                    await Task.Delay(TimeSpan.FromSeconds(30));
+                    using var scope = service.CreateScope();
+                    var helper = scope.ServiceProvider.GetRequiredService<IEditLLMConfHelper>();
+                    var added = await helper.RefreshAllChannel();
+                    Log.Information("启动后模型目录刷新完成，新增/恢复 {Count} 个模型", added);
+                } catch (Exception ex) {
+                    Log.Warning(ex, "启动后模型目录刷新失败，将由定时任务重试");
+                }
+            });
 
             // 接收消息的逻辑已迁移到 TelegramBotReceiverService (IHostedService)
             // 机器人信息将在该服务启动时打印
