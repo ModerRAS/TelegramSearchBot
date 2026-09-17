@@ -508,5 +508,50 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.NotNull(config);
             Assert.Equal("500", config.Value);
         }
+
+        [Fact]
+        public async Task ExecuteAsync_PresetOpenCodeGo_CreatesResponseBindingAndAssignsModels() {
+            // Arrange
+            long chatId = 123;
+            var stateKey = $"llmconf:{chatId}:state";
+            var dataKey = $"llmconf:{chatId}:data";
+            var goIndex = LlmProviderCatalog.Presets.ToList().FindIndex(p => p.Id == "opencode-go") + 1;
+
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)
+                .ReturnsAsync("awaiting_preset_selection")
+                .ReturnsAsync("awaiting_preset_apikey");
+            _dbMock.SetupSequence(d => d.StringGetAsync(dataKey, It.IsAny<CommandFlags>()))
+                .ReturnsAsync("opencode-go");
+
+            helperMock.Setup(h => h.AddChannel(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<LLMProvider>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ReturnsAsync(7);
+            helperMock.Setup(h => h.AddModelWithChannel(It.IsAny<int>(), It.IsAny<List<string>>()))
+                .ReturnsAsync(true);
+            helperMock.Setup(h => h.EnsureBinding(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<LlmProtocol>(), It.IsAny<LlmAuthProfile>()))
+                .ReturnsAsync(100);
+            helperMock.Setup(h => h.AssignModelBinding(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync(true);
+
+            // Act
+            var result1 = await _service.ExecuteAsync("预制渠道", chatId);
+            Assert.True(result1.Item1);
+            Assert.Contains("OpenCode Go", result1.Item2);
+
+            var result2 = await _service.ExecuteAsync(goIndex.ToString(), chatId);
+            Assert.True(result2.Item1);
+            Assert.Contains("API Key", result2.Item2);
+
+            var result3 = await _service.ExecuteAsync("go-token", chatId);
+
+            // Assert
+            Assert.True(result3.Item1);
+            Assert.Contains("渠道创建成功", result3.Item2);
+            helperMock.Verify(h => h.EnsureBinding(7, "https://opencode.ai/zen/go/v1", LlmProtocol.OpenAIResponses, LlmAuthProfile.Bearer), Times.Once);
+            helperMock.Verify(h => h.AssignModelBinding(7, "grok-4.6", 100), Times.Once);
+            helperMock.Verify(h => h.AssignModelBinding(7, "gpt-5.6-luna", 100), Times.Once);
+            helperMock.Verify(h => h.AssignModelBinding(7, "glm-5.3", It.IsAny<int>()), Times.Never);
+            helperMock.Verify(h => h.AssignModelBinding(7, It.IsAny<string>(), It.IsAny<int>()), Times.Exactly(2));
+        }
     }
 }

@@ -25,7 +25,7 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
         /// construction glue formerly in AnthropicModelApi.CreateClient.
         /// </summary>
         public static LlmTransportBundle Create(LLMChannel channel, LLMApiBinding binding, string modelName, string systemPrompt,
-            bool nativeTools, bool promptCachingEnabled, ILogger logger) {
+            bool nativeTools, bool promptCachingEnabled, ILogger logger, long chatId = 0) {
             var apiKey = LlmBindingSupport.ResolveApiKey(channel, binding);
             var options = new Anthropic.Core.ClientOptions {
                 ApiKey = apiKey,
@@ -40,6 +40,11 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
                 }
                 options.BaseUrl = trimmed;
             }
+
+            // OpenCode Go 要求每个请求携带稳定的 x-opencode-session（否则 400 MissingSessionID）；
+            // 非 opencode 端点时 Apply 自会跳过，其它渠道无感。
+            options.HttpClient = CreateSessionHttpClient(endpoint, chatId);
+
             var transport = new AnthropicMessagesTransport(logger, new AnthropicClient(options), systemPrompt, modelName, channel,
                 nativeTools, promptCachingEnabled);
             var config = new LlmTransportConfig {
@@ -52,6 +57,16 @@ namespace TelegramSearchBot.Service.AI.LLM.Transports {
                 PromptCachingEnabled = promptCachingEnabled
             };
             return new LlmTransportBundle(transport, config);
+        }
+
+        /// <summary>
+        /// 构造带 OpenCode 会话头的 HttpClient（opencode 端点生效，其它端点原样）。
+        /// 单独抽出以便测试验证 Go 的 x-opencode-session 行为。
+        /// </summary>
+        internal static HttpClient CreateSessionHttpClient(string? endpoint, long chatId = 0) {
+            var httpClient = new HttpClient();
+            OpencodeSessionHeaders.Apply(httpClient, endpoint, chatId > 0 ? $"tsb-{chatId}" : OpencodeSessionHeaders.GlobalSessionId);
+            return httpClient;
         }
 
         private readonly ILogger _logger;

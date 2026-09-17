@@ -114,10 +114,17 @@ namespace TelegramSearchBot.Service.Manage {
                 // 管理修复：每渠道恰好一个默认 binding（blueprint §六.8）
                 var defaultBinding = await EnsureDefaultBinding(channel);
 
-                // Catalog ≠ Entitlement（blueprint §四.1/.5）：OpenCode /models 不是授权快照，
-                // 刷新不得创建、不得软删任何模型行；能力 metadata 仍可安全 merge（不会创建/复活行）。
+                // Catalog ≠ Entitlement（blueprint §四.1/.5）：按量计费的 OpenCode 目录不是授权快照，
+                // 刷新不得创建、不得软删；订阅制网关（CatalogIsEntitlement，如 OpenCode Go）目录即授权，
+                // 做只增不删的同步，并按预设规则把模型挂到正确协议 binding 上。
                 if (IsOpenCodeBinding(defaultBinding)) {
-                    _logger.LogInformation("通道 {ChannelName} 默认 binding 为 OpenCode 目录（opencode.ai/zen/*），跳过目录创建/软删", channel.Name);
+                    var openCodePreset = LlmProviderCatalog.FindForEndpoint(defaultBinding?.Endpoint);
+                    if (openCodePreset?.CatalogIsEntitlement == true) {
+                        await RefreshOpenCodeEntitlementCatalogAsync(channel, defaultBinding, openCodePreset);
+                    } else {
+                        _logger.LogInformation("通道 {ChannelName} 默认 binding 为 OpenCode 目录（opencode.ai/zen/*），跳过目录创建/软删", channel.Name);
+                    }
+
                     await TryUpdateCapabilitiesAsync(channel.Id);
                     continue;
                 }
@@ -207,6 +214,74 @@ namespace TelegramSearchBot.Service.Manage {
             } else {
                 _logger.LogWarning("更新通道 {ChannelId} 的模型能力信息失败", channelId);
             }
+        }
+
+        /// <summary>
+        /// 订阅制 OpenCode 网关（目录即授权，如 Go）的只增不删同步：拉取 /models，按预设规则把
+        /// 新模型挂到正确协议 binding；既有行不动（手工调整优先），任何失败都不删除任何行。
+        /// </summary>
+        private async Task RefreshOpenCodeEntitlementCatalogAsync(LLMChannel channel, LLMApiBinding? defaultBinding, LlmProviderPreset preset) {
+            try {
+                if (_LLMFactory.GetCatalog(LLMProvider.OpenAI) is not OpenAiModelApi catalog) {
+                    _logger.LogWarning("通道 {ChannelName} 缺少 OpenAI 兼容目录实现，跳过订阅目录同步", channel.Name);
+                    return;
+                }
+
+                var models = (await catalog.GetAllModels(channel, defaultBinding)).ToList();
+                if (models.Count == 0) {
+                    _logger.LogWarning("通道 {ChannelName} 订阅目录为空，保留现有模型行", channel.Name);
+                    return;
+                }
+
+                var existing = await DataContext.ChannelsWithModel
+                    .Where(x => x.LLMChannelId == channel.Id)
+                    .ToListAsync();
+
+                var added = 0;
+                foreach (var modelName in models.Distinct(StringComparer.OrdinalIgnoreCase)) {
+                    var row = existing.FirstOrDefault(r => r.ModelName.Equals(modelName, StringComparison.OrdinalIgnoreCase));
+                    if (row != null) {
+                        if (row.IsDeleted) {
+                            row.IsDeleted = false;
+                            added++;
+                        }
+                        continue;
+                    }
+
+                    var bindingId = await ResolvePresetBindingAsync(channel.Id, channel.Gateway, preset, modelName) ?? defaultBinding?.Id;
+                    DataContext.ChannelsWithModel.Add(new ChannelWithModel {
+                        LLMChannelId = channel.Id,
+                        ModelName = modelName,
+                        IsDeleted = false,
+                        AuthorizationSource = AuthorizationSource.Discovered,
+                        ApiBindingId = bindingId,
+                        IsPreferred = defaultBinding?.Id != null && bindingId != defaultBinding.Id
+                    });
+                    added++;
+                }
+
+                if (added > 0) {
+                    await DataContext.SaveChangesAsync();
+                }
+                _logger.LogInformation("通道 {ChannelName} 订阅目录同步完成，新增/恢复 {Count} 个模型", channel.Name, added);
+            } catch (Exception ex) {
+                _logger.LogError(ex, "同步通道 {ChannelName} 的订阅目录失败，保留现有模型行", channel.Name);
+            }
+        }
+
+        /// <summary>按预设的模型前缀规则解析并补建 binding；未命中规则返回 null（用渠道默认 binding）。</summary>
+        private async Task<int?> ResolvePresetBindingAsync(int channelId, string? gateway, LlmProviderPreset preset, string modelName) {
+            var ruleBindingId = preset.ModelBindingRules.ResolveBindingId(modelName);
+            var definition = ruleBindingId == null
+                ? null
+                : preset.Bindings?.FirstOrDefault(b => b.Id.Equals(ruleBindingId, StringComparison.OrdinalIgnoreCase));
+            if (definition == null) {
+                return null;
+            }
+
+            var endpoint = LlmProviderCatalog.BuildBindingEndpoint(gateway, definition.EndpointSuffix);
+            var bindingId = await EnsureBinding(channelId, endpoint, definition.Protocol, definition.AuthProfile);
+            return bindingId > 0 ? bindingId : null;
         }
 
         /// <summary>
@@ -623,6 +698,65 @@ namespace TelegramSearchBot.Service.Manage {
                 return true;
             } catch (Exception ex) {
                 _logger.LogError(ex, "设置模型 {ModelName} preferred 失败", modelName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 确保渠道下存在指定 endpoint+protocol+auth 的 binding（非默认，幂等），返回 binding Id。
+        /// 多协议网关（OpenCode Zen/Go）在创建与刷新时按规则补建。
+        /// </summary>
+        public async Task<int> EnsureBinding(int channelId, string endpoint, LlmProtocol protocol, LlmAuthProfile authProfile) {
+            try {
+                var normalized = (endpoint ?? string.Empty).TrimEnd('/');
+                var candidates = await DataContext.LLMApiBindings
+                    .Where(b => b.LLMChannelId == channelId && b.Protocol == protocol && b.AuthProfile == authProfile)
+                    .ToListAsync();
+                var existing = candidates.FirstOrDefault(b =>
+                    string.Equals((b.Endpoint ?? string.Empty).TrimEnd('/'), normalized, StringComparison.OrdinalIgnoreCase));
+                if (existing != null) {
+                    return existing.Id;
+                }
+
+                var binding = new LLMApiBinding {
+                    LLMChannelId = channelId,
+                    Endpoint = normalized,
+                    Protocol = protocol,
+                    AuthProfile = authProfile,
+                    IsDefault = false
+                };
+                DataContext.LLMApiBindings.Add(binding);
+                await DataContext.SaveChangesAsync();
+                _logger.LogInformation("为渠道 {ChannelId} 补建协议 binding（{Protocol}/{AuthProfile} → {Endpoint}）", channelId, protocol, authProfile, normalized);
+                return binding.Id;
+            } catch (Exception ex) {
+                _logger.LogError(ex, "为渠道 {ChannelId} 补建协议 binding 失败", channelId);
+                return -1;
+            }
+        }
+
+        /// <summary>把模型行改挂到指定 binding 并标记模型级协议覆盖（多协议网关的创建/刷新共用）。</summary>
+        public async Task<bool> AssignModelBinding(int channelId, string modelName, int bindingId) {
+            if (string.IsNullOrWhiteSpace(modelName) || bindingId <= 0) {
+                return false;
+            }
+
+            try {
+                var rows = await DataContext.ChannelsWithModel
+                    .Where(m => m.LLMChannelId == channelId)
+                    .ToListAsync();
+                var row = rows.FirstOrDefault(r => r.ModelName.Equals(modelName, StringComparison.OrdinalIgnoreCase));
+                if (row == null) {
+                    _logger.LogWarning("挂载失败：渠道 {ChannelId} 没有模型 {ModelName} 的行", channelId, modelName);
+                    return false;
+                }
+
+                row.ApiBindingId = bindingId;
+                row.IsPreferred = true;
+                await DataContext.SaveChangesAsync();
+                return true;
+            } catch (Exception ex) {
+                _logger.LogError(ex, "把模型 {ModelName} 挂到 binding {BindingId} 失败", modelName, bindingId);
                 return false;
             }
         }
