@@ -496,9 +496,8 @@ namespace TelegramSearchBot.Test.Manage {
 
         [Fact]
         public async Task RefreshAllChannel_OpenCodeBinding_CreatesNoRowsAndSoftDeletesNothing() {
-            // Arrange: OpenCode 默认 binding（opencode.ai/zen/* 空间）——目录不是授权快照，
-            // 刷新不得创建行、不得软删/复活任何行（blueprint §四.1/.5）
-            const string openCodeEndpoint = "https://opencode.ai/zen/go/v1/chat/completions";
+            // Arrange: OpenCode Zen 是按量计费目录（非授权快照），刷新不得创建行、不得软删/复活任何行（blueprint §四.1/.5）
+            const string openCodeEndpoint = "https://opencode.ai/zen/v1/chat/completions";
             var binding = await SeedChannelWithDefaultBinding(20, "OpenCode", LLMProvider.OpenAI,
                 gateway: openCodeEndpoint, endpoint: openCodeEndpoint);
             await _context.ChannelsWithModel.AddRangeAsync(new[] {
@@ -736,6 +735,103 @@ namespace TelegramSearchBot.Test.Manage {
 
             // Assert
             Assert.False(ok);
+        }
+
+        /// <summary>OpenCode Go 是订阅网关（目录即授权）：只增不删；既有行/手工行不被覆盖或删除。</summary>
+        [Fact]
+        public async Task RefreshAllChannel_OpenCodeGo_SyncsCatalogAddOnly() {
+            // Arrange
+            const string goEndpoint = "https://opencode.ai/zen/go/v1";
+            var binding = await SeedChannelWithDefaultBinding(40, "OpenCode Go", LLMProvider.OpenAI,
+                gateway: goEndpoint, endpoint: goEndpoint);
+            await _context.ChannelsWithModel.AddRangeAsync(new[] {
+                new ChannelWithModel { LLMChannelId = 40, ModelName = "existing-manual", IsDeleted = false, AuthorizationSource = AuthorizationSource.Manual },
+                new ChannelWithModel { LLMChannelId = 40, ModelName = "restored-discovered", IsDeleted = true, AuthorizationSource = AuthorizationSource.Discovered, ApiBindingId = binding.Id },
+                new ChannelWithModel { LLMChannelId = 40, ModelName = "catalog-dropped", IsDeleted = false, AuthorizationSource = AuthorizationSource.Discovered, ApiBindingId = binding.Id }
+            });
+            await _context.SaveChangesAsync();
+
+            _openAIServiceMock.Setup(o => o.GetAllModels(It.IsAny<LLMChannel>(), It.IsAny<LLMApiBinding>()))
+                .ReturnsAsync(new List<string> { "new-model", "existing-manual", "restored-discovered" });
+
+            // Act
+            await _helper.RefreshAllChannel();
+
+            // Assert: 新模型以 Discovered 行加入；既有行不重复；软删行恢复；目录里没有的行不被软删
+            var rows = await _context.ChannelsWithModel.Where(m => m.LLMChannelId == 40).ToListAsync();
+            Assert.Single(rows.Where(r => r.ModelName == "new-model"));
+            Assert.Single(rows.Where(r => r.ModelName == "existing-manual"));
+            Assert.False(rows.Single(r => r.ModelName == "restored-discovered").IsDeleted);
+            Assert.False(rows.Single(r => r.ModelName == "catalog-dropped").IsDeleted);
+        }
+
+        [Fact]
+        public async Task PromoteBinding_SwitchesDefaultAndMirrorsChannel() {
+            // Arrange
+            var defaultBinding = await SeedChannelWithDefaultBinding(41, "Multi Prot", LLMProvider.OpenAI, gateway: "http://a", endpoint: "http://a");
+            var responsesBinding = new LLMApiBinding {
+                LLMChannelId = 41,
+                Endpoint = "http://b",
+                Protocol = LlmProtocol.OpenAIResponses,
+                AuthProfile = LlmAuthProfile.Bearer,
+                IsDefault = false
+            };
+            await _context.LLMApiBindings.AddAsync(responsesBinding);
+            await _context.SaveChangesAsync();
+
+            // Act
+            var ok = await _helper.PromoteBinding(41, responsesBinding.Id);
+
+            // Assert
+            Assert.True(ok);
+            Assert.True((await _context.LLMApiBindings.FindAsync(responsesBinding.Id))!.IsDefault);
+            Assert.False((await _context.LLMApiBindings.FindAsync(defaultBinding.Id))!.IsDefault);
+            var channel = await _context.LLMChannels.FindAsync(41);
+            Assert.Equal("http://b", channel.Gateway);
+            Assert.Equal(LLMProvider.ResponsesAPI, channel.Provider);
+        }
+
+        [Fact]
+        public async Task GetModelRowsByChannelId_QualifiesDuplicateNamesAndRemoveModelRowKeepsTheOther() {
+            // Arrange
+            var bindingA = await SeedChannelWithDefaultBinding(42, "Multi Model", LLMProvider.OpenAI, gateway: "http://a", endpoint: "http://a");
+            var bindingB = new LLMApiBinding { LLMChannelId = 42, Endpoint = "http://b", Protocol = LlmProtocol.OpenAIResponses, AuthProfile = LlmAuthProfile.Bearer, IsDefault = false };
+            await _context.LLMApiBindings.AddAsync(bindingB);
+            await _context.SaveChangesAsync();
+
+            var rowA = new ChannelWithModel { LLMChannelId = 42, ModelName = "shared-model", ApiBindingId = bindingA.Id };
+            var rowB = new ChannelWithModel { LLMChannelId = 42, ModelName = "shared-model", ApiBindingId = bindingB.Id };
+            var rowC = new ChannelWithModel { LLMChannelId = 42, ModelName = "single-model", ApiBindingId = bindingA.Id };
+            await _context.ChannelsWithModel.AddRangeAsync(rowA, rowB, rowC);
+            await _context.SaveChangesAsync();
+
+            // Act
+            var rows = await _helper.GetModelRowsByChannelId(42);
+
+            // Assert: 重名行带协议标注，唯一行保持原名
+            Assert.Equal(3, rows.Count);
+            Assert.Equal(2, rows.Count(r => r.Display.Contains("shared-model [")));
+            Assert.Contains(rows, r => r.Display == "single-model");
+
+            // 按行 Id 删除只影响目标行
+            var rowToRemove = rows.First(r => r.RowId == rowB.Id);
+            Assert.True(await _helper.RemoveModelRow(rowToRemove.RowId));
+            var remaining = await _context.ChannelsWithModel.Where(m => m.LLMChannelId == 42).ToListAsync();
+            Assert.Equal(2, remaining.Count);
+            Assert.DoesNotContain(remaining, r => r.Id == rowB.Id);
+            Assert.Contains(remaining, r => r.Id == rowA.Id);
+        }
+
+        [Fact]
+        public async Task GetBindings_ReturnsChannelBindingsOrderedById() {
+            await SeedChannelWithDefaultBinding(43, "Bindings", LLMProvider.OpenAI, gateway: "http://a", endpoint: "http://a");
+            await _context.LLMApiBindings.AddAsync(new LLMApiBinding { LLMChannelId = 43, Endpoint = "http://b", Protocol = LlmProtocol.OpenAIResponses, AuthProfile = LlmAuthProfile.Bearer });
+            await _context.SaveChangesAsync();
+
+            var bindings = await _helper.GetBindings(43);
+
+            Assert.Equal(2, bindings.Count);
+            Assert.True(bindings[0].Id < bindings[1].Id);
         }
 
         [Fact]

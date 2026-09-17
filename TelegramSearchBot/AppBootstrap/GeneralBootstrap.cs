@@ -262,6 +262,14 @@ namespace TelegramSearchBot.AppBootstrap {
                 Log.Warning(ex, "Failed to export tool definitions to Redis. Agent processes may have limited tools.");
             }
 
+            // 预加载并记录预设目录来源/版本（providers.json 覆盖或内置）
+            try {
+                Log.Information("LLM 预设目录已加载: {Source} (generatedAt={GeneratedAt}, presets={Count})",
+                    LlmProviderCatalog.Source, LlmProviderCatalog.GeneratedAt, LlmProviderCatalog.Presets.Count);
+            } catch (Exception ex) {
+                Log.Error(ex, "LLM 预设目录加载失败，预制渠道将不可用");
+            }
+
             // 启动Host，SchedulerService作为HostedService会自动启动
             await host.StartAsync();
             Log.Information("Host已启动，定时任务调度器已作为后台服务启动");

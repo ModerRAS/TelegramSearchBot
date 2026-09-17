@@ -37,5 +37,20 @@ namespace TelegramSearchBot.Interface.Manage {
 
         /// <summary>把模型行改挂到指定 binding，并标记为模型级协议覆盖；成功返回 true。</summary>
         Task<bool> AssignModelBinding(int channelId, string modelName, int bindingId);
+
+        /// <summary>渠道下的全部协议绑定（按 Id 升序）。</summary>
+        Task<List<LLMApiBinding>> GetBindings(int channelId);
+
+        /// <summary>把指定 binding 设为渠道默认（其余降级），并镜像 channel.Gateway/Provider；成功返回 true。</summary>
+        Task<bool> PromoteBinding(int channelId, int bindingId);
+
+        /// <summary>
+        /// 渠道下的模型行（按行 Id），展示格式与 GetModelsByChannelId 一致（多 binding 时带 [channel/binding/protocol]）；
+        /// 移除模型按行 Id 删除，避免多 binding 下删错行。
+        /// </summary>
+        Task<List<(long RowId, string ModelName, string Display)>> GetModelRowsByChannelId(long channelId);
+
+        /// <summary>按行 Id 删除模型行；行不存在返回 false。</summary>
+        Task<bool> RemoveModelRow(long rowId);
     }
 }

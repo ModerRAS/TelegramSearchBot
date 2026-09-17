@@ -1,0 +1,125 @@
+{
+  "generatedAt": "2026-09-16T00:00:00Z",
+  "presets": [
+    {
+      "id": "anthropic",
+      "displayName": "Anthropic 官方",
+      "provider": "Anthropic",
+      "defaultGateway": "https://api.anthropic.com",
+      "defaultModels": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+      "requiresApiKey": true
+    },
+    {
+      "id": "openai",
+      "displayName": "OpenAI 官方 (Chat Completions)",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.openai.com/v1",
+      "defaultModels": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"],
+      "requiresApiKey": true
+    },
+    {
+      "id": "openai-responses",
+      "displayName": "OpenAI 官方 (Responses API)",
+      "provider": "ResponsesAPI",
+      "defaultGateway": "https://api.openai.com/v1",
+      "defaultModels": ["gpt-6-astra", "gpt-5.6-sol"],
+      "requiresApiKey": true
+    },
+    {
+      "id": "gemini",
+      "displayName": "Google Gemini",
+      "provider": "Gemini",
+      "defaultGateway": "https://generativelanguage.googleapis.com",
+      "defaultModels": ["gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-3.5-flash"],
+      "requiresApiKey": true
+    },
+    {
+      "id": "minimax",
+      "displayName": "MiniMax",
+      "provider": "MiniMax",
+      "defaultGateway": "https://api.minimaxi.com/v1",
+      "defaultModels": ["MiniMax-M3", "MiniMax-M2.7"],
+      "requiresApiKey": true
+    },
+    {
+      "id": "ollama",
+      "displayName": "本地 Ollama",
+      "provider": "Ollama",
+      "defaultGateway": "http://localhost:11434",
+      "defaultModels": [],
+      "requiresApiKey": false,
+      "notes": "本地服务无需 API Key；模型通过 `添加模型` 手动添加或自动发现。"
+    },
+    {
+      "id": "lmstudio",
+      "displayName": "本地 LM Studio",
+      "provider": "LMStudio",
+      "defaultGateway": "http://localhost:1234/v1",
+      "defaultModels": [],
+      "requiresApiKey": false,
+      "notes": "本地服务无需 API Key；模型通过 `添加模型` 手动添加。"
+    },
+    {
+      "id": "deepseek",
+      "displayName": "DeepSeek (OpenAI 兼容)",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.deepseek.com/v1",
+      "defaultModels": ["deepseek-flash", "deepseek-v4-pro"],
+      "requiresApiKey": true
+    },
+    {
+      "id": "moonshot",
+      "displayName": "Moonshot Kimi (OpenAI 兼容)",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.moonshot.cn/v1",
+      "defaultModels": ["kimi-k3", "kimi-k2.7-code"],
+      "requiresApiKey": true
+    },
+    {
+      "id": "opencode-zen",
+      "displayName": "OpenCode Zen (官方订阅目录)",
+      "provider": "OpenAI",
+      "defaultGateway": "https://opencode.ai/zen/v1",
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "多协议网关（claude-*→Anthropic、gpt-*/grok-*→Responses、gemini-*→Google、其余→Chat Completions）；按量计费，目录不自动创建，授权模型请用 `添加模型`。",
+      "bindings": [
+        { "id": "anthropic", "protocol": "AnthropicMessages", "authProfile": "AnthropicApiKey", "endpointSuffix": "/v1" },
+        { "id": "responses", "protocol": "OpenAIResponses", "authProfile": "Bearer", "endpointSuffix": "/v1" },
+        { "id": "google", "protocol": "Gemini", "authProfile": "Bearer", "endpointSuffix": "/v1" }
+      ],
+      "modelBindingRules": [
+        { "bindingId": "anthropic", "prefixes": ["claude-"] },
+        { "bindingId": "responses", "prefixes": ["gpt-", "grok-", "o3", "o4"] },
+        { "bindingId": "google", "prefixes": ["gemini-"] }
+      ]
+    },
+    {
+      "id": "opencode-go",
+      "displayName": "OpenCode Go (订阅网关)",
+      "provider": "OpenAI",
+      "defaultGateway": "https://opencode.ai/zen/go/v1",
+      "defaultModels": [
+        "grok-4.6", "gpt-5.6-luna",
+        "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1",
+        "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
+        "longcat-2.0",
+        "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp",
+        "minimax-m3", "minimax-m2.7",
+        "mimo-v2.5", "mimo-v2.5-pro",
+        "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
+        "muse-spark-1.3-contributor", "muse-spark-1.2-contributor",
+        "hy4-preview", "hy3"
+      ],
+      "requiresApiKey": true,
+      "notes": "OpenAI 兼容订阅网关（/responses + /chat/completions），自动携带 x-opencode-session；订阅覆盖目录模型，刷新会同步目录。自建网关请用 `新建渠道`。",
+      "bindings": [
+        { "id": "responses", "protocol": "OpenAIResponses", "authProfile": "Bearer", "endpointSuffix": "/v1" }
+      ],
+      "modelBindingRules": [
+        { "bindingId": "responses", "prefixes": ["grok-", "gpt-"] }
+      ],
+      "catalogIsEntitlement": true
+    }
+  ]
+}
