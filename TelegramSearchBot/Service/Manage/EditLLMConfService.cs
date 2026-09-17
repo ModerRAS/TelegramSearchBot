@@ -61,6 +61,10 @@ namespace TelegramSearchBot.Service.Manage {
                 { LLMConfState.SettingAltPhotoModel.GetDescription(), HandleSettingAltPhotoModelAsync },
                 { LLMConfState.EditingSelectChannel.GetDescription(), HandleEditingSelectChannelAsync },
                 { LLMConfState.EditingSelectField.GetDescription(), HandleEditingSelectFieldAsync },
+                { LLMConfState.EditingSelectBinding.GetDescription(), HandleEditingSelectBindingAsync },
+                { LLMConfState.EditingBindingEndpoint.GetDescription(), HandleEditingBindingEndpointAsync },
+                { LLMConfState.EditingBindingProtocol.GetDescription(), HandleEditingBindingProtocolAsync },
+                { LLMConfState.EditingBindingAuth.GetDescription(), HandleEditingBindingAuthAsync },
                 { LLMConfState.AddingModelSelectChannel.GetDescription(), HandleAddingModelSelectChannelAsync },
                 { LLMConfState.AddingModelInput.GetDescription(), HandleAddingModelInputAsync },
                 { LLMConfState.RemovingModelSelectChannel.GetDescription(), HandleRemovingModelSelectChannelAsync },
@@ -341,13 +345,17 @@ namespace TelegramSearchBot.Service.Manage {
 
             await redis.SetDataAsync(channelId.ToString());
             await redis.SetStateAsync(LLMConfState.EditingSelectField.GetDescription());
-            return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key\n5. 最大并行数量 ({channel.Parallel})\n6. 优先级 ({channel.Priority})");
+            return (true, $"请选择要编辑的字段：\n1. 名称 ({channel.Name})\n2. 地址 ({channel.Gateway})\n3. 类型 ({channel.Provider})\n4. API Key\n5. 最大并行数量 ({channel.Parallel})\n6. 优先级 ({channel.Priority})\n7. 协议绑定");
         }
 
         private async Task<(bool, string)> HandleEditingSelectFieldAsync(EditLLMConfRedisHelper redis, string command) {
             var value = await redis.GetDataAsync();
             var editChannelId = int.Parse(value);
             await redis.SetDataAsync($"{editChannelId}|{command}");
+
+            if (command == "7") {
+                return await ShowBindingSelectionAsync(redis, editChannelId);
+            }
 
             if (command == "3") {
                 await redis.SetStateAsync(LLMConfState.EditingInputValue.GetDescription());
@@ -367,6 +375,135 @@ namespace TelegramSearchBot.Service.Manage {
                 await redis.SetStateAsync(LLMConfState.EditingInputValue.GetDescription());
                 return (true, "请输入新的值：");
             }
+        }
+
+        /// <summary>列出渠道的协议绑定并询问操作（输入编号设为默认，0 新增）。</summary>
+        private async Task<(bool, string)> ShowBindingSelectionAsync(EditLLMConfRedisHelper redis, int channelId) {
+            var bindings = await Helper.GetBindings(channelId);
+            if (bindings.Count == 0) {
+                await redis.DeleteKeysAsync();
+                return (true, "该渠道没有任何协议绑定");
+            }
+
+            var sb = new StringBuilder($"渠道 {channelId} 的协议绑定：\n");
+            foreach (var binding in bindings) {
+                var marker = binding.IsDefault ? " [默认]" : string.Empty;
+                sb.AppendLine($"{binding.Id}. {binding.Endpoint} ({binding.Protocol}/{binding.AuthProfile}){marker}");
+            }
+            sb.Append("请输入要设为默认的绑定ID，或发送 0 新增绑定：");
+
+            await redis.SetStateAsync(LLMConfState.EditingSelectBinding.GetDescription());
+            return (true, sb.ToString());
+        }
+
+        private async Task<(bool, string)> HandleEditingSelectBindingAsync(EditLLMConfRedisHelper redis, string command) {
+            var data = await redis.GetDataAsync();
+            var parts = data.Split('|');
+            if (parts.Length < 2 || !int.TryParse(parts[0], out var channelId)) {
+                await redis.DeleteKeysAsync();
+                return (true, "内部错误：渠道状态丢失");
+            }
+
+            var bindings = await Helper.GetBindings(channelId);
+            var cmd = command.Trim();
+
+            if (cmd == "0" || cmd.Equals("新增", StringComparison.OrdinalIgnoreCase)) {
+                await redis.SetDataAsync($"{channelId}|new");
+                await redis.SetStateAsync(LLMConfState.EditingBindingEndpoint.GetDescription());
+                return (true, "请输入新绑定的端点地址（例如 https://opencode.ai/zen/v1）：");
+            }
+
+            if (!int.TryParse(cmd, out var bindingId) || bindings.All(b => b.Id != bindingId)) {
+                return (false, "请输入列表中的绑定ID，或发送 0 新增绑定");
+            }
+
+            if (!await Helper.PromoteBinding(channelId, bindingId)) {
+                await redis.DeleteKeysAsync();
+                return (true, "设置为默认绑定失败");
+            }
+
+            await redis.DeleteKeysAsync();
+            return (true, $"已将 binding {bindingId} 设为默认绑定（渠道地址与类型已同步）。");
+        }
+
+        private async Task<(bool, string)> HandleEditingBindingEndpointAsync(EditLLMConfRedisHelper redis, string command) {
+            var data = await redis.GetDataAsync();
+            var parts = data.Split('|');
+            if (parts.Length < 2 || !int.TryParse(parts[0], out var channelId)) {
+                await redis.DeleteKeysAsync();
+                return (true, "内部错误：渠道状态丢失");
+            }
+
+            var endpoint = command.Trim();
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ||
+                ( uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps )) {
+                return (false, "请输入有效的端点地址（以 http:// 或 https:// 开头）");
+            }
+
+            await redis.SetDataAsync($"{channelId}|{endpoint}");
+            await redis.SetStateAsync(LLMConfState.EditingBindingProtocol.GetDescription());
+            return (true, FormatProtocolOptions());
+        }
+
+        private async Task<(bool, string)> HandleEditingBindingProtocolAsync(EditLLMConfRedisHelper redis, string command) {
+            var data = await redis.GetDataAsync();
+            var parts = data.Split('|');
+            if (parts.Length < 2 || !int.TryParse(parts[0], out var channelId)) {
+                await redis.DeleteKeysAsync();
+                return (true, "内部错误：渠道状态丢失");
+            }
+
+            var protocols = Enum.GetValues<LlmProtocol>();
+            if (!int.TryParse(command.Trim(), out var index) || index < 1 || index > protocols.Length) {
+                return (false, $"请输入 1 到 {protocols.Length} 之间的数字");
+            }
+
+            await redis.SetDataAsync($"{channelId}|{parts[1]}|{protocols[index - 1]}");
+            await redis.SetStateAsync(LLMConfState.EditingBindingAuth.GetDescription());
+            return (true, FormatAuthOptions());
+        }
+
+        private async Task<(bool, string)> HandleEditingBindingAuthAsync(EditLLMConfRedisHelper redis, string command) {
+            var data = await redis.GetDataAsync();
+            var parts = data.Split('|', 3);
+            if (parts.Length < 3 || !int.TryParse(parts[0], out var channelId)) {
+                await redis.DeleteKeysAsync();
+                return (true, "内部错误：绑定状态丢失");
+            }
+
+            var authProfiles = Enum.GetValues<LlmAuthProfile>();
+            if (!int.TryParse(command.Trim(), out var index) || index < 1 || index > authProfiles.Length) {
+                return (false, $"请输入 1 到 {authProfiles.Length} 之间的数字");
+            }
+
+            if (!Enum.TryParse<LlmProtocol>(parts[2], out var protocol)) {
+                await redis.DeleteKeysAsync();
+                return (true, "内部错误：协议解析失败");
+            }
+
+            var bindingId = await Helper.EnsureBinding(channelId, parts[1], protocol, authProfiles[index - 1]);
+            await redis.DeleteKeysAsync();
+            return bindingId > 0
+                ? (true, $"绑定创建成功（ID: {bindingId}，{protocol}/{authProfiles[index - 1]}）。可用 `编辑渠道` 第 7 项把它设为默认。")
+                : (true, "绑定创建失败");
+        }
+
+        private static string FormatProtocolOptions() {
+            var protocols = Enum.GetValues<LlmProtocol>();
+            var sb = new StringBuilder("请选择线协议：\n");
+            for (var i = 0; i < protocols.Length; i++) {
+                sb.AppendLine($"{i + 1}. {protocols[i]}");
+            }
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string FormatAuthOptions() {
+            var authProfiles = Enum.GetValues<LlmAuthProfile>();
+            var sb = new StringBuilder("请选择认证方式：\n");
+            for (var i = 0; i < authProfiles.Length; i++) {
+                sb.AppendLine($"{i + 1}. {authProfiles[i]}");
+            }
+            return sb.ToString().TrimEnd();
         }
 
         private async Task<(bool, string)> HandleAddingModelSelectChannelAsync(EditLLMConfRedisHelper redis, string command) {
@@ -404,23 +541,20 @@ namespace TelegramSearchBot.Service.Manage {
                 return (true, "找不到指定的渠道");
             }
 
-            // 获取该渠道下的所有模型
-            var models = await DataContext.ChannelsWithModel
-                .Where(m => m.LLMChannelId == removeModelChannelId && !m.IsDeleted)
-                .Select(m => m.ModelName)
-                .ToListAsync();
+            // 获取该渠道下的所有模型行（多 binding 时带协议标注；按行 Id 删除避免误删同名行）
+            var modelRows = await Helper.GetModelRowsByChannelId(removeModelChannelId);
 
-            if (models.Count == 0) {
+            if (modelRows.Count == 0) {
                 return (true, "该渠道下没有可移除的模型");
             }
 
             var sb = new StringBuilder();
             sb.AppendLine("请选择要移除的模型：");
-            for (int i = 0; i < models.Count; i++) {
-                sb.AppendLine($"{i + 1}. {models[i]}");
+            for (int i = 0; i < modelRows.Count; i++) {
+                sb.AppendLine($"{i + 1}. {modelRows[i].Display}");
             }
 
-            await redis.SetDataAsync($"{removeModelChannelId}|{string.Join(",", models)}");
+            await redis.SetDataAsync($"{removeModelChannelId}|{string.Join(",", modelRows.Select(r => r.RowId))}");
             await redis.SetStateAsync(LLMConfState.RemovingModelSelect.GetDescription());
             return (true, sb.ToString());
         }
@@ -433,23 +567,21 @@ namespace TelegramSearchBot.Service.Manage {
                 return (false, "内部错误：模型数据格式不正确");
             }
 
-            var removeChannelId = int.Parse(parts[0]);
-            var modelList = parts[1].Split(',');
+            var rowIds = parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-            if (modelList.Length == 0 || ( modelList.Length == 1 && string.IsNullOrEmpty(modelList[0]) )) {
+            if (rowIds.Length == 0) {
                 return (true, "该渠道下没有可移除的模型");
             }
 
-            if (!int.TryParse(command, out var modelIndex) || modelIndex < 1 || modelIndex > modelList.Length) {
+            if (!int.TryParse(command, out var modelIndex) || modelIndex < 1 || modelIndex > rowIds.Length) {
                 return (true, "请输入有效的模型序号");
             }
 
-            if (modelIndex - 1 < 0 || modelIndex - 1 >= modelList.Length) {
-                return (true, "内部错误：无效的模型序号");
+            if (!long.TryParse(rowIds[modelIndex - 1], out var rowId)) {
+                return (true, "内部错误：模型行ID无效");
             }
 
-            var modelName = modelList[modelIndex - 1];
-            var removeResult = await Helper.RemoveModelFromChannel(removeChannelId, modelName);
+            var removeResult = await Helper.RemoveModelRow(rowId);
 
             // 清理状态
             await redis.DeleteKeysAsync();

@@ -255,61 +255,43 @@ namespace TelegramSearchBot.Test.Manage {
                 ApiKey = "test-key",
                 Provider = LLMProvider.OpenAI
             };
-            await _context.LLMChannels.AddAsync(channel);
-            await _context.ChannelsWithModel.AddAsync(new ChannelWithModel {
-                LLMChannelId = 1,
-                ModelName = "model1"
-            });
-            // Add model2 to the in-memory database
-            await _context.ChannelsWithModel.AddAsync(new ChannelWithModel {
-                LLMChannelId = 1,
-                ModelName = "model2"
-            });
-            await _context.SaveChangesAsync();
 
             var stateKey = $"llmconf:{chatId}:state";
             var dataKey = $"llmconf:{chatId}:data";
 
-            // Setup state transitions
+            // 1. initial state, 2. state after "移除模型", 3. state after channel input, 4. row id payload
             _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
-                .ReturnsAsync(RedisValue.Null)  // 1. Initial state before "移除模型"
-                .ReturnsAsync("removing_model_select_channel") // 2. State after "移除模型" command
-                .ReturnsAsync("removing_model_select") // 3. State after channel ID input
-                .ReturnsAsync("1|model1,model2"); // 4. Data read by HandleRemovingModelSelectAsync
+                .ReturnsAsync(RedisValue.Null)
+                .ReturnsAsync("removing_model_select_channel")
+                .ReturnsAsync("removing_model_select")
+                .ReturnsAsync("1|101,102");
 
-            // Setup helper mock to return channel
-            helperMock.Setup(h => h.GetChannelById(1))
-                .ReturnsAsync(channel);
-
-            // Setup helper mock to return a channel in GetAllChannels, which should trigger GetModelsByChannelId in service (but service doesn't call helper here)
-            // This setup is still needed for the initial "移除模型" command which lists channels.
-            helperMock.Setup(h => h.GetAllChannels())
-                .ReturnsAsync(new List<LLMChannel> { channel });
+            helperMock.Setup(h => h.GetChannelById(1)).ReturnsAsync(channel);
+            helperMock.Setup(h => h.GetAllChannels()).ReturnsAsync(new List<LLMChannel> { channel });
+            helperMock.Setup(h => h.GetModelRowsByChannelId(1)).ReturnsAsync(new List<(long, string, string)> {
+                (101, "model1", "model1"),
+                (102, "model2", "model2")
+            });
+            helperMock.Setup(h => h.RemoveModelRow(It.IsAny<long>())).ReturnsAsync(true);
 
             // Act & Assert
             var result1 = await _service.ExecuteAsync("移除模型", chatId);
             Assert.True(result1.Item1);
             Assert.Contains("请选择要移除模型的渠道ID：", result1.Item2);
 
-            // Verify the in-memory database contains the expected models
-            var modelsInDb = await _context.ChannelsWithModel.Where(m => m.LLMChannelId == 1).ToListAsync();
-            Assert.NotNull(modelsInDb);
-            Assert.Equal(2, modelsInDb.Count);
-            Assert.Contains(modelsInDb, m => m.ModelName == "model1");
-            Assert.Contains(modelsInDb, m => m.ModelName == "model2");
-
-            var result2 = await _service.ExecuteAsync("1", chatId); // User inputs channel ID
+            var result2 = await _service.ExecuteAsync("1", chatId);
             Assert.True(result2.Item1);
-            // Verify the response lists models
             Assert.Contains("请选择要移除的模型：", result2.Item2);
             Assert.Contains("1. model1", result2.Item2);
+            Assert.Contains("2. model2", result2.Item2);
 
-            var result3 = await _service.ExecuteAsync("1", chatId); // User inputs model index (1 for model1)
+            var result3 = await _service.ExecuteAsync("1", chatId); // 选择第一行
             Assert.True(result3.Item1);
             Assert.Equal("模型移除成功", result3.Item2);
 
-            // Verify model was removed by helper (as service calls helper)
-            helperMock.Verify(h => h.RemoveModelFromChannel(1, "model1"), Times.Once);
+            // 按行 Id 删除（不是按模型名，多 binding 下不会删错行）
+            helperMock.Verify(h => h.RemoveModelRow(101), Times.Once);
+            helperMock.Verify(h => h.RemoveModelRow(It.IsAny<long>()), Times.Once);
 
             // Verify Redis keys are deleted
             _dbMock.Verify(d => d.KeyDeleteAsync(stateKey, It.IsAny<CommandFlags>()), Times.Once);
@@ -552,6 +534,84 @@ namespace TelegramSearchBot.Test.Manage {
             helperMock.Verify(h => h.AssignModelBinding(7, "gpt-5.6-luna", 100), Times.Once);
             helperMock.Verify(h => h.AssignModelBinding(7, "glm-5.3", It.IsAny<int>()), Times.Never);
             helperMock.Verify(h => h.AssignModelBinding(7, It.IsAny<string>(), It.IsAny<int>()), Times.Exactly(2));
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_EditChannelBindings_PromotesSelectedBinding() {
+            // Arrange
+            long chatId = 123;
+            var channel = new LLMChannel { Id = 1, Name = "Test Channel", Provider = LLMProvider.OpenAI, Gateway = "http://test.com" };
+            var binding = new LLMApiBinding { Id = 5, LLMChannelId = 1, Endpoint = "http://test.com/v1", Protocol = LlmProtocol.OpenAIResponses, AuthProfile = LlmAuthProfile.Bearer };
+
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)
+                .ReturnsAsync("editing_select_channel")
+                .ReturnsAsync("editing_select_field")
+                .ReturnsAsync("1")
+                .ReturnsAsync("editing_select_binding")
+                .ReturnsAsync("1|7");
+
+            helperMock.Setup(h => h.GetAllChannels()).ReturnsAsync(new List<LLMChannel> { channel });
+            helperMock.Setup(h => h.GetChannelById(1)).ReturnsAsync(channel);
+            helperMock.Setup(h => h.GetBindings(1)).ReturnsAsync(new List<LLMApiBinding> { binding });
+            helperMock.Setup(h => h.PromoteBinding(1, 5)).ReturnsAsync(true);
+
+            // Act
+            var result1 = await _service.ExecuteAsync("编辑渠道", chatId);
+            Assert.True(result1.Item1);
+
+            var result2 = await _service.ExecuteAsync("1", chatId);
+            Assert.Contains("7. 协议绑定", result2.Item2);
+
+            var result3 = await _service.ExecuteAsync("7", chatId);
+            Assert.True(result3.Item1);
+            Assert.Contains("5. http://test.com/v1 (OpenAIResponses/Bearer)", result3.Item2);
+            Assert.Contains("0 新增绑定", result3.Item2);
+
+            var result4 = await _service.ExecuteAsync("5", chatId);
+
+            // Assert
+            Assert.True(result4.Item1);
+            Assert.Contains("设为默认绑定", result4.Item2);
+            helperMock.Verify(h => h.PromoteBinding(1, 5), Times.Once);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_EditChannelBindings_AddsNewBinding() {
+            // Arrange
+            long chatId = 123;
+            var existing = new LLMApiBinding { Id = 3, LLMChannelId = 1, Endpoint = "https://opencode.ai/zen/v1", Protocol = LlmProtocol.OpenAIChat, AuthProfile = LlmAuthProfile.Bearer, IsDefault = true };
+
+            _dbMock.SetupSequence(d => d.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+                .ReturnsAsync("editing_select_field").ReturnsAsync("1")
+                .ReturnsAsync("editing_select_binding").ReturnsAsync("1|7")
+                .ReturnsAsync("editing_binding_endpoint").ReturnsAsync("1|new")
+                .ReturnsAsync("editing_binding_protocol").ReturnsAsync("1|https://opencode.ai/zen/v1")
+                .ReturnsAsync("editing_binding_auth").ReturnsAsync("1|https://opencode.ai/zen/v1|OpenAIResponses");
+
+            helperMock.Setup(h => h.GetBindings(1)).ReturnsAsync(new List<LLMApiBinding> { existing });
+            helperMock.Setup(h => h.EnsureBinding(1, "https://opencode.ai/zen/v1", LlmProtocol.OpenAIResponses, LlmAuthProfile.Bearer)).ReturnsAsync(55);
+
+            // Act
+            var openBindings = await _service.ExecuteAsync("7", chatId);
+            Assert.Contains("3. https://opencode.ai/zen/v1", openBindings.Item2);
+
+            var askEndpoint = await _service.ExecuteAsync("0", chatId);
+            Assert.Contains("请输入新绑定的端点地址", askEndpoint.Item2);
+
+            var askProtocol = await _service.ExecuteAsync("https://opencode.ai/zen/v1", chatId);
+            Assert.Contains("请选择线协议", askProtocol.Item2);
+            Assert.Contains("2. OpenAIResponses", askProtocol.Item2);
+
+            var askAuth = await _service.ExecuteAsync("2", chatId);
+            Assert.Contains("请选择认证方式", askAuth.Item2);
+
+            var created = await _service.ExecuteAsync("1", chatId);
+
+            // Assert
+            Assert.True(created.Item1);
+            Assert.Contains("绑定创建成功（ID: 55", created.Item2);
+            helperMock.Verify(h => h.EnsureBinding(1, "https://opencode.ai/zen/v1", LlmProtocol.OpenAIResponses, LlmAuthProfile.Bearer), Times.Once);
         }
     }
 }

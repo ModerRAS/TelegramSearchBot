@@ -32,6 +32,18 @@ namespace TelegramSearchBot.Model.AI {
         [Description("editing_select_channel")]
         EditingSelectChannel,
 
+        [Description("editing_select_binding")]
+        EditingSelectBinding,
+
+        [Description("editing_binding_endpoint")]
+        EditingBindingEndpoint,
+
+        [Description("editing_binding_protocol")]
+        EditingBindingProtocol,
+
+        [Description("editing_binding_auth")]
+        EditingBindingAuth,
+
         [Description("adding_model_select_channel")]
         AddingModelSelectChannel,
 
