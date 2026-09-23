@@ -613,5 +613,44 @@ namespace TelegramSearchBot.Test.Manage {
             Assert.Contains("绑定创建成功（ID: 55", created.Item2);
             helperMock.Verify(h => h.EnsureBinding(1, "https://opencode.ai/zen/v1", LlmProtocol.OpenAIResponses, LlmAuthProfile.Bearer), Times.Once);
         }
+
+        [Fact]
+        public async Task ExecuteAsync_PresetVertex_ComposesGatewayFromProjectAndLocation() {
+            long chatId = 123;
+            var stateKey = $"llmconf:{chatId}:state";
+            var dataKey = $"llmconf:{chatId}:data";
+            var index = LlmProviderCatalog.Presets.ToList().FindIndex(p => p.Id == "google-vertex") + 1;
+
+            _dbMock.SetupSequence(d => d.StringGetAsync(stateKey, It.IsAny<CommandFlags>()))
+                .ReturnsAsync(RedisValue.Null)
+                .ReturnsAsync("awaiting_preset_selection")
+                .ReturnsAsync("awaiting_preset_project")
+                .ReturnsAsync("awaiting_preset_location")
+                .ReturnsAsync("awaiting_preset_apikey");
+            _dbMock.SetupSequence(d => d.StringGetAsync(dataKey, It.IsAny<CommandFlags>()))
+                .ReturnsAsync("google-vertex")
+                .ReturnsAsync("google-vertex|my-project")
+                .ReturnsAsync("google-vertex|my-project|us-central1");
+            helperMock.Setup(h => h.AddChannel(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<LLMProvider>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ReturnsAsync(9);
+            helperMock.Setup(h => h.AddModelWithChannel(It.IsAny<int>(), It.IsAny<List<string>>()))
+                .ReturnsAsync(true);
+
+            Assert.Contains("Vertex", (await _service.ExecuteAsync("预制渠道", chatId)).Item2);
+            Assert.Contains("project", (await _service.ExecuteAsync(index.ToString(), chatId)).Item2);
+            Assert.Contains("location", (await _service.ExecuteAsync("my-project", chatId)).Item2);
+            Assert.Contains("API Key", (await _service.ExecuteAsync("us-central1", chatId)).Item2);
+            var created = await _service.ExecuteAsync("vertex-key", chatId);
+
+            Assert.True(created.Item1);
+            Assert.Contains("渠道创建成功", created.Item2);
+            helperMock.Verify(h => h.AddChannel(
+                It.IsAny<string>(),
+                "https://us-central1-aiplatform.googleapis.com/v1/projects/my-project/locations/us-central1",
+                "vertex-key",
+                LLMProvider.Vertex,
+                1,
+                0), Times.Once);
+        }
     }
 }
