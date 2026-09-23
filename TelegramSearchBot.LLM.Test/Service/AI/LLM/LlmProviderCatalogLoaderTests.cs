@@ -22,7 +22,7 @@ namespace TelegramSearchBot.LLM.Test.Service.AI.LLM {
 
             Assert.Equal("builtin", doc.Source);
             Assert.Contains("不存在", doc.Warning);
-            Assert.Equal(11, doc.Presets.Count);
+            Assert.Equal(43, doc.Presets.Count);
             Assert.NotNull(doc.GeneratedAt);
             Assert.NotNull(doc.Presets.FirstOrDefault(p => p.Id == "opencode-go"));
         }

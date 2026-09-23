@@ -369,3 +369,6 @@ external/moder-update/**/obj/
 
 # pi agent session state
 .pi/
+
+# Local requirement drafts (requirements / design / tasks). Keep on disk, do not commit.
+/specs/

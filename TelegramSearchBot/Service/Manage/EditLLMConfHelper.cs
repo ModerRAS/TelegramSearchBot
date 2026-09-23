@@ -269,6 +269,15 @@ namespace TelegramSearchBot.Service.Manage {
             }
         }
 
+        private async Task<int?> ResolveManualModelBindingAsync(int channelId, string modelName, int? defaultBindingId) {
+            var channel = await DataContext.LLMChannels.FindAsync(channelId);
+            var preset = LlmProviderCatalog.FindForGateway(channel?.Gateway);
+            if (preset == null || channel == null) {
+                return defaultBindingId;
+            }
+            return await ResolvePresetBindingAsync(channelId, channel.Gateway, preset, modelName) ?? defaultBindingId;
+        }
+
         /// <summary>按预设的模型前缀规则解析并补建 binding；未命中规则返回 null（用渠道默认 binding）。</summary>
         private async Task<int?> ResolvePresetBindingAsync(int channelId, string? gateway, LlmProviderPreset preset, string modelName) {
             var ruleBindingId = preset.ModelBindingRules.ResolveBindingId(modelName);
@@ -427,7 +436,7 @@ namespace TelegramSearchBot.Service.Manage {
                                 LLMChannelId = channelId,
                                 ModelName = modelName,
                                 IsDeleted = false,
-                                ApiBindingId = defaultBinding?.Id
+                                ApiBindingId = await ResolveManualModelBindingAsync(channelId, modelName, defaultBinding?.Id)
                             });
                         }
                     }
@@ -452,7 +461,7 @@ namespace TelegramSearchBot.Service.Manage {
                                 LLMChannelId = channelId,
                                 ModelName = modelName,
                                 IsDeleted = false,
-                                ApiBindingId = defaultBinding?.Id
+                                ApiBindingId = await ResolveManualModelBindingAsync(channelId, modelName, defaultBinding?.Id)
                             });
                         }
                     }
@@ -877,6 +886,11 @@ namespace TelegramSearchBot.Service.Manage {
                 LLMProvider.LMStudio => (LlmProtocol.OpenAIChat, LlmAuthProfile.Bearer),
                 LLMProvider.Anthropic => (LlmProtocol.AnthropicMessages, LlmAuthProfile.AnthropicApiKey),
                 LLMProvider.ResponsesAPI => (LlmProtocol.OpenAIResponses, LlmAuthProfile.Bearer),
+                LLMProvider.Mistral => (LlmProtocol.MistralConversations, LlmAuthProfile.Bearer),
+                LLMProvider.AzureOpenAI => (LlmProtocol.AzureOpenAIResponses, LlmAuthProfile.Bearer),
+                LLMProvider.Vertex => (LlmProtocol.GoogleVertex, LlmAuthProfile.Bearer),
+                LLMProvider.Bedrock => (LlmProtocol.BedrockConverse, LlmAuthProfile.Bearer),
+                LLMProvider.Radius => (LlmProtocol.PiMessages, LlmAuthProfile.Bearer),
                 _ => (LlmProtocol.OpenAIChat, LlmAuthProfile.Bearer)
             };
         }
@@ -891,6 +905,11 @@ namespace TelegramSearchBot.Service.Manage {
                 LlmProtocol.AnthropicMessages => LLMProvider.Anthropic,
                 LlmProtocol.Ollama => LLMProvider.Ollama,
                 LlmProtocol.Gemini => LLMProvider.Gemini,
+                LlmProtocol.MistralConversations => LLMProvider.Mistral,
+                LlmProtocol.AzureOpenAIResponses => LLMProvider.AzureOpenAI,
+                LlmProtocol.GoogleVertex => LLMProvider.Vertex,
+                LlmProtocol.BedrockConverse => LLMProvider.Bedrock,
+                LlmProtocol.PiMessages => LLMProvider.Radius,
                 _ => LLMProvider.OpenAI
             };
         }

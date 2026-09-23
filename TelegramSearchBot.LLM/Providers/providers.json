@@ -1,12 +1,16 @@
 {
-  "generatedAt": "2026-09-16T00:00:00Z",
+  "generatedAt": "2026-09-23T00:00:00Z",
   "presets": [
     {
       "id": "anthropic",
       "displayName": "Anthropic 官方",
       "provider": "Anthropic",
       "defaultGateway": "https://api.anthropic.com",
-      "defaultModels": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+      "defaultModels": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5-20251001"
+      ],
       "requiresApiKey": true
     },
     {
@@ -14,7 +18,11 @@
       "displayName": "OpenAI 官方 (Chat Completions)",
       "provider": "OpenAI",
       "defaultGateway": "https://api.openai.com/v1",
-      "defaultModels": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"],
+      "defaultModels": [
+        "gpt-6-astra",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra"
+      ],
       "requiresApiKey": true
     },
     {
@@ -22,7 +30,10 @@
       "displayName": "OpenAI 官方 (Responses API)",
       "provider": "ResponsesAPI",
       "defaultGateway": "https://api.openai.com/v1",
-      "defaultModels": ["gpt-6-astra", "gpt-5.6-sol"],
+      "defaultModels": [
+        "gpt-6-astra",
+        "gpt-5.6-sol"
+      ],
       "requiresApiKey": true
     },
     {
@@ -30,7 +41,11 @@
       "displayName": "Google Gemini",
       "provider": "Gemini",
       "defaultGateway": "https://generativelanguage.googleapis.com",
-      "defaultModels": ["gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-3.5-flash"],
+      "defaultModels": [
+        "gemini-3.8-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3.5-flash"
+      ],
       "requiresApiKey": true
     },
     {
@@ -38,7 +53,10 @@
       "displayName": "MiniMax",
       "provider": "MiniMax",
       "defaultGateway": "https://api.minimaxi.com/v1",
-      "defaultModels": ["MiniMax-M3", "MiniMax-M2.7"],
+      "defaultModels": [
+        "MiniMax-M3",
+        "MiniMax-M2.7"
+      ],
       "requiresApiKey": true
     },
     {
@@ -64,7 +82,10 @@
       "displayName": "DeepSeek (OpenAI 兼容)",
       "provider": "OpenAI",
       "defaultGateway": "https://api.deepseek.com/v1",
-      "defaultModels": ["deepseek-flash", "deepseek-v4-pro"],
+      "defaultModels": [
+        "deepseek-flash",
+        "deepseek-v4-pro"
+      ],
       "requiresApiKey": true
     },
     {
@@ -72,7 +93,10 @@
       "displayName": "Moonshot Kimi (OpenAI 兼容)",
       "provider": "OpenAI",
       "defaultGateway": "https://api.moonshot.cn/v1",
-      "defaultModels": ["kimi-k3", "kimi-k2.7-code"],
+      "defaultModels": [
+        "kimi-k3",
+        "kimi-k2.7-code"
+      ],
       "requiresApiKey": true
     },
     {
@@ -84,14 +108,47 @@
       "requiresApiKey": true,
       "notes": "多协议网关（claude-*→Anthropic、gpt-*/grok-*→Responses、gemini-*→Google、其余→Chat Completions）；按量计费，目录不自动创建，授权模型请用 `添加模型`。",
       "bindings": [
-        { "id": "anthropic", "protocol": "AnthropicMessages", "authProfile": "AnthropicApiKey", "endpointSuffix": "/v1" },
-        { "id": "responses", "protocol": "OpenAIResponses", "authProfile": "Bearer", "endpointSuffix": "/v1" },
-        { "id": "google", "protocol": "Gemini", "authProfile": "Bearer", "endpointSuffix": "/v1" }
+        {
+          "id": "anthropic",
+          "protocol": "AnthropicMessages",
+          "authProfile": "AnthropicApiKey",
+          "endpointSuffix": "/v1"
+        },
+        {
+          "id": "responses",
+          "protocol": "OpenAIResponses",
+          "authProfile": "Bearer",
+          "endpointSuffix": "/v1"
+        },
+        {
+          "id": "google",
+          "protocol": "Gemini",
+          "authProfile": "Bearer",
+          "endpointSuffix": "/v1"
+        }
       ],
       "modelBindingRules": [
-        { "bindingId": "anthropic", "prefixes": ["claude-"] },
-        { "bindingId": "responses", "prefixes": ["gpt-", "grok-", "o3", "o4"] },
-        { "bindingId": "google", "prefixes": ["gemini-"] }
+        {
+          "bindingId": "anthropic",
+          "prefixes": [
+            "claude-"
+          ]
+        },
+        {
+          "bindingId": "responses",
+          "prefixes": [
+            "gpt-",
+            "grok-",
+            "o3",
+            "o4"
+          ]
+        },
+        {
+          "bindingId": "google",
+          "prefixes": [
+            "gemini-"
+          ]
+        }
       ]
     },
     {
@@ -100,26 +157,676 @@
       "provider": "OpenAI",
       "defaultGateway": "https://opencode.ai/zen/go/v1",
       "defaultModels": [
-        "grok-4.6", "gpt-5.6-luna",
-        "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1",
-        "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
+        "grok-4.6",
+        "gpt-5.6-luna",
+        "glm-5.3-flash",
+        "glm-5.3",
+        "glm-5.2",
+        "glm-5.1",
+        "kimi-k3",
+        "kimi-k2.7-code",
+        "kimi-k2.6",
         "longcat-2.0",
-        "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp",
-        "minimax-m3", "minimax-m2.7",
-        "mimo-v2.5", "mimo-v2.5-pro",
-        "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
-        "muse-spark-1.3-contributor", "muse-spark-1.2-contributor",
-        "hy4-preview", "hy3"
+        "deepseek-v4.1-flash",
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp",
+        "minimax-m3",
+        "minimax-m2.7",
+        "mimo-v2.5",
+        "mimo-v2.5-pro",
+        "qwen3.8-max",
+        "qwen3.8-flash",
+        "qwen3.7-max",
+        "qwen3.7-plus",
+        "qwen3.6-plus",
+        "muse-spark-1.3-contributor",
+        "muse-spark-1.2-contributor",
+        "hy4-preview",
+        "hy3"
       ],
       "requiresApiKey": true,
       "notes": "OpenAI 兼容订阅网关（/responses + /chat/completions），自动携带 x-opencode-session；订阅覆盖目录模型，刷新会同步目录。自建网关请用 `新建渠道`。",
       "bindings": [
-        { "id": "responses", "protocol": "OpenAIResponses", "authProfile": "Bearer", "endpointSuffix": "/v1" }
+        {
+          "id": "responses",
+          "protocol": "OpenAIResponses",
+          "authProfile": "Bearer",
+          "endpointSuffix": "/v1"
+        }
       ],
       "modelBindingRules": [
-        { "bindingId": "responses", "prefixes": ["grok-", "gpt-"] }
+        {
+          "bindingId": "responses",
+          "prefixes": [
+            "grok-",
+            "gpt-"
+          ]
+        }
       ],
       "catalogIsEntitlement": true
+    },
+    {
+      "id": "ant-ling",
+      "displayName": "Ant Ling",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.ant-ling.com/v1",
+      "defaultModels": [
+        "Ling-2.6-1T",
+        "Ling-2.6-flash",
+        "Ring-2.6-1T"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "cerebras",
+      "displayName": "Cerebras",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.cerebras.ai/v1",
+      "defaultModels": [
+        "gpt-oss-120b",
+        "qwen-3.8-27b"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "groq",
+      "displayName": "Groq",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.groq.com/openai/v1",
+      "defaultModels": [
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-safeguard-20b",
+        "qwen/qwen3.6-27b",
+        "qwen/qwen3.8-27b"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "huggingface",
+      "displayName": "Hugging Face",
+      "provider": "OpenAI",
+      "defaultGateway": "https://router.huggingface.co/v1",
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "模型目录超过 30 个，创建后用添加模型或刷新维护。"
+    },
+    {
+      "id": "nvidia",
+      "displayName": "NVIDIA NIM",
+      "provider": "OpenAI",
+      "defaultGateway": "https://integrate.api.nvidia.com/v1",
+      "defaultModels": [
+        "google/gemma-3-12b-it",
+        "google/gemma-3-4b-it",
+        "meta/llama-3.2-11b-vision-instruct",
+        "meta/llama-3.2-90b-vision-instruct",
+        "meta/muse-glimmer-30b",
+        "mistralai/mistral-7b-instruct-v0.3",
+        "moonshotai/kimi-k2.6",
+        "moonshotai/kimi-k3",
+        "nvidia/cosmos-reason2-8b",
+        "nvidia/llama-3.1-nemotron-70b-instruct",
+        "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        "nvidia/nemotron-3-super-120b-a12b",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "openai/gpt-oss-20b",
+        "poolside/laguna-xs-2.1",
+        "z-ai/glm-5.3",
+        "z-ai/glm-5.3-flash"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "together",
+      "displayName": "Together AI",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.together.ai/v1",
+      "defaultModels": [
+        "MiniMaxAI/MiniMax-M2.7",
+        "MiniMaxAI/MiniMax-M3",
+        "Qwen/Qwen2.5-7B-Instruct-Turbo",
+        "Qwen/Qwen3.5-9B",
+        "Qwen/Qwen3.6-Plus",
+        "Qwen/Qwen3.7-Max",
+        "deepseek-ai/DeepSeek-V4-Flash-0731",
+        "deepseek-ai/DeepSeek-V4-Pro",
+        "deepseek-ai/DeepSeek-V4-Pro-0813",
+        "deepseek-ai/DeepSeek-V4.1-Flash",
+        "google/gemma-4-31B-it",
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "moonshotai/Kimi-K2.6",
+        "moonshotai/Kimi-K2.7-Code",
+        "moonshotai/Kimi-K3",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "thinkingmachines/Inkling",
+        "zai-org/GLM-5.2",
+        "zai-org/GLM-5.3",
+        "zai-org/GLM-5.3-Flash"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "openrouter",
+      "displayName": "OpenRouter",
+      "provider": "OpenAI",
+      "defaultGateway": "https://openrouter.ai/api/v1",
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "目录很大，不自动灌入模型。anthropic/ 前缀走 Anthropic，其余走 Chat Completions。",
+      "bindings": [
+        {
+          "id": "anthropic",
+          "protocol": "AnthropicMessages",
+          "authProfile": "AnthropicApiKey",
+          "endpointSuffix": ""
+        }
+      ],
+      "modelBindingRules": [
+        {
+          "bindingId": "anthropic",
+          "prefixes": [
+            "anthropic/"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vercel-ai-gateway",
+      "displayName": "Vercel AI Gateway",
+      "provider": "Anthropic",
+      "defaultGateway": "https://ai-gateway.vercel.sh",
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "pi 当前目录全部走 Anthropic Messages。目录超过 30 个，创建后手工添加模型。"
+    },
+    {
+      "id": "xai",
+      "displayName": "xAI",
+      "provider": "ResponsesAPI",
+      "defaultGateway": "https://api.x.ai/v1",
+      "defaultModels": [
+        "grok-4.3",
+        "grok-4.5",
+        "grok-4.6",
+        "grok-4.7"
+      ],
+      "requiresApiKey": true,
+      "notes": "pi 的 xAI 模型走 OpenAI Responses，不是 Chat Completions。"
+    },
+    {
+      "id": "xiaomi",
+      "displayName": "Xiaomi MiMo",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.xiaomimimo.com/v1",
+      "defaultModels": [
+        "mimo-v2.5",
+        "mimo-v2.5-pro",
+        "mimo-v2.5-pro-ultraspeed",
+        "mimo-v2.6-flash",
+        "mimo-v2.6-pro",
+        "mimo-v2.6-pro-ultraspeed"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "xiaomi-token-plan-cn",
+      "displayName": "Xiaomi MiMo Token Plan（中国）",
+      "provider": "OpenAI",
+      "defaultGateway": "https://token-plan-cn.xiaomimimo.com/v1",
+      "defaultModels": [
+        "mimo-v2.5",
+        "mimo-v2.5-pro",
+        "mimo-v2.6-flash",
+        "mimo-v2.6-pro"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "xiaomi-token-plan-ams",
+      "displayName": "Xiaomi MiMo Token Plan（阿姆斯特丹）",
+      "provider": "OpenAI",
+      "defaultGateway": "https://token-plan-ams.xiaomimimo.com/v1",
+      "defaultModels": [
+        "mimo-v2.5",
+        "mimo-v2.5-pro",
+        "mimo-v2.6-flash",
+        "mimo-v2.6-pro"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "xiaomi-token-plan-sgp",
+      "displayName": "Xiaomi MiMo Token Plan（新加坡）",
+      "provider": "OpenAI",
+      "defaultGateway": "https://token-plan-sgp.xiaomimimo.com/v1",
+      "defaultModels": [
+        "mimo-v2.5",
+        "mimo-v2.5-pro",
+        "mimo-v2.6-flash",
+        "mimo-v2.6-pro"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "qwen-token-plan",
+      "displayName": "Qwen Token Plan",
+      "provider": "OpenAI",
+      "defaultGateway": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "defaultModels": [
+        "MiniMax-M2.5",
+        "deepseek-v3.2",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-0731",
+        "deepseek-v4-pro",
+        "deepseek-v4-pro-0813",
+        "deepseek-v4.1-flash",
+        "glm-5",
+        "glm-5.1",
+        "glm-5.2",
+        "glm-5.3",
+        "kimi-k2.5",
+        "kimi-k2.6",
+        "kimi-k2.7-code",
+        "qwen3.6-flash",
+        "qwen3.6-plus",
+        "qwen3.7-max",
+        "qwen3.7-plus",
+        "qwen3.8-flash",
+        "qwen3.8-max"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "qwen-token-plan-individual",
+      "displayName": "Qwen Token Plan Individual",
+      "provider": "OpenAI",
+      "defaultGateway": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "defaultModels": [
+        "deepseek-v4-flash-0731",
+        "deepseek-v4-pro",
+        "deepseek-v4-pro-0813",
+        "glm-5.2",
+        "qwen3.6-flash",
+        "qwen3.7-max",
+        "qwen3.7-plus",
+        "qwen3.8-flash",
+        "qwen3.8-max"
+      ],
+      "requiresApiKey": true,
+      "notes": "与 Qwen Token Plan 同一网关，只预置 Individual 订阅模型。"
+    },
+    {
+      "id": "qwen-token-plan-cn",
+      "displayName": "Qwen Token Plan（中国）",
+      "provider": "OpenAI",
+      "defaultGateway": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "defaultModels": [
+        "MiniMax-M2.5",
+        "deepseek-v3.2",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-0731",
+        "deepseek-v4-pro",
+        "deepseek-v4-pro-0813",
+        "deepseek-v4.1-flash",
+        "glm-5",
+        "glm-5.1",
+        "glm-5.2",
+        "glm-5.3",
+        "kimi-k2.5",
+        "kimi-k2.6",
+        "kimi-k2.7-code",
+        "qwen3.6-flash",
+        "qwen3.6-plus",
+        "qwen3.7-max",
+        "qwen3.7-plus",
+        "qwen3.8-flash",
+        "qwen3.8-max"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "zai",
+      "displayName": "ZAI Coding Plan",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.z.ai/api/coding/paas/v4",
+      "defaultModels": [
+        "glm-4.7",
+        "glm-5-turbo",
+        "glm-5.2",
+        "glm-5.2-highspeed",
+        "glm-5.3",
+        "glm-5.3-flash",
+        "glm-5.3-highspeed"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "zai-coding-cn",
+      "displayName": "ZAI Coding Plan（中国）",
+      "provider": "OpenAI",
+      "defaultGateway": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "defaultModels": [
+        "glm-4.6v",
+        "glm-5.3",
+        "glm-5.3-flash",
+        "glm-5.3-highspeed"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "baseten",
+      "displayName": "Baseten",
+      "provider": "OpenAI",
+      "defaultGateway": "https://inference.baseten.co/v1",
+      "defaultModels": [
+        "deepseek-ai/DeepSeek-V4-Flash-0731",
+        "deepseek-ai/DeepSeek-V4-Pro",
+        "deepseek-ai/DeepSeek-V4-Pro-0813",
+        "deepseek-ai/DeepSeek-V4.1-Flash",
+        "moonshotai/Kimi-K2.5",
+        "moonshotai/Kimi-K2.6",
+        "moonshotai/Kimi-K2.7-Code",
+        "moonshotai/Kimi-K3",
+        "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
+        "nvidia/Nemotron-120B-A12B",
+        "openai/gpt-oss-120b",
+        "thinkingmachines/inkling",
+        "thinkingmachines/inkling-small",
+        "zai-org/GLM-4.7",
+        "zai-org/GLM-5",
+        "zai-org/GLM-5.1",
+        "zai-org/GLM-5.2",
+        "zai-org/GLM-5.2-Fast",
+        "zai-org/GLM-5.3",
+        "zai-org/GLM-5.3-Fast",
+        "zai-org/GLM-5.3-Flash"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "cloudflare-workers-ai",
+      "displayName": "Cloudflare Workers AI",
+      "provider": "OpenAI",
+      "defaultGateway": null,
+      "defaultModels": [
+        "@cf/deepseek-ai/deepseek-v4-flash-0731",
+        "@cf/deepseek-ai/deepseek-v4-pro-0813",
+        "@cf/google/gemma-4-26b-a4b-it",
+        "@cf/ibm-granite/granite-4.0-h-micro",
+        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        "@cf/meta/llama-4-scout-17b-16e-instruct",
+        "@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "@cf/moonshotai/kimi-k2.6",
+        "@cf/moonshotai/kimi-k2.7-code",
+        "@cf/nvidia/nemotron-3-120b-a12b",
+        "@cf/openai/gpt-oss-120b",
+        "@cf/openai/gpt-oss-20b",
+        "@cf/qwen/qwen3-30b-a3b-fp8",
+        "@cf/qwen/qwen3.8-27b",
+        "@cf/zai-org/glm-4.7-flash",
+        "@cf/zai-org/glm-5.2",
+        "@cf/zai-org/glm-5.3",
+        "@cf/zai-org/glm-5.3-flash"
+      ],
+      "requiresApiKey": true,
+      "notes": "创建时输入完整网关（路径含 account id）。"
+    },
+    {
+      "id": "fireworks",
+      "displayName": "Fireworks",
+      "provider": "Anthropic",
+      "defaultGateway": "https://api.fireworks.ai/inference",
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "默认 Anthropic Messages。glm/kimi 模型走 Chat Completions binding。目录 33 个，超过 30 不预置。",
+      "bindings": [
+        {
+          "id": "chat",
+          "protocol": "OpenAIChat",
+          "authProfile": "Bearer",
+          "endpointSuffix": "/v1"
+        }
+      ],
+      "modelBindingRules": [
+        {
+          "bindingId": "chat",
+          "prefixes": [
+            "accounts/fireworks/models/glm",
+            "accounts/fireworks/models/kimi",
+            "accounts/fireworks/routers/glm"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cloudflare-ai-gateway",
+      "displayName": "Cloudflare AI Gateway",
+      "provider": "OpenAI",
+      "defaultGateway": null,
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "创建时输入完整网关（含 account id 与 gateway id）。claude-* 走 Anthropic，gpt-* 走 Responses，workers-ai/ 走 Chat。",
+      "bindings": [
+        {
+          "id": "anthropic",
+          "protocol": "AnthropicMessages",
+          "authProfile": "AnthropicApiKey",
+          "endpointSuffix": ""
+        },
+        {
+          "id": "responses",
+          "protocol": "OpenAIResponses",
+          "authProfile": "Bearer",
+          "endpointSuffix": ""
+        }
+      ],
+      "modelBindingRules": [
+        {
+          "bindingId": "anthropic",
+          "prefixes": [
+            "claude-"
+          ]
+        },
+        {
+          "bindingId": "responses",
+          "prefixes": [
+            "gpt-"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "minimax-global",
+      "displayName": "MiniMax（国际，Anthropic 协议）",
+      "provider": "Anthropic",
+      "defaultGateway": "https://api.minimax.io/anthropic",
+      "defaultModels": [
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed",
+        "MiniMax-M3"
+      ],
+      "requiresApiKey": true,
+      "notes": "与现有 MiniMax OpenAI 兼容中国区预设并存，不改已有渠道。"
+    },
+    {
+      "id": "minimax-cn-anthropic",
+      "displayName": "MiniMax（中国，Anthropic 协议）",
+      "provider": "Anthropic",
+      "defaultGateway": "https://api.minimaxi.com/anthropic",
+      "defaultModels": [
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed",
+        "MiniMax-M3"
+      ],
+      "requiresApiKey": true
+    },
+    {
+      "id": "moonshot-global",
+      "displayName": "Moonshot（国际）",
+      "provider": "OpenAI",
+      "defaultGateway": "https://api.moonshot.ai/v1",
+      "defaultModels": [
+        "kimi-k2.6",
+        "kimi-k2.7-code",
+        "kimi-k2.7-code-highspeed",
+        "kimi-k3"
+      ],
+      "requiresApiKey": true,
+      "notes": "中国区预设 moonshot 保持 https://api.moonshot.cn/v1。"
+    },
+    {
+      "id": "kimi-coding",
+      "displayName": "Kimi For Coding",
+      "provider": "Anthropic",
+      "defaultGateway": "https://api.kimi.com/coding",
+      "defaultModels": [
+        "k3",
+        "k3-256k",
+        "kimi-for-coding",
+        "kimi-for-coding-highspeed"
+      ],
+      "requiresApiKey": true,
+      "notes": "粘贴 API Key。不实现订阅 OAuth。"
+    },
+    {
+      "id": "github-copilot",
+      "displayName": "GitHub Copilot",
+      "provider": "ResponsesAPI",
+      "defaultGateway": "https://api.individual.githubcopilot.com",
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "粘贴 Copilot token。默认 Responses；claude-* 走 Anthropic，gemini-*/kimi-* 走 Chat。目录超过 30 个，不预置。",
+      "bindings": [
+        {
+          "id": "anthropic",
+          "protocol": "AnthropicMessages",
+          "authProfile": "AnthropicApiKey",
+          "endpointSuffix": ""
+        },
+        {
+          "id": "chat",
+          "protocol": "OpenAIChat",
+          "authProfile": "Bearer",
+          "endpointSuffix": ""
+        }
+      ],
+      "modelBindingRules": [
+        {
+          "bindingId": "anthropic",
+          "prefixes": [
+            "claude-"
+          ]
+        },
+        {
+          "bindingId": "chat",
+          "prefixes": [
+            "gemini-",
+            "kimi-"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mistral",
+      "displayName": "Mistral",
+      "provider": "Mistral",
+      "defaultGateway": "https://api.mistral.ai",
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "线协议名 mistral-conversations；pi 当前实现实际请求 POST /v1/chat/completions。目录 33 个，不预置。"
+    },
+    {
+      "id": "azure-openai-responses",
+      "displayName": "Azure OpenAI (Responses)",
+      "provider": "AzureOpenAI",
+      "defaultGateway": null,
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "创建时输入资源名或资源根地址，系统规范成 /openai/v1。模型名即 deployment 名。",
+      "setup": "azure"
+    },
+    {
+      "id": "google-vertex",
+      "displayName": "Google Vertex AI",
+      "provider": "Vertex",
+      "defaultGateway": null,
+      "defaultModels": [
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-pro-preview-customtools",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest"
+      ],
+      "requiresApiKey": true,
+      "notes": "创建时输入 project、location 和 API Key。不支持 ADC。",
+      "setup": "vertex"
+    },
+    {
+      "id": "amazon-bedrock",
+      "displayName": "Amazon Bedrock",
+      "provider": "Bedrock",
+      "defaultGateway": null,
+      "defaultModels": [],
+      "requiresApiKey": true,
+      "notes": "创建时输入 region 和 bearer token。不支持 AWS profile / IAM。目录很大，不预置模型。",
+      "setup": "bedrock"
+    },
+    {
+      "id": "radius",
+      "displayName": "Radius",
+      "provider": "Radius",
+      "defaultGateway": "https://radius.pi.dev",
+      "defaultModels": [
+        "balanced",
+        "cheap",
+        "claude-fable-5",
+        "claude-fable-5-1",
+        "claude-haiku-4-5",
+        "claude-opus-4-5",
+        "claude-opus-4-8",
+        "claude-opus-5",
+        "claude-opus-5-5",
+        "claude-sonnet-4-5",
+        "claude-sonnet-5",
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-v4.1-flash",
+        "glm-5.2",
+        "glm-5.3",
+        "glm-5.3-flash",
+        "gpt-5.3-codex",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.5",
+        "gpt-5.6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra",
+        "gpt-6-luna",
+        "gpt-6-sol",
+        "kimi-k2.7-code",
+        "kimi-k3",
+        "precise"
+      ],
+      "requiresApiKey": true,
+      "notes": "pi-messages 网关。粘贴 API Key，不实现 OAuth。"
     }
   ]
 }

@@ -26,6 +26,15 @@ namespace TelegramSearchBot.Model.AI {
         [Description("awaiting_preset_apikey")]
         AwaitingPresetApiKey,
 
+        [Description("awaiting_preset_project")]
+        AwaitingPresetProject,
+
+        [Description("awaiting_preset_location")]
+        AwaitingPresetLocation,
+
+        [Description("awaiting_preset_region")]
+        AwaitingPresetRegion,
+
         [Description("awaiting_name")]
         AwaitingName,
 

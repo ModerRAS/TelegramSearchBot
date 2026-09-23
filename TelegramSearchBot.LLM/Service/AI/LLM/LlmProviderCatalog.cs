@@ -22,7 +22,12 @@ namespace TelegramSearchBot.Service.AI.LLM {
         /// True when the gateway catalog IS the entitlement (subscription, e.g. OpenCode Go): refresh may add
         /// discovered models. False for pay-per-token catalogs (e.g. OpenCode Zen) where listing ≠ authorization.
         /// </summary>
-        bool CatalogIsEntitlement = false);
+        bool CatalogIsEntitlement = false,
+        /// <summary>
+        /// Extra prompts before the API key: <c>vertex</c> (project, location), <c>bedrock</c> (region),
+        /// <c>azure</c> (resource root or name). Null uses the fixed gateway or the generic gateway prompt.
+        /// </summary>
+        string? Setup = null);
 
     /// <summary>Extra API binding a preset creates: same gateway, different wire protocol/auth.</summary>
     public sealed record LlmPresetBinding(
@@ -93,6 +98,18 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 return FindById("opencode-zen");
             }
             return null;
+        }
+
+        /// <summary>按预设默认网关精确匹配（忽略大小写与末尾斜杠）。网关要手填的预设不参与。</summary>
+        public static LlmProviderPreset? FindForGateway(string? gateway) {
+            if (string.IsNullOrWhiteSpace(gateway)) {
+                return null;
+            }
+
+            var normalized = gateway.Trim().TrimEnd('/');
+            return Presets.FirstOrDefault(p =>
+                !string.IsNullOrWhiteSpace(p.DefaultGateway) &&
+                string.Equals(p.DefaultGateway.Trim().TrimEnd('/'), normalized, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>把用户输入的网关补成带协议路径后缀的 binding 端点（后缀已存在时不重复追加）。</summary>

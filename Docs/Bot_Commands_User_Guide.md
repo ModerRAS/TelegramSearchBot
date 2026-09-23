@@ -147,7 +147,7 @@
 
 *   **LLM渠道配置** (在群组中由全局管理员发送，会触发交互式配置流程)
     *   **说明**: 以下指令用于管理LLM API渠道。它们会启动一个多步骤的对话流程（状态机），机器人会依次询问配置所需的各项信息。请按照机器人的提示逐步回复。
-        *   **预制渠道**：从内置 Provider 预设目录一步创建渠道（Anthropic、OpenAI Chat/Responses、Gemini、MiniMax、Ollama、LM Studio、DeepSeek、Moonshot 等常见提供商已预置默认地址与默认模型列表）。交互流程：
+        *   **预制渠道**：从内置 Provider 预设目录一步创建渠道。除原有 Anthropic、OpenAI Chat/Responses、Gemini、MiniMax、Ollama、LM Studio、DeepSeek、Moonshot、OpenCode Zen/Go 外，还包含 pi 对齐的 Groq、Cerebras、xAI（Responses）、OpenRouter、Together、Fireworks、Hugging Face、NVIDIA、Baseten、智谱 ZAI、通义 Token Plan、小米 MiMo、MiniMax 国际/中国 Anthropic 端点、Moonshot 国际、Kimi For Coding、GitHub Copilot、Mistral、Azure OpenAI Responses、Google Vertex、Amazon Bedrock、Radius、Vercel AI Gateway、Cloudflare Workers AI / AI Gateway、Ant Ling。网关需要手填的有：Cloudflare 两家、Azure（资源名或根地址）、Vertex（project 与 location）、Bedrock（region 与 bearer token）。目录超过 30 个模型的预设不自动插入模型行。交互流程：
             1.  管理员发送: `预制渠道`
             2.  机器人回复: 预设列表（含默认地址与默认模型）
             3.  管理员发送预设编号

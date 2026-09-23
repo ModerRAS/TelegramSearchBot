@@ -53,6 +53,9 @@ namespace TelegramSearchBot.Service.Manage {
                 { LLMConfState.AwaitingPresetSelection.GetDescription(), HandleAwaitingPresetSelectionAsync },
                 { LLMConfState.AwaitingPresetGateway.GetDescription(), HandleAwaitingPresetGatewayAsync },
                 { LLMConfState.AwaitingPresetApiKey.GetDescription(), HandleAwaitingPresetApiKeyAsync },
+                { LLMConfState.AwaitingPresetProject.GetDescription(), HandleAwaitingPresetProjectAsync },
+                { LLMConfState.AwaitingPresetLocation.GetDescription(), HandleAwaitingPresetLocationAsync },
+                { LLMConfState.AwaitingPresetRegion.GetDescription(), HandleAwaitingPresetRegionAsync },
                 { LLMConfState.AwaitingGateway.GetDescription(), HandleAwaitingGatewayAsync },
                 { LLMConfState.AwaitingProvider.GetDescription(), HandleAwaitingProviderAsync },
                 { LLMConfState.AwaitingParallel.GetDescription(), HandleAwaitingParallelAsync },
@@ -110,6 +113,21 @@ namespace TelegramSearchBot.Service.Manage {
             }
 
             var preset = LlmProviderCatalog.Presets[presetIndex - 1];
+            if (preset.Setup == "vertex") {
+                await redis.SetDataAsync(preset.Id);
+                await redis.SetStateAsync(LLMConfState.AwaitingPresetProject.GetDescription());
+                return (true, $"请输入 {preset.DisplayName} 的 Google Cloud project ID:");
+            }
+            if (preset.Setup == "bedrock") {
+                await redis.SetDataAsync(preset.Id);
+                await redis.SetStateAsync(LLMConfState.AwaitingPresetRegion.GetDescription());
+                return (true, $"请输入 {preset.DisplayName} 的 AWS region（例如 us-east-1）:");
+            }
+            if (preset.Setup == "azure") {
+                await redis.SetDataAsync(preset.Id);
+                await redis.SetStateAsync(LLMConfState.AwaitingPresetGateway.GetDescription());
+                return (true, $"请输入 {preset.DisplayName} 的资源名或资源根地址（例如 my-resource 或 https://my-resource.openai.azure.com）:");
+            }
             if (preset.DefaultGateway == null) {
                 await redis.SetDataAsync(preset.Id);
                 await redis.SetStateAsync(LLMConfState.AwaitingPresetGateway.GetDescription());
@@ -133,7 +151,13 @@ namespace TelegramSearchBot.Service.Manage {
             }
 
             var gateway = command.Trim();
-            if (!Uri.TryCreate(gateway, UriKind.Absolute, out var uri) ||
+            if (preset.Setup == "azure") {
+                try {
+                    gateway = LlmPresetEndpoints.NormalizeAzure(gateway);
+                } catch (ArgumentException ex) {
+                    return (false, ex.Message);
+                }
+            } else if (!Uri.TryCreate(gateway, UriKind.Absolute, out var uri) ||
                 ( uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps )) {
                 return (false, "请输入有效的网关地址（以 http:// 或 https:// 开头）");
             }
@@ -153,8 +177,59 @@ namespace TelegramSearchBot.Service.Manage {
             }
 
             var apiKey = command.Trim().Equals("-", StringComparison.OrdinalIgnoreCase) ? string.Empty : command.Trim();
-            var gateway = parts.Length > 1 ? parts[1] : preset.DefaultGateway!;
+            string gateway;
+            try {
+                gateway = LlmPresetEndpoints.Compose(preset, data);
+            } catch (ArgumentException ex) {
+                return (false, ex.Message);
+            }
             return await CreatePresetChannelAsync(redis, preset, apiKey, gateway);
+        }
+
+        private async Task<(bool, string)> HandleAwaitingPresetProjectAsync(EditLLMConfRedisHelper redis, string command) {
+            var preset = LlmProviderCatalog.FindById(await redis.GetDataAsync());
+            if (preset == null) {
+                await redis.DeleteKeysAsync();
+                return (false, "预设状态丢失，请重新发送 预制渠道");
+            }
+            var project = command.Trim();
+            if (project.Contains('|')) {
+                return (false, "project ID 不能包含 |");
+            }
+            await redis.SetDataAsync($"{preset.Id}|{project}");
+            await redis.SetStateAsync(LLMConfState.AwaitingPresetLocation.GetDescription());
+            return (true, $"请输入 {preset.DisplayName} 的 location（例如 us-central1）:");
+        }
+
+        private async Task<(bool, string)> HandleAwaitingPresetLocationAsync(EditLLMConfRedisHelper redis, string command) {
+            var data = await redis.GetDataAsync() ?? string.Empty;
+            var preset = LlmProviderCatalog.FindById(data.Split('|')[0]);
+            if (preset == null) {
+                await redis.DeleteKeysAsync();
+                return (false, "预设状态丢失，请重新发送 预制渠道");
+            }
+            var location = command.Trim();
+            if (location.Contains('|')) {
+                return (false, "location 不能包含 |");
+            }
+            await redis.SetDataAsync($"{data}|{location}");
+            await redis.SetStateAsync(LLMConfState.AwaitingPresetApiKey.GetDescription());
+            return (true, $"请输入 {preset.DisplayName} 的 API Key:");
+        }
+
+        private async Task<(bool, string)> HandleAwaitingPresetRegionAsync(EditLLMConfRedisHelper redis, string command) {
+            var preset = LlmProviderCatalog.FindById(await redis.GetDataAsync());
+            if (preset == null) {
+                await redis.DeleteKeysAsync();
+                return (false, "预设状态丢失，请重新发送 预制渠道");
+            }
+            var region = command.Trim();
+            if (region.Contains('|')) {
+                return (false, "region 不能包含 |");
+            }
+            await redis.SetDataAsync($"{preset.Id}|{region}");
+            await redis.SetStateAsync(LLMConfState.AwaitingPresetApiKey.GetDescription());
+            return (true, $"请输入 {preset.DisplayName} 的 bearer token:");
         }
 
         private async Task<(bool, string)> CreatePresetChannelAsync(EditLLMConfRedisHelper redis, LlmProviderPreset preset, string apiKey, string gateway) {

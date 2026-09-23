@@ -8,6 +8,11 @@ namespace TelegramSearchBot.Model.AI {
         OpenAIResponses = 1,
         AnthropicMessages = 2,
         Ollama = 3,
-        Gemini = 4
+        Gemini = 4,
+        MistralConversations = 5,
+        AzureOpenAIResponses = 6,
+        GoogleVertex = 7,
+        BedrockConverse = 8,
+        PiMessages = 9
     }
 }

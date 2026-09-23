@@ -32,6 +32,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 LLMProvider.LMStudio => _serviceProvider.GetRequiredService<OpenAiModelApi>(),
                 LLMProvider.Anthropic => _serviceProvider.GetRequiredService<AnthropicModelApi>(),
                 LLMProvider.ResponsesAPI => _serviceProvider.GetRequiredService<ResponsesModelApi>(),
+                LLMProvider.Mistral or LLMProvider.AzureOpenAI or LLMProvider.Vertex or LLMProvider.Bedrock or LLMProvider.Radius
+                    => _serviceProvider.GetRequiredService<FixedModelCatalog>(),
                 _ => throw new KeyNotFoundException($"No LLM provider registered for provider {provider}.")
             };
         }
@@ -46,6 +48,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 LLMProvider.LMStudio => _serviceProvider.GetRequiredService<OpenAiModelApi>(),
                 LLMProvider.Anthropic => _serviceProvider.GetRequiredService<AnthropicModelApi>(),
                 LLMProvider.ResponsesAPI => _serviceProvider.GetRequiredService<ResponsesModelApi>(),
+                LLMProvider.Mistral or LLMProvider.AzureOpenAI or LLMProvider.Vertex or LLMProvider.Bedrock or LLMProvider.Radius
+                    => _serviceProvider.GetRequiredService<FixedModelCatalog>(),
                 _ => throw new KeyNotFoundException($"No LLM provider registered for provider {provider}.")
             };
         }
@@ -60,6 +64,8 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 LLMProvider.LMStudio => _serviceProvider.GetRequiredService<OpenAiModelApi>(),
                 LLMProvider.Anthropic => _serviceProvider.GetRequiredService<AnthropicModelApi>(),
                 LLMProvider.ResponsesAPI => _serviceProvider.GetRequiredService<ResponsesModelApi>(),
+                LLMProvider.Mistral or LLMProvider.AzureOpenAI or LLMProvider.Vertex or LLMProvider.Bedrock or LLMProvider.Radius
+                    => _serviceProvider.GetRequiredService<FixedModelCatalog>(),
                 _ => throw new KeyNotFoundException($"No LLM provider registered for provider {provider}.")
             };
         }
@@ -80,6 +86,11 @@ namespace TelegramSearchBot.Service.AI.LLM {
                 LLMProvider.Anthropic => LlmProtocol.AnthropicMessages,
                 LLMProvider.Ollama => LlmProtocol.Ollama,
                 LLMProvider.Gemini => LlmProtocol.Gemini,
+                LLMProvider.Mistral => LlmProtocol.MistralConversations,
+                LLMProvider.AzureOpenAI => LlmProtocol.AzureOpenAIResponses,
+                LLMProvider.Vertex => LlmProtocol.GoogleVertex,
+                LLMProvider.Bedrock => LlmProtocol.BedrockConverse,
+                LLMProvider.Radius => LlmProtocol.PiMessages,
                 _ => LlmProtocol.OpenAIChat
             };
 
@@ -96,6 +107,16 @@ namespace TelegramSearchBot.Service.AI.LLM {
                     return Transports.GeminiTransport.Create(channel, binding, modelName, supportsVision, logger, httpClientFactory);
                 case LlmProtocol.Ollama:
                     return await Transports.OllamaTransport.CreateAsync(channel, binding, modelName, systemPrompt, logger, httpClientFactory);
+                case LlmProtocol.MistralConversations:
+                    return Transports.MistralTransport.Create(channel, binding, modelName, httpClientFactory);
+                case LlmProtocol.AzureOpenAIResponses:
+                    return Transports.AzureResponsesTransport.Create(channel, binding, modelName, promptCachingEnabled, supportsVision, logger, httpClientFactory);
+                case LlmProtocol.GoogleVertex:
+                    return Transports.VertexTransport.Create(channel, binding, modelName, httpClientFactory);
+                case LlmProtocol.BedrockConverse:
+                    return Transports.BedrockTransport.Create(channel, binding, modelName, httpClientFactory);
+                case LlmProtocol.PiMessages:
+                    return Transports.PiMessagesTransport.Create(channel, binding, modelName, httpClientFactory);
                 case LlmProtocol.OpenAIChat:
                 default:
                     return Transports.OpenAiChatTransport.Create(channel, binding, modelName, chatId,
