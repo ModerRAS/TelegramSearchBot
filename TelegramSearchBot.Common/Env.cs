@@ -46,6 +46,7 @@ namespace TelegramSearchBot.Common {
             OLTPName = config.OLTPName;
             SerilogMinimumLevel = ResolveSerilogMinimumLevel(config.LogLevel);
             BraveApiKey = config.BraveApiKey;
+            DeepSeekSearchApiKey = config.DeepSeekSearchApiKey;
             EnableAccounting = config.EnableAccounting;
             EnableAutoUpdate = config.EnableAutoUpdate;
             UpdateBaseUrl = ResolveUpdateBaseUrl(config);
@@ -150,6 +151,7 @@ namespace TelegramSearchBot.Common {
         public static string OLTPName { get; set; } = null!;
         public static readonly LogEventLevel SerilogMinimumLevel;
         public static string BraveApiKey { get; set; } = null!;
+        public static string DeepSeekSearchApiKey { get; set; } = null!;
         public static bool EnableAccounting { get; set; } = false;
         public static int MaxToolCycles { get; set; }
         public static bool EnableLLMAgentProcess { get; set; } = false;
@@ -315,6 +317,7 @@ namespace TelegramSearchBot.Common {
         public string OLTPName { get; set; } = null!;
         public string LogLevel { get; set; } = "Verbose";
         public string BraveApiKey { get; set; } = null!;
+        public string DeepSeekSearchApiKey { get; set; } = null!;
         public bool EnableAccounting { get; set; } = false;
         public int MaxToolCycles { get; set; } = 25;
         public bool EnableLLMAgentProcess { get; set; } = false;
