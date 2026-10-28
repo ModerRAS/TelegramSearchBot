@@ -133,6 +133,7 @@ API 地址和 API Key 来自该模型关联的 LLM 渠道，因此可通过 `新
 |---------|------|------|
 | `process_memory_command` | 在记忆图谱中执行操作 | `command`, `arguments` |
 | `search_web` | 使用 Brave Search API 进行网页搜索 | `query`, `page?`, `count?`, `country?`, `search_lang?` |
+| `deepseek_search_web` | 使用 DeepSeek Search API 进行网页搜索 | `query`, `count?`, `ori_question?`, `localization?`, `need_content?` |
 | `extract_article` | 使用 Puppeteer 提取网页文章内容 | `url` |
 | `sequential_thinking` | 动态问题解决思考工具 | `input`, `next_thought_needed?`, `thought_number?`, `total_thoughts?`, ... |
 | `bash` | 执行 Shell 命令 | `command`, `working_directory?`, `timeout_ms?` |

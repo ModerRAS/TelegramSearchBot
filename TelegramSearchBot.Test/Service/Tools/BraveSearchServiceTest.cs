@@ -12,6 +12,7 @@ using TelegramSearchBot.Service.Tools;
 using Xunit;
 
 namespace TelegramSearchBot.Test.Service.Tools {
+    [Collection("AgentEnvSerial")]
     public class BraveSearchServiceTest {
         private const string ValidApiKey = "test-api-key";
         private const string ValidResponseJson = @"{

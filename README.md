@@ -84,6 +84,7 @@
   "OLTPName": "",
   "LogLevel": "Verbose",
   "BraveApiKey": "",
+  "DeepSeekSearchApiKey": "",
   "EnableAccounting": false
 }
 ```

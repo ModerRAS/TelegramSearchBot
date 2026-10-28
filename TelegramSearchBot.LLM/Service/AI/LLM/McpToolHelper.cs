@@ -1177,6 +1177,26 @@ public static List<OpenAI.Chat.ChatTool> GetNativeToolDefinitions() {
                     sb.AppendLine($"--- End of {Math.Min(braveResult.Web.Results.Count, 5)} results ---");
                 }
                 return sb.ToString();
+            } else if (toolResultObject is DeepSeekSearchResult deepseekResult) {
+                var sb = new StringBuilder();
+                sb.AppendLine("Search Results (DeepSeek):");
+                if (deepseekResult.Results == null || !deepseekResult.Results.Any()) {
+                    sb.AppendLine("No results found.");
+                } else {
+                    int count = 1;
+                    foreach (var item in deepseekResult.Results.Take(5)) // Limit to 5 results
+                    {
+                        sb.AppendLine($"{count}. Title: {item.Title}");
+                        var snippet = !string.IsNullOrWhiteSpace(item.Summary) ? item.Summary : item.Snippet;
+                        if (!string.IsNullOrWhiteSpace(snippet)) {
+                            sb.AppendLine($"   Snippet: {snippet.Replace("\n", " ").Trim()}");
+                        }
+                        sb.AppendLine($"   Source: {item.Url}");
+                        count++;
+                    }
+                    sb.AppendLine($"--- End of {Math.Min(deepseekResult.Results.Count, 5)} results ---");
+                }
+                return sb.ToString();
             } else {
                 try {
                     return JsonConvert.SerializeObject(toolResultObject, Formatting.Indented,
